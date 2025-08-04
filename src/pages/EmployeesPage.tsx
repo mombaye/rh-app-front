@@ -7,6 +7,7 @@ import { Employee } from "@/types/employee";
 import { getEmployees, deleteEmployee, importEmployees } from "@/services/employeeService";
 import { FaPlus } from "react-icons/fa";
 import toast from "react-hot-toast";
+import EmployeeFormModal from "@/components/employees/EmployeeFormModal";
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -68,36 +69,48 @@ export default function EmployeesPage() {
     }
   };
 
-  return (
-    <AppLayout>
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.4 }}
-        className="space-y-6"
-      >
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-camublue-900">
-            Gestion des employés
-          </h1>
-          <button
-            onClick={handleCreate}
-            className="bg-camublue-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-camublue-800 transition"
-          >
-            <FaPlus /> Ajouter
-          </button>
-        </div>
+  // ... reste du code ...
 
-        <EmployeesStatsHeader data={employees} loading={isLoading} />
+return (
+  <AppLayout>
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-6"
+    >
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold text-camublue-900">
+          Gestion des employés
+        </h1>
+        <button
+          onClick={handleCreate}
+          className="bg-camublue-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-camublue-800 transition"
+        >
+          <FaPlus /> Ajouter
+        </button>
+      </div>
 
-        <EmployeesTable
-          employees={employees}
-          isLoading={isLoading}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onImport={handleImport}
-        />
-      </motion.div>
-    </AppLayout>
-  );
+      <EmployeesStatsHeader data={employees} loading={isLoading} />
+
+      <EmployeesTable
+        employees={employees}
+        isLoading={isLoading}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onImport={handleImport}
+      />
+
+      {/* AJOUTE LE MODAL ICI */}
+      <EmployeeFormModal
+        open={showModal}
+        onClose={handleCloseModal}
+        onSuccess={fetchEmployees}
+        initialData={selected}
+      />
+
+    </motion.div>
+  </AppLayout>
+);
+
 }

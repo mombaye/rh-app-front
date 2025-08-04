@@ -13,4 +13,5 @@ export interface Employee {
   localisation?: string;
   email?: string;
   telephone?: string;
+  has_user?: boolean
 }

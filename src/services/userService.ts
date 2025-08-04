@@ -20,3 +20,15 @@ export const register = async (username: string, email: string, password: string
 };
 
 // ... Tu ajoutes d'autres services liés à l'utilisateur ici si besoin
+export const changePassword = async (
+  old_password: string,
+  new_password: string,
+  confirm_password: string
+) => {
+  const res = await api.post("/users/change-password/", {
+    old_password,
+    new_password,
+    confirm_password,
+  });
+  return res.data;
+};

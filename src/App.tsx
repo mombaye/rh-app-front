@@ -1,37 +1,38 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
-import { useAuth } from "@/contexts/useAuth";
-import { JSX } from "react";
-import "./index.css";
-import EmployeesPage from "./pages/EmployeesPage";
-import { Toaster } from "react-hot-toast"; // ✅ Ajout du toaster
-import PayslipPage from "./pages/PayslipPage";
-
-function ProtectedRoute({ children }: { children: JSX.Element }) {
-  const { isAuthenticated, loading } = useAuth();
-
-  if (loading) {
-    return <div className="text-center mt-16">Chargement…</div>;
-  }
-
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
-}
+import EmployeesPage from "@/pages/EmployeesPage";
+import PayslipPage from "@/pages/PayslipPage";
+import ChangePasswordPage from "@/components/users/ChangePasswordPage";
+import { Toaster } from "react-hot-toast";
+import ProtectedRoute from "@/components/ProtectedRoute"; // Même logique que chez toi
+import FirstLoginGuard from "@/components/FirstLoginGuard";
 
 function App() {
   return (
-    <Router>
-      {/* ✅ Toaster visible sur toutes les pages */}
+    <>
       <Toaster position="top-right" reverseOrder={false} />
-
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
+        {/* Changement de mot de passe toujours accessible si first_login */}
+        <Route
+          path="/change-password"
+          element={
+            <ProtectedRoute>
+              <ChangePasswordPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Toutes les autres pages protégées par la FirstLoginGuard */}
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              <FirstLoginGuard>
+                <DashboardPage />
+              </FirstLoginGuard>
             </ProtectedRoute>
           }
         />
@@ -39,23 +40,26 @@ function App() {
           path="/employees"
           element={
             <ProtectedRoute>
-              <EmployeesPage />
+              <FirstLoginGuard>
+                <EmployeesPage />
+              </FirstLoginGuard>
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/payslip"
           element={
             <ProtectedRoute>
-              <PayslipPage />
+              <FirstLoginGuard>
+                <PayslipPage />
+              </FirstLoginGuard>
             </ProtectedRoute>
           }
         />
 
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    </Router>
+    </>
   );
 }
 

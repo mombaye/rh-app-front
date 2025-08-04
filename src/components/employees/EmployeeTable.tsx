@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
-import { FaEdit, FaTrash, FaFileExcel } from "react-icons/fa";
+import { FaEdit, FaTrash, FaFileExcel, FaUserPlus } from "react-icons/fa";
 import { Employee } from "@/types/employee";
-import { getEmployees, deleteEmployee, importEmployees } from "@/services/employeeService";
+import { getEmployees, deleteEmployee, importEmployees, createAccountFromEmployee } from "@/services/employeeService";
 import EmployeeFormModal from "@/components/employees/EmployeeFormModal";
 import { Input } from "@/components/ui/input";
 import toast from "react-hot-toast";
@@ -22,15 +22,33 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
   const [importFile, setImportFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState<boolean>(false);
-  
+  const [accountLoading, setAccountLoading] = useState<number | null>(null);
+  const [userFilter, setUserFilter] = useState<"all" | "with" | "without">("all");
 
   useEffect(() => {
     setFiltered(
-      employees.filter((e) =>
-        e.matricule.toLowerCase().includes(search.toLowerCase())
-      )
+      employees.filter((e) => {
+        const q = search.toLowerCase();
+        // Applique le filtre sur has_user
+        const matchesUser =
+          userFilter === "all"
+            ? true
+            : userFilter === "with"
+            ? e.has_user
+            : !e.has_user;
+        return (
+          matchesUser &&
+          (
+            e.matricule.toLowerCase().includes(q) ||
+            e.nom.toLowerCase().includes(q) ||
+            e.prenom.toLowerCase().includes(q) ||
+            (e.email ? e.email.toLowerCase().includes(q) : false)
+          )
+        );
+      })
     );
-  }, [search, employees]);
+  }, [search, employees, userFilter]);
+
 
 
  
@@ -54,6 +72,26 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
   };
 
 
+  
+
+  const handleCreateAccount = async (emp: Employee) => {
+    if (!emp.email) {
+      toast.error("L'employé n'a pas d'email !");
+      return;
+    }
+    setAccountLoading(emp.id);
+    try {
+      
+      console.log(await createAccountFromEmployee(emp.id));
+      toast.success(`Compte utilisateur créé pour ${emp.prenom} ${emp.nom}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Erreur lors de la création du compte");
+    } finally {
+      setAccountLoading(null);
+    }
+  };
+
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col md:flex-row items-center gap-4 justify-between">
@@ -72,6 +110,17 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
             accept=".xlsx"
             className="hidden"
           />
+
+            {/* Filtre utilisateurs */}
+          <select
+            value={userFilter}
+            onChange={e => setUserFilter(e.target.value as any)}
+            className="bg-gray-200 text-gray-700 px-3 py-2 rounded-md focus:ring-2 focus:ring-camublue-900"
+          >
+            <option value="all">Tous</option>
+            <option value="with">Avec accès sur eRH</option>
+            <option value="without">Sans accès sur eRH</option>
+          </select>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md flex items-center gap-2 hover:bg-gray-300"
@@ -114,7 +163,9 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
                     <th className="px-4 py-2 text-left">Date d’embauche</th>
                     <th className="px-4 py-2 text-left">Projet</th>
                     <th className="px-4 py-2 text-left">Manager</th>
+                    <th className="px-4 py-2 text-left">Email</th>
                     <th className="px-4 py-2 text-right">Actions</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -128,20 +179,32 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
                     <td className="px-4 py-2">{emp.date_embauche}</td>
                     <td className="px-4 py-2">{emp.projet}</td>
                     <td className="px-4 py-2">{emp.manager}</td>
+                    <td className="px-4 py-2">{emp.email}</td>
+                    
                     <td className="px-4 py-2 text-right space-x-2">
+                        {/* ... autres boutons ... */}
                         <button
-                        onClick={() => onEdit(emp)}
-                        className="text-yellow-500 hover:text-yellow-700"
+                          onClick={() => handleCreateAccount(emp)}
+                          className="text-blue-600 hover:text-blue-800"
+                          title="Créer un accès utilisateur"
                         >
-                        <FaEdit />
+                          <FaUserPlus />
                         </button>
                         <button
-                        onClick={() => handleDeleteClick(emp.id)}
-                        className="text-red-600 hover:text-red-800"
+                          onClick={() => onEdit(emp)}
+                          className="text-yellow-500 hover:text-yellow-700"
+                          title="Modifier"
                         >
-                        <FaTrash />
+                          <FaEdit />
                         </button>
-                    </td>
+                        <button
+                          onClick={() => handleDeleteClick(emp.id)}
+                          className="text-red-600 hover:text-red-800"
+                          title="Supprimer"
+                        >
+                          <FaTrash />
+                        </button>
+                      </td>
                 </tr>
                 ))}
                 {filtered.length === 0 && !isLoading && (

@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import api from "@/api/axios";
+import { createEmployee, updateEmployee } from "@/services/employeeService";
 
 interface EmployeeModalProps {
   open: boolean;
@@ -65,11 +66,11 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
     setLoading(true);
     try {
       if (isEdit) {
-        await api.put(`/hr/employees/${initialData.id}/`, formData);
-        toast.success("Employé mis à jour avec succès");
+        await updateEmployee(initialData.id, formData); // <-- CORRECT
+        toast.success("Employé mis à jour !");
       } else {
-        await api.post("/hr/employees/", formData);
-        toast.success("Employé ajouté avec succès");
+        await createEmployee(formData);
+        toast.success("Employé ajouté !");
       }
       onSuccess();
       onClose();
@@ -79,6 +80,7 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
       setLoading(false);
     }
   };
+
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -151,9 +153,14 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
             </div>
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Enregistrement..." : isEdit ? "Modifier" : "Ajouter"}
-          </Button>
+         <Button
+          type="submit"
+          className="w-full bg-blue-900 hover:bg-blue-800 text-white font-semibold rounded-lg transition disabled:opacity-60"
+          disabled={loading}
+        >
+          {loading ? "Enregistrement..." : isEdit ? "Modifier" : "Ajouter"}
+        </Button>
+
         </form>
       </DialogContent>
     </Dialog>
