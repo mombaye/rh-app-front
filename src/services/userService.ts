@@ -25,7 +25,7 @@ export const changePassword = async (
   new_password: string,
   confirm_password: string
 ) => {
-  const res = await api.post("/users/change-password/", {
+  const res = await api.post("/api/auth/change-password/", {
     old_password,
     new_password,
     confirm_password,
