@@ -1,24 +1,43 @@
-// components/Header.tsx
-import { Menu } from "lucide-react";
+import { useAuth } from "@/contexts/useAuth";
+import { LogOut } from "lucide-react";
 
 export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
+  const { user, logout } = useAuth();
+
   return (
-    <header className="sticky top-0 z-20 bg-white border-b shadow-sm h-16 flex items-center justify-between px-4 md:px-6">
-      <div className="flex items-center gap-3">
-        {/* Menu mobile visible uniquement sur mobile */}
-        <button className="md:hidden" onClick={onMenuClick}>
-          <Menu size={28} className="text-camublue-900" />
-        </button>
-        <h1 className="text-lg font-semibold text-camublue-900 select-none">
+    <header className="flex items-center justify-between h-16 px-4 shadow-sm bg-white border-b border-gray-200 z-10">
+      <button
+        className="md:hidden mr-2"
+        onClick={onMenuClick}
+        aria-label="Ouvrir la navigation"
+      >
+        {/* Burger menu */}
+        <svg className="h-7 w-7 text-camublue-900" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+      <h1 className="text-lg font-semibold text-camublue-900 select-none">
           Bienvenue 👋
         </h1>
-      </div>
+      <div className="flex-1" />
       <div className="flex items-center gap-3">
-        <img
-          src="https://ui-avatars.com/api/?name=Utilisateur&background=003c71&color=fff"
-          alt="Avatar"
-          className="h-10 w-10 rounded-full border shadow"
-        />
+        {user && (
+          <>
+            {/* Affiche prénom nom si dispo, sinon username */}
+            <span className="font-medium text-camublue-900">
+              {user.username
+                ? `${user.username}`
+                : user.username || user.email}
+            </span>
+            <button
+              className="ml-3 rounded-xl bg-gray-100 hover:bg-camublue-900 hover:text-white transition flex items-center gap-2 px-3 py-1 shadow-sm"
+              onClick={logout}
+            >
+              <LogOut size={18} />
+              <span className="hidden sm:inline">Déconnexion</span>
+            </button>
+          </>
+        )}
       </div>
     </header>
   );
