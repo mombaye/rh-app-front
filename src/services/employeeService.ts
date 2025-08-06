@@ -109,3 +109,20 @@ export const fetchAvailableBulletins = async (matricule: string) => {
   // Retourne directement le tableau [{ year: number, month: number }, ...]
   return Array.isArray(res.data) ? res.data : [];
 };
+
+// services/employeeService.ts
+
+// Pour lancer l’envoi massif (upload PDF)
+export const sendBulletinsMass = async (file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post("/api/employees/send-bulletins/", formData);
+  return res.data;
+};
+
+
+// Pour suivre la progression Celery
+export const fetchBulletinProgress = async (taskId: string) => {
+  const res = await api.get(`/api/employees/progress/${taskId}/`);
+  return res.data;
+};

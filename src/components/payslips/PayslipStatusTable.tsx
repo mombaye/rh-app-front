@@ -26,7 +26,7 @@ interface Props {
 export default function PayslipStatusTable({ data }: Props) {
   const [bulletinLoading, setBulletinLoading] = useState<number | null>(null);
   const [resendOpen, setResendOpen] = useState(false);
-  const [resendEmpId, setResendEmpId] = useState<number | null>(0);
+  const [resendEmpId, setResendEmpId] = useState<number | 0>(0);
   const [resendEmpName, setResendEmpName] = useState<string>("");
   const [resendEmail, setResendEmail] = useState<string>("");
   const [search, setSearch] = useState("");

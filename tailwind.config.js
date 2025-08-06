@@ -14,8 +14,11 @@ export default {
   		},
   		colors: {
   			camublue: {
-  				'900': '#003087'
-  			},
+				900: "#003c71",
+			},
+			camugray: {
+				100: "#f6f8fa",
+			},
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {
@@ -56,8 +59,16 @@ export default {
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
   			}
-  		}
-  	}
+  		},
+		borderRadius: {
+			xl: "1rem",
+			'2xl': '1.5rem',
+			},
+		boxShadow: {
+			card: "0 2px 8px 0 rgb(0 0 0 / 0.07)",
+		},
+
+		}
   },
   plugins: [require("tailwindcss-animate")],
 };
