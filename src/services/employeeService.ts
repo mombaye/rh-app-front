@@ -74,6 +74,15 @@ export const fetchPayslipStatus = async (): Promise<PayslipStatus[]> => {
 
 
 
+export async function sendAccessCodes(matricules?: string[]) {
+  // Si matricules est undefined ou [], l’API enverra à tout le monde
+  const payload = matricules && matricules.length ? { matricules } : {};
+  const { data } = await api.post("/api/employees/send-access-codes/", payload);
+  return data as { sent: string[]; errors: string[] };
+}
+
+
+
 export const createAccountFromEmployee = async (employeeId: number) => {
   // Ici, tu appelles l’endpoint DRF sur UN SEUL employé
   const res = await api.post("/api/employees/create-accounts/", {
