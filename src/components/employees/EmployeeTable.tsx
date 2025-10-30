@@ -1,6 +1,7 @@
-// src/components/employees/EmployeesTable.tsx
 import { useEffect, useState, useRef, Fragment } from "react";
-import { FaEdit, FaTrash, FaFileExcel, FaUserPlus, FaPaperPlane } from "react-icons/fa";
+import { FaEdit, FaFileExcel, FaUserPlus, FaPaperPlane } from "react-icons/fa";
+import { TbLogout } from "react-icons/tb";
+import { AiOutlineRollback } from "react-icons/ai";
 import { Employee } from "@/types/employee";
 import { createAccountFromEmployee } from "@/services/employeeService";
 import { sendAccessCodes } from "@/services/employeeService";
@@ -13,10 +14,19 @@ interface Props {
   employees: Employee[];
   isLoading: boolean;
   onEdit: (employee: Employee) => void;
-  onDelete: (id: number) => void;
+  onExit: (employee: Employee) => void;
+  onReinstate: (employee: Employee) => void;
   onImport: (file: File) => void;
 }
-export default function EmployeesTable({ employees, isLoading, onEdit, onDelete, onImport }: Props) {
+
+export default function EmployeesTable({
+  employees,
+  isLoading,
+  onEdit,
+  onExit,
+  onReinstate,
+  onImport,
+}: Props) {
   const [search, setSearch] = useState<string>("");
   const [filtered, setFiltered] = useState<Employee[]>([]);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -27,7 +37,6 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
 
   // --- Sélection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const allFilteredIds = filtered.map((e) => e.id);
   const isAllSelected = filtered.length > 0 && filtered.every((e) => selectedIds.has(e.id));
 
   // --- Modal d’envoi codes
@@ -52,8 +61,6 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
     );
   }, [search, employees, userFilter]);
 
-  const handleDeleteClick = (id: number) => onDelete(id);
-
   const handleImport = async () => {
     if (!importFile) return toast.error("Veuillez sélectionner un fichier Excel.");
     setIsImporting(true);
@@ -74,6 +81,10 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
       toast.error("L'employé n'a pas d'email !");
       return;
     }
+    if (emp.status === 'EXITED') {
+      toast.error("Employé sorti : création de compte non autorisée.");
+      return;
+    }
     setAccountLoading(emp.id);
     try {
       await createAccountFromEmployee(emp.id);
@@ -85,32 +96,22 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
     }
   };
 
-  // --- Sélection helpers
   const toggleOne = (id: number) => {
     setSelectedIds((prev) => {
       const n = new Set(prev);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
+      n.has(id) ? n.delete(id) : n.add(id);
       return n;
     });
   };
   const toggleAllFiltered = () => {
     setSelectedIds((prev) => {
-      if (isAllSelected) {
-        // unselect all filtered
-        const n = new Set(prev);
-        filtered.forEach((e) => n.delete(e.id));
-        return n;
-      } else {
-        // add all filtered
-        const n = new Set(prev);
-        filtered.forEach((e) => n.add(e.id));
-        return n;
-      }
+      const n = new Set(prev);
+      if (isAllSelected) filtered.forEach((e) => n.delete(e.id));
+      else filtered.forEach((e) => n.add(e.id));
+      return n;
     });
   };
 
-  // --- Envoi codes
   const openConfirmFor = (scope: "selected" | "filtered" | "all") => {
     setSendScope(scope);
     setConfirmOpen(true);
@@ -121,16 +122,13 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
     const toastId = toast.loading("Envoi des codes en cours...");
     try {
       let matricules: string[] | undefined;
-
       if (sendScope === "selected") {
         if (selectedIds.size === 0) {
           toast.error("Aucun employé sélectionné", { id: toastId });
           setIsSendingCodes(false);
           return;
         }
-        matricules = employees
-          .filter((e) => selectedIds.has(e.id))
-          .map((e) => e.matricule);
+        matricules = employees.filter((e) => selectedIds.has(e.id)).map((e) => e.matricule);
       } else if (sendScope === "filtered") {
         if (filtered.length === 0) {
           toast.error("Aucun employé dans la liste filtrée", { id: toastId });
@@ -139,7 +137,6 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
         }
         matricules = filtered.map((e) => e.matricule);
       } else {
-        // all → undefined => backend envoie à tout le monde
         matricules = undefined;
       }
 
@@ -147,19 +144,37 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
       const ok = res.sent?.length ?? 0;
       const ko = res.errors?.length ?? 0;
       if (ok > 0 && ko === 0) toast.success(`Codes envoyés à ${ok} employé(s)`, { id: toastId });
-      else if (ok > 0 && ko > 0)
-        toast.success(`Envoyés: ${ok}, erreurs: ${ko}`, { id: toastId });
+      else if (ok > 0 && ko > 0) toast.success(`Envoyés: ${ok}, erreurs: ${ko}`, { id: toastId });
       else toast.error("Aucun code envoyé", { id: toastId });
 
-      if (ko > 0) {
-        console.warn("Erreurs envoi codes:", res.errors);
-      }
       setConfirmOpen(false);
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors de l’envoi des codes", { id: toastId });
     } finally {
       setIsSendingCodes(false);
     }
+  };
+
+  const StatusBadge = ({ e }: { e: Employee }) => {
+    if (e.status === 'EXITED') {
+      return (
+        <span className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-700">
+          Sorti {e.date_sortie ? `· ${new Date(e.date_sortie).toLocaleDateString()}` : ''}
+        </span>
+      );
+    }
+    if (e.status === 'SUSPENDED') {
+      return (
+        <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+          Suspendu
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+        Actif
+      </span>
+    );
   };
 
   return (
@@ -178,11 +193,11 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
           <select
             value={userFilter}
             onChange={(e) => setUserFilter(e.target.value as any)}
-            className="bg-gray-200 text-gray-700 px-3 py-2 rounded-md focus:ring-2 focus:ring-camublue-900"
+            className="bg-white border border-slate-300 px-3 py-2 rounded-md focus:ring-2 focus:ring-camublue-900"
           >
             <option value="all">Tous</option>
-            <option value="with">Avec accès sur eRH</option>
-            <option value="without">Sans accès sur eRH</option>
+            <option value="with">Avec accès eRH</option>
+            <option value="without">Sans accès eRH</option>
           </select>
 
           {/* Actions d’envoi de codes */}
@@ -205,7 +220,11 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
                   <Menu.Item>
                     {({ active }) => (
                       <button
-                        onClick={() => openConfirmFor("selected")}
+                        onClick={() => {
+                          setSelectedIds(new Set()); // clean
+                          setSendScope("selected");
+                          setConfirmOpen(true);
+                        }}
                         className={`w-full text-left px-4 py-2 ${active ? "bg-gray-100" : ""}`}
                       >
                         Aux sélectionnés ({selectedIds.size})
@@ -215,7 +234,10 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
                   <Menu.Item>
                     {({ active }) => (
                       <button
-                        onClick={() => openConfirmFor("filtered")}
+                        onClick={() => {
+                          setSendScope("filtered");
+                          setConfirmOpen(true);
+                        }}
                         className={`w-full text-left px-4 py-2 ${active ? "bg-gray-100" : ""}`}
                       >
                         À la liste filtrée ({filtered.length})
@@ -225,7 +247,10 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
                   <Menu.Item>
                     {({ active }) => (
                       <button
-                        onClick={() => openConfirmFor("all")}
+                        onClick={() => {
+                          setSendScope("all");
+                          setConfirmOpen(true);
+                        }}
                         className={`w-full text-left px-4 py-2 ${active ? "bg-gray-100" : ""}`}
                       >
                         À tout le monde (tous)
@@ -247,23 +272,18 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md flex items-center gap-2 hover:bg-gray-300"
+            className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-md hover:bg-slate-50"
           >
-            <FaFileExcel /> Choisir un fichier
+            <FaFileExcel className="inline-block mr-2" />
+            Choisir un fichier
           </button>
           <button
             onClick={handleImport}
             disabled={!importFile || isImporting}
             className="bg-camublue-900 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-camublue-800 disabled:opacity-50"
           >
-            {isImporting ? (
-              <>
-                <ImSpinner2 className="animate-spin" />
-                Importation...
-              </>
-            ) : (
-              "Importer"
-            )}
+            {isImporting ? <ImSpinner2 className="animate-spin" /> : null}
+            {isImporting ? "Importation..." : "Importer"}
           </button>
         </div>
       </div>
@@ -273,11 +293,11 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
       )}
 
       {/* Tableau */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full bg-white rounded-xl shadow-md">
-          <thead className="bg-camublue-900 text-white">
+      <div className="overflow-x-auto rounded-xl border border-slate-300">
+        <table className="min-w-full bg-white rounded-xl">
+          <thead className="bg-camublue-900 text-white sticky top-0 z-10">
             <tr>
-              <th className="px-4 py-2">
+              <th className="px-4 py-3 border-b border-slate-300">
                 <input
                   type="checkbox"
                   checked={isAllSelected}
@@ -285,23 +305,24 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
                   aria-label="Tout sélectionner (filtrés)"
                 />
               </th>
-              <th className="px-4 py-2 text-left">Matricule</th>
-              <th className="px-4 py-2 text-left">Nom</th>
-              <th className="px-4 py-2 text-left">Prénom</th>
-              <th className="px-4 py-2 text-left">Sexe</th>
-              <th className="px-4 py-2 text-left">Fonction</th>
-              <th className="px-4 py-2 text-left">Date d’embauche</th>
-              <th className="px-4 py-2 text-left">Projet</th>
-              <th className="px-4 py-2 text-left">Manager</th>
-              <th className="px-4 py-2 text-left">Email</th>
-              <th className="px-4 py-2 text-right">Actions</th>
+              <th className="px-4 py-3 text-left border-b border-slate-300">Statut</th>
+              <th className="px-4 py-3 text-left border-b border-slate-300">Matricule</th>
+              <th className="px-4 py-3 text-left border-b border-slate-300">Nom</th>
+              <th className="px-4 py-3 text-left border-b border-slate-300">Prénom</th>
+              <th className="px-4 py-3 text-left border-b border-slate-300">Sexe</th>
+              <th className="px-4 py-3 text-left border-b border-slate-300">Fonction</th>
+              <th className="px-4 py-3 text-left border-b border-slate-300">Date d’embauche</th>
+              <th className="px-4 py-3 text-left border-b border-slate-300">Projet</th>
+              <th className="px-4 py-3 text-left border-b border-slate-300">Manager</th>
+              <th className="px-4 py-3 text-left border-b border-slate-300">Email</th>
+              <th className="px-4 py-3 text-right border-b border-slate-300">Actions</th>
               <th />
             </tr>
           </thead>
 
           <tbody>
             {filtered.map((emp) => (
-              <tr key={emp.id} className="border-b hover:bg-gray-50">
+              <tr key={emp.id} className="border-b border-slate-200 hover:bg-slate-50">
                 <td className="px-4 py-2">
                   <input
                     type="checkbox"
@@ -309,6 +330,9 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
                     onChange={() => toggleOne(emp.id)}
                     aria-label={`Sélectionner ${emp.nom} ${emp.prenom}`}
                   />
+                </td>
+                <td className="px-4 py-2">
+                  <StatusBadge e={emp} />
                 </td>
                 <td className="px-4 py-2">{emp.matricule}</td>
                 <td className="px-4 py-2">{emp.nom}</td>
@@ -324,8 +348,11 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
                   {/* Envoyer code - unitaire */}
                   <button
                     onClick={() => {
-                      setSelectedIds(new Set([emp.id]));
-                      openConfirmFor("selected");
+                      const n = new Set<number>(); n.add(emp.id);
+                      // on laisse le flux “envoyer codes” existant (scope sélectionnés)
+                      setSelectedIds(n);
+                      setConfirmOpen(true);
+                      setSendScope("selected");
                     }}
                     className="inline-flex items-center gap-2 text-emerald-700 hover:text-emerald-900"
                     title="Envoyer le code à cet employé"
@@ -333,15 +360,19 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
                     <FaPaperPlane />
                   </button>
 
+                  {/* Créer un user (désactivé si EXITED) */}
                   <button
                     onClick={() => handleCreateAccount(emp)}
-                    className="text-blue-600 hover:text-blue-800"
-                    title="Créer un accès utilisateur"
-                    disabled={accountLoading === emp.id}
+                    className={`${
+                      emp.status === 'EXITED' ? 'text-slate-300 cursor-not-allowed' : 'text-blue-600 hover:text-blue-800'
+                    }`}
+                    title={emp.status === 'EXITED' ? "Employé sorti" : "Créer un accès utilisateur"}
+                    disabled={accountLoading === emp.id || emp.status === 'EXITED'}
                   >
                     {accountLoading === emp.id ? <ImSpinner2 className="animate-spin" /> : <FaUserPlus />}
                   </button>
 
+                  {/* Modifier */}
                   <button
                     onClick={() => onEdit(emp)}
                     className="text-yellow-500 hover:text-yellow-700"
@@ -350,13 +381,24 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
                     <FaEdit />
                   </button>
 
-                  <button
-                    onClick={() => handleDeleteClick(emp.id)}
-                    className="text-red-600 hover:text-red-800"
-                    title="Supprimer"
-                  >
-                    <FaTrash />
-                  </button>
+                  {/* Sortie / Réintégrer */}
+                  {emp.status !== 'EXITED' ? (
+                    <button
+                      onClick={() => onExit(emp)}
+                      className="text-red-600 hover:text-red-700"
+                      title="Marquer la sortie"
+                    >
+                      <TbLogout />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onReinstate(emp)}
+                      className="text-camublue-900 hover:text-camublue-800"
+                      title="Réintégrer"
+                    >
+                      <AiOutlineRollback />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -372,7 +414,7 @@ export default function EmployeesTable({ employees, isLoading, onEdit, onDelete,
         </table>
       </div>
 
-      {/* Modal confirmation */}
+      {/* Modal confirmation envoi codes (inchangé) */}
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl p-6">

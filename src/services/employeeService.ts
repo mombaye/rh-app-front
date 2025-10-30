@@ -5,10 +5,7 @@ import { PayslipStatus } from "@/components/payslips/PayslipStatusTable";
 
 // ...
 
-export const getEmployees = async (): Promise<Employee[]> => {
-  const res = await api.get("/api/employees/");
-  return Array.isArray(res.data) ? res.data : []; // 🔥 Ajout de sécurité
-};
+
 
 
 export const createEmployee = async (data: Partial<Employee>) => {
@@ -133,5 +130,36 @@ export const sendBulletinsMass = async (file: File) => {
 // Pour suivre la progression Celery
 export const fetchBulletinProgress = async (taskId: string) => {
   const res = await api.get(`/api/employees/progress/${taskId}/`);
+  return res.data;
+};
+
+
+
+
+// services/employeeService.ts
+export const getEmployees = async (opts?: { status?: 'ALL' | 'ACTIVE' | 'EXITED' }) => {
+  const params: Record<string, any> = {};
+  if (opts?.status) params.status = opts.status;   // ACTIVE / EXITED / ALL
+  const res = await api.get('/api/employees/', { params });
+  return Array.isArray(res.data) ? res.data : [];
+};
+
+
+
+// 🔁 “Sortie” (soft-delete)
+export const markExit = async (id: number, payload: { date_sortie: string; motif_sortie?: string }) => {
+  const res = await api.post(`/api/employees/${id}/mark-exit/`, payload);
+  return res.data as Employee;
+};
+
+
+
+
+// services/employeeService.ts
+export const reinstate = async (
+  id: number,
+  payload?: { date_reintegration?: string; update_date_embauche?: boolean }
+) => {
+  const res = await api.post(`/api/employees/${id}/reinstate/`, payload ?? {});
   return res.data;
 };
