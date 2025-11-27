@@ -1,10 +1,17 @@
 import { useEffect, useState, useRef, Fragment } from "react";
-import { FaEdit, FaFileExcel, FaUserPlus, FaPaperPlane } from "react-icons/fa";
+import {
+  FaEdit,
+  FaFileExcel,
+  FaUserPlus,
+  FaPaperPlane,
+  FaSort,
+  FaSortUp,
+  FaSortDown,
+} from "react-icons/fa";
 import { TbLogout } from "react-icons/tb";
 import { AiOutlineRollback } from "react-icons/ai";
 import { Employee } from "@/types/employee";
-import { createAccountFromEmployee } from "@/services/employeeService";
-import { sendAccessCodes } from "@/services/employeeService";
+import { createAccountFromEmployee, sendAccessCodes } from "@/services/employeeService";
 import { Input } from "@/components/ui/input";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
@@ -18,6 +25,8 @@ interface Props {
   onReinstate: (employee: Employee) => void;
   onImport: (file: File) => void;
 }
+
+type SortKey = "matricule" | "nom" | "prenom" | "fonction" | "sexe";
 
 export default function EmployeesTable({
   employees,
@@ -35,6 +44,12 @@ export default function EmployeesTable({
   const [accountLoading, setAccountLoading] = useState<number | null>(null);
   const [userFilter, setUserFilter] = useState<"all" | "with" | "without">("all");
 
+  // Tri par colonne
+  const [sortConfig, setSortConfig] = useState<{
+    key: SortKey;
+    direction: "asc" | "desc";
+  } | null>(null);
+
   // --- Sélection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const isAllSelected = filtered.length > 0 && filtered.every((e) => selectedIds.has(e.id));
@@ -45,21 +60,63 @@ export default function EmployeesTable({
   const [isSendingCodes, setIsSendingCodes] = useState(false);
 
   useEffect(() => {
-    setFiltered(
-      employees.filter((e) => {
-        const q = search.toLowerCase();
-        const matchesUser =
-          userFilter === "all" ? true : userFilter === "with" ? e.has_user : !e.has_user;
-        return (
-          matchesUser &&
-          (e.matricule.toLowerCase().includes(q) ||
-            e.nom.toLowerCase().includes(q) ||
-            e.prenom.toLowerCase().includes(q) ||
-            (e.email ? e.email.toLowerCase().includes(q) : false))
-        );
-      })
-    );
-  }, [search, employees, userFilter]);
+    const q = search.toLowerCase();
+
+    const base = employees.filter((e) => {
+      const matchesUser =
+        userFilter === "all" ? true : userFilter === "with" ? e.has_user : !e.has_user;
+
+      const matchesSearch =
+        e.matricule.toLowerCase().includes(q) ||
+        e.nom.toLowerCase().includes(q) ||
+        e.prenom.toLowerCase().includes(q) ||
+        (e.email ? e.email.toLowerCase().includes(q) : false);
+
+      return matchesUser && matchesSearch;
+    });
+
+    let result = base;
+
+    if (sortConfig) {
+      const { key, direction } = sortConfig;
+      result = [...base].sort((a, b) => {
+        const aRaw = (a as any)[key] ?? "";
+        const bRaw = (b as any)[key] ?? "";
+        const aVal =
+          typeof aRaw === "string" ? aRaw.toLowerCase() : String(aRaw).toLowerCase();
+        const bVal =
+          typeof bRaw === "string" ? bRaw.toLowerCase() : String(bRaw).toLowerCase();
+
+        if (aVal < bVal) return direction === "asc" ? -1 : 1;
+        if (aVal > bVal) return direction === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
+    setFiltered(result);
+  }, [search, employees, userFilter, sortConfig]);
+
+  const handleSort = (key: SortKey) => {
+    setSortConfig((prev) => {
+      if (!prev || prev.key !== key) {
+        return { key, direction: "asc" };
+      }
+      return {
+        key,
+        direction: prev.direction === "asc" ? "desc" : "asc",
+      };
+    });
+  };
+
+  const renderSortIcon = (key: SortKey) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <FaSort className="text-xs opacity-70" />;
+    }
+    if (sortConfig.direction === "asc") {
+      return <FaSortUp className="text-xs" />;
+    }
+    return <FaSortDown className="text-xs" />;
+  };
 
   const handleImport = async () => {
     if (!importFile) return toast.error("Veuillez sélectionner un fichier Excel.");
@@ -81,7 +138,7 @@ export default function EmployeesTable({
       toast.error("L'employé n'a pas d'email !");
       return;
     }
-    if (emp.status === 'EXITED') {
+    if (emp.status === "EXITED") {
       toast.error("Employé sorti : création de compte non autorisée.");
       return;
     }
@@ -103,6 +160,7 @@ export default function EmployeesTable({
       return n;
     });
   };
+
   const toggleAllFiltered = () => {
     setSelectedIds((prev) => {
       const n = new Set(prev);
@@ -156,14 +214,14 @@ export default function EmployeesTable({
   };
 
   const StatusBadge = ({ e }: { e: Employee }) => {
-    if (e.status === 'EXITED') {
+    if (e.status === "EXITED") {
       return (
         <span className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-700">
-          Sorti {e.date_sortie ? `· ${new Date(e.date_sortie).toLocaleDateString()}` : ''}
+          Sorti {e.date_sortie ? `· ${new Date(e.date_sortie).toLocaleDateString()}` : ""}
         </span>
       );
     }
-    if (e.status === 'SUSPENDED') {
+    if (e.status === "SUSPENDED") {
       return (
         <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
           Suspendu
@@ -306,11 +364,62 @@ export default function EmployeesTable({
                 />
               </th>
               <th className="px-4 py-3 text-left border-b border-slate-300">Statut</th>
-              <th className="px-4 py-3 text-left border-b border-slate-300">Matricule</th>
-              <th className="px-4 py-3 text-left border-b border-slate-300">Nom</th>
-              <th className="px-4 py-3 text-left border-b border-slate-300">Prénom</th>
-              <th className="px-4 py-3 text-left border-b border-slate-300">Sexe</th>
-              <th className="px-4 py-3 text-left border-b border-slate-300">Fonction</th>
+
+              <th className="px-4 py-3 text-left border-b border-slate-300">
+                <button
+                  type="button"
+                  onClick={() => handleSort("matricule")}
+                  className="flex items-center gap-1 select-none"
+                >
+                  <span>Matricule</span>
+                  {renderSortIcon("matricule")}
+                </button>
+              </th>
+
+              <th className="px-4 py-3 text-left border-b border-slate-300">
+                <button
+                  type="button"
+                  onClick={() => handleSort("nom")}
+                  className="flex items-center gap-1 select-none"
+                >
+                  <span>Nom</span>
+                  {renderSortIcon("nom")}
+                </button>
+              </th>
+
+              <th className="px-4 py-3 text-left border-b border-slate-300">
+                <button
+                  type="button"
+                  onClick={() => handleSort("prenom")}
+                  className="flex items-center gap-1 select-none"
+                >
+                  <span>Prénom</span>
+                  {renderSortIcon("prenom")}
+                </button>
+              </th>
+
+              <th className="px-4 py-3 text-left border-b border-slate-300">
+                <button
+                  type="button"
+                  onClick={() => handleSort("sexe")}
+                  className="flex items-center gap-1 select-none"
+                >
+                  <span>Sexe</span>
+                  {renderSortIcon("sexe")}
+                </button>
+              </th>
+
+              <th className="px-4 py-3 text-left border-b border-slate-300">
+                <button
+                  type="button"
+                  onClick={() => handleSort("fonction")}
+                  className="flex items-center gap-1 select-none"
+                >
+                  <span>Fonction</span>
+                  {renderSortIcon("fonction")}
+                </button>
+              </th>
+
               <th className="px-4 py-3 text-left border-b border-slate-300">Date d’embauche</th>
               <th className="px-4 py-3 text-left border-b border-slate-300">Projet</th>
               <th className="px-4 py-3 text-left border-b border-slate-300">Manager</th>
@@ -331,13 +440,30 @@ export default function EmployeesTable({
                     aria-label={`Sélectionner ${emp.nom} ${emp.prenom}`}
                   />
                 </td>
-                <td className="px-4 py-2">
-                  <StatusBadge e={emp} />
-                </td>
+                <td className="px-4 py-2 align-top">
+                    <StatusBadge e={emp} />
+
+                    {emp.status === "EXITED" && emp.motif_sortie && (
+                      <div className="mt-1 rounded-md bg-red-50 border border-red-100 px-2 py-1 max-w-xs">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-red-600 mb-0.5">
+                          Motif de sortie
+                        </span>
+                        <p
+                          className="text-xs text-red-700 overflow-hidden text-ellipsis whitespace-nowrap"
+                          title={emp.motif_sortie} // tooltip avec le texte complet
+                        >
+                          {emp.motif_sortie}
+                        </p>
+                      </div>
+                    )}
+                  </td>       
+
                 <td className="px-4 py-2">{emp.matricule}</td>
                 <td className="px-4 py-2">{emp.nom}</td>
                 <td className="px-4 py-2">{emp.prenom}</td>
-                <td className="px-4 py-2">{emp.sexe === "H" ? "Homme" : emp.sexe === "F" ? "Femme" : ""}</td>
+                <td className="px-4 py-2">
+                  {emp.sexe === "H" ? "Homme" : emp.sexe === "F" ? "Femme" : ""}
+                </td>
                 <td className="px-4 py-2">{emp.fonction}</td>
                 <td className="px-4 py-2">{emp.date_embauche}</td>
                 <td className="px-4 py-2">{emp.projet}</td>
@@ -348,8 +474,8 @@ export default function EmployeesTable({
                   {/* Envoyer code - unitaire */}
                   <button
                     onClick={() => {
-                      const n = new Set<number>(); n.add(emp.id);
-                      // on laisse le flux “envoyer codes” existant (scope sélectionnés)
+                      const n = new Set<number>();
+                      n.add(emp.id);
                       setSelectedIds(n);
                       setConfirmOpen(true);
                       setSendScope("selected");
@@ -364,12 +490,22 @@ export default function EmployeesTable({
                   <button
                     onClick={() => handleCreateAccount(emp)}
                     className={`${
-                      emp.status === 'EXITED' ? 'text-slate-300 cursor-not-allowed' : 'text-blue-600 hover:text-blue-800'
+                      emp.status === "EXITED"
+                        ? "text-slate-300 cursor-not-allowed"
+                        : "text-blue-600 hover:text-blue-800"
                     }`}
-                    title={emp.status === 'EXITED' ? "Employé sorti" : "Créer un accès utilisateur"}
-                    disabled={accountLoading === emp.id || emp.status === 'EXITED'}
+                    title={
+                      emp.status === "EXITED"
+                        ? "Employé sorti"
+                        : "Créer un accès utilisateur"
+                    }
+                    disabled={accountLoading === emp.id || emp.status === "EXITED"}
                   >
-                    {accountLoading === emp.id ? <ImSpinner2 className="animate-spin" /> : <FaUserPlus />}
+                    {accountLoading === emp.id ? (
+                      <ImSpinner2 className="animate-spin" />
+                    ) : (
+                      <FaUserPlus />
+                    )}
                   </button>
 
                   {/* Modifier */}
@@ -382,7 +518,7 @@ export default function EmployeesTable({
                   </button>
 
                   {/* Sortie / Réintégrer */}
-                  {emp.status !== 'EXITED' ? (
+                  {emp.status !== "EXITED" ? (
                     <button
                       onClick={() => onExit(emp)}
                       className="text-red-600 hover:text-red-700"
@@ -418,7 +554,9 @@ export default function EmployeesTable({
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl p-6">
-            <h3 className="text-xl font-semibold text-slate-800 mb-2">Confirmer l’envoi des codes</h3>
+            <h3 className="text-xl font-semibold text-slate-800 mb-2">
+              Confirmer l’envoi des codes
+            </h3>
             <p className="text-slate-600 mb-4">
               Portée :
               <span className="ml-2 font-medium">
@@ -431,7 +569,8 @@ export default function EmployeesTable({
             </p>
 
             <div className="bg-slate-50 rounded-xl p-3 text-sm text-slate-600 mb-4">
-              Les destinataires recevront un email individuel contenant leur code d’accès permanent.
+              Les destinataires recevront un email individuel contenant leur code d’accès
+              permanent.
             </div>
 
             <div className="flex items-center justify-end gap-3">
