@@ -5,7 +5,8 @@ import {
   Users2,
   BadgeDollarSign,
   Menu,
-  X
+  X,
+  Clock,
 } from "lucide-react";
 import logo from "@/assets/images/camusat-logo.png";
 import { useState } from "react";
@@ -14,6 +15,7 @@ const navItems = [
   { label: "Tableau de bord", path: "/dashboard", icon: <LayoutDashboard size={20} /> },
   { label: "Employés", path: "/employees", icon: <Users2 size={20} /> },
   { label: "Bulletins Salariés", path: "/payslip", icon: <BadgeDollarSign size={20} /> },
+  { label: "Pointages", path: "/attendance", icon: <Clock size={20} /> },
   // ... ajoute tes autres modules ici
 ];
 

@@ -7,6 +7,7 @@ import ChangePasswordPage from "@/components/users/ChangePasswordPage";
 import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "@/components/ProtectedRoute"; // Même logique que chez toi
 import FirstLoginGuard from "@/components/FirstLoginGuard";
+import AttendancePage from "./pages/AttendancePage";
 
 function App() {
   return (
@@ -52,6 +53,17 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <PayslipPage />
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/attendance"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <AttendancePage />
               </FirstLoginGuard>
             </ProtectedRoute>
           }
