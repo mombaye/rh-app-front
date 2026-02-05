@@ -7,15 +7,20 @@ import {
   FaSort,
   FaSortUp,
   FaSortDown,
+  FaFilePdf
 } from "react-icons/fa";
 import { TbLogout } from "react-icons/tb";
 import { AiOutlineRollback } from "react-icons/ai";
 import { Employee } from "@/types/employee";
-import { createAccountFromEmployee, sendAccessCodes } from "@/services/employeeService";
+import { createAccountFromEmployee, sendAccessCodes, exportEmployeesExcel } from "@/services/employeeService";
 import { Input } from "@/components/ui/input";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import { Menu, Transition } from "@headlessui/react";
+
+import EmployeePayslipResendModal from "@/components/employees/EmployeePayslipResendModal";
+
+
 
 interface Props {
   employees: Employee[];
@@ -43,6 +48,9 @@ export default function EmployeesTable({
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [accountLoading, setAccountLoading] = useState<number | null>(null);
   const [userFilter, setUserFilter] = useState<"all" | "with" | "without">("all");
+  const [isExporting, setIsExporting] = useState(false);
+  const [payslipOpen, setPayslipOpen] = useState(false);
+  const [payslipEmp, setPayslipEmp] = useState<Employee | null>(null);
 
   // Tri par colonne
   const [sortConfig, setSortConfig] = useState<{
@@ -213,6 +221,24 @@ export default function EmployeesTable({
     }
   };
 
+
+  
+  const handleExport = async (status: "ACTIVE" | "EXITED" | "ALL") => {
+    if (isExporting) return;
+
+    setIsExporting(true);
+    const toastId = toast.loading("Export en cours...");
+    try {
+      await exportEmployeesExcel({ status });
+      toast.success("Export terminé", { id: toastId });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors de l'export", { id: toastId });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+
   const StatusBadge = ({ e }: { e: Employee }) => {
     if (e.status === "EXITED") {
       return (
@@ -343,7 +369,69 @@ export default function EmployeesTable({
             {isImporting ? <ImSpinner2 className="animate-spin" /> : null}
             {isImporting ? "Importation..." : "Importer"}
           </button>
+
+        
+          {/* Export (Actifs / Sortis / Tous) */}
+          <Menu as="div" className="relative inline-block text-left">
+            <Menu.Button
+              disabled={isExporting}
+              className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-md hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2 shadow-sm"
+            >
+              {isExporting ? <ImSpinner2 className="animate-spin" /> : <FaFileExcel />}
+              {isExporting ? "Export..." : "Exporter"}
+            </Menu.Button>
+
+            <Transition
+              as={Fragment}
+              enter="transition ease-out duration-100"
+              enterFrom="transform opacity-0 scale-95"
+              enterTo="transform opacity-100 scale-100"
+              leave="transition ease-in duration-75"
+              leaveFrom="transform opacity-100 scale-100"
+              leaveTo="transform opacity-0 scale-95"
+            >
+              <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right rounded-xl bg-white shadow-lg ring-1 ring-black/5 focus:outline-none overflow-hidden z-20">
+                <div className="py-1">
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        onClick={() => handleExport("ACTIVE")}
+                        className={`w-full text-left px-4 py-2 ${active ? "bg-gray-100" : ""}`}
+                      >
+                        Exporter les actifs
+                      </button>
+                    )}
+                  </Menu.Item>
+
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        onClick={() => handleExport("EXITED")}
+                        className={`w-full text-left px-4 py-2 ${active ? "bg-gray-100" : ""}`}
+                      >
+                        Exporter les sortis
+                      </button>
+                    )}
+                  </Menu.Item>
+
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        onClick={() => handleExport("ALL")}
+                        className={`w-full text-left px-4 py-2 ${active ? "bg-gray-100" : ""}`}
+                      >
+                        Exporter tous
+                      </button>
+                    )}
+                  </Menu.Item>
+                </div>
+              </Menu.Items>
+            </Transition>
+          </Menu>
+
         </div>
+
+        
       </div>
 
       {importFile && (
@@ -534,7 +622,20 @@ export default function EmployeesTable({
                     >
                       <AiOutlineRollback />
                     </button>
+                    
                   )}
+
+                  <button
+                    onClick={() => {
+                      setPayslipEmp(emp);
+                      setPayslipOpen(true);
+                    }}
+                    className="text-camublue-900 hover:text-camublue-800"
+                    title="Renvoyer un bulletin existant"
+                  >
+                    <FaFilePdf />
+                  </button>
+
                 </td>
               </tr>
             ))}
@@ -593,6 +694,16 @@ export default function EmployeesTable({
           </div>
         </div>
       )}
+
+      <EmployeePayslipResendModal
+        open={payslipOpen}
+        employee={payslipEmp}
+        onClose={() => {
+          setPayslipOpen(false);
+          setPayslipEmp(null);
+        }}
+      />
+
     </div>
   );
 }

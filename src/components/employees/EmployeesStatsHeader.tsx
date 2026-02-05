@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { FaUsers, FaMale, FaFemale, FaUserPlus, FaChartBar, FaUserTie } from "react-icons/fa";
-import { BarChart, Bar, XAxis, ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
+import { BarChart, Bar, XAxis, ResponsiveContainer, PieChart, Pie, Cell, Tooltip, LabelList  } from "recharts";
 import { motion } from "framer-motion";
 
 const COLORS = ["#1d3557", "#f59e42", "#6bc4b4", "#8e44ad", "#c0392b"];
@@ -168,24 +168,35 @@ export default function EmployeesStatsHeader({ data, loading }: { data: any[]; l
             <span>{women} femmes</span>
           </div>
         </div>
+        
         {/* Mini-barchart top fonctions */}
         <div className="w-full md:w-1/4">
           <div className="font-semibold text-sm mb-1 text-gray-700">Top Fonctions</div>
-          <BarChart width={180} height={60} data={topFonctions}>
+          <BarChart width={180} height={80} data={topFonctions} margin={{ top: 14, right: 8, left: 8, bottom: 0 }}>
             <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-            <Bar dataKey="value" fill="#1d3557" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="value" fill="#1d3557" radius={[6, 6, 0, 0]}>
+              <LabelList dataKey="value" position="top" fontSize={10} />
+            </Bar>
           </BarChart>
         </div>
+
+        
         {/* Trendline sur 6 mois */}
         <div className="w-full md:w-1/4">
-          <div className="font-semibold text-sm mb-1 text-gray-700">Recrutements 6 derniers mois</div>
-          <ResponsiveContainer width="100%" height={60}>
-            <BarChart data={monthlyTrend}>
+          <div className="font-semibold text-sm mb-1 text-gray-700">
+            Recrutements 6 derniers mois
+          </div>
+
+          <ResponsiveContainer width="100%" height={80}>
+            <BarChart data={monthlyTrend} margin={{ top: 14, right: 8, left: 8, bottom: 0 }}>
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-              <Bar dataKey="count" fill="#6bc4b4" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="count" fill="#6bc4b4" radius={[6, 6, 0, 0]}>
+                <LabelList dataKey="count" position="top" fontSize={10} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
+
       </div>
     </motion.div>
   );
