@@ -21,7 +21,6 @@ import {
 import type { PayslipPreviewResponse, BulletinMonthSummary } from "@/services/employeeService";
 
 export default function PayslipPage() {
-  // ✅ période par défaut: 3 derniers mois
   const [start, setStart] = useState(dayjs().subtract(90, "day").format("YYYY-MM-DD"));
   const [end, setEnd] = useState(dayjs().format("YYYY-MM-DD"));
 
@@ -32,18 +31,16 @@ export default function PayslipPage() {
   const sent = useMemo(() => summary.reduce((a, x) => a + (x.sent || 0), 0), [summary]);
   const failed = useMemo(() => summary.reduce((a, x) => a + (x.failed || 0), 0), [summary]);
 
-  // ✅ modal détails (cards + monthly)
   const [logsOpen, setLogsOpen] = useState(false);
   const [logsTitle, setLogsTitle] = useState("Détails");
-  const [logsScope, setLogsScope] = useState<{ year?: number; month?: number; status?: "sent"|"failed"|"pending" }>({});
+  const [logsScope, setLogsScope] = useState<{ year?: number; month?: number; status?: "sent" | "failed" | "pending" }>({});
 
-  // ✅ preview/select flow (ton existant)
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [preview, setPreview] = useState<PayslipPreviewResponse | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendingSelected, setSendingSelected] = useState(false);
 
-  type PreviewMeta = { status: string; progress: number; total_pages?: number; found?: number; errors_count?: number; };
+  type PreviewMeta = { status: string; progress: number; total_pages?: number; found?: number; errors_count?: number };
   const [previewTaskId, setPreviewTaskId] = useState<string | null>(null);
   const [previewMeta, setPreviewMeta] = useState<PreviewMeta>({ status: "IDLE", progress: 0 });
 
@@ -59,50 +56,27 @@ export default function PayslipPage() {
     }
   };
 
-  useEffect(() => {
-    loadSummary();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { loadSummary(); }, []);
 
-  // reload summary quand la période change (bouton “Appliquer” conseillé)
-  const applyPeriod = () => loadSummary();
-
-  // poll preview progress (ton existant)
   useEffect(() => {
     if (!previewTaskId) return;
     let stopped = false;
-
     const tick = async () => {
       try {
         const p = await fetchPayslipPreviewProgress(previewTaskId);
         if (stopped) return;
-
-        setPreviewMeta({
-          status: p.status,
-          progress: Number(p.progress ?? 0),
-          total_pages: p.total_pages,
-          found: p.found,
-          errors_count: p.errors_count,
-        });
-
+        setPreviewMeta({ status: p.status, progress: Number(p.progress ?? 0), total_pages: p.total_pages, found: p.found, errors_count: p.errors_count });
         if (p.status === "SUCCESS" && p.result) {
           setPreview(p.result);
           setPreviewTaskId(null);
           toast.success(`Analyse terminée : ${p.result.items.length} matricule(s)`);
         }
-        if (p.status === "FAILURE") {
-          setPreviewTaskId(null);
-          toast.error("Analyse échouée (preview).");
-        }
+        if (p.status === "FAILURE") { setPreviewTaskId(null); toast.error("Analyse échouée (preview)."); }
       } catch {}
     };
-
     tick();
     const id = window.setInterval(tick, 1500);
-    return () => {
-      stopped = true;
-      window.clearInterval(id);
-    };
+    return () => { stopped = true; window.clearInterval(id); };
   }, [previewTaskId]);
 
   const handleUploadAuto = async (file: File) => {
@@ -111,7 +85,6 @@ export default function PayslipPage() {
       const formData = new FormData();
       formData.append("file", file);
       const data = await uploadPayslipPdf(formData);
-
       if (data.task_id) {
         setCurrentTaskId(data.task_id);
         toast.success("Envoi automatique lancé : suivi en cours…", { id: toastId });
@@ -119,7 +92,7 @@ export default function PayslipPage() {
         toast.error(data.error || "Erreur au lancement.", { id: toastId });
       }
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || "Erreur lors de l’envoi automatique", { id: toastId });
+      toast.error(e?.response?.data?.error || "Erreur lors de l'envoi automatique", { id: toastId });
     }
   };
 
@@ -128,14 +101,12 @@ export default function PayslipPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-
       const startRes = await startPreviewPayslipPdf(formData);
       setPreview(null);
       setPreviewMeta({ status: "PENDING", progress: 0 });
       setPreviewTaskId(startRes.task_id);
       setPreviewOpen(true);
-
-      toast.success("Analyse en cours… vous pouvez patienter ou fermer le modal.", { id: toastId });
+      toast.success("Analyse en cours…", { id: toastId });
     } catch (e: any) {
       toast.error(e?.response?.data?.error || e?.message || "Erreur lancement analyse", { id: toastId });
     }
@@ -143,13 +114,13 @@ export default function PayslipPage() {
 
   const openFromCard = (kind: "all" | "sent" | "failed") => {
     setLogsScope(kind === "all" ? {} : { status: kind === "sent" ? "sent" : "failed" });
-    setLogsTitle(kind === "all" ? "Tous les bulletins (détails)" : kind === "sent" ? "Succès (détails)" : "Échecs (détails)");
+    setLogsTitle(kind === "all" ? "Tous les bulletins" : kind === "sent" ? "Succès" : "Échecs");
     setLogsOpen(true);
   };
 
   const openMonth = (y: number, m: number) => {
     setLogsScope({ year: y, month: m });
-    setLogsTitle(`Détails du mois ${dayjs(`${y}-${String(m).padStart(2, "0")}-01`).format("MMMM YYYY")}`);
+    setLogsTitle(`Détails — ${dayjs(`${y}-${String(m).padStart(2, "0")}-01`).format("MMMM YYYY")}`);
     setLogsOpen(true);
   };
 
@@ -158,10 +129,74 @@ export default function PayslipPage() {
       <div className="space-y-6">
         <h1 className="text-3xl font-bold text-camublue-900">Bulletins de salaire</h1>
 
-        {/* Upload / envoi */}
-        <PayslipUploader onUploadAuto={handleUploadAuto} onUploadSelect={handleUploadSelect} />
+        {/* 1 — Stats */}
+        <PayslipStatsCards
+          loading={summaryLoading}
+          total={total}
+          sent={sent}
+          failed={failed}
+          onOpen={openFromCard}
+        />
 
-        {/* Preview select (ton existant) */}
+        {/* 2 — Uploader + Période sur la même ligne */}
+        <div className="bg-white rounded-2xl shadow border border-slate-200 p-4 flex flex-col lg:flex-row gap-4 lg:items-center">
+          {/* Uploader */}
+          <div className="flex-1 min-w-0">
+            <PayslipUploader onUploadAuto={handleUploadAuto} onUploadSelect={handleUploadSelect} />
+          </div>
+
+          {/* Séparateur vertical (desktop) */}
+          <div className="hidden lg:block w-px bg-slate-200 self-stretch mx-4" />
+
+          {/* Filtres période */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-end shrink-0 lg:pl-4">
+            <div>
+              <div className="text-xs text-slate-500 mb-1">Début</div>
+              <input
+                type="date"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <div className="text-xs text-slate-500 mb-1">Fin</div>
+              <input
+                type="date"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="px-3 py-2 text-sm rounded-lg border border-slate-300 hover:bg-slate-50 whitespace-nowrap"
+                onClick={() => {
+                  setStart(dayjs().subtract(90, "day").format("YYYY-MM-DD"));
+                  setEnd(dayjs().format("YYYY-MM-DD"));
+                }}
+              >
+                3 derniers mois
+              </button>
+              <button
+                className="px-4 py-2 text-sm rounded-lg bg-camublue-900 text-white hover:bg-camublue-800 whitespace-nowrap"
+                onClick={loadSummary}
+              >
+                Appliquer
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Progress bar envoi */}
+        {currentTaskId && (
+          <BulletinSendProgress
+            taskId={currentTaskId}
+            onDone={() => { setCurrentTaskId(null); loadSummary(); }}
+          />
+        )}
+
+        {/* Modal préview sélection */}
         {preview && (
           <PayslipTargetsModal
             open={previewOpen}
@@ -175,22 +210,16 @@ export default function PayslipPage() {
             onClose={() => setPreviewOpen(false)}
             onConfirm={async (matricules) => {
               setSendingSelected(true);
-              const t = toast.loading("Lancement de l’envoi...");
+              const t = toast.loading("Lancement de l'envoi...");
               try {
-                const res = await sendBulletinsSelected({
-                  batch_id: preview.batch_id,
-                  year: preview.year,
-                  month: preview.month,
-                  matricules,
-                });
+                const res = await sendBulletinsSelected({ batch_id: preview.batch_id, year: preview.year, month: preview.month, matricules });
                 setPreviewOpen(false);
                 setPreview(null);
-
                 if (res.task_id) {
                   setCurrentTaskId(res.task_id);
-                  toast.success("Envoi lancé : suivi de progression…", { id: t });
+                  toast.success("Envoi lancé…", { id: t });
                 } else {
-                  toast.error("Impossible de lancer l’envoi", { id: t });
+                  toast.error("Impossible de lancer l'envoi", { id: t });
                 }
               } catch (e: any) {
                 toast.error(e?.response?.data?.error || "Erreur lancement envoi", { id: t });
@@ -201,71 +230,10 @@ export default function PayslipPage() {
           />
         )}
 
-        {currentTaskId && (
-          <BulletinSendProgress
-            taskId={currentTaskId}
-            onDone={() => {
-              setCurrentTaskId(null);
-              loadSummary(); // refresh reporting
-            }}
-          />
-        )}
-
-        {/* Filtres période */}
-        <div className="bg-white rounded-2xl shadow border border-slate-200 p-4 flex flex-col md:flex-row gap-3 md:items-end">
-          <div className="flex gap-3">
-            <div>
-              <div className="text-xs text-slate-500 mb-1">Début</div>
-              <input
-                type="date"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-                className="border border-slate-300 rounded-lg px-3 py-2"
-              />
-            </div>
-            <div>
-              <div className="text-xs text-slate-500 mb-1">Fin</div>
-              <input
-                type="date"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-                className="border border-slate-300 rounded-lg px-3 py-2"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 md:ml-auto">
-            <button
-              className="px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50"
-              onClick={() => {
-                setStart(dayjs().subtract(90, "day").format("YYYY-MM-DD"));
-                setEnd(dayjs().format("YYYY-MM-DD"));
-              }}
-            >
-              3 derniers mois
-            </button>
-            <button
-              className="px-4 py-2 rounded-lg bg-camublue-900 text-white hover:bg-camublue-800"
-              onClick={applyPeriod}
-            >
-              Appliquer
-            </button>
-          </div>
-        </div>
-
-        {/* Cards (cliquables) */}
-        <PayslipStatsCards
-          loading={summaryLoading}
-          total={total}
-          sent={sent}
-          failed={failed}
-          onOpen={openFromCard}
-        />
-
-        {/* Table principale mensuelle */}
+        {/* 3 — Table mensuelle */}
         <BulletinsMonthlyTable rows={summary} loading={summaryLoading} onOpenMonth={openMonth} />
 
-        {/* Modal détails paginé */}
+        {/* Modal logs */}
         <BulletinsLogsModal
           open={logsOpen}
           title={logsTitle}

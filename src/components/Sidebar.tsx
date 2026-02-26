@@ -16,7 +16,6 @@ const navItems = [
   { label: "Employés", path: "/employees", icon: <Users2 size={20} /> },
   { label: "Bulletins Salariés", path: "/payslip", icon: <BadgeDollarSign size={20} /> },
   { label: "Pointages", path: "/attendance", icon: <Clock size={20} /> },
-  // ... ajoute tes autres modules ici
 ];
 
 export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boolean, setMobileOpen: (open: boolean) => void }) {

@@ -17,7 +17,7 @@ export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
         </svg>
       </button>
       <h1 className="text-lg font-semibold text-camublue-900 select-none">
-          Bienvenue 👋
+          Bienvenue sur la plateforme de Gestion RH de Camusat👋
         </h1>
       <div className="flex-1" />
       <div className="flex items-center gap-3">

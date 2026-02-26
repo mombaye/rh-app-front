@@ -1,148 +1,144 @@
-  import { useEffect, useMemo, useState } from "react";
-  import { motion, AnimatePresence } from "framer-motion";
-  import { Card, CardContent } from "@/components/ui/card";
-  import { Button } from "@/components/ui/button";
-  import { Input } from "@/components/ui/input";
-  import { AlertCircle, CalendarDays, RefreshCw, Users, X } from "lucide-react";
-  import { Cell, Legend } from "recharts";
+import { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { AlertCircle, CalendarDays, RefreshCw, Users, X } from "lucide-react";
+import { Cell, Legend } from "recharts";
+import AppLayout from "@/layouts/AppLayout";
 
-  import {
-    getDailyStats,
-    getWeeklyStats,
-    getMonthlyStats,
-    getEmployeePeriodDetail,
-  } from "@/services/attendanceService";
+import {
+  getDailyStats,
+  getWeeklyStats,
+  getMonthlyStats,
+  getEmployeePeriodDetail,
+} from "@/services/attendanceService";
 
-  import type {
-    DailyStatsResponse,
-    WeeklyStatsResponse,
-    MonthlyStatsResponse,
-    PeriodEmployeeRow,
-    EmployeePeriodDetailResponse,
-  } from "@/types/attendance";
+import type {
+  DailyStatsResponse,
+  WeeklyStatsResponse,
+  MonthlyStatsResponse,
+  PeriodEmployeeRow,
+  EmployeePeriodDetailResponse,
+} from "@/types/attendance";
 
-  import {
-    ResponsiveContainer,
-    PieChart,
-    Pie,
-    Tooltip,
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-  } from "recharts";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
 
-  type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly";
-  type TopMode = "most_worked" | "least_worked" | "absent" | "not_pointing";
-  type PeriodTopMode = "most_worked" | "least_worked";
-  type PeriodSortKey = "worked" | "name" | "service";
+type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly";
+type TopMode = "most_worked" | "least_worked" | "absent" | "not_pointing";
+type PeriodTopMode = "most_worked" | "least_worked";
+type PeriodSortKey = "worked" | "name" | "service";
 
-  const STATUS_STYLE: Record<
-    "ok" | "absent" | "incomplete" | "anomaly",
-    { badge: string; dot: string; label: string }
-  > = {
-    ok: {
-      badge: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-      dot: "bg-emerald-500",
-      label: "OK",
-    },
-    absent: {
-      badge: "bg-red-50 text-red-700 ring-1 ring-red-200",
-      dot: "bg-red-500",
-      label: "Absent",
-    },
-    incomplete: {
-      badge: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
-      dot: "bg-amber-500",
-      label: "Incomplet",
-    },
-    anomaly: {
-      badge: "bg-purple-50 text-purple-700 ring-1 ring-purple-200",
-      dot: "bg-purple-500",
-      label: "Anomalie",
-    },
+const STATUS_STYLE: Record<
+  "ok" | "absent" | "incomplete" | "anomaly",
+  { badge: string; dot: string; label: string }
+> = {
+  ok: {
+    badge: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+    dot: "bg-emerald-500",
+    label: "OK",
+  },
+  absent: {
+    badge: "bg-red-50 text-red-700 ring-1 ring-red-200",
+    dot: "bg-red-500",
+    label: "Absent",
+  },
+  incomplete: {
+    badge: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
+    dot: "bg-amber-500",
+    label: "Incomplet",
+  },
+  anomaly: {
+    badge: "bg-purple-50 text-purple-700 ring-1 ring-purple-200",
+    dot: "bg-purple-500",
+    label: "Anomalie",
+  },
+};
+
+function StatusBadge({ status }: { status: "ok" | "absent" | "incomplete" | "anomaly" }) {
+  const s = STATUS_STYLE[status] ?? STATUS_STYLE.anomaly;
+  return (
+    <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-lg font-medium ${s.badge}`}>
+      <span className={`h-2 w-2 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
+  );
+}
+
+const PIE_COLORS = ["#2563eb", "#ef4444", "#f59e0b", "#a855f7"];
+const BAR_COLORS = ["#2563eb", "#06b6d4", "#22c55e", "#f59e0b", "#a855f7", "#ef4444"];
+
+function minutesToHHMM(min: number) {
+  const h = Math.floor((min || 0) / 60);
+  const m = (min || 0) % 60;
+  return `${h}:${String(m).padStart(2, "0")}`;
+}
+
+function downloadCSV(filename: string, rows: Record<string, any>[]) {
+  if (!rows.length) return;
+
+  const headers = Object.keys(rows[0]);
+  const esc = (v: any) => {
+    const s = String(v ?? "");
+    const needs = /[",\n]/.test(s);
+    const out = s.replaceAll('"', '""');
+    return needs ? `"${out}"` : out;
   };
 
-  function StatusBadge({ status }: { status: "ok" | "absent" | "incomplete" | "anomaly" }) {
-    const s = STATUS_STYLE[status] ?? STATUS_STYLE.anomaly;
-    return (
-      <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-lg font-medium ${s.badge}`}>
-        <span className={`h-2 w-2 rounded-full ${s.dot}`} />
-        {s.label}
-      </span>
-    );
-  }
+  const csv = [headers.join(","), ...rows.map(r => headers.map(h => esc(r[h])).join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
+function isoToday() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
 
-  const PIE_COLORS = ["#2563eb", "#ef4444", "#f59e0b", "#a855f7"];
-  const BAR_COLORS = ["#2563eb", "#06b6d4", "#22c55e", "#f59e0b", "#a855f7", "#ef4444"];
+function yyyyMmToday() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}`;
+}
 
-  function minutesToHHMM(min: number) {
-    const h = Math.floor((min || 0) / 60);
-    const m = (min || 0) % 60;
-    return `${h}:${String(m).padStart(2, "0")}`;
-  }
+function isoWeekNow() {
+  const d = new Date();
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
 
-  function downloadCSV(filename: string, rows: Record<string, any>[]) {
-    if (!rows.length) return;
-
-    const headers = Object.keys(rows[0]);
-    const esc = (v: any) => {
-      const s = String(v ?? "");
-      const needs = /[",\n]/.test(s);
-      const out = s.replaceAll('"', '""');
-      return needs ? `"${out}"` : out;
-    };
-
-    const csv = [headers.join(","), ...rows.map(r => headers.map(h => esc(r[h])).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function isoToday() {
-    const d = new Date();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${d.getFullYear()}-${mm}-${dd}`;
-  }
-
-  function yyyyMmToday() {
-    const d = new Date();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    return `${d.getFullYear()}-${mm}`;
-  }
-
-  function isoWeekNow() {
-    const d = new Date();
-    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    const dayNum = date.getUTCDay() || 7;
-    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-    const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-    return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
-  }
-
- 
-
-  function formatTime(iso?: string | null) {
+function formatTime(iso?: string | null) {
   if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "-";
 
-  // 24h garanti
   return new Intl.DateTimeFormat("fr-FR", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   }).format(d);
 }
-
 
 function minutesToSignedHHMM(min: number) {
   const v = Math.round(min || 0);
@@ -153,254 +149,254 @@ function minutesToSignedHHMM(min: number) {
   return `${sign}${h}:${String(m).padStart(2, "0")}`;
 }
 
+function getFunctionLabel(r: any) {
+  return r.fonction || r.position || r.job_title || r.poste || "-";
+}
 
-  function getFunctionLabel(r: any) {
-    return r.fonction || r.position || r.job_title || r.poste || "-";
-  }
+function ProgressExpected({
+  workedHours,
+  expectedHours,
+  label,
+}: {
+  workedHours: number;
+  expectedHours: number;
+  label?: string;
+}) {
+  const base = expectedHours > 0 ? expectedHours : 40;
+  const pct = Math.max(0, Math.min(100, (workedHours / base) * 100));
+  const ok = workedHours >= base;
 
-  function ProgressExpected({
-    workedHours,
-    expectedHours,
-    label,
-  }: {
-    workedHours: number;
-    expectedHours: number;
-    label?: string;
-  }) {
-    const base = expectedHours > 0 ? expectedHours : 40;
-    const pct = Math.max(0, Math.min(100, (workedHours / base) * 100));
-    const ok = workedHours >= base;
-
-    return (
-      <div className="w-full">
-        <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${pct}%` }}
-            transition={{ type: "spring", stiffness: 120, damping: 18 }}
-            className={`h-2 rounded-full ${ok ? "bg-emerald-500" : "bg-camublue-900"}`}
-          />
-        </div>
-        <div className="mt-1 text-[11px] text-slate-500">
-          {workedHours.toFixed(1)}h / {base.toFixed(0)}h {ok ? "✅" : ""} {label ? `· ${label}` : ""}
-        </div>
+  return (
+    <div className="w-full">
+      <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ type: "spring", stiffness: 120, damping: 18 }}
+          className={`h-2 rounded-full ${ok ? "bg-emerald-500" : "bg-camublue-900"}`}
+        />
       </div>
+      <div className="mt-1 text-[11px] text-slate-500">
+        {workedHours.toFixed(1)}h / {base.toFixed(0)}h {ok ? "✅" : ""} {label ? `· ${label}` : ""}
+      </div>
+    </div>
+  );
+}
+
+export default function AttendancePage() {
+  const [tab, setTab] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [loading, setLoading] = useState(false);
+
+  const [date, setDate] = useState(isoToday());
+  const [week, setWeek] = useState(isoWeekNow());
+  const [month, setMonth] = useState(yyyyMmToday());
+
+  const [daily, setDaily] = useState<DailyStatsResponse | null>(null);
+  const [weekly, setWeekly] = useState<WeeklyStatsResponse | null>(null);
+  const [monthly, setMonthly] = useState<MonthlyStatsResponse | null>(null);
+
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [q, setQ] = useState("");
+  const [topMode, setTopMode] = useState<TopMode>("most_worked");
+  const [topN, setTopN] = useState(10);
+
+  // weekly/monthly table controls
+  const [periodTopMode, setPeriodTopMode] = useState<PeriodTopMode>("most_worked");
+  const [periodTopN, setPeriodTopN] = useState(10);
+  const [periodQ, setPeriodQ] = useState("");
+  const [periodService, setPeriodService] = useState("all");
+  const [periodSort, setPeriodSort] = useState<PeriodSortKey>("worked");
+  const [periodPage, setPeriodPage] = useState(1);
+  const [periodPageSize, setPeriodPageSize] = useState(20);
+
+  // modal detail
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailErr, setDetailErr] = useState<string | null>(null);
+  const [detailData, setDetailData] = useState<EmployeePeriodDetailResponse | null>(null);
+  const [detailOnlyIssues, setDetailOnlyIssues] = useState(true);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      if (tab === "daily") setDaily(await getDailyStats(date));
+      if (tab === "weekly") setWeekly(await getWeeklyStats(week));
+      if (tab === "monthly") setMonthly(await getMonthlyStats(month));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line
+  }, [tab]);
+
+  // reset pagination when filters change
+  useEffect(() => {
+    setPeriodPage(1);
+  }, [periodQ, periodService, periodSort, tab, weekly, monthly]);
+
+  // DAILY filtered
+  const dailyFiltered = useMemo(() => {
+    const recs = daily?.records ?? [];
+    const ql = q.trim().toLowerCase();
+
+    return recs.filter((r) => {
+      const okStatus = statusFilter === "all" ? true : r.status === statusFilter;
+      const text = [r.full_name, r.matricule, r.department].filter(Boolean).join(" ").toLowerCase();
+      const okQ = !ql ? true : text.includes(ql);
+      return okStatus && okQ;
+    });
+  }, [daily, statusFilter, q]);
+
+  const toHandleList = useMemo(() => {
+    return dailyFiltered.filter(
+      (r) => r.status === "absent" || r.status === "incomplete" || r.status === "anomaly"
     );
-  }
+  }, [dailyFiltered]);
 
-  export default function AttendancePage() {
-    const [tab, setTab] = useState<"daily" | "weekly" | "monthly">("daily");
-    const [loading, setLoading] = useState(false);
+  // Pie daily
+  const pieDaily = useMemo(() => {
+    if (!daily) return [];
+    return [
+      { name: "Présents", value: daily.kpis.present },
+      { name: "Absents", value: daily.kpis.absent },
+      { name: "Incomplets", value: daily.kpis.incomplete },
+      { name: "Anomalies", value: daily.kpis.anomalies },
+    ];
+  }, [daily]);
 
-    const [date, setDate] = useState(isoToday());
-    const [week, setWeek] = useState(isoWeekNow());
-    const [month, setMonth] = useState(yyyyMmToday());
+  // daily top chart
+  const topEmployeesData = useMemo(() => {
+    const recs = daily?.records ?? [];
+    const nameOf = (r: any) => r.full_name || r.matricule || String(r.employee_id);
 
-    const [daily, setDaily] = useState<DailyStatsResponse | null>(null);
-    const [weekly, setWeekly] = useState<WeeklyStatsResponse | null>(null);
-    const [monthly, setMonthly] = useState<MonthlyStatsResponse | null>(null);
+    if (topMode === "absent") {
+      return recs.filter(r => r.status === "absent").slice(0, topN).map(r => ({ name: nameOf(r), value: 1, label: "Absent" }));
+    }
+    if (topMode === "not_pointing") {
+      return recs.filter(r => r.status === "absent" || r.status === "incomplete").slice(0, topN).map(r => ({ name: nameOf(r), value: 1, label: r.status }));
+    }
 
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-    const [q, setQ] = useState("");
-    const [topMode, setTopMode] = useState<TopMode>("most_worked");
-    const [topN, setTopN] = useState(10);
+    const presentLike = recs.filter(r => r.status !== "absent");
+    const sorted = [...presentLike].sort((a, b) => (a.worked_minutes || 0) - (b.worked_minutes || 0));
+    const picked = topMode === "least_worked" ? sorted.slice(0, topN) : sorted.slice(-topN).reverse();
 
-    // weekly/monthly table controls
-    const [periodTopMode, setPeriodTopMode] = useState<PeriodTopMode>("most_worked");
-    const [periodTopN, setPeriodTopN] = useState(10);
-    const [periodQ, setPeriodQ] = useState("");
-    const [periodService, setPeriodService] = useState("all");
-    const [periodSort, setPeriodSort] = useState<PeriodSortKey>("worked");
-    const [periodPage, setPeriodPage] = useState(1);
-    const [periodPageSize, setPeriodPageSize] = useState(20);
+    return picked.map(r => ({
+      name: nameOf(r),
+      value: Math.round(((r.worked_minutes || 0) / 60) * 10) / 10,
+      label: minutesToHHMM(r.worked_minutes || 0),
+    }));
+  }, [daily, topMode, topN]);
 
-    // modal detail
-    const [detailOpen, setDetailOpen] = useState(false);
-    const [detailLoading, setDetailLoading] = useState(false);
-    const [detailErr, setDetailErr] = useState<string | null>(null);
-    const [detailData, setDetailData] = useState<EmployeePeriodDetailResponse | null>(null);
-    const [detailOnlyIssues, setDetailOnlyIssues] = useState(true);
+  // PERIOD rows
+  const periodRows: PeriodEmployeeRow[] = useMemo(() => {
+    if (tab === "weekly") return (weekly?.by_employee ?? []) as any;
+    if (tab === "monthly") return (monthly?.by_employee ?? []) as any;
+    return [];
+  }, [tab, weekly, monthly]);
 
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        if (tab === "daily") setDaily(await getDailyStats(date));
-        if (tab === "weekly") setWeekly(await getWeeklyStats(week));
-        if (tab === "monthly") setMonthly(await getMonthlyStats(month));
-      } finally {
-        setLoading(false);
-      }
-    };
+  const periodServices = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of periodRows) {
+      const s = (r.service || "").trim();
+      if (s) set.add(s);
+    }
+    return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [periodRows]);
 
-    useEffect(() => {
-      fetchData();
-      // eslint-disable-next-line
-    }, [tab]);
+  const periodEmployees = useMemo(() => {
+    const ql = periodQ.trim().toLowerCase();
 
-    // reset pagination when filters change
-    useEffect(() => {
-      setPeriodPage(1);
-    }, [periodQ, periodService, periodSort, tab, weekly, monthly]);
+    let out = periodRows.filter((r: any) => {
+      const okService =
+        periodService === "all"
+          ? true
+          : String(r.service || "").toLowerCase() === String(periodService).toLowerCase();
 
-    // DAILY filtered (important: la table doit utiliser dailyFiltered/toHandleList)
-    const dailyFiltered = useMemo(() => {
-      const recs = daily?.records ?? [];
-      const ql = q.trim().toLowerCase();
+      const text = `${r.matricule ?? ""} ${r.nom ?? ""} ${r.prenom ?? ""} ${r.service ?? ""} ${getFunctionLabel(r)}`.toLowerCase();
+      const okQ = !ql ? true : text.includes(ql);
+      return okService && okQ;
+    });
 
-      return recs.filter((r) => {
-        const okStatus = statusFilter === "all" ? true : r.status === statusFilter;
-        const text = [r.full_name, r.matricule, r.department].filter(Boolean).join(" ").toLowerCase();
-        const okQ = !ql ? true : text.includes(ql);
-        return okStatus && okQ;
-      });
-    }, [daily, statusFilter, q]);
+    out = [...out].sort((a: any, b: any) => {
+      if (periodSort === "worked") return (b.worked_minutes || 0) - (a.worked_minutes || 0);
+      if (periodSort === "service") return String(a.service || "").localeCompare(String(b.service || ""));
+      return `${a.nom ?? ""} ${a.prenom ?? ""}`.localeCompare(`${b.nom ?? ""} ${b.prenom ?? ""}`);
+    });
 
-    const toHandleList = useMemo(() => {
-      return dailyFiltered.filter(
-        (r) => r.status === "absent" || r.status === "incomplete" || r.status === "anomaly"
-      );
-    }, [dailyFiltered]);
+    return out;
+  }, [periodRows, periodQ, periodService, periodSort]);
 
-    // Pie daily
-    const pieDaily = useMemo(() => {
-      if (!daily) return [];
-      return [
-        { name: "Présents", value: daily.kpis.present },
-        { name: "Absents", value: daily.kpis.absent },
-        { name: "Incomplets", value: daily.kpis.incomplete },
-        { name: "Anomalies", value: daily.kpis.anomalies },
-      ];
-    }, [daily]);
+  const periodTopData = useMemo(() => {
+    const sorted = [...periodEmployees].sort((a: any, b: any) => (a.worked_minutes || 0) - (b.worked_minutes || 0));
+    const picked = periodTopMode === "least_worked" ? sorted.slice(0, periodTopN) : sorted.slice(-periodTopN).reverse();
 
-    // daily top chart
-    const topEmployeesData = useMemo(() => {
-      const recs = daily?.records ?? [];
-      const nameOf = (r: any) => r.full_name || r.matricule || String(r.employee_id);
+    return picked.map((r: any) => ({
+      name: `${r.nom ?? ""} ${r.prenom ?? ""}`.trim() || r.matricule || String(r.employee_id),
+      value: Math.round(((r.worked_minutes || 0) / 60) * 10) / 10,
+      label: minutesToHHMM(r.worked_minutes || 0),
+    }));
+  }, [periodEmployees, periodTopMode, periodTopN]);
 
-      if (topMode === "absent") {
-        return recs.filter(r => r.status === "absent").slice(0, topN).map(r => ({ name: nameOf(r), value: 1, label: "Absent" }));
-      }
-      if (topMode === "not_pointing") {
-        return recs.filter(r => r.status === "absent" || r.status === "incomplete").slice(0, topN).map(r => ({ name: nameOf(r), value: 1, label: r.status }));
-      }
+  // weekly by_day chart label with weekday
+  const barWeekly = useMemo(() => {
+    if (!weekly) return [];
+    return weekly.by_day.map((d: any) => ({
+      label: `${(d.weekday_label || "").slice(0, 3)} ${d.date.slice(5)}`,
+      worked_h: Math.round((d.worked_minutes / 60) * 10) / 10,
+      expected_h: Math.round((d.expected_minutes / 60) * 10) / 10,
+      not_pointing: d.not_pointing_count ?? 0,
+    }));
+  }, [weekly]);
 
-      const presentLike = recs.filter(r => r.status !== "absent");
-      const sorted = [...presentLike].sort((a, b) => (a.worked_minutes || 0) - (b.worked_minutes || 0));
-      const picked = topMode === "least_worked" ? sorted.slice(0, topN) : sorted.slice(-topN).reverse();
+  const barMonthly = useMemo(() => {
+    if (!monthly) return [];
+    return monthly.by_week.map((w: any) => ({
+      week: w.week,
+      worked_h: Math.round((w.worked_minutes / 60) * 10) / 10,
+      expected_h: Math.round((w.expected_minutes / 60) * 10) / 10,
+    }));
+  }, [monthly]);
 
-      return picked.map(r => ({
-        name: nameOf(r),
-        value: Math.round(((r.worked_minutes || 0) / 60) * 10) / 10,
-        label: minutesToHHMM(r.worked_minutes || 0),
-      }));
-    }, [daily, topMode, topN]);
+  // pagination for period table
+  const periodTotal = periodEmployees.length;
+  const periodTotalPages = Math.max(1, Math.ceil(periodTotal / periodPageSize));
+  const periodPageSafe = Math.min(periodPage, periodTotalPages);
+  const periodSlice = useMemo(() => {
+    const start = (periodPageSafe - 1) * periodPageSize;
+    const end = start + periodPageSize;
+    return periodEmployees.slice(start, end);
+  }, [periodEmployees, periodPageSafe, periodPageSize]);
 
-    // PERIOD rows
-    const periodRows: PeriodEmployeeRow[] = useMemo(() => {
-      if (tab === "weekly") return (weekly?.by_employee ?? []) as any;
-      if (tab === "monthly") return (monthly?.by_employee ?? []) as any;
-      return [];
-    }, [tab, weekly, monthly]);
+  const openDetail = async (employee_id: number) => {
+    const start = tab === "weekly" ? weekly?.start : monthly?.start;
+    const end = tab === "weekly" ? weekly?.end : monthly?.end;
+    if (!start || !end) return;
 
-    const periodServices = useMemo(() => {
-      const set = new Set<string>();
-      for (const r of periodRows) {
-        const s = (r.service || "").trim();
-        if (s) set.add(s);
-      }
-      return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-    }, [periodRows]);
+    setDetailErr(null);
+    setDetailData(null);
+    setDetailOpen(true);
+    setDetailLoading(true);
+    try {
+      const data = await getEmployeePeriodDetail({ employee_id, start, end });
+      setDetailData(data);
+    } catch (e: any) {
+      setDetailErr(e?.message || "Erreur chargement détail");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
-    const periodEmployees = useMemo(() => {
-      const ql = periodQ.trim().toLowerCase();
+  const detailDays = useMemo(() => {
+    const days = detailData?.days ?? [];
+    if (!detailOnlyIssues) return days;
+    return days.filter((d: any) => d.status === "absent" || d.status === "incomplete" || d.status === "anomaly");
+  }, [detailData, detailOnlyIssues]);
 
-      let out = periodRows.filter((r: any) => {
-        const okService =
-          periodService === "all"
-            ? true
-            : String(r.service || "").toLowerCase() === String(periodService).toLowerCase();
-
-        const text = `${r.matricule ?? ""} ${r.nom ?? ""} ${r.prenom ?? ""} ${r.service ?? ""} ${getFunctionLabel(r)}`.toLowerCase();
-        const okQ = !ql ? true : text.includes(ql);
-        return okService && okQ;
-      });
-
-      out = [...out].sort((a: any, b: any) => {
-        if (periodSort === "worked") return (b.worked_minutes || 0) - (a.worked_minutes || 0);
-        if (periodSort === "service") return String(a.service || "").localeCompare(String(b.service || ""));
-        return `${a.nom ?? ""} ${a.prenom ?? ""}`.localeCompare(`${b.nom ?? ""} ${b.prenom ?? ""}`);
-      });
-
-      return out;
-    }, [periodRows, periodQ, periodService, periodSort]);
-
-    const periodTopData = useMemo(() => {
-      const sorted = [...periodEmployees].sort((a: any, b: any) => (a.worked_minutes || 0) - (b.worked_minutes || 0));
-      const picked = periodTopMode === "least_worked" ? sorted.slice(0, periodTopN) : sorted.slice(-periodTopN).reverse();
-
-      return picked.map((r: any) => ({
-        name: `${r.nom ?? ""} ${r.prenom ?? ""}`.trim() || r.matricule || String(r.employee_id),
-        value: Math.round(((r.worked_minutes || 0) / 60) * 10) / 10,
-        label: minutesToHHMM(r.worked_minutes || 0),
-      }));
-    }, [periodEmployees, periodTopMode, periodTopN]);
-
-    // weekly by_day chart label with weekday
-    const barWeekly = useMemo(() => {
-      if (!weekly) return [];
-      return weekly.by_day.map((d: any) => ({
-        label: `${(d.weekday_label || "").slice(0, 3)} ${d.date.slice(5)}`,
-        worked_h: Math.round((d.worked_minutes / 60) * 10) / 10,
-        expected_h: Math.round((d.expected_minutes / 60) * 10) / 10,
-        not_pointing: d.not_pointing_count ?? 0,
-      }));
-    }, [weekly]);
-
-    const barMonthly = useMemo(() => {
-      if (!monthly) return [];
-      return monthly.by_week.map((w: any) => ({
-        week: w.week,
-        worked_h: Math.round((w.worked_minutes / 60) * 10) / 10,
-        expected_h: Math.round((w.expected_minutes / 60) * 10) / 10,
-      }));
-    }, [monthly]);
-
-    // pagination for period table
-    const periodTotal = periodEmployees.length;
-    const periodTotalPages = Math.max(1, Math.ceil(periodTotal / periodPageSize));
-    const periodPageSafe = Math.min(periodPage, periodTotalPages);
-    const periodSlice = useMemo(() => {
-      const start = (periodPageSafe - 1) * periodPageSize;
-      const end = start + periodPageSize;
-      return periodEmployees.slice(start, end);
-    }, [periodEmployees, periodPageSafe, periodPageSize]);
-
-    const openDetail = async (employee_id: number) => {
-      const start = tab === "weekly" ? weekly?.start : monthly?.start;
-      const end = tab === "weekly" ? weekly?.end : monthly?.end;
-      if (!start || !end) return;
-
-      setDetailErr(null);
-      setDetailData(null);
-      setDetailOpen(true);
-      setDetailLoading(true);
-      try {
-        const data = await getEmployeePeriodDetail({ employee_id, start, end });
-        setDetailData(data);
-      } catch (e: any) {
-        setDetailErr(e?.message || "Erreur chargement détail");
-      } finally {
-        setDetailLoading(false);
-      }
-    };
-
-    const detailDays = useMemo(() => {
-      const days = detailData?.days ?? [];
-      if (!detailOnlyIssues) return days;
-      return days.filter((d: any) => d.status === "absent" || d.status === "incomplete" || d.status === "anomaly");
-    }, [detailData, detailOnlyIssues]);
-
-    return (
+  return (
+    <AppLayout>
       <div className="p-6 space-y-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-3">
@@ -652,9 +648,8 @@ function minutesToSignedHHMM(min: number) {
                             <td className="px-3 py-2 text-gray-600">{r.in_time ? formatTime(r.in_time) : "-"}</td>
                             <td className="px-3 py-2 text-gray-600">{r.out_time ? formatTime(r.out_time) : "-"}</td>
                             <td className="px-3 py-2 text-gray-700 font-medium">
-                                {minutesToSignedHHMM(r.delta_minutes ?? 0)}
-                              </td>
-
+                              {minutesToSignedHHMM(r.delta_minutes ?? 0)}
+                            </td>
                           </tr>
                         ))}
                         {toHandleList.length === 0 && (
@@ -816,7 +811,6 @@ function minutesToSignedHHMM(min: number) {
                         incomplete_days: r.incomplete_days ?? 0,
                         not_pointing_days: r.not_pointing_days ?? 0,
                         delta: minutesToSignedHHMM(r.delta_minutes ?? 0),
-
                       }));
                       downloadCSV(`weekly_${weekly.week}_employees.csv`, rows);
                     }}
@@ -1228,17 +1222,18 @@ function minutesToSignedHHMM(min: number) {
           )}
         </AnimatePresence>
       </div>
-    );
-  }
+    </AppLayout>
+  );
+}
 
-  function Kpi({ title, value, hint }: { title: string; value: any; hint?: string }) {
-    return (
-      <Card className="rounded-2xl border-gray-200">
-        <CardContent className="p-4">
-          <div className="text-sm text-gray-500">{title}</div>
-          <div className="text-2xl font-bold text-camublue-900 mt-1">{value}</div>
-          {hint && <div className="text-xs text-gray-400 mt-1">{hint}</div>}
-        </CardContent>
-      </Card>
-    );
-  }
+function Kpi({ title, value, hint }: { title: string; value: any; hint?: string }) {
+  return (
+    <Card className="rounded-2xl border-gray-200">
+      <CardContent className="p-4">
+        <div className="text-sm text-gray-500">{title}</div>
+        <div className="text-2xl font-bold text-camublue-900 mt-1">{value}</div>
+        {hint && <div className="text-xs text-gray-400 mt-1">{hint}</div>}
+      </CardContent>
+    </Card>
+  );
+}

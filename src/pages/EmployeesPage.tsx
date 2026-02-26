@@ -135,7 +135,7 @@ export default function EmployeesPage() {
               onClick={handleCreate}
               className="bg-camublue-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-camublue-800 transition"
             >
-              <FaPlus /> Ajouter
+              <FaPlus /> Ajouter Employer
             </button>
           </div>
         </div>
