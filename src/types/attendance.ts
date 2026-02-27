@@ -1,159 +1,206 @@
 // src/types/attendance.ts
 
-export type AttendanceStatus = "ok" | "absent" | "incomplete" | "anomaly";
+// ─── Daily ────────────────────────────────────────────────────────────────────
 
-export type DailyRecord = {
+export interface DailyRecord {
   employee_id: number;
-  matricule?: string | null;
-  full_name?: string | null;
+  matricule?: string;
+  full_name: string;
   department?: string | null;
-  work_date: string; // YYYY-MM-DD
-  weekday?: number;
-  weekday_label?: string; // Lundi...
+  work_date: string;
+  weekday: number;
+  weekday_label: string;
   in_time?: string | null;
   out_time?: string | null;
-  worked_minutes?: number | null;
-  expected_minutes?: number | null;
-  delta_minutes?: number | null;
-  late_minutes?: number | null;
-  early_leave_minutes?: number | null;
-  status: AttendanceStatus;
-  flags?: Record<string, any>;
-  // optionnels si backend les renvoie
-  position?: string | null;
-  fonction?: string | null;
-  job_title?: string | null;
-  poste?: string | null;
-};
-
-export type DailyStatsResponse = {
-  date: string;
-  weekday?: number;
-  weekday_label?: string;
-  kpis: {
-    present: number;
-    absent: number;
-    incomplete: number;
-    anomalies: number;
-    not_pointing?: number;
-    avg_late_minutes: number;
-    total_overtime_minutes: number;
-  };
-  by_department: Array<{
-    department: string;
-    ok: number;
-    absent: number;
-    incomplete: number;
-    anomaly: number;
-  }>;
-  late_top: Array<{ full_name: string; late_minutes: number; department?: string | null }>;
-  records: DailyRecord[];
-};
-
-export type WeeklyDayRow = {
-  date: string; // YYYY-MM-DD
-  weekday?: number;
-  weekday_label?: string;
   worked_minutes: number;
   expected_minutes: number;
-  ok_count?: number;
-  absent_count?: number;
-  incomplete_count?: number;
-  anomaly_count?: number;
-  not_pointing_count?: number;
-};
+  delta_minutes: number;
+  late_minutes: number;
+  /** ex: "12 min" | "1h05" | null */
+  late_label: string | null;
+  /** true si l'employé est arrivé en retard (après tolérance) */
+  is_late: boolean;
+  early_leave_minutes: number;
+  status: "ok" | "absent" | "incomplete" | "anomaly";
+  flags: Record<string, unknown>;
+  // champs optionnels
+  position?: string;
+  fonction?: string;
+  job_title?: string;
+  poste?: string;
+}
 
-export type PeriodEmployeeRow = {
+export interface DailyKpis {
+  present: number;
+  absent: number;
+  incomplete: number;
+  anomalies: number;
+  /** nombre d'employés présents mais en retard */
+  late: number;
+  not_pointing: number;
+  avg_late_minutes: number;
+  total_overtime_minutes: number;
+}
+
+export interface DepartmentStat {
+  department: string;
+  ok: number;
+  absent: number;
+  incomplete: number;
+  anomaly: number;
+  /** nombre d'employés en retard dans ce département */
+  late: number;
+}
+
+export interface LateTopEntry {
+  full_name: string;
+  late_minutes: number;
+  late_label: string;
+  department?: string | null;
+}
+
+export interface DailyStatsResponse {
+  date: string;
+  weekday: number;
+  weekday_label: string;
+  kpis: DailyKpis;
+  by_department: DepartmentStat[];
+  late_top: LateTopEntry[];
+  records: DailyRecord[];
+}
+
+// ─── Weekly ───────────────────────────────────────────────────────────────────
+
+export interface WeeklyDayEntry {
+  date: string;
+  weekday: number;
+  weekday_label: string;
+  worked_minutes: number;
+  expected_minutes: number;
+  ok_count: number;
+  absent_count: number;
+  incomplete_count: number;
+  anomaly_count: number;
+  /** nombre d'employés en retard ce jour */
+  late_count: number;
+  not_pointing_count: number;
+}
+
+export interface PeriodEmployeeRow {
   employee_id: number;
-  matricule?: string | null;
-  nom?: string | null;
-  prenom?: string | null;
-  full_name?: string | null;
+  matricule?: string;
+  nom?: string;
+  prenom?: string;
+  full_name: string;
   service?: string | null;
-
+  attendance_status?: string;
   worked_minutes: number;
   expected_minutes: number;
   worked_hours: number;
   expected_hours: number;
   delta_minutes: number;
-
-  present_days?: number;
-  absent_days?: number;
-  incomplete_days?: number;
-  anomaly_days?: number;
-  not_pointing_days?: number;
-  days_total?: number;
-
-  total_late_minutes?: number;
+  present_days: number;
+  anomaly_days: number;
+  incomplete_days: number;
+  absent_days: number;
+  not_pointing_days: number;
+  days_total: number;
+  total_late_minutes: number;
+  /** nombre de jours en retard sur la période */
+  late_days: number;
+  /** retard moyen les jours où l'employé était en retard */
+  avg_late_minutes: number;
+  // monthly only
   overtime_minutes?: number;
-
   // optionnels
-  position?: string | null;
-  fonction?: string | null;
-  job_title?: string | null;
-  poste?: string | null;
-};
+  position?: string;
+  fonction?: string;
+  job_title?: string;
+  poste?: string;
+}
 
-export type WeeklyStatsResponse = {
+export interface WeeklyTopEntry {
+  employee_id: number;
+  full_name: string;
+  late_minutes?: number;
+  count?: number;
+  department?: string | null;
+}
+
+export interface WeeklyStatsResponse {
   week: string;
-  start?: string; // YYYY-MM-DD
-  end?: string;   // YYYY-MM-DD
+  start: string;
+  end: string;
   expected_minutes: number;
   worked_minutes: number;
   delta_minutes: number;
-
   present_days: number;
   absent_days: number;
-  incomplete_days?: number;
-  anomaly_days?: number;
-  not_pointing_days?: number;
-
-  by_day: WeeklyDayRow[];
+  incomplete_days: number;
+  anomaly_days: number;
+  /** total employee-days en retard sur la semaine */
+  late_days: number;
+  not_pointing_days: number;
+  by_day: WeeklyDayEntry[];
   by_employee: PeriodEmployeeRow[];
+  top_absent: WeeklyTopEntry[];
+  top_late: WeeklyTopEntry[];
+}
 
-  top_absent: Array<{ employee_id?: number; full_name: string; count: number; department?: string | null }>;
-  top_late: Array<{ employee_id?: number; full_name: string; late_minutes: number; department?: string | null }>;
-};
+// ─── Monthly ──────────────────────────────────────────────────────────────────
 
-export type MonthlyWeekRow = {
-  week: string; // YYYY-Www
+export interface MonthlyWeekEntry {
+  week: string;
   worked_minutes: number;
   expected_minutes: number;
-};
+  /** nombre de retards (employee-jours) sur cette semaine */
+  late_count: number;
+}
 
-export type MonthlyStatsResponse = {
-  month: string; // YYYY-MM
-  start?: string;
-  end?: string;
-
+export interface MonthlyStatsResponse {
+  month: string;
+  start: string;
+  end: string;
   expected_minutes: number;
   worked_minutes: number;
   delta_minutes: number;
-
-  by_week: MonthlyWeekRow[];
+  by_week: MonthlyWeekEntry[];
   by_employee: PeriodEmployeeRow[];
+  top_absent: WeeklyTopEntry[];
+  top_overtime: WeeklyTopEntry[];
+  /** top retardataires du mois */
+  top_late: WeeklyTopEntry[];
+}
 
-  top_absent: Array<{ employee_id?: number; full_name: string; count: number; department?: string | null }>;
-  top_overtime: Array<{ employee_id?: number; full_name: string; overtime_minutes: number; department?: string | null }>;
-};
+// ─── Employee Period Detail ───────────────────────────────────────────────────
 
-export type EmployeePeriodDetailDay = {
-  date: string; // YYYY-MM-DD
-  weekday?: number;
-  weekday_label?: string;
-  status: AttendanceStatus | "present"; // backend renvoie ok/anomaly/incomplete/absent (et parfois present)
+export interface DayDetail {
+  date: string;
+  weekday: number;
+  weekday_label: string;
+  status: "ok" | "absent" | "incomplete" | "anomaly";
   in_time?: string | null;
   out_time?: string | null;
-  worked_minutes?: number;
-  expected_minutes?: number;
-  reason?: string | null; // missing_row / no_in / no_out / no_in_no_out
-  flags?: Record<string, any>;
-};
+  worked_minutes: number;
+  expected_minutes: number;
+  late_minutes: number;
+  is_late: boolean;
+  late_label: string | null;
+  reason?: string | null;
+  flags: Record<string, unknown>;
+}
 
-export type EmployeePeriodDetailResponse = {
+export interface LateSummary {
+  late_days: number;
+  total_late_minutes: number;
+  avg_late_minutes: number;
+}
+
+export interface EmployeePeriodDetailResponse {
   employee_id: number;
   start: string;
   end: string;
   days_total: number;
-  days: EmployeePeriodDetailDay[];
-};
+  late_summary: LateSummary;
+  days: DayDetail[];
+}

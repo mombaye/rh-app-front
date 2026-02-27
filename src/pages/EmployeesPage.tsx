@@ -6,13 +6,17 @@ import EmployeesTable from "@/components/employees/EmployeeTable";
 import ExitEmployeeModal from "@/components/employees/ExitEmployeeModal";
 import EmployeeFormModal from "@/components/employees/EmployeeFormModal";
 import { Employee } from "@/types/employee";
-import { getEmployees, importEmployees, markExit, reinstate, createAccountFromEmployee } from "@/services/employeeService";
+import {
+  getEmployees,
+  importEmployees,
+  markExit,
+  reinstate,
+} from "@/services/employeeService";
 import { FaPlus } from "react-icons/fa";
 import toast from "react-hot-toast";
 import ReinstateEmployeeModal from "@/components/employees/ReinstateEmployeeModal";
 
-
-type StatusFilter = 'ALL' | 'ACTIVE' | 'EXITED';
+type StatusFilter = "ALL" | "ACTIVE" | "EXITED";
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -21,9 +25,8 @@ export default function EmployeesPage() {
   const [showModal, setShowModal] = useState(false);
   const [reinstateOpen, setReinstateOpen] = useState(false);
   const [reinstateTarget, setReinstateTarget] = useState<Employee | null>(null);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ACTIVE');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ACTIVE");
 
-  // Sortie modal
   const [exitOpen, setExitOpen] = useState(false);
   const [exitTarget, setExitTarget] = useState<Employee | null>(null);
 
@@ -43,23 +46,10 @@ export default function EmployeesPage() {
     fetchEmployees();
   }, [statusFilter]);
 
-  const handleEdit = (employee: Employee) => {
-    setSelected(employee);
-    setShowModal(true);
-  };
-
-  const handleCreate = () => {
-    setSelected(null);
-    setShowModal(true);
-  };
-
+  const handleEdit = (employee: Employee) => { setSelected(employee); setShowModal(true); };
+  const handleCreate = () => { setSelected(null); setShowModal(true); };
   const handleCloseModal = () => setShowModal(false);
-
-  // → on remplace "delete" par "exit"
-  const handleExitClick = (emp: Employee) => {
-    setExitTarget(emp);
-    setExitOpen(true);
-  };
+  const handleExitClick = (emp: Employee) => { setExitTarget(emp); setExitOpen(true); };
 
   const handleConfirmExit = async (payload: { date_sortie: string; motif_sortie?: string }) => {
     if (!exitTarget) return;
@@ -70,17 +60,7 @@ export default function EmployeesPage() {
       setExitTarget(null);
       fetchEmployees();
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || "Erreur lors de l’enregistrement de la sortie");
-    }
-  };
-
-  const handleReinstate = async (emp: Employee) => {
-    try {
-      await reinstate(emp.id);
-      toast.success(`${emp.prenom} ${emp.nom} réintégré`);
-      fetchEmployees();
-    } catch {
-      toast.error("Erreur lors de la réintégration");
+      toast.error(e?.response?.data?.error || "Erreur lors de l'enregistrement de la sortie");
     }
   };
 
@@ -88,11 +68,16 @@ export default function EmployeesPage() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      await importEmployees(formData);
-      toast.success("Import terminé avec succès");
+      const result = await importEmployees(formData);
+      const c = result.created ?? 0;
+      const u = result.updated ?? 0;
+      const s = result.skipped ?? 0;
+      if (s > 0) toast.error(`Import terminé — ${s} ligne(s) ignorée(s)`);
+      else toast.success(`Import terminé — ${c} créé(s), ${u} mis à jour`);
       fetchEmployees();
-    } catch {
+    } catch (err: any) {
       toast.error("Erreur lors de l'import");
+      console.error(err?.response?.data);
     }
   };
 
@@ -100,7 +85,7 @@ export default function EmployeesPage() {
 
   const doReinstate = async (payload: { date_reintegration?: string; update_date_embauche?: boolean }) => {
     if (!reinstateTarget) return;
-    await reinstate(reinstateTarget.id, payload);   // <-- envoie la date au backend
+    await reinstate(reinstateTarget.id, payload);
     toast.success(`${reinstateTarget.prenom} ${reinstateTarget.nom} réintégré`);
     setReinstateOpen(false);
     setReinstateTarget(null);
@@ -113,13 +98,12 @@ export default function EmployeesPage() {
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.4 }}
-        className="space-y-6"
+        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-6 p-6"
       >
-        <div className="flex flex-col md:flex-row justify-between gap-3 md:items-center">
+        {/* ── En-tête (fixe) ── */}
+        <div className="flex flex-col md:flex-row justify-between gap-3 md:items-center shrink-0">
           <h1 className="text-3xl font-bold text-camublue-900">Gestion des employés</h1>
-
           <div className="flex items-center gap-3">
-            {/* Filtre statut */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
@@ -130,7 +114,6 @@ export default function EmployeesPage() {
               <option value="EXITED">Sortis</option>
               <option value="ALL">Tous</option>
             </select>
-
             <button
               onClick={handleCreate}
               className="bg-camublue-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-camublue-800 transition"
@@ -140,35 +123,39 @@ export default function EmployeesPage() {
           </div>
         </div>
 
-        <EmployeesStatsHeader data={employees} loading={isLoading} />
+        {/* ── Stats (fixe) ── */}
+        <div className="shrink-0">
+          <EmployeesStatsHeader data={employees} loading={isLoading} />
+        </div>
 
-        <EmployeesTable
-          employees={employees}
-          isLoading={isLoading}
-          onEdit={handleEdit}
-          onExit={handleExitClick}
-          onReinstate={openReinstate}
-          onImport={handleImport}
-        />
+        {/* ── Tableau : prend tout l'espace restant, gère son propre scroll ── */}
+        <div className="flex-1 min-h-0">
+          <EmployeesTable
+            employees={employees}
+            isLoading={isLoading}
+            onEdit={handleEdit}
+            onExit={handleExitClick}
+            onReinstate={openReinstate}
+            onImport={handleImport}
+          />
+        </div>
 
-
+        {/* ── Modals ── */}
         <EmployeeFormModal
           open={showModal}
           onClose={handleCloseModal}
           onSuccess={fetchEmployees}
           initialData={selected}
         />
-
         <ExitEmployeeModal
           open={exitOpen}
           onClose={() => setExitOpen(false)}
           employee={exitTarget}
           onConfirm={handleConfirmExit}
         />
-
         <ReinstateEmployeeModal
           open={reinstateOpen}
-          onClose={()=>setReinstateOpen(false)}
+          onClose={() => setReinstateOpen(false)}
           employee={reinstateTarget}
           onConfirm={doReinstate}
         />

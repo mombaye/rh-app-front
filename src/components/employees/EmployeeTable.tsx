@@ -2,7 +2,8 @@ import { useEffect, useState, useRef, Fragment } from "react";
 import {
   FaEdit, FaFileExcel, FaUserPlus, FaPaperPlane,
   FaSort, FaSortUp, FaSortDown, FaFilePdf,
-  FaSearch, FaTimes, FaChevronRight, FaArrowLeft, FaCheck
+  FaSearch, FaTimes, FaChevronRight, FaArrowLeft, FaCheck,
+  FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight
 } from "react-icons/fa";
 import { TbLogout } from "react-icons/tb";
 import { AiOutlineRollback } from "react-icons/ai";
@@ -26,12 +27,13 @@ interface Props {
 
 type SortKey = "matricule" | "nom" | "prenom" | "fonction" | "sexe";
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
 export default function EmployeesTable({
   employees, isLoading, onEdit, onExit, onReinstate, onImport,
 }: Props) {
   const [search, setSearch] = useState("");
   const [filtered, setFiltered] = useState<Employee[]>([]);
-  const [importFile, setImportFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [accountLoading, setAccountLoading] = useState<number | null>(null);
@@ -41,10 +43,13 @@ export default function EmployeesTable({
   const [payslipEmp, setPayslipEmp] = useState<Employee | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: "asc" | "desc" } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const isAllSelected = filtered.length > 0 && filtered.every((e) => selectedIds.has(e.id));
   const [isSendingCodes, setIsSendingCodes] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sendScope, setSendScope] = useState<"selected" | "filtered" | "all">("selected");
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Row action modal
   const [rowOpen, setRowOpen] = useState(false);
@@ -73,7 +78,13 @@ export default function EmployeesTable({
       });
     }
     setFiltered(result);
+    setCurrentPage(1);
   }, [search, employees, userFilter, sortConfig]);
+
+  // Pagination computed values
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedEmployees = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const isAllSelected = paginatedEmployees.length > 0 && paginatedEmployees.every((e) => selectedIds.has(e.id));
 
   const handleSort = (key: SortKey) => {
     setSortConfig((prev) =>
@@ -92,10 +103,30 @@ export default function EmployeesTable({
   const toggleAllFiltered = () => {
     setSelectedIds((prev) => {
       const n = new Set(prev);
-      if (isAllSelected) filtered.forEach((e) => n.delete(e.id));
-      else filtered.forEach((e) => n.add(e.id));
+      if (isAllSelected) paginatedEmployees.forEach((e) => n.delete(e.id));
+      else paginatedEmployees.forEach((e) => n.add(e.id));
       return n;
     });
+  };
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.min(Math.max(1, page), totalPages));
+  };
+
+  const getPageNumbers = () => {
+    const pages: (number | "...")[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 3) pages.push("...");
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      for (let i = start; i <= end; i++) pages.push(i);
+      if (currentPage < totalPages - 2) pages.push("...");
+      pages.push(totalPages);
+    }
+    return pages;
   };
 
   const doSendCodes = async () => {
@@ -140,14 +171,21 @@ export default function EmployeesTable({
     }
   };
 
-  const handleImport = async () => {
-    if (!importFile) return toast.error("Veuillez sélectionner un fichier Excel.");
+  // Import : ouvre le sélecteur de fichier, puis importe directement à la sélection
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input so same file can be re-selected
+    e.target.value = "";
     setIsImporting(true);
     const toastId = toast.loading("Import en cours...");
     try {
-      await onImport(importFile);
+      await onImport(file);
       toast.success("Import terminé avec succès", { id: toastId });
-      setImportFile(null);
     } catch {
       toast.error("Erreur lors de l'import", { id: toastId });
     } finally {
@@ -198,12 +236,12 @@ export default function EmployeesTable({
     const isExited = rowEmp.status === "EXITED";
 
     const rowActions = [
-      { id: "edit", icon: <FaEdit size={15} />, label: "Modifier les informations", desc: "Mettre à jour le profil et les données de cet employé", color: "text-amber-600", bg: "bg-amber-50 hover:bg-amber-100 border-amber-200", show: true },
-      { id: "send-code", icon: <FaPaperPlane size={15} />, label: "Envoyer le code d'accès", desc: "Envoyer par email le code d'accès à la plateforme eRH", color: "text-emerald-600", bg: "bg-emerald-50 hover:bg-emerald-100 border-emerald-200", show: true },
-      { id: "create-account", icon: <FaUserPlus size={15} />, label: "Créer un accès utilisateur", desc: "Générer un compte eRH pour cet employé", color: "text-blue-600", bg: "bg-blue-50 hover:bg-blue-100 border-blue-200", show: !isExited },
-      { id: "exit", icon: <TbLogout size={15} />, label: "Enregistrer la sortie", desc: "Marquer le départ de cet employé de l'entreprise", color: "text-red-600", bg: "bg-red-50 hover:bg-red-100 border-red-200", show: !isExited },
-      { id: "reinstate", icon: <AiOutlineRollback size={15} />, label: "Réintégrer l'employé", desc: "Annuler la sortie et réactiver le profil de cet employé", color: "text-camublue-900", bg: "bg-slate-50 hover:bg-slate-100 border-slate-200", show: isExited },
-      { id: "payslip", icon: <FaFilePdf size={15} />, label: "Renvoyer un bulletin de paie", desc: "Renvoyer un bulletin de paie existant par email", color: "text-purple-600", bg: "bg-purple-50 hover:bg-purple-100 border-purple-200", show: true },
+      { id: "edit", icon: <FaEdit size={15} />, label: "Modifier les informations", color: "text-amber-600", show: true },
+      { id: "send-code", icon: <FaPaperPlane size={15} />, label: "Envoyer le code d'accès", color: "text-emerald-600", show: true },
+      { id: "create-account", icon: <FaUserPlus size={15} />, label: "Créer un accès utilisateur", color: "text-blue-600", show: !isExited },
+      { id: "exit", icon: <TbLogout size={15} />, label: "Enregistrer la sortie", color: "text-red-600", show: !isExited },
+      { id: "reinstate", icon: <AiOutlineRollback size={15} />, label: "Réintégrer l'employé", color: "text-camublue-900", show: isExited },
+      { id: "payslip", icon: <FaFilePdf size={15} />, label: "Renvoyer un bulletin de paie", color: "text-purple-600", show: true },
     ].filter((a) => a.show);
 
     const handleRowAction = (id: string) => {
@@ -218,33 +256,28 @@ export default function EmployeesTable({
 
     return (
       <div>
-        {/* En-tête sobre */}
         <div className="mb-5 pb-4 border-b border-slate-100">
           <p className="text-xs text-slate-400 uppercase tracking-widest font-medium mb-1">Employé</p>
           <div className="font-bold text-slate-800 text-lg">{rowEmp.prenom} {rowEmp.nom}</div>
           <div className="text-xs text-slate-400">{rowEmp.matricule} · {rowEmp.fonction}</div>
         </div>
-
-        {/* Liste d'actions minimaliste */}
         <div className="divide-y divide-slate-100">
           {rowActions.map((action) => {
-            const isLoading =
+            const loading =
               (action.id === "create-account" && accountLoading === rowEmp.id) ||
               (action.id === "send-code" && isSendingCodes);
             return (
               <button
                 key={action.id}
                 onClick={() => handleRowAction(action.id)}
-                disabled={isLoading}
+                disabled={loading}
                 className="w-full flex items-center justify-between px-1 py-3 text-left group hover:bg-slate-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <div className="flex items-center gap-3">
-                  <span className={`${action.color}`}>{action.icon}</span>
-                  <span className="text-sm text-slate-700 group-hover:text-slate-900 font-medium transition-colors">
-                    {action.label}
-                  </span>
+                  <span className={action.color}>{action.icon}</span>
+                  <span className="text-sm text-slate-700 group-hover:text-slate-900 font-medium transition-colors">{action.label}</span>
                 </div>
-                {isLoading
+                {loading
                   ? <ImSpinner2 className="animate-spin text-slate-400 shrink-0" size={13} />
                   : <FaChevronRight className="text-slate-300 group-hover:text-slate-400 shrink-0 transition-colors" size={10} />
                 }
@@ -257,12 +290,10 @@ export default function EmployeesTable({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full gap-3">
 
-      {/* ── Toolbar : recherche à gauche, actions à droite ── */}
-      <div className="flex items-center gap-2">
-
-        {/* Barre de recherche — prend tout l’espace restant à gauche */}
+      {/* ── Toolbar (fixe) ── */}
+      <div className="flex items-center gap-2 shrink-0">
         <div className="relative flex-1">
           <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
           <Input
@@ -275,7 +306,6 @@ export default function EmployeesTable({
 
         <div className="h-6 w-px bg-slate-200 shrink-0" />
 
-        {/* Filtre accès eRH */}
         <select
           value={userFilter}
           onChange={(e) => setUserFilter(e.target.value as any)}
@@ -317,20 +347,29 @@ export default function EmployeesTable({
 
         <div className="h-6 w-px bg-slate-200 shrink-0" />
 
-        {/* Import */}
-        <input type="file" ref={fileInputRef} onChange={(e) => setImportFile(e.target.files?.[0] || null)} accept=".xlsx" className="hidden" />
-        <button onClick={() => fileInputRef.current?.click()} className="bg-white border border-slate-300 text-slate-700 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 flex items-center gap-2 transition shadow-sm">
-          <FaFileExcel className="text-green-600" size={14} />
-          {importFile ? <span className="max-w-[100px] truncate text-camublue-900 font-medium">{importFile.name}</span> : "Choisir un fichier"}
-        </button>
-        <button onClick={handleImport} disabled={!importFile || isImporting} className="bg-camublue-900 text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-camublue-800 disabled:opacity-40 transition shadow-sm">
-          {isImporting ? <ImSpinner2 className="animate-spin" size={13} /> : null}
+        {/* Importer — un seul bouton, déclenche directement le file picker */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelected}
+          accept=".xlsx"
+          className="hidden"
+        />
+        <button
+          onClick={handleImportClick}
+          disabled={isImporting}
+          className="bg-white border border-slate-300 text-slate-700 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2 transition shadow-sm"
+        >
+          {isImporting
+            ? <ImSpinner2 className="animate-spin text-green-600" size={14} />
+            : <FaFileExcel className="text-green-600" size={14} />
+          }
           {isImporting ? "Importation..." : "Importer"}
         </button>
 
         <div className="h-6 w-px bg-slate-200 shrink-0" />
 
-        {/* Export */}
+        {/* Exporter */}
         <Menu as="div" className="relative inline-block text-left">
           <Menu.Button disabled={isExporting} className="bg-white border border-slate-300 text-slate-700 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2 transition shadow-sm">
             {isExporting ? <ImSpinner2 className="animate-spin" size={13} /> : <FaFileExcel className="text-green-600" size={14} />}
@@ -354,9 +393,9 @@ export default function EmployeesTable({
         </Menu>
       </div>
 
-      {/* ── Tableau ── */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
-        <table className="min-w-full bg-white rounded-xl">
+      {/* ── Tableau avec thead sticky + tbody scrollable ── */}
+      <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
+        <table className="min-w-full bg-white">
           <thead className="bg-camublue-900 text-white sticky top-0 z-10">
             <tr>
               <th className="px-4 py-3 border-b border-camublue-800">
@@ -379,7 +418,7 @@ export default function EmployeesTable({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((emp) => (
+            {paginatedEmployees.map((emp) => (
               <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                 <td className="px-4 py-3">
                   <input type="checkbox" checked={selectedIds.has(emp.id)} onChange={() => toggleOne(emp.id)} />
@@ -412,7 +451,7 @@ export default function EmployeesTable({
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && !isLoading && (
+            {paginatedEmployees.length === 0 && !isLoading && (
               <tr>
                 <td colSpan={12} className="text-center py-12 text-slate-400 text-sm">
                   Aucun employé trouvé.
@@ -422,6 +461,62 @@ export default function EmployeesTable({
           </tbody>
         </table>
       </div>
+
+      {/* ── Pagination (fixe) ── */}
+      {filtered.length > 0 && (
+        <div className="flex items-center justify-between px-1 shrink-0">
+          <div className="flex items-center gap-3 text-sm text-slate-500">
+            <span>
+              {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, filtered.length)} sur{" "}
+              <span className="font-semibold text-slate-700">{filtered.length}</span> employé(s)
+            </span>
+            <div className="h-4 w-px bg-slate-200" />
+            <div className="flex items-center gap-1.5">
+              <span>Afficher</span>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                className="border border-slate-300 rounded-md text-sm px-2 py-1 bg-white focus:ring-2 focus:ring-camublue-900 focus:outline-none shadow-sm"
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+              <span>par page</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button onClick={() => goToPage(1)} disabled={currentPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Première page">
+              <FaAngleDoubleLeft size={12} />
+            </button>
+            <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Page précédente">
+              <FaChevronLeft size={12} />
+            </button>
+            <div className="flex items-center gap-1 mx-1">
+              {getPageNumbers().map((page, i) =>
+                page === "..." ? (
+                  <span key={`ellipsis-${i}`} className="px-1 text-slate-400 text-sm select-none">…</span>
+                ) : (
+                  <button
+                    key={page}
+                    onClick={() => goToPage(page as number)}
+                    className={`min-w-[32px] h-8 rounded-md text-sm font-medium transition-colors ${currentPage === page ? "bg-camublue-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}
+                  >
+                    {page}
+                  </button>
+                )
+              )}
+            </div>
+            <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Page suivante">
+              <FaChevronRight size={12} />
+            </button>
+            <button onClick={() => goToPage(totalPages)} disabled={currentPage === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Dernière page">
+              <FaAngleDoubleRight size={12} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal confirmation envoi codes ── */}
       {confirmOpen && (
