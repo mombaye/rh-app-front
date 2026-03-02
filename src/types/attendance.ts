@@ -204,3 +204,14 @@ export interface EmployeePeriodDetailResponse {
   late_summary: LateSummary;
   days: DayDetail[];
 }
+
+
+// Définition de l'interface Pointage
+interface Pointage {
+  day: string;
+  date: string;
+  in_time: string | null;
+  out_time: string | null;
+  status: "ok" | "absent" | "incomplete" | "anomaly";
+}
+

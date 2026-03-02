@@ -4,65 +4,178 @@ import {
   Users2,
   BadgeDollarSign,
   Clock,
+  ChevronDown,
+  ChevronRight,
   X,
-  LogOut,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.jpg";
 import { useAuth } from "@/contexts/useAuth";
 import { useState } from "react";
 
 const navItems = [
-  { label: "Tableau de bord", path: "/dashboard", icon: <LayoutDashboard size={20} /> },
-  { label: "Employés", path: "/employees", icon: <Users2 size={20} /> },
-  { label: "Bulletins Salariés", path: "/payslip", icon: <BadgeDollarSign size={20} /> },
-  { label: "Pointages", path: "/attendance", icon: <Clock size={20} /> },
+  {
+    label: "Tableau de bord",
+    path: "/dashboard",
+    icon: <LayoutDashboard size={20} />,
+  },
+  {
+    label: "Employés",
+    path: "/employees",
+    icon: <Users2 size={20} />,
+    subItems: [
+      { label: "Internes",     path: "/employees/internes" },
+      { label: "Intérimaires", path: "/employees/interims" },
+    ],
+  },
+  {
+    label: "Bulletins Salariés",
+    path: "/payslip",
+    icon: <BadgeDollarSign size={20} />,
+  },
+  {
+    label: "Pointages",
+    path: "/attendance",
+    icon: <Clock size={20} />,
+  },
 ];
+
+type NavItem = typeof navItems[0];
 
 export default function Sidebar({
   mobileOpen,
   setMobileOpen,
+}: {
+  mobileOpen: boolean;
+  setMobileOpen: (v: boolean) => void;
 }) {
   const location = useLocation();
   const { user, logout } = useAuth();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
+  // Ouvre automatiquement la section dont un sous-item est actif au premier rendu
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    navItems.forEach((item) => {
+      if (item.subItems?.some((s) => location.pathname.startsWith(s.path))) {
+        initial[item.path] = true;
+      }
+    });
+    return initial;
+  });
+
+  const toggleMenu = (path: string) =>
+    setOpenMenus((prev) => ({ ...prev, [path]: !prev[path] }));
+
+  const isParentActive = (item: NavItem) =>
+    item.subItems
+      ? item.subItems.some((s) => location.pathname.startsWith(s.path))
+      : location.pathname === item.path;
+
+  // ── Composant NavLink ──────────────────────────────────────────────────────
+  const NavLink = ({ item, onClose }: { item: NavItem; onClose?: () => void }) => {
+    const hasChildren  = !!item.subItems?.length;
+    const isOpen       = openMenus[item.path] ?? false;
+    const parentActive = isParentActive(item);
+
+    if (hasChildren) {
+      return (
+        <div>
+          {/* Bouton parent — clique pour ouvrir/fermer */}
+          <button
+            onClick={() => toggleMenu(item.path)}
+            className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-150 ${
+              parentActive
+                ? "bg-camublue-900/10 text-camublue-900"
+                : "text-gray-700 hover:bg-camublue-900/10 hover:text-camublue-900"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              {item.icon}
+              {item.label}
+            </div>
+            {isOpen
+              ? <ChevronDown  size={15} className="shrink-0 text-gray-400" />
+              : <ChevronRight size={15} className="shrink-0 text-gray-400" />
+            }
+          </button>
+
+          {/* Sous-items */}
+          {isOpen && (
+            <div className="mt-1 ml-9 flex flex-col gap-0.5 border-l-2 border-camublue-900/20 pl-3">
+              {item.subItems!.map((sub) => {
+                const isActive = location.pathname.startsWith(sub.path);
+                return (
+                  <Link
+                    key={sub.path}
+                    to={sub.path}
+                    onClick={onClose}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                      isActive
+                        ? "bg-camublue-900 text-white shadow-sm"
+                        : "text-gray-600 hover:bg-camublue-900/10 hover:text-camublue-900"
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? "bg-white" : "bg-gray-400"}`} />
+                    {sub.label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Lien simple
+    return (
+      <Link
+        to={item.path}
+        onClick={onClose}
+        className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-150 ${
+          location.pathname === item.path
+            ? "bg-camublue-900 text-white shadow-sm"
+            : "text-gray-700 hover:bg-camublue-900/10 hover:text-camublue-900"
+        }`}
+      >
+        {item.icon}
+        {item.label}
+      </Link>
+    );
+  };
+
+  // ── Contenu partagé desktop/mobile ────────────────────────────────────────
+  const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
+    <>
+      <nav className="flex-1 px-4 py-6 space-y-1">
+        {navItems.map((item) => (
+          <NavLink key={item.path} item={item} onClose={onClose} />
+        ))}
+      </nav>
+
+      <div className="px-4 py-4 border-t border-gray-200">
+        <button
+          className="flex items-center gap-3 px-4 py-2 rounded-lg w-full text-left text-gray-700 hover:bg-camublue-900/10 transition-all"
+          onClick={() => setShowLogoutModal(true)}
+        >
+          <span className="font-medium text-sm truncate">
+            {user?.username || user?.email}
+          </span>
+        </button>
+      </div>
+    </>
+  );
+
   return (
     <>
-      {/* Sidebar desktop */}
+      {/* ── Sidebar desktop ── */}
       <aside className="bg-white shadow-md w-64 min-h-screen hidden md:flex md:flex-col border-r">
         <div className="py-6 px-4 border-b-4 border-camublue-900 flex justify-center items-center">
           <img src={logo} alt="Camusat" className="w-full max-h-24 object-contain" />
         </div>
-        <nav className="flex-1 px-4 py-6 space-y-3">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-150 ${
-                location.pathname === item.path
-                  ? "bg-camublue-900 text-white shadow-sm"
-                  : "text-gray-700 hover:bg-camublue-900/10 hover:text-camublue-900"
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        {/* Section utilisateur */}
-        <div className="px-4 py-4 border-t border-gray-200">
-          <button
-            className="flex items-center gap-3 px-4 py-2 rounded-lg w-full text-left text-gray-700 hover:bg-camublue-900/10 transition-all"
-            onClick={() => setShowLogoutModal(true)}
-          >
-            <span className="font-medium text-sm truncate">
-              {user?.username || user?.email}
-            </span>
-          </button>
-        </div>
+        <SidebarContent />
       </aside>
 
-      {/* Overlay mobile */}
+      {/* ── Overlay mobile ── */}
       <div
         className={`fixed z-40 inset-0 bg-black/40 transition-opacity ${
           mobileOpen ? "block md:hidden" : "hidden"
@@ -70,9 +183,9 @@ export default function Sidebar({
         onClick={() => setMobileOpen(false)}
       />
 
-      {/* Drawer mobile */}
+      {/* ── Drawer mobile ── */}
       <aside
-        className={`fixed z-50 top-0 left-0 h-full w-64 bg-white shadow-md border-r transition-transform duration-300 ${
+        className={`fixed z-50 top-0 left-0 h-full w-64 bg-white shadow-md border-r transition-transform duration-300 flex flex-col ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:hidden`}
       >
@@ -82,46 +195,15 @@ export default function Sidebar({
             <X size={28} className="text-camublue-900" />
           </button>
         </div>
-        <nav className="flex-1 px-4 py-6 space-y-3">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-150 ${
-                location.pathname === item.path
-                  ? "bg-camublue-900 text-white shadow-sm"
-                  : "text-gray-700 hover:bg-camublue-900/10 hover:text-camublue-900"
-              }`}
-              onClick={() => setMobileOpen(false)}
-            >
-              {item.icon}
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        {/* Section utilisateur mobile */}
-        <div className="px-4 py-4 border-t border-gray-200">
-          <button
-            className="flex items-center gap-3 px-4 py-2 rounded-lg w-full text-left text-gray-700 hover:bg-camublue-900/10 transition-all"
-            onClick={() => setShowLogoutModal(true)}
-          >
-            <span className="font-medium text-sm truncate">
-              {user?.username || user?.email}
-            </span>
-          </button>
-        </div>
+        <SidebarContent onClose={() => setMobileOpen(false)} />
       </aside>
 
-      {/* Modal de confirmation de déconnexion */}
+      {/* ── Modal confirmation déconnexion ── */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl shadow-lg p-6 w-80">
-            <h3 className="text-lg font-semibold text-camublue-900 mb-4">
-              Déconnexion
-            </h3>
-            <p className="mb-6 text-gray-700">
-              Voulez-vous vraiment vous déconnecter ?
-            </p>
+            <h3 className="text-lg font-semibold text-camublue-900 mb-4">Déconnexion</h3>
+            <p className="mb-6 text-gray-700">Voulez-vous vraiment vous déconnecter ?</p>
             <div className="flex justify-end gap-3">
               <button
                 className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition"

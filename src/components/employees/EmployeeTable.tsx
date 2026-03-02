@@ -23,6 +23,10 @@ interface Props {
   onExit: (employee: Employee) => void;
   onReinstate: (employee: Employee) => void;
   onImport: (file: File) => void;
+  // ✅ Prop optionnelle : affiche ou masque la colonne "Type contrat"
+  // Utile pour les pages dédiées (ex: InterimEmployeesPage) où tous les
+  // employés ont le même type — inutile de répéter la colonne.
+  showContractType?: boolean;
 }
 
 type SortKey = "matricule" | "nom" | "prenom" | "fonction" | "sexe";
@@ -30,7 +34,13 @@ type SortKey = "matricule" | "nom" | "prenom" | "fonction" | "sexe";
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export default function EmployeesTable({
-  employees, isLoading, onEdit, onExit, onReinstate, onImport,
+  employees,
+  isLoading,
+  onEdit,
+  onExit,
+  onReinstate,
+  onImport,
+  showContractType = true, // ✅ true par défaut → pas de breaking change sur les autres pages
 }: Props) {
   const [search, setSearch] = useState("");
   const [filtered, setFiltered] = useState<Employee[]>([]);
@@ -81,7 +91,6 @@ export default function EmployeesTable({
     setCurrentPage(1);
   }, [search, employees, userFilter, sortConfig]);
 
-  // Pagination computed values
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginatedEmployees = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const isAllSelected = paginatedEmployees.length > 0 && paginatedEmployees.every((e) => selectedIds.has(e.id));
@@ -109,9 +118,7 @@ export default function EmployeesTable({
     });
   };
 
-  const goToPage = (page: number) => {
-    setCurrentPage(Math.min(Math.max(1, page), totalPages));
-  };
+  const goToPage = (page: number) => setCurrentPage(Math.min(Math.max(1, page), totalPages));
 
   const getPageNumbers = () => {
     const pages: (number | "...")[] = [];
@@ -171,15 +178,11 @@ export default function EmployeesTable({
     }
   };
 
-  // Import : ouvre le sélecteur de fichier, puis importe directement à la sélection
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
+  const handleImportClick = () => fileInputRef.current?.click();
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Reset input so same file can be re-selected
     e.target.value = "";
     setIsImporting(true);
     const toastId = toast.loading("Import en cours...");
@@ -230,11 +233,9 @@ export default function EmployeesTable({
     return <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">Actif</span>;
   };
 
-  // ── Row Action Modal
   const RowActionModal = () => {
     if (!rowEmp) return null;
     const isExited = rowEmp.status === "EXITED";
-
     const rowActions = [
       { id: "edit", icon: <FaEdit size={15} />, label: "Modifier les informations", color: "text-amber-600", show: true },
       { id: "send-code", icon: <FaPaperPlane size={15} />, label: "Envoyer le code d'accès", color: "text-emerald-600", show: true },
@@ -267,10 +268,7 @@ export default function EmployeesTable({
               (action.id === "create-account" && accountLoading === rowEmp.id) ||
               (action.id === "send-code" && isSendingCodes);
             return (
-              <button
-                key={action.id}
-                onClick={() => handleRowAction(action.id)}
-                disabled={loading}
+              <button key={action.id} onClick={() => handleRowAction(action.id)} disabled={loading}
                 className="w-full flex items-center justify-between px-1 py-3 text-left group hover:bg-slate-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <div className="flex items-center gap-3">
@@ -289,10 +287,13 @@ export default function EmployeesTable({
     );
   };
 
+  // Nombre de colonnes total (pour colSpan du message vide)
+  const colCount = 11 + (showContractType ? 1 : 0);
+
   return (
     <div className="flex flex-col h-full gap-3">
 
-      {/* ── Toolbar (fixe) ── */}
+      {/* ── Toolbar ── */}
       <div className="flex items-center gap-2 shrink-0">
         <div className="relative flex-1">
           <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
@@ -318,7 +319,6 @@ export default function EmployeesTable({
 
         <div className="h-6 w-px bg-slate-200 shrink-0" />
 
-        {/* Envoyer les codes */}
         <Menu as="div" className="relative inline-block text-left">
           <Menu.Button className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition">
             <FaPaperPlane size={13} />
@@ -334,7 +334,8 @@ export default function EmployeesTable({
                 ].map(({ scope, label }) => (
                   <Menu.Item key={scope}>
                     {({ active }) => (
-                      <button onClick={() => { setSendScope(scope); setConfirmOpen(true); }} className={`w-full text-left px-4 py-2.5 text-sm ${active ? "bg-slate-50" : ""}`}>
+                      <button onClick={() => { setSendScope(scope); setConfirmOpen(true); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm ${active ? "bg-slate-50" : ""}`}>
                         {label}
                       </button>
                     )}
@@ -347,31 +348,20 @@ export default function EmployeesTable({
 
         <div className="h-6 w-px bg-slate-200 shrink-0" />
 
-        {/* Importer — un seul bouton, déclenche directement le file picker */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileSelected}
-          accept=".xlsx"
-          className="hidden"
-        />
-        <button
-          onClick={handleImportClick}
-          disabled={isImporting}
+        <input type="file" ref={fileInputRef} onChange={handleFileSelected} accept=".xlsx" className="hidden" />
+        <button onClick={handleImportClick} disabled={isImporting}
           className="bg-white border border-slate-300 text-slate-700 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2 transition shadow-sm"
         >
-          {isImporting
-            ? <ImSpinner2 className="animate-spin text-green-600" size={14} />
-            : <FaFileExcel className="text-green-600" size={14} />
-          }
+          {isImporting ? <ImSpinner2 className="animate-spin text-green-600" size={14} /> : <FaFileExcel className="text-green-600" size={14} />}
           {isImporting ? "Importation..." : "Importer"}
         </button>
 
         <div className="h-6 w-px bg-slate-200 shrink-0" />
 
-        {/* Exporter */}
         <Menu as="div" className="relative inline-block text-left">
-          <Menu.Button disabled={isExporting} className="bg-white border border-slate-300 text-slate-700 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2 transition shadow-sm">
+          <Menu.Button disabled={isExporting}
+            className="bg-white border border-slate-300 text-slate-700 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2 transition shadow-sm"
+          >
             {isExporting ? <ImSpinner2 className="animate-spin" size={13} /> : <FaFileExcel className="text-green-600" size={14} />}
             {isExporting ? "Export..." : "Exporter"}
           </Menu.Button>
@@ -381,7 +371,8 @@ export default function EmployeesTable({
                 {[["ACTIVE", "Exporter les actifs"], ["EXITED", "Exporter les sortis"], ["ALL", "Exporter tous"]].map(([status, label]) => (
                   <Menu.Item key={status}>
                     {({ active }) => (
-                      <button onClick={() => handleExport(status as any)} className={`w-full text-left px-4 py-2.5 text-sm ${active ? "bg-slate-50" : ""}`}>
+                      <button onClick={() => handleExport(status as any)}
+                        className={`w-full text-left px-4 py-2.5 text-sm ${active ? "bg-slate-50" : ""}`}>
                         {label}
                       </button>
                     )}
@@ -393,7 +384,7 @@ export default function EmployeesTable({
         </Menu>
       </div>
 
-      {/* ── Tableau avec thead sticky + tbody scrollable ── */}
+      {/* ── Tableau ── */}
       <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
         <table className="min-w-full bg-white">
           <thead className="bg-camublue-900 text-white sticky top-0 z-10">
@@ -410,6 +401,12 @@ export default function EmployeesTable({
                   </button>
                 </th>
               ))}
+              {/* ✅ Colonne Type contrat — visible uniquement si showContractType=true */}
+              {showContractType && (
+                <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold">
+                  Type contrat
+                </th>
+              )}
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold">Date d'embauche</th>
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold">Projet</th>
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold">Manager</th>
@@ -437,6 +434,19 @@ export default function EmployeesTable({
                 <td className="px-4 py-3 text-sm">{emp.prenom}</td>
                 <td className="px-4 py-3 text-sm">{emp.sexe === "H" ? "Homme" : emp.sexe === "F" ? "Femme" : ""}</td>
                 <td className="px-4 py-3 text-sm">{emp.fonction}</td>
+                {/* ✅ Cellule Type contrat — visible uniquement si showContractType=true */}
+                {showContractType && (
+                  <td className="px-4 py-3 text-sm">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border
+                      ${emp.type_contrat === "INTERIM"
+                        ? "bg-orange-50 border-orange-200 text-orange-700"
+                        : "bg-blue-50 border-blue-200 text-blue-700"
+                      }`}
+                    >
+                      {emp.type_contrat || "—"}
+                    </span>
+                  </td>
+                )}
                 <td className="px-4 py-3 text-sm">{emp.date_embauche}</td>
                 <td className="px-4 py-3 text-sm">{emp.projet}</td>
                 <td className="px-4 py-3 text-sm">{emp.manager}</td>
@@ -453,7 +463,7 @@ export default function EmployeesTable({
             ))}
             {paginatedEmployees.length === 0 && !isLoading && (
               <tr>
-                <td colSpan={12} className="text-center py-12 text-slate-400 text-sm">
+                <td colSpan={colCount} className="text-center py-12 text-slate-400 text-sm">
                   Aucun employé trouvé.
                 </td>
               </tr>
@@ -462,7 +472,7 @@ export default function EmployeesTable({
         </table>
       </div>
 
-      {/* ── Pagination (fixe) ── */}
+      {/* ── Pagination ── */}
       {filtered.length > 0 && (
         <div className="flex items-center justify-between px-1 shrink-0">
           <div className="flex items-center gap-3 text-sm text-slate-500">
@@ -487,10 +497,10 @@ export default function EmployeesTable({
           </div>
 
           <div className="flex items-center gap-1">
-            <button onClick={() => goToPage(1)} disabled={currentPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Première page">
+            <button onClick={() => goToPage(1)} disabled={currentPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
               <FaAngleDoubleLeft size={12} />
             </button>
-            <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Page précédente">
+            <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
               <FaChevronLeft size={12} />
             </button>
             <div className="flex items-center gap-1 mx-1">
@@ -498,9 +508,7 @@ export default function EmployeesTable({
                 page === "..." ? (
                   <span key={`ellipsis-${i}`} className="px-1 text-slate-400 text-sm select-none">…</span>
                 ) : (
-                  <button
-                    key={page}
-                    onClick={() => goToPage(page as number)}
+                  <button key={page} onClick={() => goToPage(page as number)}
                     className={`min-w-[32px] h-8 rounded-md text-sm font-medium transition-colors ${currentPage === page ? "bg-camublue-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}
                   >
                     {page}
@@ -508,10 +516,10 @@ export default function EmployeesTable({
                 )
               )}
             </div>
-            <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Page suivante">
+            <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
               <FaChevronRight size={12} />
             </button>
-            <button onClick={() => goToPage(totalPages)} disabled={currentPage === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Dernière page">
+            <button onClick={() => goToPage(totalPages)} disabled={currentPage === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
               <FaAngleDoubleRight size={12} />
             </button>
           </div>

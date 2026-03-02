@@ -62,7 +62,7 @@ function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode
     <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
       {(["chiffres", "graphes"] as ViewMode[]).map((m) => (
         <button key={m} onClick={() => onChange(m)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
             mode === m ? "bg-white text-camublue-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
           }`}
         >
@@ -240,38 +240,37 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      {/* Conteneur pleine hauteur, pas de scroll global */}
-      <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
-
-        {/* ── Header fixe ── */}
-        <div className="shrink-0 px-6 pt-6 pb-4 bg-white border-b border-slate-100 shadow-sm">
-          <motion.div
-            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col md:flex-row md:items-center justify-between gap-4"
-          >
-            <div>
-              <h1 className="text-3xl font-bold text-camublue-900">Tableau de bord RH</h1>
-              <p className="text-slate-500 text-sm mt-1">Vue d'ensemble · Employés, Paie & Pointages</p>
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.4 }}
+        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-6 p-6"
+      >
+        {/* ── En-tête (fixe) ── */}
+        <div className="flex flex-col md:flex-row justify-between gap-3 md:items-center shrink-0">
+          <div>
+            <h1 className="text-3xl font-bold text-camublue-900">Tableau de bord RH</h1>
+            <p className="text-slate-500 text-sm mt-1">Vue d'ensemble · Employés, Paie &amp; Pointages</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm font-medium text-slate-700">
+              {currentMonthLabel()} <ChevronDown className="h-4 w-4 text-slate-400" />
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium text-slate-700">
-                {currentMonthLabel()} <ChevronDown className="h-4 w-4 text-slate-400" />
-              </div>
-              <button
-                onClick={() => fetchAll(true)} disabled={refreshing}
-                className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
-                title="Actualiser"
-              >
-                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              </button>
-              <ViewToggle mode={view} onChange={setView} />
-            </div>
-          </motion.div>
+            <button
+              onClick={() => fetchAll(true)}
+              disabled={refreshing}
+              className="flex items-center gap-2 bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
+              title="Actualiser"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            </button>
+            <ViewToggle mode={view} onChange={setView} />
+          </div>
         </div>
 
-        {/* ── Zone scrollable ── */}
-        <div className="flex-1 overflow-y-auto min-h-0">
-          <div className="px-6 py-6 space-y-8">
+        {/* ── Contenu scrollable ── */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="space-y-8 pb-6">
 
             {/* ── EMPLOYÉS ── */}
             <Section title="Employés" icon={Users} delay={0.05}>
@@ -473,7 +472,7 @@ export default function DashboardPage() {
 
           </div>
         </div>
-      </div>
+      </motion.div>
     </AppLayout>
   );
 }

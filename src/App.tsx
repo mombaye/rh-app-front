@@ -5,9 +5,10 @@ import EmployeesPage from "@/pages/EmployeesPage";
 import PayslipPage from "@/pages/PayslipPage";
 import ChangePasswordPage from "@/components/users/ChangePasswordPage";
 import { Toaster } from "react-hot-toast";
-import ProtectedRoute from "@/components/ProtectedRoute"; // Même logique que chez toi
+import ProtectedRoute from "@/components/ProtectedRoute";
 import FirstLoginGuard from "@/components/FirstLoginGuard";
 import AttendancePage from "./pages/AttendancePage";
+import InterimEmployeesPage from "@/pages/InterimEmployeesPage"; 
 
 function App() {
   return (
@@ -48,6 +49,16 @@ function App() {
           }
         />
         <Route
+          path="/employees/interims"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <InterimEmployeesPage />
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/payslip"
           element={
             <ProtectedRoute>
@@ -57,7 +68,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/attendance"
           element={
@@ -68,7 +78,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </>

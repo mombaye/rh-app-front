@@ -1,4 +1,6 @@
+// types/employee.ts
 export type EmployeeStatus = 'ACTIVE' | 'EXITED' | 'SUSPENDED';
+export type ContractType = 'INTERNE' | 'INTERIM'; // Nouveau type
 
 export interface Employee {
   id: number;
@@ -15,6 +17,7 @@ export interface Employee {
   localisation?: string | null;
   email?: string | null;
   telephone?: string | null;
+  type_contrat: ContractType; // Nouveau champ
 
   // Backend nouveaux champs
   status: EmployeeStatus;
@@ -22,6 +25,6 @@ export interface Employee {
   motif_sortie?: string | null;
   is_active_employee?: boolean;
 
-  // champ déjà utilisé dans ton code (si tu l’as côté backend)
+  // champ déjà utilisé dans ton code
   has_user?: boolean;
 }
