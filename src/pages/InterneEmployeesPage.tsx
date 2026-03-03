@@ -6,13 +6,12 @@ import EmployeesTable from "@/components/employees/EmployeeTable";
 import ExitEmployeeModal from "@/components/employees/ExitEmployeeModal";
 import EmployeeFormModal from "@/components/employees/EmployeeFormModal";
 import ReinstateEmployeeModal from "@/components/employees/ReinstateEmployeeModal";
-import { Employee } from "@/types/employee";
+import { Employee, ContractType } from "@/types/employee";
 import {
   getEmployees,
   importEmployees,
   markExit,
   reinstate,
-  sendAccessCodesInterim,
   bulkUpdateMatricules,
   previewMatriculeChanges,
   MatriculeUpdate,
@@ -155,6 +154,7 @@ function ImportResultModal({
   );
 }
 
+
 // ─── Bulk Update Matricules Modal ─────────────────────────────────────────────
 function BulkMatriculeModal({
   employees,
@@ -229,14 +229,7 @@ function BulkMatriculeModal({
     setRows((prev) =>
       prev.map((r) =>
         r.id === id
-          ? {
-              ...r,
-              newMatricule: r.oldMatricule,
-              error: undefined,
-              success: undefined,
-              previewStatus: undefined,
-              conflictDetail: undefined,
-            }
+          ? { ...r, newMatricule: r.oldMatricule, error: undefined, success: undefined, previewStatus: undefined, conflictDetail: undefined }
           : r
       )
     );
@@ -372,9 +365,7 @@ function BulkMatriculeModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">
-              Mise à jour des matricules
-            </h2>
+            <h2 className="text-lg font-bold text-gray-900">Mise à jour des matricules</h2>
             <p className="text-sm text-gray-500 mt-0.5">
               Modifiez les matricules directement dans le tableau ou importez un fichier Excel.{" "}
               {changedCount > 0 && (
@@ -517,9 +508,7 @@ function BulkMatriculeModal({
                     <td className="py-2.5 pr-4">
                       <div className="flex items-center gap-1.5">
                         <span className="font-mono text-gray-500">{row.oldMatricule}</span>
-                        {isChanged && (
-                          <FiArrowRight className="text-blue-400 shrink-0" size={12} />
-                        )}
+                        {isChanged && <FiArrowRight className="text-blue-400 shrink-0" size={12} />}
                       </div>
                     </td>
                     <td className="py-2.5 pr-2">
@@ -643,7 +632,7 @@ function BulkMatriculeModal({
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
-export default function InterimEmployeesPage() {
+export default function InterneEmployeesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -660,24 +649,26 @@ export default function InterimEmployeesPage() {
   const [exitOpen, setExitOpen] = useState(false);
   const [exitTarget, setExitTarget] = useState<Employee | null>(null);
 
-  const [isSendingCodes, setIsSendingCodes] = useState(false);
   const [bulkMatOpen, setBulkMatOpen] = useState(false);
 
-  const fetchInterimEmployees = async () => {
+  // ── Charge tous les employés sauf INTERIM ──────────────────────────────────
+  const fetchInternalEmployees = async () => {
     setIsLoading(true);
     try {
-      const data = await getEmployees({ type_contrat: "INTERIM" });
-      setEmployees(data);
+      // On récupère TOUS les employés actifs, puis on exclut les INTERIM côté client.
+      // Le backend filtre par status=ACTIVE par défaut (exclude EXITED).
+      const data = await getEmployees({ status: "ALL" });
+      setEmployees(data.filter((e) => e.type_contrat !== "INTERIM"));
     } catch (error) {
-      console.error("Erreur lors du chargement des employés intérimaires :", error);
-      toast.error("Erreur lors du chargement des employés intérimaires");
+      console.error("Erreur lors du chargement des employés internes :", error);
+      toast.error("Erreur lors du chargement des employés internes");
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchInterimEmployees();
+    fetchInternalEmployees();
   }, []);
 
   const handleEdit = (employee: Employee) => {
@@ -705,7 +696,7 @@ export default function InterimEmployeesPage() {
       toast.success(`Sortie enregistrée pour ${exitTarget.prenom} ${exitTarget.nom}`);
       setExitOpen(false);
       setExitTarget(null);
-      fetchInterimEmployees();
+      fetchInternalEmployees();
     } catch (e: any) {
       toast.error(
         e?.response?.data?.error || "Erreur lors de l'enregistrement de la sortie"
@@ -713,6 +704,7 @@ export default function InterimEmployeesPage() {
     }
   };
 
+  // ── Import Excel — ignore les lignes INTERIM dans le fichier ───────────────
   const handleImport = async (file: File) => {
     setIsImporting(true);
     setImportResult(null);
@@ -727,7 +719,14 @@ export default function InterimEmployeesPage() {
         skipped_details: result.skipped_details ?? [],
       };
       setImportResult(summary);
-      await fetchInterimEmployees();
+      await fetchInternalEmployees();
+      if (summary.skipped > 0 && summary.created === 0 && summary.updated === 0) {
+        toast.error(`Import terminé — ${summary.skipped} ligne(s) ignorée(s)`);
+      } else {
+        toast.success(
+          `Import terminé — ${summary.created} créé(s), ${summary.updated} mis à jour`
+        );
+      }
     } catch (err: any) {
       toast.error("Erreur lors de l'import");
       console.error(err?.response?.data);
@@ -757,23 +756,9 @@ export default function InterimEmployeesPage() {
       toast.success(`${reinstateTarget.prenom} ${reinstateTarget.nom} réintégré(e)`);
       setReinstateOpen(false);
       setReinstateTarget(null);
-      fetchInterimEmployees();
+      fetchInternalEmployees();
     } catch {
       toast.error("Erreur lors de la réintégration");
-    }
-  };
-
-  const handleSendAccessCodes = async () => {
-    setIsSendingCodes(true);
-    try {
-      const result = await sendAccessCodesInterim();
-      toast.success(
-        `Codes d'accès envoyés à ${result.sent.length} employé(s) intérimaire(s)`
-      );
-    } catch {
-      toast.error("Erreur lors de l'envoi des codes d'accès");
-    } finally {
-      setIsSendingCodes(false);
     }
   };
 
@@ -788,7 +773,7 @@ export default function InterimEmployeesPage() {
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between gap-3 md:items-center shrink-0">
           <h1 className="text-3xl font-bold text-camublue-900">
-            Gestion des employés intérimaires
+            Gestion des employés internes
           </h1>
 
           <div className="flex items-center gap-3">
@@ -801,11 +786,20 @@ export default function InterimEmployeesPage() {
               Mettre à jour les matricules
             </button>
 
+            {/* Input fichier caché pour import liste */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+
             <button
               onClick={handleCreate}
               className="bg-camublue-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-camublue-800 transition"
             >
-              <FaPlus /> Ajouter un intérimaire
+              <FaPlus /> Ajouter un employé
             </button>
           </div>
         </div>
@@ -814,15 +808,6 @@ export default function InterimEmployeesPage() {
         <div className="shrink-0">
           <EmployeesStatsHeader data={employees} loading={isLoading} />
         </div>
-
-        {/* Input fichier caché */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.xls"
-          className="hidden"
-          onChange={handleFileChange}
-        />
 
         {/* Table */}
         <div className="flex-1 min-h-0">
@@ -833,7 +818,7 @@ export default function InterimEmployeesPage() {
             onExit={handleExitClick}
             onReinstate={openReinstate}
             onImport={handleImport}
-            showContractType={false}
+            showContractType={true}
           />
         </div>
 
@@ -841,9 +826,9 @@ export default function InterimEmployeesPage() {
         <EmployeeFormModal
           open={showModal}
           onClose={() => setShowModal(false)}
-          onSuccess={fetchInterimEmployees}
+          onSuccess={fetchInternalEmployees}
           initialData={selected}
-          defaultContractType="INTERIM"
+          defaultContractType={"CDI" as ContractType}
         />
         <ExitEmployeeModal
           open={exitOpen}
@@ -865,7 +850,7 @@ export default function InterimEmployeesPage() {
               employees={employees}
               onClose={() => setBulkMatOpen(false)}
               onSuccess={() => {
-                fetchInterimEmployees();
+                fetchInternalEmployees();
                 setBulkMatOpen(false);
               }}
             />

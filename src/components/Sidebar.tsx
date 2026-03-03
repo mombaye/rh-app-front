@@ -8,7 +8,7 @@ import {
   ChevronRight,
   X,
 } from "lucide-react";
-import logo from "@/assets/images/logo-camusat.jpg";
+import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState } from "react";
 
@@ -28,15 +28,16 @@ const navItems = [
     ],
   },
   {
-    label: "Bulletins Salariés",
-    path: "/payslip",
-    icon: <BadgeDollarSign size={20} />,
-  },
-  {
     label: "Pointages",
     path: "/attendance",
     icon: <Clock size={20} />,
   },
+  {
+    label: "Bulletins Salariés",
+    path: "/payslip",
+    icon: <BadgeDollarSign size={20} />,
+  },
+  
 ];
 
 type NavItem = typeof navItems[0];
