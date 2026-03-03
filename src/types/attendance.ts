@@ -1,5 +1,3 @@
-// src/types/attendance.ts
-
 // ─── Daily ────────────────────────────────────────────────────────────────────
 
 export interface DailyRecord {
@@ -16,14 +14,11 @@ export interface DailyRecord {
   expected_minutes: number;
   delta_minutes: number;
   late_minutes: number;
-  /** ex: "12 min" | "1h05" | null */
   late_label: string | null;
-  /** true si l'employé est arrivé en retard (après tolérance) */
   is_late: boolean;
   early_leave_minutes: number;
   status: "ok" | "absent" | "incomplete" | "anomaly";
   flags: Record<string, unknown>;
-  // champs optionnels
   position?: string;
   fonction?: string;
   job_title?: string;
@@ -35,7 +30,6 @@ export interface DailyKpis {
   absent: number;
   incomplete: number;
   anomalies: number;
-  /** nombre d'employés présents mais en retard */
   late: number;
   not_pointing: number;
   avg_late_minutes: number;
@@ -48,7 +42,6 @@ export interface DepartmentStat {
   absent: number;
   incomplete: number;
   anomaly: number;
-  /** nombre d'employés en retard dans ce département */
   late: number;
 }
 
@@ -81,7 +74,6 @@ export interface WeeklyDayEntry {
   absent_count: number;
   incomplete_count: number;
   anomaly_count: number;
-  /** nombre d'employés en retard ce jour */
   late_count: number;
   not_pointing_count: number;
 }
@@ -106,13 +98,9 @@ export interface PeriodEmployeeRow {
   not_pointing_days: number;
   days_total: number;
   total_late_minutes: number;
-  /** nombre de jours en retard sur la période */
   late_days: number;
-  /** retard moyen les jours où l'employé était en retard */
   avg_late_minutes: number;
-  // monthly only
   overtime_minutes?: number;
-  // optionnels
   position?: string;
   fonction?: string;
   job_title?: string;
@@ -138,7 +126,6 @@ export interface WeeklyStatsResponse {
   absent_days: number;
   incomplete_days: number;
   anomaly_days: number;
-  /** total employee-days en retard sur la semaine */
   late_days: number;
   not_pointing_days: number;
   by_day: WeeklyDayEntry[];
@@ -153,7 +140,6 @@ export interface MonthlyWeekEntry {
   week: string;
   worked_minutes: number;
   expected_minutes: number;
-  /** nombre de retards (employee-jours) sur cette semaine */
   late_count: number;
 }
 
@@ -168,7 +154,6 @@ export interface MonthlyStatsResponse {
   by_employee: PeriodEmployeeRow[];
   top_absent: WeeklyTopEntry[];
   top_overtime: WeeklyTopEntry[];
-  /** top retardataires du mois */
   top_late: WeeklyTopEntry[];
 }
 
@@ -205,13 +190,62 @@ export interface EmployeePeriodDetailResponse {
   days: DayDetail[];
 }
 
+// ─── Shift ────────────────────────────────────────────────────────────────────
 
-// Définition de l'interface Pointage
-interface Pointage {
-  day: string;
-  date: string;
-  in_time: string | null;
-  out_time: string | null;
-  status: "ok" | "absent" | "incomplete" | "anomaly";
+export type ShiftTeamKey = "jour" | "soir1" | "soir2";
+
+export interface ShiftTeamInfo {
+  label: string;
+  horaire: string;
 }
 
+export interface ShiftTeamKpi {
+  total: number;
+  present: number;
+  absent: number;
+  incomplete: number;
+  anomalies: number;
+  late: number;
+}
+
+export interface ShiftRecord {
+  employee_id: number;
+  matricule: string;
+  full_name: string;
+  department: string | null;
+  attendance_status: string;
+  work_date: string;
+  weekday: number;
+  weekday_label: string;
+  shift_team: ShiftTeamKey | null;
+  shift_team_label: string;
+  in_time: string | null;
+  out_time: string | null;
+  worked_minutes: number;
+  expected_minutes: number;
+  delta_minutes: number;
+  late_minutes: number;
+  late_label: string | null;
+  is_late: boolean;
+  early_leave_minutes: number;
+  status: "ok" | "absent" | "incomplete" | "anomaly";
+  flags: Record<string, any>;
+}
+
+export interface ShiftDailyStatsResponse {
+  date: string;
+  weekday: number;
+  weekday_label: string;
+  team_filter: ShiftTeamKey | null;
+  teams_info: Record<ShiftTeamKey, ShiftTeamInfo>;
+  kpis: {
+    total: number;
+    present: number;
+    absent: number;
+    incomplete: number;
+    anomalies: number;
+    late: number;
+    by_team: Record<ShiftTeamKey | "unknown", ShiftTeamKpi>;
+  };
+  records: ShiftRecord[];
+}

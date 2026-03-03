@@ -13,12 +13,15 @@ import {
 import type {
   DailyStatsResponse, WeeklyStatsResponse, MonthlyStatsResponse,
 } from "@/types/attendance";
-import type { BulletinMonthSummary } from "@/services/employeeService";
-import { getEmployees, fetchBulletinsSummary } from "@/services/employeeService";
-import { getDailyStats, getWeeklyStats, getMonthlyStats } from "@/services/attendanceService";
+import type { BulletinMonthSummary, Employee, ContractType } from "@/types/employee";
+import {
+  getEmployees, getEmployeesByContractType, fetchBulletinsSummary,
+} from "@/services/employeeService";
+import {
+  getDailyStats, getWeeklyStats, getMonthlyStats,
+} from "@/services/attendanceService";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
+// ─── Helpers ────────────────────────────────────────────────────────────────────
 const fmt = (n: number) =>
   new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n);
 
@@ -53,8 +56,7 @@ const firstDayOfMonth = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 };
 
-// ─── View toggle ──────────────────────────────────────────────────────────────
-
+// ─── View toggle ────────────────────────────────────────────────────────────────
 type ViewMode = "chiffres" | "graphes";
 
 function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
@@ -74,8 +76,40 @@ function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode
   );
 }
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
+// ─── Employee Filter Toggle ────────────────────────────────────────────────────
+function EmployeeFilterToggle({
+  filter,
+  onChange,
+}: {
+  filter: ContractType | "ALL";
+  onChange: (f: ContractType | "ALL") => void;
+}) {
+  const options = [
+    { value: "ALL", label: "Tous" },
+    { value: "INTERNE", label: "Internes" },
+    { value: "INTERIM", label: "Intérimaires" },
+  ];
 
+  return (
+    <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value as ContractType | "ALL")}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+            filter === opt.value
+              ? "bg-white text-camublue-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Stat card ──────────────────────────────────────────────────────────────────
 function StatCard({ icon: Icon, label, value, sub, trend, trendLabel, color = "blue", delay = 0, loading = false }: {
   icon: any; label: string; value: string | number; sub?: string;
   trend?: "up" | "down" | "neutral"; trendLabel?: string;
@@ -124,7 +158,6 @@ function StatCard({ icon: Icon, label, value, sub, trend, trendLabel, color = "b
 }
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
-
 function Section({ title, icon: Icon, children, delay = 0 }: {
   title: string; icon: any; children: React.ReactNode; delay?: number;
 }) {
@@ -144,17 +177,18 @@ function Section({ title, icon: Icon, children, delay = 0 }: {
   );
 }
 
+// ─── Chart Skeleton ────────────────────────────────────────────────────────────
 function ChartSkeleton({ height = 200 }: { height?: number }) {
   return <div className="w-full rounded-xl bg-slate-100 animate-pulse" style={{ height }} />;
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
-
+// ─── Main ───────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [view, setView] = useState<ViewMode>("graphes");
+  const [employeeFilter, setEmployeeFilter] = useState<ContractType | "ALL">("ALL");
 
   // ── Raw data
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [daily, setDaily] = useState<DailyStatsResponse | null>(null);
   const [weekly, setWeekly] = useState<WeeklyStatsResponse | null>(null);
   const [monthly, setMonthly] = useState<MonthlyStatsResponse | null>(null);
@@ -167,13 +201,33 @@ export default function DashboardPage() {
   const [loadingBulletins, setLoadingBulletins] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // ── Fetch Employees (with filter)
+  const fetchEmployees = async (filter: ContractType | "ALL") => {
+    setLoadingEmp(true);
+    try {
+      const data = filter === "ALL"
+        ? await getEmployees({ status: "ALL" })
+        : await getEmployeesByContractType(filter, "ALL");
+      setEmployees(data);
+    } catch (error) {
+      console.error("Erreur lors de la récupération des employés :", error);
+    } finally {
+      setLoadingEmp(false);
+    }
+  };
+
+  // ── Fetch All Data
   const fetchAll = async (silent = false) => {
     if (silent) setRefreshing(true);
-    else { setLoadingEmp(true); setLoadingDaily(true); setLoadingWeekly(true); setLoadingBulletins(true); }
+    else {
+      setLoadingEmp(true);
+      setLoadingDaily(true);
+      setLoadingWeekly(true);
+      setLoadingBulletins(true);
+    }
 
     await Promise.allSettled([
-      getEmployees({ status: "ALL" })
-        .then(setEmployees).finally(() => setLoadingEmp(false)),
+      fetchEmployees(employeeFilter),
       getDailyStats(todayStr())
         .then(setDaily).finally(() => setLoadingDaily(false)),
       getWeeklyStats(currentISOWeek())
@@ -193,9 +247,8 @@ export default function DashboardPage() {
   const totalEmployees = employees.length;
   const actifs = employees.filter((e) => e.status === "ACTIVE").length;
   const sortis = employees.filter((e) => e.status === "EXITED").length;
-  const firstOfMonth = firstDayOfMonth();
   const nouveauxMois = employees.filter(
-    (e) => e.status === "ACTIVE" && e.date_embauche >= firstOfMonth
+    (e) => e.status === "ACTIVE" && e.date_embauche >= firstDayOfMonth()
   ).length;
 
   const repartitionMap: Record<string, number> = {};
@@ -238,6 +291,7 @@ export default function DashboardPage() {
     attendues: Math.round(w.expected_minutes / 60),
   }));
 
+  // ── Render
   return (
     <AppLayout>
       <motion.div
@@ -274,6 +328,12 @@ export default function DashboardPage() {
 
             {/* ── EMPLOYÉS ── */}
             <Section title="Employés" icon={Users} delay={0.05}>
+              <div className="flex justify-between items-center mb-4">
+                <EmployeeFilterToggle
+                  filter={employeeFilter}
+                  onChange={(f) => { setEmployeeFilter(f); fetchEmployees(f); }}
+                />
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard icon={Users} label="Total employés" value={totalEmployees} sub="Tous statuts confondus" delay={0.1} loading={loadingEmp} />
                 <StatCard icon={UserCheck} label="Actifs" value={actifs} color="green" trend="up" trendLabel={`+${nouveauxMois} ce mois`} delay={0.15} loading={loadingEmp} />
