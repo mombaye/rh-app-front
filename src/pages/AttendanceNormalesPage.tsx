@@ -1,16 +1,14 @@
+// src/pages/attendance/AttendanceNormalesPage.tsx
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";
 import {
-  Clock, AlertTriangle, UserMinus,
-  Filter, FileSpreadsheet, X, ChevronLeft, ChevronRight,
-  Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2,
-  ChevronDown,
+  Clock, AlertTriangle, UserMinus, Filter, FileSpreadsheet, X, ChevronLeft, ChevronRight,
+  Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import {
-  getDailyStats, getWeeklyStats, getMonthlyStats,
-  getEmployeePeriodDetail,
+  getDailyStats, getWeeklyStats, getMonthlyStats, getEmployeePeriodDetail,
 } from "@/services/attendanceService";
 import { getEmployees } from "@/services/employeeService";
 import type {
@@ -19,10 +17,20 @@ import type {
 } from "@/types/attendance";
 import type { Employee } from "@/types/employee";
 
+// Types
 type ViewMode = "daily" | "weekly" | "monthly";
 type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" | "deficit";
 type MotifType = "absent" | "not_pointing";
 
+// Constantes
+const LATE_H = 8;
+const LATE_M = 0;
+const OT_H = 17;
+const OT_M = 30;
+const WORKDAY_MIN = 510;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+// Interfaces
 interface CompensationResult {
   late_min: number;
   overtime_min: number;
@@ -61,13 +69,7 @@ interface Pointage {
   status: "ok" | "absent" | "incomplete" | "anomaly";
 }
 
-const LATE_H = 8;
-const LATE_M = 0;
-const OT_H = 17;
-const OT_M = 30;
-const WORKDAY_MIN = 510;
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
-
+// Fonctions utilitaires
 function formatTime(iso?: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -158,6 +160,7 @@ async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ succ
   return { success: !!emp.email };
 }
 
+// Constantes de style
 const STATUS_CFG = {
   ok: { label: "OK", dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
   absent: { label: "Absent", dot: "bg-red-500", badge: "bg-red-50 text-red-700 ring-red-200" },
@@ -175,6 +178,7 @@ const QUICK_FILTERS = [
   { key: "deficit" as StatusFilter, label: "Heures moins", dotColor: "bg-rose-400", activeText: "text-rose-700", activeBg: "bg-rose-50", activeDot: "bg-rose-500" },
 ];
 
+// Composants réutilisables
 function StatusPill({ status }: { status: keyof typeof STATUS_CFG }) {
   const c = STATUS_CFG[status] ?? STATUS_CFG.anomaly;
   return (
@@ -227,12 +231,7 @@ function CompensationCell({ c, viewMode }: { c: CompensationResult; viewMode: st
   );
 }
 
-// ── Carte Absents enrichie ──
-function AbsentsCard({
-  total, absent, loading, delay,
-}: {
-  total: number; absent: number; loading: boolean; delay: number;
-}) {
+function AbsentsCard({ total, absent, loading, delay }: { total: number; absent: number; loading: boolean; delay: number }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -268,8 +267,7 @@ function AbsentsCard({
 }
 
 function StatCard({
-  icon: Icon, label, value, sub,
-  color = "blue", delay = 0, loading = false, active = false, onClick,
+  icon: Icon, label, value, sub, color = "blue", delay = 0, loading = false, active = false, onClick,
 }: {
   icon: any; label: string; value: string | number; sub?: string;
   color?: "blue" | "green" | "amber" | "red" | "violet" | "slate" | "orange";
@@ -684,7 +682,6 @@ function AlertModal({
   );
 }
 
-// ── Ligne tableau responsive (carte sur mobile) ──
 function TableRow({
   r, isLate, viewMode, onAlert, onDetail,
 }: {
@@ -824,9 +821,7 @@ function TableRow({
   );
 }
 
-// ─────────────────────────────────────────────────────────────
 // Page principale
-// ─────────────────────────────────────────────────────────────
 export default function AttendanceNormalesPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("daily");
   const [loading, setLoading] = useState(false);
@@ -994,7 +989,7 @@ export default function AttendanceNormalesPage() {
         transition={{ duration: 0.4 }}
         className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-3 p-3 sm:p-4 md:p-6"
       >
-        {/* ── En-tête ── */}
+        {/* En-tête */}
         <div className="flex flex-col sm:flex-row justify-between gap-3 sm:items-start shrink-0">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-camublue-900">Pointages Normaux</h1>
@@ -1064,8 +1059,8 @@ export default function AttendanceNormalesPage() {
           </div>
         </div>
 
-        {/* ── KPI Cards — 3 colonnes, sans "Non pointés" ── */}
-        <div className="grid grid-cols-3 gap-3 shrink-0">
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
           <AbsentsCard total={kpis.total} absent={kpis.absent} loading={loading} delay={0.05} />
           <StatCard
             icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
@@ -1075,9 +1070,9 @@ export default function AttendanceNormalesPage() {
           <StatCard icon={AlertTriangle} label="Anomalies" value={kpis.anomaly} color="violet" delay={0.15} loading={loading} />
         </div>
 
-        {/* ── Filtres rapides ── */}
-        <div className="shrink-0 w-full">
-          <div className="flex items-center gap-1 bg-slate-100/80 rounded-xl p-1 overflow-x-auto border border-camublue-900/20 shadow-sm">
+        {/* Filtres rapides */}
+        <div className="shrink-0 w-full overflow-x-auto">
+          <div className="flex items-center gap-1 bg-slate-100/80 rounded-xl p-1 border border-camublue-900/20 shadow-sm min-w-max">
             {QUICK_FILTERS.map((f) => {
               const isActive = statusFilter === f.key;
               const count = filterCount(f.key);
@@ -1114,7 +1109,7 @@ export default function AttendanceNormalesPage() {
           </div>
         </div>
 
-        {/* ── Tableau ── */}
+        {/* Tableau */}
         <div className="flex-1 min-h-0 flex flex-col gap-2">
           <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
             <table className="min-w-full bg-white">
@@ -1169,7 +1164,7 @@ export default function AttendanceNormalesPage() {
             </table>
           </div>
 
-          {/* ── Pagination ── */}
+          {/* Pagination */}
           {filtered.length > 0 && (
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-1 shrink-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -1229,7 +1224,7 @@ export default function AttendanceNormalesPage() {
           )}
         </div>
 
-        {/* ── Modals ── */}
+        {/* Modals */}
         <FilterModal
           open={filterOpen} onClose={() => setFilterOpen(false)}
           viewMode={viewMode} setViewMode={setViewMode}

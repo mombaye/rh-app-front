@@ -1,16 +1,19 @@
+// src/components/layout/Sidebar.tsx
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Users2,
   BadgeDollarSign,
   Clock,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   X,
+  Menu,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const navItems = [
   {
@@ -37,6 +40,11 @@ const navItems = [
     ],
   },
   {
+    label: "Congés/Absences",
+    path: "/leaves",
+    icon: <CalendarDays size={20} />,
+  },
+  {
     label: "Bulletins Salariés",
     path: "/payslip",
     icon: <BadgeDollarSign size={20} />,
@@ -45,17 +53,11 @@ const navItems = [
 
 type NavItem = typeof navItems[0];
 
-export default function Sidebar({
-  mobileOpen,
-  setMobileOpen,
-}: {
-  mobileOpen: boolean;
-  setMobileOpen: (v: boolean) => void;
-}) {
+export default function Sidebar() {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     navItems.forEach((item) => {
@@ -66,13 +68,25 @@ export default function Sidebar({
     return initial;
   });
 
-  const toggleMenu = (path: string) =>
+  // Fermer le menu mobile si la taille de l'écran change (ex: passage en desktop)
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setMobileOpen(false);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const toggleMenu = (path: string) => {
     setOpenMenus((prev) => ({ ...prev, [path]: !prev[path] }));
+  };
 
   const isParentActive = (item: NavItem) =>
     item.subItems
       ? item.subItems.some((s) => location.pathname.startsWith(s.path))
-      : location.pathname === item.path;
+      : location.pathname.startsWith(item.path);
 
   const NavLink = ({ item, onClose }: { item: NavItem; onClose?: () => void }) => {
     const hasChildren = !!item.subItems?.length;
@@ -131,12 +145,13 @@ export default function Sidebar({
       );
     }
 
+    const isActive = location.pathname === item.path;
     return (
       <Link
         to={item.path}
         onClick={onClose}
         className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-150 ${
-          location.pathname === item.path
+          isActive
             ? "bg-camublue-900 text-white shadow-sm"
             : "text-gray-700 hover:bg-camublue-900/10 hover:text-camublue-900"
         }`}
@@ -154,7 +169,6 @@ export default function Sidebar({
           <NavLink key={item.path} item={item} onClose={onClose} />
         ))}
       </nav>
-
       <div className="px-4 py-4 border-t border-gray-200">
         <button
           className="flex items-center gap-3 px-4 py-2 rounded-lg w-full text-left text-gray-700 hover:bg-camublue-900/10 transition-all"
@@ -170,15 +184,15 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Sidebar desktop */}
-      <aside className="bg-white shadow-md w-64 min-h-screen hidden md:flex md:flex-col border-r">
-        <div className="py-6 px-4 flex justify-center items-center">
-          <img src={logo} alt="Camusat" className="w-full max-h-24 object-contain" />
-        </div>
-        <SidebarContent />
-      </aside>
+      {/* Bouton pour ouvrir le menu mobile (visible uniquement sur mobile/tablette) */}
+      <button
+        className="md:hidden fixed top-4 left-4 z-40 p-2 rounded-lg bg-white shadow-md border"
+        onClick={() => setMobileOpen(true)}
+      >
+        <Menu size={20} className="text-camublue-900" />
+      </button>
 
-      {/* Overlay mobile */}
+      {/* Overlay pour le menu mobile */}
       <div
         className={`fixed z-40 inset-0 bg-black/40 transition-opacity ${
           mobileOpen ? "block md:hidden" : "hidden"
@@ -186,7 +200,15 @@ export default function Sidebar({
         onClick={() => setMobileOpen(false)}
       />
 
-      {/* Drawer mobile */}
+      {/* Sidebar Desktop */}
+      <aside className="bg-white shadow-md w-64 min-h-screen hidden md:flex md:flex-col border-r">
+        <div className="py-6 px-4 flex justify-center items-center">
+          <img src={logo} alt="Camusat" className="w-full max-h-24 object-contain" />
+        </div>
+        <SidebarContent />
+      </aside>
+
+      {/* Sidebar Mobile/Tablette (Drawer) */}
       <aside
         className={`fixed z-50 top-0 left-0 h-full w-64 bg-white shadow-md border-r transition-transform duration-300 flex flex-col ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
@@ -201,7 +223,7 @@ export default function Sidebar({
         <SidebarContent onClose={() => setMobileOpen(false)} />
       </aside>
 
-      {/* Modal confirmation déconnexion */}
+      {/* Modale de déconnexion */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl shadow-lg p-6 w-80">

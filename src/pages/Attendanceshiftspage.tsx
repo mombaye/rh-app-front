@@ -107,7 +107,7 @@ const QUICK_FILTERS = [
   { key: "late" as StatusFilter, label: "Retards", dotColor: "bg-orange-400", activeText: "text-orange-700", activeBg: "bg-orange-50", activeDot: "bg-orange-500" },
   { key: "incomplete" as StatusFilter, label: "Incomplets", dotColor: "bg-amber-400", activeText: "text-amber-800", activeBg: "bg-amber-50", activeDot: "bg-amber-500" },
   { key: "anomaly" as StatusFilter, label: "Anomalies", dotColor: "bg-violet-400", activeText: "text-violet-700", activeBg: "bg-violet-50", activeDot: "bg-violet-500" },
-  { key: "deficit" as StatusFilter, label: "Heures moins", dotColor: "bg-rose-400", activeText: "text-rose-700", activeBg: "bg-rose-50", activeDot: "bg-rose-500" },
+  { key: "deficit" as StatusFilter, label: "Heures −", dotColor: "bg-rose-400", activeText: "text-rose-700", activeBg: "bg-rose-50", activeDot: "bg-rose-500" },
 ];
 
 const STATUS_CFG = {
@@ -175,9 +175,9 @@ async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ succ
 function StatusPill({ status }: { status: keyof typeof STATUS_CFG }) {
   const c = STATUS_CFG[status] ?? STATUS_CFG.anomaly;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${c.badge}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
-      {c.label}
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ring-1 ${c.badge}`}>
+      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${c.dot}`} />
+      <span className="hidden sm:inline">{c.label}</span>
     </span>
   );
 }
@@ -187,7 +187,7 @@ function ShiftTeamPill({ teamKey }: { teamKey: ShiftTeamKey | null }) {
   const cfg = SHIFT_TEAMS.find((t) => t.key === teamKey);
   if (!cfg) return <span className="text-slate-400 text-xs">{teamKey}</span>;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.pillBg}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${cfg.pillBg}`}>
       <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${cfg.dot}`} />
       {cfg.short}
     </span>
@@ -197,8 +197,9 @@ function ShiftTeamPill({ teamKey }: { teamKey: ShiftTeamKey | null }) {
 function LateBadge({ minutes }: { minutes: number }) {
   if (minutes <= 0) return <span className="text-slate-300 text-xs">—</span>;
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 ring-1 ring-orange-300 whitespace-nowrap">
-      <Clock className="h-3 w-3 shrink-0" />RETARD · {formatMinutes(minutes)}
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700 ring-1 ring-orange-300 whitespace-nowrap">
+      <Clock className="h-3 w-3 shrink-0" />
+      <span className="hidden lg:inline">RETARD · </span>{formatMinutes(minutes)}
     </span>
   );
 }
@@ -206,7 +207,7 @@ function LateBadge({ minutes }: { minutes: number }) {
 function DeficitBadge({ minutes }: { minutes: number }) {
   if (minutes <= 0) return <span className="text-slate-300 text-xs">—</span>;
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 ring-1 ring-rose-200 whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 ring-1 ring-rose-200 whitespace-nowrap">
       − {formatMinutes(minutes)}
     </span>
   );
@@ -218,26 +219,26 @@ function AbsentsCard({ total, absent, loading, delay }: { total: number; absent:
     <motion.div
       initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4, ease: "easeOut" }}
-      className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-all"
+      className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm hover:shadow-md transition-all"
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="p-2.5 rounded-xl bg-red-500 text-white"><UserMinus className="h-5 w-5" /></div>
+      <div className="flex items-start justify-between mb-2 sm:mb-3">
+        <div className="p-2 rounded-xl bg-red-500 text-white"><UserMinus className="h-4 w-4 sm:h-5 sm:w-5" /></div>
       </div>
       {loading ? (
         <div className="space-y-2 mt-1">
-          <div className="h-4 w-28 bg-slate-100 rounded animate-pulse" />
-          <div className="h-4 w-20 bg-slate-100 rounded animate-pulse" />
+          <div className="h-4 w-20 sm:w-28 bg-slate-100 rounded animate-pulse" />
+          <div className="h-4 w-16 sm:w-20 bg-slate-100 rounded animate-pulse" />
         </div>
       ) : (
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Effectif total</span>
-            <span className="text-base font-bold text-slate-800 tabular-nums">{total}</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-slate-500 truncate">Effectif</span>
+            <span className="text-base font-bold text-slate-800 tabular-nums shrink-0">{total}</span>
           </div>
           <div className="w-full h-px bg-slate-100" />
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-red-600">Absents</span>
-            <span className="text-base font-bold text-red-600 tabular-nums">{absent}</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-red-600 truncate">Absents</span>
+            <span className="text-base font-bold text-red-600 tabular-nums shrink-0">{absent}</span>
           </div>
         </div>
       )}
@@ -267,26 +268,26 @@ function StatCard({
       initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4, ease: "easeOut" }}
       onClick={onClick}
-      className={`bg-white rounded-2xl border p-5 shadow-sm transition-all ${onClick ? "cursor-pointer" : ""} ${
+      className={`bg-white rounded-2xl border p-4 shadow-sm transition-all ${onClick ? "cursor-pointer" : ""} ${
         active ? "border-orange-400 ring-2 ring-orange-200 shadow-md" : "border-slate-100 hover:shadow-md"
       }`}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className={`p-2.5 rounded-xl ${c.icon}`}><Icon className="h-5 w-5" /></div>
+      <div className="flex items-start justify-between mb-2 sm:mb-3">
+        <div className={`p-2 rounded-xl ${c.icon}`}><Icon className="h-4 w-4 sm:h-5 sm:w-5" /></div>
         {active && (
           <span className="text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full ring-1 ring-orange-200">Filtré</span>
         )}
       </div>
       {loading ? (
         <div className="space-y-2 mt-1">
-          <div className="h-7 w-20 bg-slate-100 rounded-lg animate-pulse" />
-          <div className="h-4 w-28 bg-slate-100 rounded animate-pulse" />
+          <div className="h-6 w-16 sm:w-20 bg-slate-100 rounded-lg animate-pulse" />
+          <div className="h-4 w-20 sm:w-28 bg-slate-100 rounded animate-pulse" />
         </div>
       ) : (
         <>
-          <div className={`text-2xl font-bold ${c.text} mb-0.5`}>{value}</div>
-          <div className="text-sm font-medium text-slate-700">{label}</div>
-          {sub && <div className="text-xs text-slate-400 mt-1">{sub}</div>}
+          <div className={`text-xl sm:text-2xl font-bold ${c.text} mb-0.5`}>{value}</div>
+          <div className="text-xs sm:text-sm font-medium text-slate-700 truncate">{label}</div>
+          {sub && <div className="text-xs text-slate-400 mt-1 hidden sm:block">{sub}</div>}
         </>
       )}
     </motion.div>
@@ -378,7 +379,8 @@ function GestionShiftsModal({
         >
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <motion.div
-            className="relative w-full sm:max-w-2xl bg-white sm:rounded-3xl shadow-2xl overflow-hidden z-10 flex flex-col max-h-screen sm:max-h-[90vh]"
+            className="relative w-full sm:max-w-2xl bg-white sm:rounded-3xl shadow-2xl overflow-hidden z-10 flex flex-col"
+            style={{ maxHeight: "calc(100dvh - 0px)" }}
             initial={{ y: 60, opacity: 0, scale: 0.97 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 60, opacity: 0, scale: 0.97 }}
@@ -386,14 +388,14 @@ function GestionShiftsModal({
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+            <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-camublue-900 text-white">
                   <Settings2 className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="font-bold text-slate-800 text-base">Gestion des Shifts</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Répartition des employés par équipe</p>
+                  <p className="font-bold text-slate-800 text-sm sm:text-base">Gestion des Shifts</p>
+                  <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">Répartition des employés par équipe</p>
                 </div>
               </div>
               <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 transition">
@@ -401,48 +403,48 @@ function GestionShiftsModal({
               </button>
             </div>
 
-            {/* Compteurs par équipe (filtrables) */}
-            <div className="px-5 py-3 border-b border-slate-100 shrink-0">
-              <div className="grid grid-cols-4 gap-2">
+            {/* Compteurs par équipe */}
+            <div className="px-4 sm:px-5 py-3 border-b border-slate-100 shrink-0">
+              <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
                 {SHIFT_TEAMS.map((t) => (
                   <button
                     key={t.key}
                     onClick={() => setFilterTeam(filterTeam === t.key ? "all" : t.key)}
-                    className={`flex flex-col items-center py-2.5 px-2 rounded-xl border-2 transition-all ${
+                    className={`flex flex-col items-center py-2 px-1 sm:px-2 rounded-xl border-2 transition-all ${
                       filterTeam === t.key
                         ? `${t.activeBorder} ${t.activeBg} ${t.activeText}`
                         : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                     }`}
                   >
-                    <span className={`h-2 w-2 rounded-full mb-1.5 ${t.dot}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full mb-1 ${t.dot}`} />
                     <span className="text-sm font-bold tabular-nums">{counts[t.key] ?? 0}</span>
-                    <span className="text-xs font-medium text-center leading-tight mt-0.5">{t.short}</span>
+                    <span className="text-[10px] sm:text-xs font-medium text-center leading-tight mt-0.5">{t.short}</span>
                   </button>
                 ))}
                 <button
                   onClick={() => setFilterTeam(filterTeam === "unassigned" ? "all" : "unassigned")}
-                  className={`flex flex-col items-center py-2.5 px-2 rounded-xl border-2 transition-all ${
+                  className={`flex flex-col items-center py-2 px-1 sm:px-2 rounded-xl border-2 transition-all ${
                     filterTeam === "unassigned"
                       ? "border-slate-500 bg-slate-100 text-slate-800"
                       : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                   }`}
                 >
-                  <span className="h-2 w-2 rounded-full mb-1.5 bg-slate-400" />
+                  <span className="h-1.5 w-1.5 rounded-full mb-1 bg-slate-400" />
                   <span className="text-sm font-bold tabular-nums text-slate-600">{counts.unassigned ?? 0}</span>
-                  <span className="text-xs font-medium text-slate-500 text-center leading-tight mt-0.5">Non assignés</span>
+                  <span className="text-[10px] sm:text-xs font-medium text-slate-500 text-center leading-tight mt-0.5">Non ass.</span>
                 </button>
               </div>
             </div>
 
             {/* Barre de recherche + actions en masse */}
-            <div className="px-5 py-3 border-b border-slate-100 shrink-0 space-y-2.5">
+            <div className="px-4 sm:px-5 py-3 border-b border-slate-100 shrink-0 space-y-2">
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Rechercher un employé…"
+                    placeholder="Rechercher…"
                     className="pl-8 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none"
                   />
                   {search && (
@@ -453,18 +455,18 @@ function GestionShiftsModal({
                 </div>
                 <button
                   onClick={clearAllVisible}
-                  className="px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition whitespace-nowrap"
+                  className="px-2.5 py-2 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition whitespace-nowrap"
                 >
-                  Effacer sélection
+                  Effacer
                 </button>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-slate-400 shrink-0 mr-1">Assigner la sélection à :</span>
+                <span className="text-xs text-slate-400 shrink-0">Assigner à :</span>
                 {SHIFT_TEAMS.map((t) => (
                   <button
                     key={t.key}
                     onClick={() => assignAllVisible(t.key)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${t.pillBg} hover:opacity-80`}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${t.pillBg} hover:opacity-80`}
                   >
                     <UserPlus className="h-3 w-3" />
                     {t.short}
@@ -474,9 +476,9 @@ function GestionShiftsModal({
             </div>
 
             {/* Liste des employés */}
-            <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="flex-1 overflow-y-auto">
               {filteredEmployees.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                   <Users className="h-10 w-10 mb-2 text-slate-200" />
                   <p className="text-sm">Aucun employé trouvé</p>
                 </div>
@@ -488,10 +490,10 @@ function GestionShiftsModal({
                     const fullName = `${emp.prenom ?? ""} ${emp.nom ?? ""}`.trim() || emp.username || mat;
                     const dept = (emp as any).department ?? (emp as any).service ?? "";
                     return (
-                      <div key={mat} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/80 transition-colors">
-                        {/* Avatar initiale */}
-                        <div className="h-9 w-9 rounded-full bg-camublue-900/10 flex items-center justify-center shrink-0">
-                          <span className="text-sm font-bold text-camublue-900">
+                      <div key={mat} className="flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-3 hover:bg-slate-50/80 transition-colors">
+                        {/* Avatar */}
+                        <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-camublue-900/10 flex items-center justify-center shrink-0">
+                          <span className="text-xs sm:text-sm font-bold text-camublue-900">
                             {fullName.charAt(0).toUpperCase()}
                           </span>
                         </div>
@@ -504,7 +506,6 @@ function GestionShiftsModal({
                         </div>
                         {/* Boutons d'assignation */}
                         <div className="flex items-center gap-1 shrink-0">
-                          {/* Bouton "Aucune équipe" */}
                           <button
                             onClick={() => assign(mat, null)}
                             title="Retirer l'assignation"
@@ -523,7 +524,7 @@ function GestionShiftsModal({
                                 key={t.key}
                                 onClick={() => assign(mat, t.key)}
                                 title={`${t.label} · ${t.horaire}`}
-                                className={`h-7 px-2 rounded-lg border-2 flex items-center gap-1 text-xs font-bold transition-all ${
+                                className={`h-7 px-1.5 sm:px-2 rounded-lg border-2 flex items-center gap-1 text-xs font-bold transition-all ${
                                   isSelected
                                     ? `${t.activeBorder} ${t.activeBg} ${t.activeText}`
                                     : "border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50"
@@ -544,30 +545,30 @@ function GestionShiftsModal({
             </div>
 
             {/* Footer */}
-            <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-between gap-3 shrink-0 bg-slate-50/60">
-              <div className="text-xs">
+            <div className="px-4 sm:px-5 py-4 border-t border-slate-100 flex items-center justify-between gap-3 shrink-0 bg-slate-50/60">
+              <div className="text-xs min-w-0">
                 {changedCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-50 px-2.5 py-1 rounded-full ring-1 ring-amber-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                    {changedCount} modification{changedCount > 1 ? "s" : ""} en attente
+                  <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-50 px-2.5 py-1 rounded-full ring-1 ring-amber-200 truncate">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                    {changedCount} modif.
                   </span>
                 ) : (
                   <span className="text-slate-400">Aucune modification</span>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 shrink-0">
                 <button onClick={onClose}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-100 transition">
+                  className="px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-100 transition">
                   Annuler
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={saving || changedCount === 0}
-                  className="px-5 py-2 rounded-xl bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 rounded-xl bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving
-                    ? <><Loader2 className="h-4 w-4 animate-spin" />Enregistrement…</>
-                    : <><Check className="h-4 w-4" />Enregistrer</>
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /><span className="hidden sm:inline">Enregistrement…</span></>
+                    : <><Check className="h-4 w-4" /><span>Enregistrer</span></>
                   }
                 </button>
               </div>
@@ -595,23 +596,27 @@ function AlertModal({
     <AnimatePresence>
       {open && employee && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={() => !sending && onClose()}
         >
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <motion.div
-            className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden z-10"
+            className="relative bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-sm overflow-hidden z-10"
             initial={{ y: 40, scale: 0.97, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 40, scale: 0.97, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            {/* Drag handle on mobile */}
+            <div className="flex justify-center pt-3 sm:hidden">
+              <div className="h-1 w-10 rounded-full bg-slate-200" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
               <div>
                 <div className="font-bold text-slate-800">Envoyer une alerte</div>
-                <div className="text-xs text-slate-400 mt-0.5 truncate max-w-[230px]">
+                <div className="text-xs text-slate-400 mt-0.5 truncate max-w-[200px] sm:max-w-[230px]">
                   {employee.full_name}
                   {employee.matricule && <span className="font-mono ml-1.5 text-slate-300">· {employee.matricule}</span>}
                 </div>
@@ -621,7 +626,7 @@ function AlertModal({
                 <X className="h-4 w-4 text-slate-400" />
               </button>
             </div>
-            <div className="px-6 py-5 space-y-5">
+            <div className="px-5 py-4 space-y-4">
               <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${employee.email ? "bg-slate-50" : "bg-red-50 border border-red-100"}`}>
                 <Mail className={`h-4 w-4 shrink-0 ${employee.email ? "text-slate-400" : "text-red-400"}`} />
                 {employee.email ? (
@@ -636,7 +641,7 @@ function AlertModal({
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Motif</p>
                 <div className="grid grid-cols-2 gap-3">
                   <button onClick={() => setMotif("absent")}
-                    className={`flex flex-col items-center gap-2.5 py-5 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${
+                    className={`flex flex-col items-center gap-2 py-4 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${
                       motif === "absent" ? "border-red-400 bg-red-50 text-red-700" : "border-slate-200 text-slate-500 hover:border-slate-300"
                     }`}>
                     <div className={`p-2 rounded-xl ${motif === "absent" ? "bg-red-100" : "bg-slate-100"}`}>
@@ -645,7 +650,7 @@ function AlertModal({
                     Absence
                   </button>
                   <button onClick={() => setMotif("not_pointing")}
-                    className={`flex flex-col items-center gap-2.5 py-5 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${
+                    className={`flex flex-col items-center gap-2 py-4 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${
                       motif === "not_pointing" ? "border-amber-400 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500 hover:border-slate-300"
                     }`}>
                     <div className={`p-2 rounded-xl ${motif === "not_pointing" ? "bg-amber-100" : "bg-slate-100"}`}>
@@ -656,12 +661,12 @@ function AlertModal({
                 </div>
               </div>
               <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700 leading-relaxed">
-                Un email sera envoyé à <strong>{employee.full_name}</strong> pour son{" "}
+                Email à <strong>{employee.full_name}</strong> pour{" "}
                 <strong>{motif === "absent" ? "absence" : "non-pointage"}</strong> du{" "}
                 {new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })}.
               </div>
             </div>
-            <div className="px-6 pb-6 flex gap-3">
+            <div className="px-5 pb-6 flex gap-3">
               <button onClick={onClose} disabled={sending}
                 className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50">
                 Annuler
@@ -694,29 +699,30 @@ function TableRow({ r, isLate, onAlert }: { r: FlatRecord; isLate: boolean; onAl
         : deficit ? "bg-rose-50/30 hover:bg-rose-50/60"
         : "hover:bg-slate-50"
       }`}>
-        <td className="px-4 py-3 font-mono text-slate-500 text-xs">{r.matricule || "—"}</td>
-        <td className="px-4 py-3 font-medium text-slate-800">{r.full_name}</td>
-        <td className="px-4 py-3 text-slate-600 text-xs">{r.department}</td>
-        <td className="px-4 py-3"><ShiftTeamPill teamKey={r.shift_team} /></td>
-        <td className="px-4 py-3"><StatusPill status={r.status} /></td>
-        <td className="px-4 py-3"><LateBadge minutes={r.computed_late_minutes} /></td>
-        <td className={`px-4 py-3 tabular-nums font-mono ${r.computed_late_minutes > 0 ? "text-red-600 font-semibold" : "text-slate-700"}`}>
+        <td className="px-3 lg:px-4 py-3 font-mono text-slate-500 text-xs whitespace-nowrap">{r.matricule || "—"}</td>
+        <td className="px-3 lg:px-4 py-3 font-medium text-slate-800 max-w-[140px] lg:max-w-none truncate">{r.full_name}</td>
+        <td className="px-3 lg:px-4 py-3 text-slate-600 text-xs max-w-[100px] truncate hidden lg:table-cell">{r.department}</td>
+        <td className="px-3 lg:px-4 py-3"><ShiftTeamPill teamKey={r.shift_team} /></td>
+        <td className="px-3 lg:px-4 py-3"><StatusPill status={r.status} /></td>
+        <td className="px-3 lg:px-4 py-3"><LateBadge minutes={r.computed_late_minutes} /></td>
+        <td className={`px-3 lg:px-4 py-3 tabular-nums font-mono text-xs whitespace-nowrap ${r.computed_late_minutes > 0 ? "text-red-600 font-semibold" : "text-slate-700"}`}>
           {formatTime(r.in_time)}
         </td>
-        <td className="px-4 py-3 tabular-nums font-mono text-slate-700">{formatTime(r.out_time)}</td>
-        <td className="px-4 py-3"><DeficitBadge minutes={r.deficit_minutes} /></td>
-        <td className="px-4 py-3">
+        <td className="px-3 lg:px-4 py-3 tabular-nums font-mono text-xs text-slate-700 whitespace-nowrap">{formatTime(r.out_time)}</td>
+        <td className="px-3 lg:px-4 py-3 hidden lg:table-cell"><DeficitBadge minutes={r.deficit_minutes} /></td>
+        <td className="px-3 lg:px-4 py-3">
           <button
             onClick={onAlert}
             disabled={r.status !== "absent" || !r.email}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
               r.status === "absent" && r.email
                 ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer"
                 : "bg-slate-100 text-slate-400 cursor-not-allowed"
             }`}
             title={!r.email ? "Email manquant" : ""}
           >
-            <Bell className="h-3 w-3" />Alerter
+            <Bell className="h-3 w-3" />
+            <span className="hidden lg:inline">Alerter</span>
           </button>
         </td>
       </tr>
@@ -725,14 +731,15 @@ function TableRow({ r, isLate, onAlert }: { r: FlatRecord; isLate: boolean; onAl
       <tr className={`md:hidden border-b border-slate-100 ${
         isLate ? "bg-orange-50/40" : deficit ? "bg-rose-50/30" : ""
       }`}>
-        <td colSpan={10} className="px-3 py-2">
+        <td colSpan={10} className="px-3 py-2.5">
           <div className="flex items-center justify-between gap-2 cursor-pointer" onClick={() => setExpanded((v) => !v)}>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="font-semibold text-slate-800 text-sm truncate">{r.full_name}</p>
               <p className="text-xs text-slate-400 font-mono">{r.matricule || "—"} · {r.department}</p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <StatusPill status={r.status} />
+              {isLate && <LateBadge minutes={r.computed_late_minutes} />}
               <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
             </div>
           </div>
@@ -742,39 +749,39 @@ function TableRow({ r, isLate, onAlert }: { r: FlatRecord; isLate: boolean; onAl
               animate={{ opacity: 1, height: "auto" }}
               className="mt-3 space-y-2 text-sm"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <ShiftTeamPill teamKey={r.shift_team} />
                 {teamCfg && <span className="text-xs text-slate-400 font-mono">{teamCfg.horaire}</span>}
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <div className="bg-slate-50 rounded-lg p-2">
+                <div className="bg-slate-50 rounded-lg p-2.5">
                   <p className="text-xs text-slate-400 mb-0.5">Entrée</p>
-                  <p className={`font-mono font-semibold ${r.computed_late_minutes > 0 ? "text-red-600" : "text-slate-700"}`}>
+                  <p className={`font-mono font-semibold text-sm ${r.computed_late_minutes > 0 ? "text-red-600" : "text-slate-700"}`}>
                     {formatTime(r.in_time)}
                   </p>
                 </div>
-                <div className="bg-slate-50 rounded-lg p-2">
+                <div className="bg-slate-50 rounded-lg p-2.5">
                   <p className="text-xs text-slate-400 mb-0.5">Sortie</p>
-                  <p className="font-mono font-semibold text-slate-700">{formatTime(r.out_time)}</p>
+                  <p className="font-mono font-semibold text-sm text-slate-700">{formatTime(r.out_time)}</p>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {r.computed_late_minutes > 0 && <LateBadge minutes={r.computed_late_minutes} />}
-                {r.deficit_minutes > 0 && <DeficitBadge minutes={r.deficit_minutes} />}
-              </div>
-              <div className="pt-1">
-                <button
-                  onClick={onAlert}
-                  disabled={r.status !== "absent" || !r.email}
-                  className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    r.status === "absent" && r.email
-                      ? "bg-red-50 hover:bg-red-100 text-red-700"
-                      : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                  }`}
-                >
-                  <Bell className="h-3 w-3" />Alerter
-                </button>
-              </div>
+              {r.deficit_minutes > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-400">Déficit :</span>
+                  <DeficitBadge minutes={r.deficit_minutes} />
+                </div>
+              )}
+              <button
+                onClick={onAlert}
+                disabled={r.status !== "absent" || !r.email}
+                className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all mt-1 ${
+                  r.status === "absent" && r.email
+                    ? "bg-red-50 hover:bg-red-100 text-red-700"
+                    : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                }`}
+              >
+                <Bell className="h-3 w-3" />Alerter
+              </button>
             </motion.div>
           )}
         </td>
@@ -891,7 +898,7 @@ export default function AttendanceShiftsPage() {
 
   const getPageNumbers = (): (number | "...")[] => {
     const pages: (number | "...")[] = [];
-    if (totalPages <= 7) { for (let i = 1; i <= totalPages; i++) pages.push(i); }
+    if (totalPages <= 5) { for (let i = 1; i <= totalPages; i++) pages.push(i); }
     else {
       pages.push(1);
       if (page > 3) pages.push("...");
@@ -921,15 +928,12 @@ export default function AttendanceShiftsPage() {
 
   const handleSaveAssignments = (map: AssignmentMap) => {
     setAssignments(map);
-    // TODO: appel API pour persister
     fetchData();
   };
 
-  // Badge badge d'alerte sur le bouton Gestion Shifts
   const unassignedCount = allEmployees.filter((e) => e.matricule && !assignments[e.matricule]).length;
-
   const activeTeamCfg = SHIFT_TEAMS.find((t) => t.key === selectedTeam);
-  const tableHeaders = ["Matricule", "Nom", "Département", "Équipe", "Statut", "Retard", "Entrée", "Sortie", "Heures moins", "Actions"];
+  const tableHeaders = ["Matricule", "Nom", "Dép.", "Équipe", "Statut", "Retard", "Entrée", "Sortie", "Déficit", ""];
 
   return (
     <AppLayout>
@@ -937,41 +941,42 @@ export default function AttendanceShiftsPage() {
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-3 p-3 sm:p-4 md:p-6"
+        className="flex flex-col h-[calc(100dvh-4rem)] overflow-hidden gap-2 sm:gap-3 p-3 sm:p-4 md:p-5"
       >
         {/* ── En-tête ── */}
-        <div className="flex flex-col sm:flex-row justify-between gap-3 sm:items-start shrink-0">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-camublue-900">Pointages Shifts</h1>
+        <div className="flex flex-col sm:flex-row justify-between gap-2 sm:gap-3 sm:items-start shrink-0">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-camublue-900 truncate">Pointages Shifts</h1>
             <p className="text-xs text-slate-400 mt-0.5">
               {activeTeamCfg
                 ? <span className="text-indigo-500 font-semibold">{activeTeamCfg.label} · {activeTeamCfg.horaire}</span>
-                : "Toutes les équipes · Journée / Soir 1 / Soir 2"
+                : "Toutes les équipes"
               }
             </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Action bar — scrollable on xs */}
+          <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto pb-0.5 sm:pb-0">
             {/* Search */}
-            <div className="relative w-full sm:w-auto">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            <div className="relative shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
               <input
                 value={searchQ}
                 onChange={(e) => { setSearchQ(e.target.value); setPage(1); }}
-                placeholder="Nom, matricule, équipe…"
-                className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-48 md:w-56 focus:outline-none"
+                placeholder="Rechercher…"
+                className="pl-8 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-36 sm:w-44 md:w-52 focus:outline-none"
               />
             </div>
 
-            {/* Gestion Shifts — bouton mis en avant */}
+            {/* Gestion Shifts */}
             <button
               onClick={() => setGestionOpen(true)}
-              className="relative border-2 px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 bg-white border-camublue-900 text-camublue-900 hover:bg-camublue-900/5"
+              className="relative border-2 px-2.5 sm:px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 bg-white border-camublue-900 text-camublue-900 hover:bg-camublue-900/5 shrink-0"
             >
               <Settings2 className="h-4 w-4" />
               <span className="hidden sm:inline">Gestion Shifts</span>
               {unassignedCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 h-4.5 min-w-[18px] px-1 bg-amber-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold leading-none">
+                <span className="absolute -top-1.5 -right-1.5 h-4 min-w-[16px] px-1 bg-amber-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold leading-none">
                   {unassignedCount > 9 ? "9+" : unassignedCount}
                 </span>
               )}
@@ -988,7 +993,7 @@ export default function AttendanceShiftsPage() {
                 "Heures moins": r.deficit_minutes > 0 ? `−${formatMinutes(r.deficit_minutes)}` : "—",
                 Email: r.email ?? "Manquant",
               })))}
-              className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5"
+              className="bg-white border border-slate-300 px-2.5 sm:px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5 shrink-0"
             >
               <FileSpreadsheet className="h-4 w-4" />
               <span className="hidden sm:inline">Exporter</span>
@@ -997,7 +1002,7 @@ export default function AttendanceShiftsPage() {
             {/* Refresh */}
             <button
               onClick={fetchData}
-              className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition"
+              className="bg-camublue-900 text-white px-2.5 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition shrink-0"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">Rafraîchir</span>
@@ -1006,17 +1011,17 @@ export default function AttendanceShiftsPage() {
         </div>
 
         {/* ── Sélecteur d'équipe ── */}
-        <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
           <button
             onClick={() => setSelectedTeam(null)}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 transition-all text-sm font-semibold ${
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${
               selectedTeam === null
                 ? "border-camublue-900 bg-camublue-900/10 text-camublue-900"
                 : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
             }`}
           >
             <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" />
-            <span className="truncate">Toutes</span>
+            <span className="truncate text-xs sm:text-sm">Toutes</span>
           </button>
           {SHIFT_TEAMS.map((team) => {
             const isActive = selectedTeam === team.key;
@@ -1025,15 +1030,15 @@ export default function AttendanceShiftsPage() {
               <button
                 key={team.key}
                 onClick={() => setSelectedTeam(isActive ? null : team.key)}
-                className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border-2 transition-all text-sm font-semibold ${
+                className={`flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${
                   isActive
                     ? `${team.activeBg} ${team.activeText} ${team.activeBorder}`
                     : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                 }`}
               >
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
                   <span className={`h-2 w-2 rounded-full shrink-0 ${team.dot}`} />
-                  <span className="truncate text-xs sm:text-sm">{team.label}</span>
+                  <span className="truncate text-xs sm:text-sm">{team.short}</span>
                 </div>
                 {kpiTeam && (
                   <span className={`text-xs font-bold tabular-nums shrink-0 ${isActive ? team.activeText : "text-slate-500"}`}>
@@ -1045,8 +1050,8 @@ export default function AttendanceShiftsPage() {
           })}
         </div>
 
-        {/* ── KPI Cards — 3 cartes, sans "Non pointés" ── */}
-        <div className="grid grid-cols-3 gap-3 shrink-0">
+        {/* ── KPI Cards ── */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 shrink-0">
           <AbsentsCard total={kpis.total} absent={kpis.absent} loading={loading} delay={0.05} />
           <StatCard
             icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
@@ -1057,8 +1062,8 @@ export default function AttendanceShiftsPage() {
         </div>
 
         {/* ── Filtres rapides ── */}
-        <div className="shrink-0 w-full">
-          <div className="flex items-center gap-1 bg-slate-100/80 rounded-xl p-1 overflow-x-auto border border-camublue-900/20 shadow-sm">
+        <div className="shrink-0">
+          <div className="flex items-center gap-0.5 sm:gap-1 bg-slate-100/80 rounded-xl p-1 overflow-x-auto border border-camublue-900/20 shadow-sm scrollbar-none">
             {QUICK_FILTERS.map((f) => {
               const isActive = statusFilter === f.key;
               const count = filterCount(f.key);
@@ -1066,16 +1071,15 @@ export default function AttendanceShiftsPage() {
                 <button
                   key={f.key}
                   onClick={() => { setStatusFilter(f.key); setPage(1); }}
-                  className={`relative inline-flex flex-col items-center justify-center gap-0.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 whitespace-nowrap shrink-0 ${
+                  className={`relative inline-flex flex-col items-center justify-center gap-0.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 whitespace-nowrap shrink-0 ${
                     isActive ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-white/60"
                   }`}
                 >
                   <span className="inline-flex items-center gap-1">
                     <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActive ? f.activeDot : f.dotColor}`} />
-                    <span className="hidden sm:inline">{f.label}</span>
-                    <span className="sm:hidden">{f.label.split(" ")[0]}</span>
+                    {f.label}
                   </span>
-                  <span className={`tabular-nums font-bold leading-none ${isActive ? "text-camublue-900" : "text-slate-400/70"}`}>
+                  <span className={`tabular-nums font-bold leading-none text-[10px] sm:text-xs ${isActive ? "text-camublue-900" : "text-slate-400/70"}`}>
                     {count}
                   </span>
                 </button>
@@ -1099,28 +1103,36 @@ export default function AttendanceShiftsPage() {
         <div className="flex-1 min-h-0 flex flex-col gap-2">
           <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
             <table className="min-w-full bg-white">
+              {/* Desktop header */}
               <thead className={`sticky top-0 z-10 text-white hidden md:table-header-group ${activeTeamCfg?.headerBg ?? "bg-camublue-900"}`}>
                 <tr>
-                  {tableHeaders.map((h) => (
-                    <th key={h} className="px-4 py-3 text-left border-b border-white/20 text-sm font-semibold whitespace-nowrap">
+                  {tableHeaders.map((h, i) => (
+                    <th
+                      key={h + i}
+                      className={`px-3 lg:px-4 py-3 text-left border-b border-white/20 text-xs font-semibold whitespace-nowrap ${
+                        // Hide dept & deficit columns on md, show on lg
+                        (h === "Dép." || h === "Déficit") ? "hidden lg:table-cell" : ""
+                      }`}
+                    >
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
+              {/* Mobile header */}
               <thead className={`sticky top-0 z-10 text-white md:hidden ${activeTeamCfg?.headerBg ?? "bg-camublue-900"}`}>
                 <tr>
                   <th className="px-3 py-3 text-left text-sm font-semibold" colSpan={10}>
-                    {activeTeamCfg ? `${activeTeamCfg.label} · ${activeTeamCfg.horaire}` : "Toutes les équipes"} ({filtered.length})
+                    {activeTeamCfg ? `${activeTeamCfg.short}` : "Tous"} · {filtered.length} enreg.
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  [...Array(5)].map((_, i) => (
+                  [...Array(6)].map((_, i) => (
                     <tr key={i} className="border-b border-slate-100">
-                      {[...Array(tableHeaders.length)].map((_, j) => (
-                        <td key={j} className="px-4 py-3">
+                      {[...Array(8)].map((_, j) => (
+                        <td key={j} className="px-3 lg:px-4 py-3">
                           <div className="h-4 bg-slate-100 rounded animate-pulse" />
                         </td>
                       ))}
@@ -1137,7 +1149,7 @@ export default function AttendanceShiftsPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={tableHeaders.length} className="text-center py-12 text-slate-400 text-sm">
+                    <td colSpan={10} className="text-center py-12 text-slate-400 text-sm">
                       {statusFilter === "late" ? "Aucun retard."
                         : statusFilter === "deficit" ? "Aucune heure manquante."
                         : "Aucun enregistrement trouvé."}
@@ -1150,20 +1162,19 @@ export default function AttendanceShiftsPage() {
 
           {/* ── Pagination ── */}
           {filtered.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-1 shrink-0">
+            <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-2 px-1 shrink-0">
+              {/* Left: count + page size */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs sm:text-sm text-slate-500">
-                  {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} / <strong className="text-slate-700">{filtered.length}</strong>
-                  {activeTeamCfg && <span className="ml-1.5 text-indigo-600 font-semibold">· {activeTeamCfg.label}</span>}
-                  {statusFilter === "late" && <span className="ml-1.5 text-orange-600 font-semibold">· Retards</span>}
-                  {statusFilter === "deficit" && <span className="ml-1.5 text-rose-600 font-semibold">· Manquantes</span>}
+                <span className="text-xs text-slate-500">
+                  <span className="font-medium text-slate-700">{(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)}</span>
+                  {" / "}<strong className="text-slate-700">{filtered.length}</strong>
                 </span>
                 <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
-                  <span className="text-xs text-slate-400">Lignes :</span>
+                  <span className="text-xs text-slate-400 hidden sm:inline">Lignes :</span>
                   <div className="flex items-center gap-0.5">
                     {PAGE_SIZE_OPTIONS.map((size) => (
                       <button key={size} onClick={() => { setPageSize(size); setPage(1); }}
-                        className={`min-w-[28px] h-6 rounded text-xs font-semibold transition-all ${
+                        className={`min-w-[26px] h-6 rounded text-xs font-semibold transition-all ${
                           pageSize === size ? "bg-camublue-900 text-white" : "text-slate-500 hover:bg-slate-100"
                         }`}>
                         {size}
@@ -1173,22 +1184,23 @@ export default function AttendanceShiftsPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1">
+              {/* Right: page nav */}
+              <div className="flex items-center gap-0.5 sm:gap-1">
                 <button onClick={() => setPage(1)} disabled={page === 1}
                   className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed">
-                  <FaAngleDoubleLeft size={12} />
+                  <FaAngleDoubleLeft size={11} />
                 </button>
                 <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page === 1}
                   className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed">
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <div className="flex items-center gap-0.5 mx-1">
+                <div className="flex items-center gap-0.5 mx-0.5">
                   {getPageNumbers().map((p, i) =>
                     p === "..." ? (
                       <span key={`e-${i}`} className="px-1 text-slate-400 text-sm">…</span>
                     ) : (
                       <button key={p} onClick={() => setPage(p as number)}
-                        className={`min-w-[28px] sm:min-w-[32px] h-7 sm:h-8 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                        className={`min-w-[26px] sm:min-w-[30px] h-7 rounded-md text-xs font-medium transition-colors ${
                           page === p ? "bg-camublue-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
                         }`}>
                         {p}
@@ -1202,7 +1214,7 @@ export default function AttendanceShiftsPage() {
                 </button>
                 <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
                   className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed">
-                  <FaAngleDoubleRight size={12} />
+                  <FaAngleDoubleRight size={11} />
                 </button>
               </div>
             </div>
