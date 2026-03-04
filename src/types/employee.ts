@@ -6,6 +6,7 @@ export type ContractType = 'CDI' | 'CDD' | 'STAGE' | 'INTERIM';
 
 export interface Employee {
   id: number;
+  employee_id:Int16Array;
   matricule: string;
   department: string;
   nom: string;

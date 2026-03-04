@@ -5,7 +5,7 @@ import {
   Users, FileText, Clock, TrendingUp,
   UserCheck, UserX, AlertTriangle, CheckCircle,
   ChevronDown, RefreshCw, Calendar, Award,
-  ArrowUp, ArrowDown, Minus,
+  ArrowUp, ArrowDown, Minus, LogIn, LogOut, Star,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar,
@@ -13,9 +13,10 @@ import {
   Tooltip, Legend,
 } from "recharts";
 import type {
-  DailyStatsResponse, WeeklyStatsResponse, MonthlyStatsResponse,
+  DailyStatsResponse, WeeklyStatsResponse, MonthlyStatsResponse, DailyRecord,
 } from "@/types/attendance";
-import type { BulletinMonthSummary, Employee, ContractType } from "@/types/employee";
+import type {  Employee, ContractType } from "@/types/employee";
+import type { BulletinMonthSummary } from "@/services/employeeService";
 import {
   getEmployees, getEmployeesByContractType, fetchBulletinsSummary,
 } from "@/services/employeeService";
@@ -47,12 +48,70 @@ const isoWeekFromDate = (d: Date) => {
   return `${d.getFullYear()}-W${String(week).padStart(2, "0")}`;
 };
 
-const yearMonthStr     = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}`;
+const yearMonthStr        = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}`;
 const firstDayOfYearMonth = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}-01`;
 
 // ─── Types ───────────────────────────────────────────────────────────────────────
 type EmpFilter = ContractType | "ALL";
 interface MonthYear { month: number; year: number }
+
+// ─── Helpers Top Présents ────────────────────────────────────────────────────────
+// Critère : in_time ≤ "08:00" ET out_time ≥ "17:30"
+const ARRIVAL_CUTOFF  = 8 * 60;       // 08:00 → 480 min
+const DEPARTURE_FLOOR = 17 * 60 + 30; // 17:30 → 1050 min
+
+/** Convertit "HH:MM" ou "HH:MM:SS" en minutes depuis minuit. Retourne -1 si invalide. */
+const timeToMinutes = (t?: string | null): number => {
+  if (!t) return -1;
+  const parts = t.split(":").map(Number);
+  if (parts.length < 2 || parts.some(isNaN)) return -1;
+  return parts[0] * 60 + parts[1];
+};
+
+/** Formatte "07:48:00" → "7h48" */
+const fmtTime = (t?: string | null): string => {
+  if (!t) return "—";
+  const parts = t.split(":");
+  return `${parseInt(parts[0], 10)}h${parts[1]}`;
+};
+
+/**
+ * Score de ponctualité 0–100 :
+ *  - 50 pts max pour arrivée tôt  (meilleur score à 07:00, nul à 09:00)
+ *  - 50 pts max pour départ tardif (meilleur score à 19:00, nul à 17:00)
+ */
+const presenceScore = (inTime?: string | null, outTime?: string | null): number => {
+  const arrMin = timeToMinutes(inTime);
+  const depMin = timeToMinutes(outTime);
+  if (arrMin < 0 || depMin < 0) return 0;
+  const arrScore = Math.max(0, Math.min(50, ((9 * 60) - arrMin) / 60 * 25));
+  const depScore = Math.max(0, Math.min(50, (depMin - 17 * 60) / 60 * 25));
+  return Math.round(arrScore + depScore);
+};
+
+/**
+ * Calcule le Top 10 présents depuis daily.records — 100% frontend.
+ * Critères :
+ *   - status === "ok"
+ *   - in_time  ≤ 08:00
+ *   - out_time ≥ 17:30
+ * Tri : score ponctualité desc, puis worked_minutes desc.
+ */
+const computeTopPresents = (records: DailyRecord[]): DailyRecord[] =>
+  records
+    .filter((r) => {
+      if (r.status !== "ok") return false;
+      const arrMin = timeToMinutes(r.in_time);
+      const depMin = timeToMinutes(r.out_time);
+      if (arrMin < 0 || depMin < 0) return false;
+      return arrMin <= ARRIVAL_CUTOFF && depMin >= DEPARTURE_FLOOR;
+    })
+    .sort((a, b) => {
+      const scoreDiff = presenceScore(b.in_time, b.out_time) - presenceScore(a.in_time, a.out_time);
+      if (scoreDiff !== 0) return scoreDiff;
+      return b.worked_minutes - a.worked_minutes;
+    })
+    .slice(0, 10);
 
 // ─── Month Picker ─────────────────────────────────────────────────────────────────
 function MonthPicker({ value, onChange }: { value: MonthYear; onChange: (m: MonthYear) => void }) {
@@ -105,10 +164,10 @@ function MonthPicker({ value, onChange }: { value: MonthYear; onChange: (m: Mont
 // ─── Employee filter ──────────────────────────────────────────────────────────────
 function EmpFilterToggle({ filter, onChange }: { filter: EmpFilter; onChange: (f: EmpFilter) => void }) {
   const opts = [
-    { value: "ALL",     label: "Tous" },
-    { value: "CDI",     label: "CDI" },
-    { value: "CDD",     label: "CDD" },
-    { value: "STAGE",   label: "Stage" },
+    { value: "ALL",     label: "Tous"    },
+    { value: "CDI",     label: "CDI"     },
+    { value: "CDD",     label: "CDD"     },
+    { value: "STAGE",   label: "Stage"   },
     { value: "INTERIM", label: "Intérim" },
   ];
   return (
@@ -275,20 +334,15 @@ function SkeletonGrid({ count = 4 }: { count?: number }) {
   );
 }
 
-// ─── Top ranking list ─────────────────────────────────────────────────────────────
-function TopList({
-  items, emptyMsg, emptyIcon, variant = "danger",
-}: {
-  items: { full_name: string; department?: string; count: number }[];
-  emptyMsg: string;
-  emptyIcon?: React.ReactNode;
-  variant?: "danger" | "success";
+// ─── Top Absents list ─────────────────────────────────────────────────────────────
+function TopAbsentList({ items }: {
+  items: { full_name: string; department?: string | null; count: number }[];
 }) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-40 gap-2 text-center">
-        {emptyIcon}
-        <p className="text-xs text-slate-400">{emptyMsg}</p>
+        <CheckCircle className="h-8 w-8 text-emerald-200" />
+        <p className="text-xs text-slate-400">Aucune absence cette semaine 🎉</p>
       </div>
     );
   }
@@ -296,18 +350,11 @@ function TopList({
   return (
     <div className="space-y-0.5 mt-1">
       {items.map((row, i) => {
-        const pct    = maxCount > 0 ? (row.count / maxCount) * 100 : 0;
-        const isTop3 = i < 3;
-        const rankCls  = variant === "success"
-          ? (isTop3 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500")
-          : (isTop3 ? "bg-red-100 text-red-700"         : "bg-slate-100 text-slate-500");
-        const badgeCls = variant === "success"
-          ? (isTop3 ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600")
-          : (isTop3 ? "bg-red-50 text-red-600"         : "bg-slate-100 text-slate-600");
-        const barColor = variant === "success"
-          ? (isTop3 ? "#22c55e" : "#86efac")
-          : (isTop3 ? "#ef4444" : "#fca5a5");
-
+        const pct      = maxCount > 0 ? (row.count / maxCount) * 100 : 0;
+        const isTop3   = i < 3;
+        const rankCls  = isTop3 ? "bg-red-100 text-red-700"  : "bg-slate-100 text-slate-500";
+        const badgeCls = isTop3 ? "bg-red-50 text-red-600"   : "bg-slate-100 text-slate-600";
+        const barColor = isTop3 ? "#ef4444"                  : "#fca5a5";
         return (
           <div key={i} className="flex items-center gap-2.5 py-1.5 border-b border-slate-50 last:border-0">
             <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${rankCls}`}>
@@ -333,6 +380,136 @@ function TopList({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Top Présents list ────────────────────────────────────────────────────────────
+// Source   : daily.records (DailyRecord[]) — aucun appel backend supplémentaire
+// Critères : status === "ok"  ET  in_time ≤ 08:00  ET  out_time ≥ 17:30
+// Tri      : score ponctualité desc → worked_minutes desc
+function TopPresentList({ records }: { records: DailyRecord[] }) {
+  const MEDALS    = ["🥇", "🥈", "🥉"];
+  const qualified = computeTopPresents(records); // filtre + tri + slice(10)
+  const scoreMax  = 100;
+
+  if (qualified.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-40 gap-3 text-center px-4">
+        <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center">
+          <Award className="h-6 w-6 text-amber-300" />
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-slate-600">Aucun résultat aujourd'hui</p>
+          <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+            Critères : arrivée{" "}
+            <span className="font-bold text-blue-500">≤ 08h00</span>
+            {" "}et départ{" "}
+            <span className="font-bold text-violet-500">≥ 17h30</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1 mt-1">
+      {qualified.map((row, i) => {
+        const isTop3  = i < 3;
+        const score   = presenceScore(row.in_time, row.out_time);
+        const arrMin  = timeToMinutes(row.in_time);
+        const depMin  = timeToMinutes(row.out_time);
+        const earlyIn = arrMin >= 0 && arrMin <= ARRIVAL_CUTOFF;
+        const lateOut = depMin >= 0 && depMin >= DEPARTURE_FLOOR;
+
+        return (
+          <motion.div
+            key={row.employee_id}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.045, duration: 0.25 }}
+            className={`rounded-xl p-2 border transition-all
+              ${isTop3
+                ? "bg-gradient-to-r from-emerald-50/80 to-white border-emerald-100"
+                : "bg-white border-slate-50 hover:border-slate-100"
+              }`}
+          >
+            <div className="flex items-center gap-2">
+              {/* Rang / Médaille */}
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0
+                ${isTop3 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                {i < 3 ? MEDALS[i] : i + 1}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                {/* Ligne 1 : Nom + durée travaillée */}
+                <div className="flex items-center justify-between gap-1">
+                  <p className="text-xs font-semibold text-slate-700 truncate">{row.full_name}</p>
+                  <span className={`shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-lg
+                    ${isTop3 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                    {fmtMinutes(row.worked_minutes)}
+                  </span>
+                </div>
+
+                {/* Ligne 2 : Département + badges horaires + score */}
+                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  {row.department && (
+                    <span className="text-[10px] text-slate-400 truncate max-w-[56px]">
+                      {row.department}
+                    </span>
+                  )}
+
+                  {/* Badge arrivée — bleu si ≤ 08h00 */}
+                  <span className={`flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md
+                    ${earlyIn ? "bg-blue-50 text-blue-600" : "bg-slate-50 text-slate-400"}`}>
+                    <LogIn className="h-2.5 w-2.5" />
+                    {fmtTime(row.in_time)}
+                  </span>
+
+                  {/* Badge départ — violet si ≥ 17h30 */}
+                  <span className={`flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md
+                    ${lateOut ? "bg-violet-50 text-violet-600" : "bg-slate-50 text-slate-400"}`}>
+                    <LogOut className="h-2.5 w-2.5" />
+                    {fmtTime(row.out_time)}
+                  </span>
+
+                  {/* Score ponctualité — top 3 seulement */}
+                  {isTop3 && (
+                    <span className="ml-auto flex items-center gap-0.5 text-[10px] font-bold text-amber-600">
+                      <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />
+                      {score}pts
+                    </span>
+                  )}
+                </div>
+
+                {/* Barre de score animée */}
+                <div className="mt-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(100, (score / scoreMax) * 100)}%` }}
+                    transition={{ delay: 0.3 + i * 0.045, duration: 0.6, ease: "easeOut" }}
+                    className={`h-full rounded-full ${isTop3 ? "bg-emerald-400" : "bg-slate-300"}`}
+                  />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        );
+      })}
+
+      {/* Légende critères en bas */}
+      <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-3 justify-center">
+        {[
+          { icon: <LogIn  className="h-2.5 w-2.5 text-blue-500"                  />, label: "Arrivée ≤ 08h00"   },
+          { icon: <LogOut className="h-2.5 w-2.5 text-violet-500"                />, label: "Départ ≥ 17h30"    },
+          { icon: <Star   className="h-2.5 w-2.5 text-amber-400 fill-amber-400"  />, label: "Score ponctualité" },
+        ].map((leg) => (
+          <div key={leg.label} className="flex items-center gap-1 text-[9px] text-slate-400">
+            {leg.icon}
+            <span>{leg.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -371,17 +548,17 @@ export default function DashboardPage() {
   }, []);
 
   const fetchAttendance = useCallback(async (my: MonthYear) => {
-    const ymStr    = yearMonthStr(my.year, my.month);
-    const firstDay = firstDayOfYearMonth(my.year, my.month);
-    const weekStr  = isoWeekFromDate(new Date(firstDay));
+    const ymStr     = yearMonthStr(my.year, my.month);
+    const firstDay  = firstDayOfYearMonth(my.year, my.month);
+    const weekStr   = isoWeekFromDate(new Date(firstDay));
     const isCurrent = my.month === now.getMonth() + 1 && my.year === now.getFullYear();
-    const dayStr   = isCurrent ? todayStr() : firstDay;
+    const dayStr    = isCurrent ? todayStr() : firstDay;
 
     setLoadDaily(true); setLoadWeekly(true); setLoadMonthly(true); setLoadBulletin(true);
     await Promise.allSettled([
-      getDailyStats(dayStr)    .then(setDaily)   .finally(() => setLoadDaily(false)),
-      getWeeklyStats(weekStr)  .then(setWeekly)  .finally(() => setLoadWeekly(false)),
-      getMonthlyStats(ymStr)   .then(setMonthly) .finally(() => setLoadMonthly(false)),
+      getDailyStats(dayStr)   .then(setDaily)    .finally(() => setLoadDaily(false)),
+      getWeeklyStats(weekStr) .then(setWeekly)   .finally(() => setLoadWeekly(false)),
+      getMonthlyStats(ymStr)  .then(setMonthly)  .finally(() => setLoadMonthly(false)),
       fetchBulletinsSummary({ start: firstDay, end: isCurrent ? todayStr() : `${ymStr}-31` })
         .then(setBulletins).finally(() => setLoadBulletin(false)),
     ]);
@@ -397,7 +574,7 @@ export default function DashboardPage() {
     setRefreshing(false);
   };
 
-  // ── Derived: Employees
+  // ── Derived: Employees ──────────────────────────────────────────────────────
   const total    = employees.length;
   const actifs   = employees.filter((e) => e.status === "ACTIVE").length;
   const sortis   = employees.filter((e) => e.status === "EXITED").length;
@@ -426,7 +603,7 @@ export default function DashboardPage() {
     { name: "Femmes", value: femmes },
   ].filter((d) => d.value > 0);
 
-  // ── Derived: Daily
+  // ── Derived: Daily ──────────────────────────────────────────────────────────
   const kpis          = daily?.kpis;
   const present       = kpis?.present    ?? 0;
   const absent        = kpis?.absent     ?? 0;
@@ -442,29 +619,37 @@ export default function DashboardPage() {
     { name: "En retard",  value: late,       fill: "#8b5cf6" },
   ].filter((d) => d.value > 0);
 
-  // ── Derived: Weekly
+  // ── Top 10 présents ─────────────────────────────────────────────────────────
+  // Calculé 100% côté frontend depuis daily.records
+  // Critères : status="ok"  +  in_time ≤ 08:00  +  out_time ≥ 17:30
+  // Aucun champ supplémentaire requis côté backend
+  const dailyRecords = daily?.records ?? [];
+
+  // ── Derived: Weekly ─────────────────────────────────────────────────────────
   const heuresTrav  = weekly ? Math.round(weekly.worked_minutes / 60) : 0;
   const heuresAtt   = weekly ? Math.round(weekly.expected_minutes / 60) : 0;
   const deltaMin    = weekly?.delta_minutes ?? 0;
   const semaineData = (weekly?.by_day ?? []).map((d) => ({
     jour:    d.weekday_label?.slice(0, 3) ?? d.date.slice(5),
-    present: d.ok_count     ?? 0,
-    absent:  d.absent_count ?? 0,
-    retard:  d.late_count   ?? 0,
+    present: d.ok_count          ?? 0,
+    absent:  d.absent_count      ?? 0,
+    retard:  d.late_count        ?? 0,
   }));
 
-  // Top 10 absents & top 10 présents
-  const topAbsents = (weekly?.top_absent  ?? []).slice(0, 10) as { full_name: string; department?: string; count: number }[];
-  const topPresents = (weekly?.top_present ?? []).slice(0, 10) as { full_name: string; department?: string; count: number }[];
+  const topAbsents = (weekly?.top_absent ?? []).slice(0, 10).map((e) => ({
+    full_name:  e.full_name,
+    department: e.department,
+    count:      e.count ?? 0,
+  }));
 
-  // ── Derived: Monthly
+  // ── Derived: Monthly ────────────────────────────────────────────────────────
   const heuresMens = (monthly?.by_week ?? []).map((w) => ({
     sem:         `S${w.week.split("W")[1] ?? ""}`,
     travaillees: Math.round(w.worked_minutes / 60),
     attendues:   Math.round(w.expected_minutes / 60),
   }));
 
-  // ── Derived: Bulletins
+  // ── Derived: Bulletins ──────────────────────────────────────────────────────
   const totalBulletins = bulletins.reduce((s, b) => s + (b.total ?? 0), 0);
   const totalEnvoyes   = bulletins.reduce((s, b) => s + (b.sent  ?? 0), 0);
   const tauxEnvoi      = actifs > 0 ? Math.round((totalEnvoyes / actifs) * 100) : 0;
@@ -505,10 +690,10 @@ export default function DashboardPage() {
             >
               {loadEmp ? <SkeletonGrid count={4} /> : (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <KPICard icon={Users}      label="Effectif total" value={fmt(total)}    sub="Tous statuts"   color="blue"  delay={0.08} />
-                  <KPICard icon={UserCheck}  label="Actifs"         value={fmt(actifs)}   delta={nouveaux}     deltaLabel={`+${nouveaux} ce mois`} color="green" delay={0.12} />
-                  <KPICard icon={UserX}      label="Sortis"         value={fmt(sortis)}   sub="Total cumulé"   color="red"   delay={0.16} />
-                  <KPICard icon={TrendingUp} label="Recrutements"   value={fmt(nouveaux)} sub={monthLabel}     color="amber" delay={0.20} />
+                  <KPICard icon={Users}      label="Effectif total" value={fmt(total)}    sub="Tous statuts"              color="blue"  delay={0.08} />
+                  <KPICard icon={UserCheck}  label="Actifs"         value={fmt(actifs)}   delta={nouveaux} deltaLabel={`+${nouveaux} ce mois`} color="green" delay={0.12} />
+                  <KPICard icon={UserX}      label="Sortis"         value={fmt(sortis)}   sub="Total cumulé"              color="red"   delay={0.16} />
+                  <KPICard icon={TrendingUp} label="Recrutements"   value={fmt(nouveaux)} sub={monthLabel}                color="amber" delay={0.20} />
                 </div>
               )}
 
@@ -590,7 +775,7 @@ export default function DashboardPage() {
             <Section title="Pointages" icon={Clock} delay={0.1}
               action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
             >
-              {/* Row 1: Donut + Semaine + Heures */}
+              {/* Row 1 */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
                 {/* Donut pointage du jour */}
@@ -684,7 +869,7 @@ export default function DashboardPage() {
                 </ChartCard>
               </div>
 
-              {/* Row 2: Heures mensuelles + Top 10 absents + Top 10 présents */}
+              {/* Row 2 */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
                 {/* Heures par semaine du mois */}
@@ -709,22 +894,21 @@ export default function DashboardPage() {
 
                 {/* Top 10 absents */}
                 <ChartCard title="Top 10 absents" sub="Semaine en cours" loading={loadWeekly} minH={220}>
-                  <TopList
-                    items={topAbsents}
-                    emptyMsg="Aucune absence cette semaine 🎉"
-                    variant="danger"
-                  />
+                  <TopAbsentList items={topAbsents} />
                 </ChartCard>
 
-                {/* Top 10 meilleurs travailleurs */}
-                <ChartCard title="Top 10 présents" sub="Semaine en cours · plus assidus" loading={loadWeekly} minH={220}>
-                  <TopList
-                    items={topPresents}
-                    emptyMsg={`Classement non disponible.\nVérifiez que le backend expose top_present dans la réponse weekly.`}
-                    emptyIcon={<Award className="h-8 w-8 text-slate-200" />}
-                    variant="success"
-                  />
+                {/* ── Top 10 présents ── */}
+                {/* Calculé 100% frontend depuis daily.records          */}
+                {/* Critères : status="ok" + in_time≤08h + out_time≥17h30 */}
+                <ChartCard
+                  title="Top 10 présents"
+                  sub="Aujourd'hui · Arrivée ≤ 08h00 · Départ ≥ 17h30"
+                  loading={loadDaily}
+                  minH={220}
+                >
+                  <TopPresentList records={dailyRecords} />
                 </ChartCard>
+
               </div>
             </Section>
 
