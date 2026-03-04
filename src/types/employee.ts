@@ -1,11 +1,15 @@
 // types/employee.ts
 export type EmployeeStatus = 'ACTIVE' | 'EXITED' | 'SUSPENDED';
-export type ContractType = 'INTERNE' | 'INTERIM'; // Nouveau type
+
+// ✅ Mise à jour : ajout de CDD, STAGE en plus de CDI et INTERIM
+export type ContractType = 'CDI' | 'CDD' | 'STAGE' | 'INTERIM';
 
 export interface Employee {
   id: number;
   matricule: string;
+  department: string;
   nom: string;
+  username: string;
   prenom: string;
   fonction: string;
   sexe?: 'H' | 'F' | null;
@@ -17,14 +21,12 @@ export interface Employee {
   localisation?: string | null;
   email?: string | null;
   telephone?: string | null;
-  type_contrat: ContractType; // Nouveau champ
+  type_contrat: ContractType;
 
-  // Backend nouveaux champs
+  // Backend
   status: EmployeeStatus;
   date_sortie?: string | null;
   motif_sortie?: string | null;
   is_active_employee?: boolean;
-
-  // champ déjà utilisé dans ton code
   has_user?: boolean;
 }

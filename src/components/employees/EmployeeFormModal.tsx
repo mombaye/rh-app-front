@@ -176,8 +176,9 @@ export default function EmployeeFormModal({
                 onChange={handleChange}
                 className="w-full rounded-md border p-2"
               >
-                <option value="">— Sélectionner —</option>
-                <option value="INTERNE">Interne</option>
+                <option value="CDI">CDI</option>
+                <option value="CDD">CDD</option>
+                <option value="STAGE">Stage</option>
                 <option value="INTERIM">Intérim</option>
               </select>
             </div>

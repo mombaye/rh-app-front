@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import AppLayout from "@/layouts/AppLayout";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Users, FileText, Clock, TrendingUp, TrendingDown,
+  Users, FileText, Clock, TrendingUp,
   UserCheck, UserX, AlertTriangle, CheckCircle,
-  BarChart2, Hash, ChevronDown, RefreshCw,
+  ChevronDown, RefreshCw, Calendar, Award,
+  ArrowUp, ArrowDown, Minus,
 } from "lucide-react";
 import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
-  PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, BarChart, Bar,
+  PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend,
 } from "recharts";
 import type {
   DailyStatsResponse, WeeklyStatsResponse, MonthlyStatsResponse,
@@ -32,75 +34,92 @@ const fmtMinutes = (min: number) => {
 };
 
 const MONTH_NAMES = ["", "Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
-const PIE_COLORS = ["#1e3a5f", "#2563eb", "#60a5fa", "#93c5fd", "#bfdbfe"];
+const MONTH_FULL  = ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+const PIE_COLORS  = ["#1e3a5f", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"];
 
 const todayStr = () => new Date().toISOString().split("T")[0];
-const currentYearMonth = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-};
-const currentISOWeek = () => {
-  const d = new Date();
+
+const isoWeekFromDate = (d: Date) => {
   const day = d.getDay() || 7;
   d.setDate(d.getDate() + 4 - day);
   const yearStart = new Date(d.getFullYear(), 0, 1);
   const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
   return `${d.getFullYear()}-W${String(week).padStart(2, "0")}`;
 };
-const currentMonthLabel = () => {
-  const d = new Date();
-  return `${MONTH_NAMES[d.getMonth() + 1]} ${d.getFullYear()}`;
-};
-const firstDayOfMonth = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-};
 
-// ─── View toggle ────────────────────────────────────────────────────────────────
-type ViewMode = "chiffres" | "graphes";
+const yearMonthStr     = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}`;
+const firstDayOfYearMonth = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}-01`;
 
-function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
+// ─── Types ───────────────────────────────────────────────────────────────────────
+type EmpFilter = ContractType | "ALL";
+interface MonthYear { month: number; year: number }
+
+// ─── Month Picker ─────────────────────────────────────────────────────────────────
+function MonthPicker({ value, onChange }: { value: MonthYear; onChange: (m: MonthYear) => void }) {
+  const [open, setOpen] = useState(false);
+  const now = new Date();
+  const months: MonthYear[] = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    return { month: d.getMonth() + 1, year: d.getFullYear() };
+  });
+
   return (
-    <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
-      {(["chiffres", "graphes"] as ViewMode[]).map((m) => (
-        <button key={m} onClick={() => onChange(m)}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            mode === m ? "bg-white text-camublue-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          {m === "chiffres" ? <Hash className="h-3.5 w-3.5" /> : <BarChart2 className="h-3.5 w-3.5" />}
-          {m.charAt(0).toUpperCase() + m.slice(1)}
-        </button>
-      ))}
+    <div className="relative">
+      <button onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition shadow-sm"
+      >
+        <Calendar className="h-4 w-4 text-camublue-900" />
+        <span className="hidden sm:inline">{MONTH_FULL[value.month]}</span>
+        <span className="sm:hidden">{MONTH_NAMES[value.month]}</span>
+        <span>{value.year}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.97 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50 max-h-72 overflow-y-auto"
+          >
+            {months.map((m) => {
+              const active = m.month === value.month && m.year === value.year;
+              return (
+                <button key={`${m.year}-${m.month}`} onClick={() => { onChange(m); setOpen(false); }}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors
+                    ${active ? "bg-camublue-900 text-white font-semibold" : "text-slate-700 hover:bg-slate-50"}`}
+                >
+                  <span>{MONTH_FULL[m.month]}</span>
+                  <span className={active ? "text-blue-200" : "text-slate-400"}>{m.year}</span>
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-// ─── Employee Filter Toggle ────────────────────────────────────────────────────
-function EmployeeFilterToggle({
-  filter,
-  onChange,
-}: {
-  filter: ContractType | "ALL";
-  onChange: (f: ContractType | "ALL") => void;
-}) {
-  const options = [
-    { value: "ALL", label: "Tous" },
-    { value: "INTERNE", label: "Internes" },
-    { value: "INTERIM", label: "Intérimaires" },
+// ─── Employee filter ──────────────────────────────────────────────────────────────
+function EmpFilterToggle({ filter, onChange }: { filter: EmpFilter; onChange: (f: EmpFilter) => void }) {
+  const opts = [
+    { value: "ALL",     label: "Tous" },
+    { value: "CDI",     label: "CDI" },
+    { value: "CDD",     label: "CDD" },
+    { value: "STAGE",   label: "Stage" },
+    { value: "INTERIM", label: "Intérim" },
   ];
-
   return (
-    <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value as ContractType | "ALL")}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            filter === opt.value
-              ? "bg-white text-camublue-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
+    <div className="flex flex-wrap items-center gap-1">
+      {opts.map((opt) => (
+        <button key={opt.value} onClick={() => onChange(opt.value as EmpFilter)}
+          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all
+            ${filter === opt.value
+              ? "bg-camublue-900 text-white border-camublue-900 shadow-sm"
+              : "bg-white text-slate-600 border-slate-200 hover:border-camublue-900 hover:text-camublue-900"
+            }`}
         >
           {opt.label}
         </button>
@@ -109,430 +128,643 @@ function EmployeeFilterToggle({
   );
 }
 
-// ─── Stat card ──────────────────────────────────────────────────────────────────
-function StatCard({ icon: Icon, label, value, sub, trend, trendLabel, color = "blue", delay = 0, loading = false }: {
+// ─── KPI Card ────────────────────────────────────────────────────────────────────
+function KPICard({
+  icon: Icon, label, value, sub, delta, deltaLabel,
+  color = "blue", delay = 0, loading = false,
+}: {
   icon: any; label: string; value: string | number; sub?: string;
-  trend?: "up" | "down" | "neutral"; trendLabel?: string;
-  color?: "blue" | "green" | "amber" | "red"; delay?: number; loading?: boolean;
+  delta?: number; deltaLabel?: string;
+  color?: "blue" | "green" | "amber" | "red" | "purple" | "slate";
+  delay?: number; loading?: boolean;
 }) {
-  const colors = {
-    blue:  { icon: "bg-camublue-900 text-white", text: "text-camublue-900" },
-    green: { icon: "bg-emerald-500 text-white",  text: "text-emerald-700"  },
-    amber: { icon: "bg-amber-500 text-white",    text: "text-amber-700"    },
-    red:   { icon: "bg-red-500 text-white",      text: "text-red-700"      },
+  const palette = {
+    blue:   { bg: "bg-camublue-900/10", icon: "text-camublue-900", val: "text-camublue-900" },
+    green:  { bg: "bg-emerald-50",      icon: "text-emerald-600",  val: "text-emerald-700"  },
+    amber:  { bg: "bg-amber-50",        icon: "text-amber-500",    val: "text-amber-700"    },
+    red:    { bg: "bg-red-50",          icon: "text-red-500",      val: "text-red-700"      },
+    purple: { bg: "bg-purple-50",       icon: "text-purple-600",   val: "text-purple-700"   },
+    slate:  { bg: "bg-slate-100",       icon: "text-slate-500",    val: "text-slate-700"    },
   };
-  const c = colors[color];
+  const c = palette[color];
+  const isUp   = delta !== undefined && delta > 0;
+  const isDown = delta !== undefined && delta < 0;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.4, ease: "easeOut" }}
-      className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-shadow"
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.35, ease: "easeOut" }}
+      className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm hover:shadow-md transition-all"
     >
       <div className="flex items-start justify-between mb-3">
-        <div className={`p-2.5 rounded-xl ${c.icon}`}><Icon className="h-5 w-5" /></div>
-        {trend && trendLabel && (
-          <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg ${
-            trend === "up" ? "bg-emerald-50 text-emerald-700" :
-            trend === "down" ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-500"
-          }`}>
-            {trend === "up" ? <TrendingUp className="h-3 w-3" /> : trend === "down" ? <TrendingDown className="h-3 w-3" /> : null}
-            {trendLabel}
-          </div>
+        <div className={`p-2 rounded-xl ${c.bg}`}>
+          <Icon className={`h-4 w-4 ${c.icon}`} />
+        </div>
+        {delta !== undefined && (
+          <span className={`flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-lg
+            ${isUp ? "bg-emerald-50 text-emerald-700" : isDown ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-500"}`}>
+            {isUp ? <ArrowUp className="h-2.5 w-2.5" /> : isDown ? <ArrowDown className="h-2.5 w-2.5" /> : <Minus className="h-2.5 w-2.5" />}
+            {deltaLabel ?? Math.abs(delta)}
+          </span>
         )}
       </div>
       {loading ? (
-        <div className="space-y-2 mt-1">
-          <div className="h-7 w-20 bg-slate-100 rounded-lg animate-pulse" />
-          <div className="h-4 w-28 bg-slate-100 rounded animate-pulse" />
+        <div className="space-y-2">
+          <div className="h-7 w-16 bg-slate-100 rounded-lg animate-pulse" />
+          <div className="h-3.5 w-24 bg-slate-100 rounded animate-pulse" />
         </div>
       ) : (
         <>
-          <div className={`text-2xl font-bold ${c.text} mb-0.5`}>{value}</div>
-          <div className="text-sm font-medium text-slate-700">{label}</div>
-          {sub && <div className="text-xs text-slate-400 mt-1">{sub}</div>}
+          <div className={`text-2xl font-bold ${c.val} leading-none mb-1`}>{value}</div>
+          <div className="text-xs font-semibold text-slate-600 leading-snug">{label}</div>
+          {sub && <div className="text-[11px] text-slate-400 mt-0.5">{sub}</div>}
         </>
       )}
     </motion.div>
   );
 }
 
-// ─── Section wrapper ──────────────────────────────────────────────────────────
-function Section({ title, icon: Icon, children, delay = 0 }: {
-  title: string; icon: any; children: React.ReactNode; delay?: number;
+// ─── Section ──────────────────────────────────────────────────────────────────────
+function Section({ title, icon: Icon, children, delay = 0, action }: {
+  title: string; icon: any; children: React.ReactNode; delay?: number; action?: React.ReactNode;
 }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4 }} className="space-y-4"
     >
-      <div className="flex items-center gap-2">
-        <div className="h-8 w-8 rounded-xl bg-camublue-900/10 flex items-center justify-center">
-          <Icon className="h-4 w-4 text-camublue-900" />
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-xl bg-camublue-900 flex items-center justify-center shadow-sm shrink-0">
+            <Icon className="h-4 w-4 text-white" />
+          </div>
+          <h2 className="text-base font-bold text-slate-800">{title}</h2>
         </div>
-        <h2 className="text-base font-bold text-camublue-900">{title}</h2>
-        <div className="flex-1 h-px bg-slate-100" />
+        {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
-    </motion.div>
+    </motion.section>
   );
 }
 
-// ─── Chart Skeleton ────────────────────────────────────────────────────────────
-function ChartSkeleton({ height = 200 }: { height?: number }) {
-  return <div className="w-full rounded-xl bg-slate-100 animate-pulse" style={{ height }} />;
+// ─── Chart card ───────────────────────────────────────────────────────────────────
+function ChartCard({ title, sub, children, loading, minH = 220 }: {
+  title: string; sub?: string; children: React.ReactNode; loading?: boolean; minH?: number;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm h-full">
+      <div className="mb-3">
+        <p className="text-sm font-bold text-slate-700">{title}</p>
+        {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+      </div>
+      {loading
+        ? <div className="animate-pulse bg-slate-100 rounded-xl" style={{ height: minH }} />
+        : <div style={{ minHeight: minH }}>{children}</div>
+      }
+    </div>
+  );
 }
 
-// ─── Main ───────────────────────────────────────────────────────────────────────
+// ─── Custom tooltip ───────────────────────────────────────────────────────────────
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-slate-100 rounded-xl shadow-lg px-3 py-2 text-xs">
+      <p className="font-semibold text-slate-700 mb-1">{label}</p>
+      {payload.map((p: any, i: number) => (
+        <div key={i} className="flex items-center gap-1.5 mt-0.5">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color || p.fill }} />
+          <span className="text-slate-500">{p.name}:</span>
+          <span className="font-bold text-slate-700">{fmt(p.value)}{p.unit ?? ""}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ─── Progress bar ─────────────────────────────────────────────────────────────────
+function ProgressBar({ value, max, color = "#1e3a5f", label, valueLabel }: {
+  value: number; max: number; color?: string; label: string; valueLabel: string;
+}) {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return (
+    <div>
+      <div className="flex justify-between text-xs mb-1">
+        <span className="text-slate-600 font-medium">{label}</span>
+        <span className="font-bold text-slate-700">{valueLabel}</span>
+      </div>
+      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+        <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+          transition={{ delay: 0.4, duration: 0.7, ease: "easeOut" }}
+          className="h-full rounded-full" style={{ background: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Skeleton grid ────────────────────────────────────────────────────────────────
+function SkeletonGrid({ count = 4 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="bg-white rounded-2xl border border-slate-100 p-4 h-24 animate-pulse">
+          <div className="w-8 h-8 rounded-xl bg-slate-100 mb-3" />
+          <div className="w-16 h-5 bg-slate-100 rounded" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Top ranking list ─────────────────────────────────────────────────────────────
+function TopList({
+  items, emptyMsg, emptyIcon, variant = "danger",
+}: {
+  items: { full_name: string; department?: string; count: number }[];
+  emptyMsg: string;
+  emptyIcon?: React.ReactNode;
+  variant?: "danger" | "success";
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-40 gap-2 text-center">
+        {emptyIcon}
+        <p className="text-xs text-slate-400">{emptyMsg}</p>
+      </div>
+    );
+  }
+  const maxCount = items[0]?.count ?? 1;
+  return (
+    <div className="space-y-0.5 mt-1">
+      {items.map((row, i) => {
+        const pct    = maxCount > 0 ? (row.count / maxCount) * 100 : 0;
+        const isTop3 = i < 3;
+        const rankCls  = variant === "success"
+          ? (isTop3 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500")
+          : (isTop3 ? "bg-red-100 text-red-700"         : "bg-slate-100 text-slate-500");
+        const badgeCls = variant === "success"
+          ? (isTop3 ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600")
+          : (isTop3 ? "bg-red-50 text-red-600"         : "bg-slate-100 text-slate-600");
+        const barColor = variant === "success"
+          ? (isTop3 ? "#22c55e" : "#86efac")
+          : (isTop3 ? "#ef4444" : "#fca5a5");
+
+        return (
+          <div key={i} className="flex items-center gap-2.5 py-1.5 border-b border-slate-50 last:border-0">
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${rankCls}`}>
+              {i + 1}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1 mb-0.5">
+                <p className="text-xs font-semibold text-slate-700 truncate">{row.full_name}</p>
+                <span className={`shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-lg ${badgeCls}`}>
+                  {row.count}j
+                </span>
+              </div>
+              {row.department && (
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[10px] text-slate-400 truncate w-16 shrink-0">{row.department}</p>
+                  <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%`, background: barColor }} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
-  const [view, setView] = useState<ViewMode>("graphes");
-  const [employeeFilter, setEmployeeFilter] = useState<ContractType | "ALL">("ALL");
-
-  // ── Raw data
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [daily, setDaily] = useState<DailyStatsResponse | null>(null);
-  const [weekly, setWeekly] = useState<WeeklyStatsResponse | null>(null);
-  const [monthly, setMonthly] = useState<MonthlyStatsResponse | null>(null);
-  const [bulletins, setBulletins] = useState<BulletinMonthSummary[]>([]);
-
-  // ── Loading
-  const [loadingEmp, setLoadingEmp] = useState(true);
-  const [loadingDaily, setLoadingDaily] = useState(true);
-  const [loadingWeekly, setLoadingWeekly] = useState(true);
-  const [loadingBulletins, setLoadingBulletins] = useState(true);
+  const now = new Date();
+  const [empFilter,     setEmpFilter]     = useState<EmpFilter>("ALL");
+  const [selectedMonth, setSelectedMonth] = useState<MonthYear>({
+    month: now.getMonth() + 1,
+    year:  now.getFullYear(),
+  });
   const [refreshing, setRefreshing] = useState(false);
 
-  // ── Fetch Employees (with filter)
-  const fetchEmployees = async (filter: ContractType | "ALL") => {
-    setLoadingEmp(true);
+  const [employees,  setEmployees]  = useState<Employee[]>([]);
+  const [daily,      setDaily]      = useState<DailyStatsResponse | null>(null);
+  const [weekly,     setWeekly]     = useState<WeeklyStatsResponse | null>(null);
+  const [monthly,    setMonthly]    = useState<MonthlyStatsResponse | null>(null);
+  const [bulletins,  setBulletins]  = useState<BulletinMonthSummary[]>([]);
+
+  const [loadEmp,      setLoadEmp]      = useState(true);
+  const [loadDaily,    setLoadDaily]    = useState(true);
+  const [loadWeekly,   setLoadWeekly]   = useState(true);
+  const [loadMonthly,  setLoadMonthly]  = useState(true);
+  const [loadBulletin, setLoadBulletin] = useState(true);
+
+  const fetchEmployees = useCallback(async (filter: EmpFilter) => {
+    setLoadEmp(true);
     try {
       const data = filter === "ALL"
         ? await getEmployees({ status: "ALL" })
-        : await getEmployeesByContractType(filter, "ALL");
+        : await getEmployeesByContractType(filter as ContractType, "ALL");
       setEmployees(data);
-    } catch (error) {
-      console.error("Erreur lors de la récupération des employés :", error);
-    } finally {
-      setLoadingEmp(false);
-    }
-  };
+    } catch (e) { console.error(e); }
+    finally { setLoadEmp(false); }
+  }, []);
 
-  // ── Fetch All Data
-  const fetchAll = async (silent = false) => {
-    if (silent) setRefreshing(true);
-    else {
-      setLoadingEmp(true);
-      setLoadingDaily(true);
-      setLoadingWeekly(true);
-      setLoadingBulletins(true);
-    }
+  const fetchAttendance = useCallback(async (my: MonthYear) => {
+    const ymStr    = yearMonthStr(my.year, my.month);
+    const firstDay = firstDayOfYearMonth(my.year, my.month);
+    const weekStr  = isoWeekFromDate(new Date(firstDay));
+    const isCurrent = my.month === now.getMonth() + 1 && my.year === now.getFullYear();
+    const dayStr   = isCurrent ? todayStr() : firstDay;
 
+    setLoadDaily(true); setLoadWeekly(true); setLoadMonthly(true); setLoadBulletin(true);
     await Promise.allSettled([
-      fetchEmployees(employeeFilter),
-      getDailyStats(todayStr())
-        .then(setDaily).finally(() => setLoadingDaily(false)),
-      getWeeklyStats(currentISOWeek())
-        .then(setWeekly).finally(() => setLoadingWeekly(false)),
-      getMonthlyStats(currentYearMonth())
-        .then(setMonthly).catch(() => {}),
-      fetchBulletinsSummary({ start: firstDayOfMonth(), end: todayStr() })
-        .then(setBulletins).finally(() => setLoadingBulletins(false)),
+      getDailyStats(dayStr)    .then(setDaily)   .finally(() => setLoadDaily(false)),
+      getWeeklyStats(weekStr)  .then(setWeekly)  .finally(() => setLoadWeekly(false)),
+      getMonthlyStats(ymStr)   .then(setMonthly) .finally(() => setLoadMonthly(false)),
+      fetchBulletinsSummary({ start: firstDay, end: isCurrent ? todayStr() : `${ymStr}-31` })
+        .then(setBulletins).finally(() => setLoadBulletin(false)),
     ]);
+  }, []);
 
-    if (silent) setRefreshing(false);
+  useEffect(() => { fetchEmployees(empFilter); fetchAttendance(selectedMonth); }, []);
+  useEffect(() => { fetchAttendance(selectedMonth); }, [selectedMonth]);
+  useEffect(() => { fetchEmployees(empFilter); }, [empFilter]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.allSettled([fetchEmployees(empFilter), fetchAttendance(selectedMonth)]);
+    setRefreshing(false);
   };
 
-  useEffect(() => { fetchAll(); }, []);
-
-  // ── Computed : Employés
-  const totalEmployees = employees.length;
-  const actifs = employees.filter((e) => e.status === "ACTIVE").length;
-  const sortis = employees.filter((e) => e.status === "EXITED").length;
-  const nouveauxMois = employees.filter(
-    (e) => e.status === "ACTIVE" && e.date_embauche >= firstDayOfMonth()
+  // ── Derived: Employees
+  const total    = employees.length;
+  const actifs   = employees.filter((e) => e.status === "ACTIVE").length;
+  const sortis   = employees.filter((e) => e.status === "EXITED").length;
+  const hommes   = employees.filter((e) => e.status === "ACTIVE" && e.sexe === "H").length;
+  const femmes   = employees.filter((e) => e.status === "ACTIVE" && e.sexe === "F").length;
+  const firstDay = firstDayOfYearMonth(selectedMonth.year, selectedMonth.month);
+  const nouveaux = employees.filter(
+    (e) => e.status === "ACTIVE" && (e.date_embauche ?? "") >= firstDay
   ).length;
 
-  const repartitionMap: Record<string, number> = {};
+  const contratMap: Record<string, number> = {};
   employees.filter((e) => e.status === "ACTIVE").forEach((e) => {
-    const key = e.projet || e.fonction || "Autre";
-    repartitionMap[key] = (repartitionMap[key] ?? 0) + 1;
+    const k = e.type_contrat ?? "Autre"; contratMap[k] = (contratMap[k] ?? 0) + 1;
   });
-  const repartition = Object.entries(repartitionMap)
-    .sort((a, b) => b[1] - a[1]).slice(0, 5)
+  const contratData = Object.entries(contratMap).map(([name, value]) => ({ name, value }));
+
+  const projetMap: Record<string, number> = {};
+  employees.filter((e) => e.status === "ACTIVE").forEach((e) => {
+    const k = e.projet || "Non assigné"; projetMap[k] = (projetMap[k] ?? 0) + 1;
+  });
+  const projetData = Object.entries(projetMap).sort((a, b) => b[1] - a[1]).slice(0, 6)
     .map(([name, value]) => ({ name, value }));
 
-  // ── Computed : Pointage journalier
-  const kpis = daily?.kpis;
-  const presentAujourdhui = kpis?.present ?? 0;
-  const absentAujourdhui = kpis?.absent ?? 0;
-  const incompletAujourdhui = kpis?.incomplete ?? 0;
-  const tauxPresence = actifs > 0 ? Math.round((presentAujourdhui / actifs) * 100) : 0;
+  const sexeData = [
+    { name: "Hommes", value: hommes },
+    { name: "Femmes", value: femmes },
+  ].filter((d) => d.value > 0);
 
-  // ── Computed : Pointage hebdomadaire
-  const heuresTravaillees = weekly ? Math.round(weekly.worked_minutes / 60) : 0;
-  const heuresAttendues = weekly ? Math.round(weekly.expected_minutes / 60) : 0;
-  const deltaMinutes = weekly?.delta_minutes ?? 0;
+  // ── Derived: Daily
+  const kpis          = daily?.kpis;
+  const present       = kpis?.present    ?? 0;
+  const absent        = kpis?.absent     ?? 0;
+  const incomplete    = kpis?.incomplete ?? 0;
+  const late          = kpis?.late       ?? 0;
+  const totalPointing = present + absent + incomplete;
+  const tauxPresence  = totalPointing > 0 ? Math.round((present / totalPointing) * 100) : 0;
+
+  const attendanceDonut = [
+    { name: "Présents",   value: present,    fill: "#22c55e" },
+    { name: "Absents",    value: absent,     fill: "#ef4444" },
+    { name: "Incomplets", value: incomplete, fill: "#f59e0b" },
+    { name: "En retard",  value: late,       fill: "#8b5cf6" },
+  ].filter((d) => d.value > 0);
+
+  // ── Derived: Weekly
+  const heuresTrav  = weekly ? Math.round(weekly.worked_minutes / 60) : 0;
+  const heuresAtt   = weekly ? Math.round(weekly.expected_minutes / 60) : 0;
+  const deltaMin    = weekly?.delta_minutes ?? 0;
   const semaineData = (weekly?.by_day ?? []).map((d) => ({
-    jour: d.weekday_label?.slice(0, 3) ?? d.date.slice(5),
-    present: d.ok_count ?? 0,
-    absent: d.absent_count ?? 0,
+    jour:    d.weekday_label?.slice(0, 3) ?? d.date.slice(5),
+    present: d.ok_count     ?? 0,
+    absent:  d.absent_count ?? 0,
+    retard:  d.late_count   ?? 0,
   }));
 
-  // ── Computed : Bulletins
-  const totalBulletins = bulletins.reduce((s, b) => s + (b.total ?? 0), 0);
-  const totalEnvoyes = bulletins.reduce((s, b) => s + (b.sent ?? 0), 0);
-  const totalEnAttente = bulletins.reduce((s, b) => s + (b.pending ?? 0), 0);
-  const tauxValidation = actifs > 0 ? Math.round((totalEnvoyes / actifs) * 100) : 0;
-  const bulletinsEvolution = [...bulletins]
-    .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
-    .map((b) => ({ mois: MONTH_NAMES[b.month] ?? `M${b.month}`, envoyes: b.sent, total: b.total }));
-  const heuresMensuelles = (monthly?.by_week ?? []).map((w) => ({
-    sem: `S${w.week.split("W")[1] ?? ""}`,
+  // Top 10 absents & top 10 présents
+  const topAbsents = (weekly?.top_absent  ?? []).slice(0, 10) as { full_name: string; department?: string; count: number }[];
+  const topPresents = (weekly?.top_present ?? []).slice(0, 10) as { full_name: string; department?: string; count: number }[];
+
+  // ── Derived: Monthly
+  const heuresMens = (monthly?.by_week ?? []).map((w) => ({
+    sem:         `S${w.week.split("W")[1] ?? ""}`,
     travaillees: Math.round(w.worked_minutes / 60),
-    attendues: Math.round(w.expected_minutes / 60),
+    attendues:   Math.round(w.expected_minutes / 60),
   }));
 
-  // ── Render
+  // ── Derived: Bulletins
+  const totalBulletins = bulletins.reduce((s, b) => s + (b.total ?? 0), 0);
+  const totalEnvoyes   = bulletins.reduce((s, b) => s + (b.sent  ?? 0), 0);
+  const tauxEnvoi      = actifs > 0 ? Math.round((totalEnvoyes / actifs) * 100) : 0;
+  const bulletinsChart = [...bulletins]
+    .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
+    .map((b) => ({ mois: MONTH_NAMES[b.month], envoyes: b.sent, total: b.total }));
+
+  const monthLabel = `${MONTH_FULL[selectedMonth.month]} ${selectedMonth.year}`;
+
   return (
     <AppLayout>
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-6 p-6"
-      >
-        {/* ── En-tête (fixe) ── */}
-        <div className="flex flex-col md:flex-row justify-between gap-3 md:items-center shrink-0">
+      <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-slate-50">
+
+        {/* ── Top bar ── */}
+        <div className="shrink-0 bg-white border-b border-slate-100 px-4 md:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-camublue-900">Tableau de bord RH</h1>
-            <p className="text-slate-500 text-sm mt-1">Vue d'ensemble · Employés, Paie &amp; Pointages</p>
+            <h1 className="text-xl md:text-2xl font-bold text-camublue-900 leading-tight">Tableau de bord RH</h1>
+            <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">Vue d'ensemble · {monthLabel}</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm font-medium text-slate-700">
-              {currentMonthLabel()} <ChevronDown className="h-4 w-4 text-slate-400" />
-            </div>
-            <button
-              onClick={() => fetchAll(true)}
-              disabled={refreshing}
-              className="flex items-center gap-2 bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
-              title="Actualiser"
+          <div className="flex items-center gap-2 flex-wrap">
+            <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
+            <button onClick={handleRefresh} disabled={refreshing}
+              className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition shadow-sm disabled:opacity-50"
             >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Actualiser</span>
             </button>
-            <ViewToggle mode={view} onChange={setView} />
           </div>
         </div>
 
-        {/* ── Contenu scrollable ── */}
+        {/* ── Scrollable content ── */}
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="space-y-8 pb-6">
+          <div className="px-4 md:px-6 py-5 space-y-10 pb-12">
 
-            {/* ── EMPLOYÉS ── */}
-            <Section title="Employés" icon={Users} delay={0.05}>
-              <div className="flex justify-between items-center mb-4">
-                <EmployeeFilterToggle
-                  filter={employeeFilter}
-                  onChange={(f) => { setEmployeeFilter(f); fetchEmployees(f); }}
-                />
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard icon={Users} label="Total employés" value={totalEmployees} sub="Tous statuts confondus" delay={0.1} loading={loadingEmp} />
-                <StatCard icon={UserCheck} label="Actifs" value={actifs} color="green" trend="up" trendLabel={`+${nouveauxMois} ce mois`} delay={0.15} loading={loadingEmp} />
-                <StatCard icon={UserX} label="Sorties" value={sortis} color="red" sub="Total cumulé" delay={0.2} loading={loadingEmp} />
-                <StatCard icon={TrendingUp} label="Nouveaux" value={nouveauxMois} color="amber" sub="Recrutés ce mois" delay={0.25} loading={loadingEmp} />
-              </div>
-
-              {view === "graphes" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                  <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-                    <p className="text-sm font-semibold text-slate-700 mb-4">Répartition par projet / service</p>
-                    {loadingEmp ? <ChartSkeleton height={200} /> : repartition.length === 0 ? (
-                      <p className="text-sm text-slate-400 text-center py-16">Aucune donnée</p>
-                    ) : (
-                      <div className="h-[200px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={repartition} dataKey="value" nameKey="name" outerRadius={80} innerRadius={40}>
-                              {repartition.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                            </Pie>
-                            <Tooltip /><Legend iconType="circle" iconSize={8} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </div>
-                  <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-                    <p className="text-sm font-semibold text-slate-700 mb-4">Statut des employés</p>
-                    {loadingEmp ? <ChartSkeleton height={200} /> : (
-                      <div className="h-[200px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={[{ name: "Actifs", value: actifs }, { name: "Sortis", value: sortis }]}
-                              dataKey="value" nameKey="name" outerRadius={80} innerRadius={40}>
-                              <Cell fill="#22c55e" /><Cell fill="#ef4444" />
-                            </Pie>
-                            <Tooltip /><Legend iconType="circle" iconSize={8} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </div>
+            {/* ════ SECTION 1 — EMPLOYÉS ════ */}
+            <Section title="Employés" icon={Users} delay={0.05}
+              action={<EmpFilterToggle filter={empFilter} onChange={setEmpFilter} />}
+            >
+              {loadEmp ? <SkeletonGrid count={4} /> : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <KPICard icon={Users}      label="Effectif total" value={fmt(total)}    sub="Tous statuts"   color="blue"  delay={0.08} />
+                  <KPICard icon={UserCheck}  label="Actifs"         value={fmt(actifs)}   delta={nouveaux}     deltaLabel={`+${nouveaux} ce mois`} color="green" delay={0.12} />
+                  <KPICard icon={UserX}      label="Sortis"         value={fmt(sortis)}   sub="Total cumulé"   color="red"   delay={0.16} />
+                  <KPICard icon={TrendingUp} label="Recrutements"   value={fmt(nouveaux)} sub={monthLabel}     color="amber" delay={0.20} />
                 </div>
               )}
-            </Section>
 
-            {/* ── BULLETINS ── */}
-            <Section title="Bulletins de salaire" icon={FileText} delay={0.1}>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard icon={FileText} label="Bulletins générés" value={totalBulletins} sub={currentMonthLabel()} color="blue" delay={0.15} loading={loadingBulletins} />
-                <StatCard icon={CheckCircle} label="Envoyés" value={totalEnvoyes} color="green" sub="Ce mois" delay={0.2} loading={loadingBulletins} />
-                <StatCard icon={AlertTriangle} label="En attente" value={totalEnAttente} color="amber" sub="À envoyer" delay={0.25} loading={loadingBulletins} />
-                <StatCard icon={TrendingUp} label="Taux d'envoi" value={`${tauxValidation}%`} color="blue" sub="Envoyés / Actifs" delay={0.3} loading={loadingBulletins || loadingEmp} />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Contrats */}
+                <ChartCard title="Types de contrats" sub="Employés actifs" loading={loadEmp} minH={200}>
+                  {contratData.length === 0
+                    ? <p className="text-xs text-slate-400 text-center pt-16">Aucune donnée</p>
+                    : (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie data={contratData} dataKey="value" nameKey="name" outerRadius={70} innerRadius={42} paddingAngle={3}>
+                            {contratData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip content={<CustomTooltip />} />
+                          <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11 }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    )
+                  }
+                </ChartCard>
 
-              {view === "graphes" && (
-                <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm mt-2">
-                  <p className="text-sm font-semibold text-slate-700 mb-4">Bulletins envoyés par mois</p>
-                  {loadingBulletins ? <ChartSkeleton height={200} /> : bulletinsEvolution.length === 0 ? (
-                    <p className="text-sm text-slate-400 text-center py-16">Aucune donnée disponible</p>
-                  ) : (
-                    <div className="h-[200px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={bulletinsEvolution}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                          <XAxis dataKey="mois" tick={{ fontSize: 12 }} />
-                          <YAxis tick={{ fontSize: 12 }} />
-                          <Tooltip /><Legend iconType="circle" iconSize={8} />
-                          <Bar dataKey="envoyes" name="Envoyés" fill="#2563eb" radius={[6, 6, 0, 0]} />
-                          <Bar dataKey="total" name="Générés" fill="#93c5fd" radius={[6, 6, 0, 0]} />
+                {/* Genre */}
+                <ChartCard title="Répartition par genre" sub="Employés actifs" loading={loadEmp} minH={200}>
+                  {sexeData.length === 0
+                    ? <p className="text-xs text-slate-400 text-center pt-16">Aucune donnée genre</p>
+                    : (
+                      <>
+                        <ResponsiveContainer width="100%" height={160}>
+                          <PieChart>
+                            <Pie data={sexeData} dataKey="value" nameKey="name" outerRadius={65} innerRadius={40} paddingAngle={3}>
+                              <Cell fill="#2563eb" />
+                              <Cell fill="#ec4899" />
+                            </Pie>
+                            <Tooltip content={<CustomTooltip />} />
+                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11 }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        {!loadEmp && actifs > 0 && (
+                          <div className="flex gap-4 justify-center mt-2">
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-blue-700">{hommes}</div>
+                              <div className="text-[10px] text-slate-400">Hommes · {Math.round(hommes / actifs * 100)}%</div>
+                            </div>
+                            <div className="w-px bg-slate-100" />
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-pink-600">{femmes}</div>
+                              <div className="text-[10px] text-slate-400">Femmes · {Math.round(femmes / actifs * 100)}%</div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )
+                  }
+                </ChartCard>
+
+                {/* Projets */}
+                <ChartCard title="Projets / Services" sub="Top 6 actifs" loading={loadEmp} minH={200}>
+                  {projetData.length === 0
+                    ? <p className="text-xs text-slate-400 text-center pt-16">Aucune donnée</p>
+                    : (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={projetData} layout="vertical" margin={{ left: 0, right: 12, top: 0, bottom: 0 }}>
+                          <XAxis type="number" tick={{ fontSize: 10 }} />
+                          <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Bar dataKey="value" name="Employés" radius={[0, 4, 4, 0]}>
+                            {projetData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                          </Bar>
                         </BarChart>
                       </ResponsiveContainer>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )
+                  }
+                </ChartCard>
+              </div>
             </Section>
 
-            {/* ── POINTAGES ── */}
-            <Section title="Pointages" icon={Clock} delay={0.15}>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard icon={UserCheck} label="Présents aujourd'hui" value={presentAujourdhui} color="green" sub={`Sur ${actifs} actifs`} delay={0.2} loading={loadingDaily} />
-                <StatCard icon={UserX} label="Absents" value={absentAujourdhui} color="red" sub="Aujourd'hui" delay={0.25} loading={loadingDaily} />
-                <StatCard icon={AlertTriangle} label="Incomplets" value={incompletAujourdhui} color="amber" sub="IN ou OUT manquant" delay={0.3} loading={loadingDaily} />
-                <StatCard
-                  icon={Clock} label="Taux de présence"
-                  value={loadingDaily || loadingEmp ? "—" : `${tauxPresence}%`}
-                  color={tauxPresence >= 90 ? "green" : tauxPresence >= 75 ? "amber" : "red"}
-                  sub="Aujourd'hui" delay={0.35} loading={loadingDaily || loadingEmp}
+            {/* ════ SECTION 2 — POINTAGES ════ */}
+            <Section title="Pointages" icon={Clock} delay={0.1}
+              action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
+            >
+              {/* Row 1: Donut + Semaine + Heures */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                {/* Donut pointage du jour */}
+                <ChartCard title="Pointage aujourd'hui" sub={`Effectif suivi : ${totalPointing}`} loading={loadDaily} minH={220}>
+                  {attendanceDonut.length === 0
+                    ? <p className="text-xs text-slate-400 text-center pt-20">Aucun pointage enregistré</p>
+                    : (
+                      <>
+                        <ResponsiveContainer width="100%" height={150}>
+                          <PieChart>
+                            <Pie data={attendanceDonut} dataKey="value" outerRadius={62} innerRadius={40} paddingAngle={2}>
+                              {attendanceDonut.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                            </Pie>
+                            <Tooltip content={<CustomTooltip />} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="grid grid-cols-2 gap-1.5 mt-1">
+                          {attendanceDonut.map((d) => (
+                            <div key={d.name} className="flex items-center gap-1.5 text-xs">
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.fill }} />
+                              <span className="text-slate-500 truncate">{d.name}</span>
+                              <span className="font-bold text-slate-700 ml-auto">{d.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 pt-2 border-t border-slate-100">
+                          <ProgressBar
+                            value={present} max={actifs || totalPointing}
+                            color="#22c55e"
+                            label={`Présents / Effectif (${actifs || totalPointing})`}
+                            valueLabel={`${tauxPresence}%`}
+                          />
+                        </div>
+                      </>
+                    )
+                  }
+                </ChartCard>
+
+                {/* Présence par jour de la semaine */}
+                <ChartCard title="Présence — Semaine en cours" sub="Par jour de la semaine" loading={loadWeekly} minH={220}>
+                  {semaineData.length === 0
+                    ? <p className="text-xs text-slate-400 text-center pt-20">Aucune donnée</p>
+                    : (
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={semaineData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                          <XAxis dataKey="jour" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 10 }} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
+                          <Bar dataKey="present" name="Présents"  fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={26} />
+                          <Bar dataKey="absent"  name="Absents"   fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={26} />
+                          <Bar dataKey="retard"  name="En retard" fill="#8b5cf6" radius={[3, 3, 0, 0]} maxBarSize={26} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )
+                  }
+                </ChartCard>
+
+                {/* Heures semaine */}
+                <ChartCard title="Heures — Semaine en cours" sub="Travaillées vs attendues" loading={loadWeekly} minH={220}>
+                  <div className="space-y-3 mt-2">
+                    <ProgressBar
+                      value={heuresTrav} max={Math.max(heuresAtt, heuresTrav)}
+                      color="#1e3a5f" label="Travaillées" valueLabel={`${fmt(heuresTrav)} h`}
+                    />
+                    <ProgressBar
+                      value={heuresAtt} max={Math.max(heuresAtt, heuresTrav)}
+                      color="#cbd5e1" label="Attendues" valueLabel={`${fmt(heuresAtt)} h`}
+                    />
+                    <div className="pt-2 border-t border-slate-100 flex justify-between items-center">
+                      <span className="text-xs text-slate-500 font-medium">Écart semaine</span>
+                      <span className={`text-sm font-bold flex items-center gap-0.5 ${deltaMin < 0 ? "text-red-500" : "text-emerald-600"}`}>
+                        {deltaMin < 0 ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
+                        {fmtMinutes(deltaMin)}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      {[
+                        { label: "Présents",   value: present,    cls: "text-emerald-700 bg-emerald-50" },
+                        { label: "Absents",    value: absent,     cls: "text-red-700 bg-red-50"         },
+                        { label: "Incomplets", value: incomplete, cls: "text-amber-700 bg-amber-50"     },
+                      ].map((s) => (
+                        <div key={s.label} className={`rounded-xl p-2 text-center ${s.cls}`}>
+                          <div className="text-lg font-bold">{s.value}</div>
+                          <div className="text-[10px] font-semibold">{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </ChartCard>
+              </div>
+
+              {/* Row 2: Heures mensuelles + Top 10 absents + Top 10 présents */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                {/* Heures par semaine du mois */}
+                <ChartCard title={`Heures — ${monthLabel}`} sub="Travaillées vs attendues par semaine" loading={loadMonthly} minH={220}>
+                  {heuresMens.length === 0
+                    ? <p className="text-xs text-slate-400 text-center pt-20">Aucune donnée mensuelle</p>
+                    : (
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={heuresMens} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                          <XAxis dataKey="sem" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 10 }} unit="h" />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
+                          <Bar dataKey="travaillees" name="Travaillées" fill="#1e3a5f" radius={[4, 4, 0, 0]} maxBarSize={30} />
+                          <Bar dataKey="attendues"   name="Attendues"   fill="#cbd5e1" radius={[4, 4, 0, 0]} maxBarSize={30} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )
+                  }
+                </ChartCard>
+
+                {/* Top 10 absents */}
+                <ChartCard title="Top 10 absents" sub="Semaine en cours" loading={loadWeekly} minH={220}>
+                  <TopList
+                    items={topAbsents}
+                    emptyMsg="Aucune absence cette semaine 🎉"
+                    variant="danger"
+                  />
+                </ChartCard>
+
+                {/* Top 10 meilleurs travailleurs */}
+                <ChartCard title="Top 10 présents" sub="Semaine en cours · plus assidus" loading={loadWeekly} minH={220}>
+                  <TopList
+                    items={topPresents}
+                    emptyMsg={`Classement non disponible.\nVérifiez que le backend expose top_present dans la réponse weekly.`}
+                    emptyIcon={<Award className="h-8 w-8 text-slate-200" />}
+                    variant="success"
+                  />
+                </ChartCard>
+              </div>
+            </Section>
+
+            {/* ════ SECTION 3 — BULLETINS ════ */}
+            <Section title="Bulletins de salaire" icon={FileText} delay={0.15}
+              action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
+            >
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <KPICard icon={FileText}      label="Générés"      value={totalBulletins}                     color="blue"  delay={0.18} loading={loadBulletin} sub={monthLabel} />
+                <KPICard icon={CheckCircle}   label="Envoyés"      value={totalEnvoyes}                       color="green" delay={0.21} loading={loadBulletin} sub="Ce mois" />
+                <KPICard icon={AlertTriangle} label="Non envoyés"  value={Math.max(0, actifs - totalEnvoyes)} color="amber" delay={0.24} loading={loadBulletin || loadEmp} sub="Actifs sans bulletin" />
+                <KPICard icon={TrendingUp}    label="Taux d'envoi" value={`${tauxEnvoi}%`}
+                  color={tauxEnvoi >= 90 ? "green" : tauxEnvoi >= 60 ? "amber" : "red"}
+                  delay={0.27} loading={loadBulletin || loadEmp} sub="Envoyés / Actifs"
                 />
               </div>
 
-              {view === "graphes" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                  <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-                    <p className="text-sm font-semibold text-slate-700 mb-4">Présence / Absence (cette semaine)</p>
-                    {loadingWeekly ? <ChartSkeleton height={200} /> : semaineData.length === 0 ? (
-                      <p className="text-sm text-slate-400 text-center py-16">Aucune donnée disponible</p>
-                    ) : (
-                      <div className="h-[200px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={semaineData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                            <XAxis dataKey="jour" tick={{ fontSize: 12 }} />
-                            <YAxis tick={{ fontSize: 12 }} />
-                            <Tooltip /><Legend iconType="circle" iconSize={8} />
-                            <Bar dataKey="present" name="Présents" fill="#22c55e" radius={[4, 4, 0, 0]} stackId="a" />
-                            <Bar dataKey="absent" name="Absents" fill="#ef4444" radius={[4, 4, 0, 0]} stackId="a" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-                    <p className="text-sm font-semibold text-slate-700 mb-3">Heures semaine en cours</p>
-                    {loadingWeekly ? <ChartSkeleton height={160} /> : (
-                      <div className="space-y-4 mt-4">
-                        <div>
-                          <div className="flex justify-between text-sm mb-1.5">
-                            <span className="text-slate-600 font-medium">Heures travaillées</span>
-                            <span className="font-bold text-camublue-900">{fmt(heuresTravaillees)} h</span>
-                          </div>
-                          <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${heuresAttendues > 0 ? Math.min(100, (heuresTravaillees / heuresAttendues) * 100) : 0}%` }}
-                              transition={{ delay: 0.6, duration: 0.8, ease: "easeOut" }}
-                              className="h-3 bg-camublue-900 rounded-full"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex justify-between text-sm mb-1.5">
-                            <span className="text-slate-600 font-medium">Heures attendues</span>
-                            <span className="font-bold text-slate-500">{fmt(heuresAttendues)} h</span>
-                          </div>
-                          <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-3 bg-slate-300 rounded-full w-full" />
-                          </div>
-                        </div>
-                        <div className="pt-2 border-t border-slate-100">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-slate-500">Écart</span>
-                            <span className={`text-sm font-bold ${deltaMinutes < 0 ? "text-red-500" : "text-emerald-600"}`}>
-                              {deltaMinutes < 0 ? "−" : "+"}{fmtMinutes(deltaMinutes)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {view === "graphes" && heuresMensuelles.length > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-                  <p className="text-sm font-semibold text-slate-700 mb-4">
-                    Heures travaillées vs attendues — {currentMonthLabel()}
-                  </p>
-                  <div className="h-[200px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={heuresMensuelles}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis dataKey="sem" tick={{ fontSize: 12 }} />
-                        <YAxis tick={{ fontSize: 12 }} unit=" h" />
-                        <Tooltip formatter={(v: any) => [`${fmt(v)} h`]} />
-                        <Legend iconType="circle" iconSize={8} />
-                        <Bar dataKey="travaillees" name="Travaillées" fill="#1e3a5f" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="attendues" name="Attendues" fill="#cbd5e1" radius={[4, 4, 0, 0]} />
+              <ChartCard title="Bulletins — Historique" sub="Envoyés vs générés par mois" loading={loadBulletin} minH={200}>
+                {bulletinsChart.length === 0
+                  ? <p className="text-xs text-slate-400 text-center pt-20">Aucune donnée</p>
+                  : (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={bulletinsChart} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                        <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
+                        <Bar dataKey="envoyes" name="Envoyés"  fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                        <Bar dataKey="total"   name="Générés"  fill="#93c5fd" radius={[4, 4, 0, 0]} maxBarSize={32} />
                       </BarChart>
                     </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {view === "graphes" && (weekly?.top_absent?.length ?? 0) > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-                  <p className="text-sm font-semibold text-slate-700 mb-3">Top absences cette semaine</p>
-                  <div className="divide-y divide-slate-100">
-                    {weekly!.top_absent.slice(0, 5).map((row, i) => (
-                      <div key={i} className="flex items-center justify-between py-2.5">
-                        <div>
-                          <p className="text-sm font-medium text-slate-700">{row.full_name}</p>
-                          {row.department && <p className="text-xs text-slate-400">{row.department}</p>}
-                        </div>
-                        <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-lg">
-                          {row.count} jour{row.count > 1 ? "s" : ""}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                  )
+                }
+              </ChartCard>
             </Section>
 
           </div>
         </div>
-      </motion.div>
+      </div>
     </AppLayout>
   );
 }

@@ -31,6 +31,10 @@ const navItems = [
     label: "Pointages",
     path: "/attendance",
     icon: <Clock size={20} />,
+    subItems: [
+      { label: "Normales", path: "/attendance/normales" },
+      { label: "Shifts", path: "/attendance/shifts" },
+    ],
   },
   {
     label: "Bulletins Salariés",
