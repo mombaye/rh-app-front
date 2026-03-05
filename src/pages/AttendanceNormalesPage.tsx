@@ -4,16 +4,16 @@ import { AnimatePresence, motion } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";
 import {
   Clock, AlertTriangle, UserMinus, Filter, FileSpreadsheet, X, ChevronLeft, ChevronRight,
-  Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
+  Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown, Settings, CheckCircle,
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import {
-  getDailyStats, getWeeklyStats, getMonthlyStats, getEmployeePeriodDetail,
+  getDailyStats, getWeeklyStats, getMonthlyStats, getEmployeePeriodDetail, getShiftDailyStats,
 } from "@/services/attendanceService";
 import { getEmployees } from "@/services/employeeService";
 import type {
   DailyStatsResponse, WeeklyStatsResponse, MonthlyStatsResponse,
-  EmployeePeriodDetailResponse, DayDetail,
+  EmployeePeriodDetailResponse, DayDetail, ShiftTeamKey,
 } from "@/types/attendance";
 import type { Employee } from "@/types/employee";
 
@@ -22,54 +22,51 @@ type ViewMode = "daily" | "weekly" | "monthly";
 type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" | "deficit";
 type MotifType = "absent" | "not_pointing";
 
-// Constantes
-const LATE_H = 8;
-const LATE_M = 0;
-const OT_H = 17;
-const OT_M = 30;
-const WORKDAY_MIN = 510;
+// ─── Constantes ──────────────────────────────────────────────────────────────
+const MAX_WORKDAY_HOURS = 8;
+const MAX_WORKDAY_MIN = MAX_WORKDAY_HOURS * 60;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
-// Interfaces
+// ─── Work Hours Settings ─────────────────────────────────────────────────────
+interface WorkHoursSettings {
+  context: string;
+  startH: number; startM: number;
+  endH: number; endM: number;
+  breakMin: number;
+}
+
+const DEFAULT_WORK_HOURS: WorkHoursSettings = {
+  context: "Normal", startH: 8, startM: 0, endH: 17, endM: 30, breakMin: 60,
+};
+
+function workDayMinutes(s: WorkHoursSettings): number {
+  return Math.max(0, (s.endH * 60 + s.endM) - (s.startH * 60 + s.startM) - s.breakMin);
+}
+
+// ─── Interfaces ──────────────────────────────────────────────────────────────
 interface CompensationResult {
-  late_min: number;
-  overtime_min: number;
-  compensated_min: number;
-  remaining_min: number;
-  is_compensated: boolean;
-  has_overtime: boolean;
+  late_min: number; overtime_min: number; compensated_min: number;
+  remaining_min: number; is_compensated: boolean; has_overtime: boolean;
 }
 
 interface FlatRecord {
-  employee_id: number;
-  matricule: string;
-  full_name: string;
-  department: string;
+  employee_id: number; matricule: string; full_name: string; department: string;
   status: "ok" | "absent" | "incomplete" | "anomaly";
-  is_late_api: boolean;
-  late_label_api: string | null;
-  late_minutes_api: number;
-  computed_late_minutes: number;
-  overtime_minutes: number;
-  compensation: CompensationResult;
-  deficit_minutes: number;
-  in_time: string | null;
-  out_time: string | null;
-  delta_minutes: number;
-  worked_minutes: number;
-  expected_minutes: number;
+  is_late_api: boolean; late_label_api: string | null; late_minutes_api: number;
+  computed_late_minutes: number; overtime_minutes: number;
+  compensation: CompensationResult; deficit_minutes: number;
+  in_time: string | null; out_time: string | null;
+  worked_minutes: number; delta_minutes: number; expected_minutes: number;
   email: string | null;
 }
 
 interface Pointage {
-  day: string;
-  date: string;
-  in_time: string | null;
-  out_time: string | null;
+  day: string; date: string;
+  in_time: string | null; out_time: string | null;
   status: "ok" | "absent" | "incomplete" | "anomaly";
 }
 
-// Fonctions utilitaires
+// ─── Utilitaires ─────────────────────────────────────────────────────────────
 function formatTime(iso?: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -80,44 +77,44 @@ function formatTime(iso?: string | null): string {
 function formatMinutes(min: number): string {
   if (!min || min <= 0) return "";
   if (min < 60) return `${min} min`;
-  const h = Math.floor(min / 60);
-  const m = min % 60;
+  const h = Math.floor(min / 60), m = min % 60;
   return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
 }
 
-function computeLateMinutes(iso: string | null): number {
+function computeLateMinutes(iso: string | null, thH: number, thM: number): number {
   if (!iso) return 0;
   const d = new Date(iso);
   if (isNaN(d.getTime())) return 0;
-  const t = d.getHours() * 60 + d.getMinutes();
-  const th = LATE_H * 60 + LATE_M;
+  const t = d.getHours() * 60 + d.getMinutes(), th = thH * 60 + thM;
   return t > th ? t - th : 0;
 }
 
-function computeOvertimeMinutes(iso: string | null): number {
+function computeOvertimeMinutes(iso: string | null, thH: number, thM: number): number {
   if (!iso) return 0;
   const d = new Date(iso);
   if (isNaN(d.getTime())) return 0;
-  const t = d.getHours() * 60 + d.getMinutes();
-  const th = OT_H * 60 + OT_M;
+  const t = d.getHours() * 60 + d.getMinutes(), th = thH * 60 + thM;
   return t > th ? t - th : 0;
+}
+
+function computeWorkedMinutesFromTimes(inIso: string | null, outIso: string | null): number {
+  if (!inIso || !outIso) return 0;
+  const inD = new Date(inIso), outD = new Date(outIso);
+  if (isNaN(inD.getTime()) || isNaN(outD.getTime())) return 0;
+  const diff = (outD.getTime() - inD.getTime()) / 60000;
+  return diff > 0 ? Math.round(diff) : 0;
 }
 
 function computeCompensation(lateMin: number, overtimeMin: number): CompensationResult {
-  const compensated = Math.min(lateMin, overtimeMin);
-  const remaining = Math.max(0, lateMin - compensated);
+  const compensated = Math.min(lateMin, overtimeMin), remaining = Math.max(0, lateMin - compensated);
   return {
-    late_min: lateMin,
-    overtime_min: overtimeMin,
-    compensated_min: compensated,
-    remaining_min: remaining,
-    is_compensated: lateMin > 0 && remaining === 0,
-    has_overtime: overtimeMin > 0,
+    late_min: lateMin, overtime_min: overtimeMin, compensated_min: compensated,
+    remaining_min: remaining, is_compensated: lateMin > 0 && remaining === 0, has_overtime: overtimeMin > 0,
   };
 }
 
 function computeDeficitMinutes(worked: number, expected: number): number {
-  const exp = expected > 0 ? expected : WORKDAY_MIN;
+  const exp = expected > 0 ? expected : MAX_WORKDAY_MIN;
   return worked > 0 ? Math.max(0, exp - worked) : 0;
 }
 
@@ -144,15 +141,11 @@ function yyyyMmToday(): string {
 function exportCSV(filename: string, rows: Record<string, any>[]) {
   if (!rows.length) return;
   const headers = Object.keys(rows[0]);
-  const esc = (v: any) => {
-    const s = String(v ?? "");
-    return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
-  };
+  const esc = (v: any) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s; };
   const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }));
-  a.download = filename + ".csv";
-  a.click();
+  a.download = filename + ".csv"; a.click();
 }
 
 async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ success: boolean }> {
@@ -160,7 +153,7 @@ async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ succ
   return { success: !!emp.email };
 }
 
-// Constantes de style
+// ─── Styles partagés ─────────────────────────────────────────────────────────
 const STATUS_CFG = {
   ok: { label: "OK", dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
   absent: { label: "Absent", dot: "bg-red-500", badge: "bg-red-50 text-red-700 ring-red-200" },
@@ -172,19 +165,18 @@ const QUICK_FILTERS = [
   { key: "all" as StatusFilter, label: "Tous", dotColor: "bg-slate-400", activeText: "text-slate-800", activeBg: "bg-slate-900", activeDot: "bg-white" },
   { key: "ok" as StatusFilter, label: "OK", dotColor: "bg-emerald-400", activeText: "text-emerald-700", activeBg: "bg-emerald-50", activeDot: "bg-emerald-500" },
   { key: "absent" as StatusFilter, label: "Absents", dotColor: "bg-red-400", activeText: "text-red-700", activeBg: "bg-red-50", activeDot: "bg-red-500" },
-  { key: "late" as StatusFilter, label: "Retards >08h", dotColor: "bg-orange-400", activeText: "text-orange-700", activeBg: "bg-orange-50", activeDot: "bg-orange-500" },
+  { key: "late" as StatusFilter, label: "Retards", dotColor: "bg-orange-400", activeText: "text-orange-700", activeBg: "bg-orange-50", activeDot: "bg-orange-500" },
   { key: "incomplete" as StatusFilter, label: "Incomplets", dotColor: "bg-amber-400", activeText: "text-amber-800", activeBg: "bg-amber-50", activeDot: "bg-amber-500" },
   { key: "anomaly" as StatusFilter, label: "Anomalies", dotColor: "bg-violet-400", activeText: "text-violet-700", activeBg: "bg-violet-50", activeDot: "bg-violet-500" },
   { key: "deficit" as StatusFilter, label: "Heures moins", dotColor: "bg-rose-400", activeText: "text-rose-700", activeBg: "bg-rose-50", activeDot: "bg-rose-500" },
 ];
 
-// Composants réutilisables
+// ─── Composants ──────────────────────────────────────────────────────────────
 function StatusPill({ status }: { status: keyof typeof STATUS_CFG }) {
   const c = STATUS_CFG[status] ?? STATUS_CFG.anomaly;
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${c.badge}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
-      {c.label}
+      <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />{c.label}
     </span>
   );
 }
@@ -193,8 +185,7 @@ function LateBadge({ minutes }: { minutes: number }) {
   if (minutes <= 0) return <span className="text-slate-300 text-xs">—</span>;
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 ring-1 ring-orange-300 whitespace-nowrap">
-      <Clock className="h-3 w-3 shrink-0" />
-      RETARD · {formatMinutes(minutes)}
+      <Clock className="h-3 w-3 shrink-0" />RETARD · {formatMinutes(minutes)}
     </span>
   );
 }
@@ -203,8 +194,7 @@ function OvertimeBadge({ minutes }: { minutes: number }) {
   if (minutes <= 0) return <span className="text-slate-300 text-xs">—</span>;
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 whitespace-nowrap">
-      <Clock className="h-3 w-3 shrink-0" />
-      +{formatMinutes(minutes)}
+      <Clock className="h-3 w-3 shrink-0" />+{formatMinutes(minutes)}
     </span>
   );
 }
@@ -218,31 +208,34 @@ function DeficitBadge({ minutes }: { minutes: number }) {
   );
 }
 
+function WorkedTimeBadge({ minutes }: { minutes: number }) {
+  if (minutes <= 0) return <span className="text-slate-300 text-xs">—</span>;
+  const color = minutes < MAX_WORKDAY_MIN
+    ? "bg-amber-50 text-amber-700 ring-amber-200"
+    : "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ring-1 whitespace-nowrap ${color}`}>
+      <Clock className="h-3 w-3 shrink-0" />{formatMinutes(minutes)}
+    </span>
+  );
+}
+
 function CompensationCell({ c, viewMode }: { c: CompensationResult; viewMode: string }) {
   if (viewMode !== "daily" || c.late_min === 0) return <span className="text-slate-300 text-xs">—</span>;
   return c.is_compensated ? (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 whitespace-nowrap">
-      ✓ Compensé
-    </span>
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 whitespace-nowrap">✓ Compensé</span>
   ) : (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 ring-1 ring-red-200 whitespace-nowrap">
-      ✗ Non compensé
-    </span>
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 ring-1 ring-red-200 whitespace-nowrap">✗ Non compensé</span>
   );
 }
 
 function AbsentsCard({ total, absent, loading, delay }: { total: number; absent: number; loading: boolean; delay: number }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4, ease: "easeOut" }}
-      className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-all"
-    >
+      className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-all">
       <div className="flex items-start justify-between mb-3">
-        <div className="p-2.5 rounded-xl bg-red-500 text-white">
-          <UserMinus className="h-5 w-5" />
-        </div>
+        <div className="p-2.5 rounded-xl bg-red-500 text-white"><UserMinus className="h-5 w-5" /></div>
       </div>
       {loading ? (
         <div className="space-y-2 mt-1">
@@ -284,22 +277,12 @@ function StatCard({
   };
   const c = palette[color];
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.4, ease: "easeOut" }}
-      onClick={onClick}
-      className={`bg-white rounded-2xl border p-5 shadow-sm transition-all ${onClick ? "cursor-pointer" : ""} ${
-        active ? "border-orange-400 ring-2 ring-orange-200 shadow-md" : "border-slate-100 hover:shadow-md"
-      }`}
-    >
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.4, ease: "easeOut" }} onClick={onClick}
+      className={`bg-white rounded-2xl border p-5 shadow-sm transition-all ${onClick ? "cursor-pointer" : ""} ${active ? "border-orange-400 ring-2 ring-orange-200 shadow-md" : "border-slate-100 hover:shadow-md"}`}>
       <div className="flex items-start justify-between mb-3">
         <div className={`p-2.5 rounded-xl ${c.icon}`}><Icon className="h-5 w-5" /></div>
-        {active && (
-          <span className="text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full ring-1 ring-orange-200">
-            Filtré
-          </span>
-        )}
+        {active && <span className="text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full ring-1 ring-orange-200">Filtré</span>}
       </div>
       {loading ? (
         <div className="space-y-2 mt-1">
@@ -317,6 +300,128 @@ function StatCard({
   );
 }
 
+// ─── Modal : Gestion des heures de travail ───────────────────────────────────
+function WorkHoursModal({ open, onClose, settings, onSave }: {
+  open: boolean; onClose: () => void; settings: WorkHoursSettings; onSave: (s: WorkHoursSettings) => void;
+}) {
+  const [local, setLocal] = useState<WorkHoursSettings>(settings);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { if (open) { setLocal(settings); setSaved(false); } }, [open, settings]);
+
+  const plannedMin = workDayMinutes(local);
+  const exceedsMax = plannedMin > MAX_WORKDAY_MIN;
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  const handleSave = () => {
+    onSave(local); setSaved(true);
+    setTimeout(() => { setSaved(false); onClose(); }, 800);
+  };
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+          <motion.div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10"
+            initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 40, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Settings className="h-4 w-4 text-camublue-900" />
+                <span className="font-semibold text-gray-900">Gestion des heures de travail</span>
+              </div>
+              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-gray-100 transition"><X className="h-4 w-4 text-gray-500" /></button>
+            </div>
+            <div className="px-6 py-5 space-y-5">
+              <div>
+                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Contexte / Libellé</label>
+                <input type="text" value={local.context}
+                  onChange={(e) => setLocal((p) => ({ ...p, context: e.target.value }))}
+                  placeholder="ex: Ramadan, Été, Normal…"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 block">Plage horaire</label>
+                <div className="grid grid-cols-2 gap-4">
+                  {(["start", "end"] as const).map((k) => (
+                    <div key={k} className="bg-slate-50 rounded-2xl p-4 space-y-2">
+                      <p className="text-xs font-medium text-slate-500">{k === "start" ? "Heure d'entrée" : "Heure de sortie"}</p>
+                      <div className="flex items-center gap-1">
+                        <input type="number" min={0} max={23}
+                          value={k === "start" ? local.startH : local.endH}
+                          onChange={(e) => setLocal((p) => ({ ...p, [k === "start" ? "startH" : "endH"]: Math.min(23, Math.max(0, +e.target.value)) }))}
+                          className="w-14 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-sm font-bold focus:outline-none focus:ring-2 focus:ring-camublue-900" />
+                        <span className="font-bold text-slate-400">:</span>
+                        <input type="number" min={0} max={59}
+                          value={k === "start" ? local.startM : local.endM}
+                          onChange={(e) => setLocal((p) => ({ ...p, [k === "start" ? "startM" : "endM"]: Math.min(59, Math.max(0, +e.target.value)) }))}
+                          className="w-14 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-sm font-bold focus:outline-none focus:ring-2 focus:ring-camublue-900" />
+                      </div>
+                      <p className="text-xs text-slate-400 font-mono">
+                        {pad(k === "start" ? local.startH : local.endH)}h{pad(k === "start" ? local.startM : local.endM)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 block">Pause déjeuner</label>
+                <div className="bg-slate-50 rounded-2xl p-4 space-y-2">
+                  <p className="text-xs font-medium text-slate-500">Durée de la pause (déduite du temps travaillé)</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <input type="number" min={0} max={180}
+                        value={local.breakMin}
+                        onChange={(e) => setLocal((p) => ({ ...p, breakMin: Math.min(180, Math.max(0, +e.target.value)) }))}
+                        className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-sm font-bold focus:outline-none focus:ring-2 focus:ring-camublue-900" />
+                      <span className="text-sm font-medium text-slate-500">min</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {[30, 45, 60, 90].map((v) => (
+                        <button key={v} type="button"
+                          onClick={() => setLocal((p) => ({ ...p, breakMin: v }))}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${local.breakMin === v ? "bg-camublue-900 text-white" : "bg-white border border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                          {v}min
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-400 font-mono">
+                    {local.breakMin > 0 ? `−${formatMinutes(local.breakMin)} déduit` : "Aucune pause déduite"}
+                  </p>
+                </div>
+              </div>
+              <div className={`rounded-xl px-4 py-3 text-sm flex items-start gap-3 ${exceedsMax ? "bg-amber-50 border border-amber-200 text-amber-800" : "bg-blue-50 border border-blue-100 text-blue-700"}`}>
+                {exceedsMax ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" /> : <Clock className="h-4 w-4 shrink-0 mt-0.5 text-blue-500" />}
+                <div>
+                  <p className="font-semibold">Durée effective : {formatMinutes(plannedMin) || "0 min"}</p>
+                  {exceedsMax
+                    ? <p className="text-xs mt-0.5">⚠️ Dépasse le maximum légal de <strong>{MAX_WORKDAY_HOURS}h/jour</strong>.</p>
+                    : <p className="text-xs mt-0.5">
+                        Retard après <strong>{pad(local.startH)}h{pad(local.startM)}</strong> — HS après <strong>{pad(local.endH)}h{pad(local.endM)}</strong>
+                        {local.breakMin > 0 && <> — Pause <strong>{formatMinutes(local.breakMin)}</strong> déduite</>}
+                      </p>}
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+              <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
+              <button onClick={handleSave}
+                className={`flex-1 rounded-2xl px-4 py-2 text-sm font-semibold transition flex items-center justify-center gap-2 ${saved ? "bg-emerald-500 text-white" : "bg-camublue-900 hover:bg-camublue-800 text-white"}`}>
+                {saved ? <><CheckCircle className="h-4 w-4" />Enregistré</> : "Enregistrer"}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ─── Modal filtre ─────────────────────────────────────────────────────────────
 function FilterModal({
   open, onClose, viewMode, setViewMode, date, setDate, week, setWeek,
   month, setMonth, statusFilter, setStatusFilter, onApply,
@@ -329,28 +434,19 @@ function FilterModal({
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={onClose}
-        >
+        <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-          <motion.div
-            className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10"
-            initial={{ y: 40, opacity: 0, scale: 0.97 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 40, opacity: 0, scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <motion.div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10"
+            initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 40, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gray-600" />
                 <span className="font-semibold text-gray-900">Filtres & Période</span>
               </div>
-              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-gray-100 transition">
-                <X className="h-4 w-4 text-gray-500" />
-              </button>
+              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-gray-100 transition"><X className="h-4 w-4 text-gray-500" /></button>
             </div>
             <div className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
               <div>
@@ -414,14 +510,9 @@ function FilterModal({
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
-              <button onClick={onClose}
-                className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">
-                Annuler
-              </button>
+              <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
               <button onClick={() => { onApply(); onClose(); }}
-                className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-medium transition">
-                Appliquer
-              </button>
+                className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-medium transition">Appliquer</button>
             </div>
           </motion.div>
         </motion.div>
@@ -430,9 +521,8 @@ function FilterModal({
   );
 }
 
-function DetailModal({
-  open, onClose, employeeId, initialWeek,
-}: {
+// ─── Modal détail ─────────────────────────────────────────────────────────────
+function DetailModal({ open, onClose, employeeId, initialWeek }: {
   open: boolean; onClose: () => void; employeeId: number | null; initialWeek: string;
 }) {
   const [pointages, setPointages] = useState<Pointage[]>([]);
@@ -444,8 +534,7 @@ function DetailModal({
     const fd = new Date(y, 0, 1);
     const fw = new Date(fd);
     fw.setDate(fw.getDate() + (wn - 1) * 7 - fw.getDay() + 1);
-    const lw = new Date(fw);
-    lw.setDate(lw.getDate() + 4);
+    const lw = new Date(fw); lw.setDate(lw.getDate() + 4);
     return { start: fw.toISOString().split("T")[0], end: lw.toISOString().split("T")[0] };
   };
 
@@ -457,18 +546,13 @@ function DetailModal({
       const res: EmployeePeriodDetailResponse = await getEmployeePeriodDetail({ employee_id: employeeId, start, end });
       setPointages(
         ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"].map((day, i) => {
-          const cur = new Date(start);
-          cur.setDate(cur.getDate() + i);
+          const cur = new Date(start); cur.setDate(cur.getDate() + i);
           const ds = cur.toISOString().split("T")[0];
           const dd = res.days.find((d: DayDetail) => d.date === ds);
           return { day, date: ds, in_time: dd?.in_time ?? null, out_time: dd?.out_time ?? null, status: dd?.status ?? "absent" };
         })
       );
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   }, [employeeId, selWeek, open]);
 
   useEffect(() => { fetchPointages(); }, [fetchPointages]);
@@ -476,23 +560,14 @@ function DetailModal({
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/30 backdrop-blur-sm"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={onClose}
-        >
-          <motion.div
-            className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
-            initial={{ y: 40, opacity: 0, scale: 0.97 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 40, opacity: 0, scale: 0.97 }}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/30 backdrop-blur-sm"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+          <motion.div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 40, opacity: 0, scale: 0.97 }} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100 shrink-0">
               <h3 className="text-lg sm:text-xl font-bold text-camublue-900">Pointages hebdomadaires</h3>
-              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 transition">
-                <X className="h-5 w-5 text-slate-500" />
-              </button>
+              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 transition"><X className="h-5 w-5 text-slate-500" /></button>
             </div>
             <div className="px-4 sm:px-6 py-3 border-b border-slate-100 shrink-0">
               <label className="block text-sm font-medium text-slate-700 mb-1">Semaine (ex: 2026-W09)</label>
@@ -500,9 +575,7 @@ function DetailModal({
                 <input type="text" value={selWeek} onChange={(e) => setSelWeek(e.target.value)} placeholder="2026-W09"
                   className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
                 <button onClick={fetchPointages}
-                  className="px-4 py-2 bg-camublue-900 text-white rounded-lg text-sm hover:bg-camublue-800 transition whitespace-nowrap">
-                  Charger
-                </button>
+                  className="px-4 py-2 bg-camublue-900 text-white rounded-lg text-sm hover:bg-camublue-800 transition whitespace-nowrap">Charger</button>
               </div>
             </div>
             <div className="p-4 sm:p-6 overflow-y-auto flex-1">
@@ -516,28 +589,18 @@ function DetailModal({
                     <span>Jour</span><span>Date</span><span>Statut</span><span>Entrée</span><span>Sortie</span>
                   </div>
                   {pointages.map((p, i) => (
-                    <div key={i} className={`rounded-xl border p-3 ${
-                      p.status === "ok" ? "bg-white border-slate-100" : "bg-rose-50 border-rose-100"
-                    }`}>
+                    <div key={i} className={`rounded-xl border p-3 ${p.status === "ok" ? "bg-white border-slate-100" : "bg-rose-50 border-rose-100"}`}>
                       <div className="hidden sm:grid grid-cols-5 gap-4">
                         <span className="font-medium text-slate-800 text-sm">{p.day}</span>
-                        <span className="text-sm text-slate-600">
-                          {new Date(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                        </span>
+                        <span className="text-sm text-slate-600">{new Date(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
                         <span><StatusPill status={p.status} /></span>
-                        <span className={`text-sm ${p.in_time ? "text-slate-700" : "text-slate-400"}`}>
-                          {p.in_time ? formatTime(p.in_time) : "—"}
-                        </span>
-                        <span className={`text-sm ${p.out_time ? "text-slate-700" : "text-slate-400"}`}>
-                          {p.out_time ? formatTime(p.out_time) : "—"}
-                        </span>
+                        <span className={`text-sm ${p.in_time ? "text-slate-700" : "text-slate-400"}`}>{p.in_time ? formatTime(p.in_time) : "—"}</span>
+                        <span className={`text-sm ${p.out_time ? "text-slate-700" : "text-slate-400"}`}>{p.out_time ? formatTime(p.out_time) : "—"}</span>
                       </div>
                       <div className="sm:hidden flex items-center justify-between gap-2">
                         <div>
                           <p className="font-semibold text-slate-800 text-sm">{p.day}</p>
-                          <p className="text-xs text-slate-400">
-                            {new Date(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}
-                          </p>
+                          <p className="text-xs text-slate-400">{new Date(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}</p>
                         </div>
                         <StatusPill status={p.status} />
                         <div className="text-right text-xs font-mono text-slate-600">
@@ -556,10 +619,7 @@ function DetailModal({
               )}
             </div>
             <div className="px-4 sm:px-6 py-4 border-t border-slate-100 flex justify-end shrink-0">
-              <button onClick={onClose}
-                className="px-5 py-2 text-sm font-medium text-white bg-camublue-900 rounded-xl hover:bg-camublue-800 transition">
-                Fermer
-              </button>
+              <button onClick={onClose} className="px-5 py-2 text-sm font-medium text-white bg-camublue-900 rounded-xl hover:bg-camublue-800 transition">Fermer</button>
             </div>
           </motion.div>
         </motion.div>
@@ -568,86 +628,51 @@ function DetailModal({
   );
 }
 
-function AlertModal({
-  open, onClose, employee, onConfirm, sending,
-}: {
+// ─── Modal alerte ─────────────────────────────────────────────────────────────
+function AlertModal({ open, onClose, employee, onConfirm, sending }: {
   open: boolean; onClose: () => void; employee: FlatRecord | null;
   onConfirm: (m: MotifType) => void; sending: boolean;
 }) {
   const [motif, setMotif] = useState<MotifType>("absent");
-  useEffect(() => {
-    if (employee) setMotif(employee.status === "absent" ? "absent" : "not_pointing");
-  }, [employee]);
+  useEffect(() => { if (employee) setMotif(employee.status === "absent" ? "absent" : "not_pointing"); }, [employee]);
 
   return (
     <AnimatePresence>
       {open && employee && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+        <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={() => !sending && onClose()}
-        >
+          onClick={() => !sending && onClose()}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <motion.div
-            className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden z-10"
-            initial={{ y: 40, scale: 0.97, opacity: 0 }}
-            animate={{ y: 0, scale: 1, opacity: 1 }}
-            exit={{ y: 40, scale: 0.97, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <motion.div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden z-10"
+            initial={{ y: 40, scale: 0.97, opacity: 0 }} animate={{ y: 0, scale: 1, opacity: 1 }}
+            exit={{ y: 40, scale: 0.97, opacity: 0 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <div>
                 <div className="font-bold text-slate-800">Envoyer une alerte</div>
                 <div className="text-xs text-slate-400 mt-0.5 truncate max-w-[230px]">
-                  {employee.full_name}
-                  {employee.matricule && (
-                    <span className="font-mono ml-1.5 text-slate-300">· {employee.matricule}</span>
-                  )}
+                  {employee.full_name}{employee.matricule && <span className="font-mono ml-1.5 text-slate-300">· {employee.matricule}</span>}
                 </div>
               </div>
-              <button onClick={onClose} disabled={sending}
-                className="p-1.5 rounded-xl hover:bg-slate-100 transition disabled:opacity-40">
-                <X className="h-4 w-4 text-slate-400" />
-              </button>
+              <button onClick={onClose} disabled={sending} className="p-1.5 rounded-xl hover:bg-slate-100 transition disabled:opacity-40"><X className="h-4 w-4 text-slate-400" /></button>
             </div>
             <div className="px-6 py-5 space-y-5">
-              <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${
-                employee.email ? "bg-slate-50" : "bg-red-50 border border-red-100"
-              }`}>
+              <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${employee.email ? "bg-slate-50" : "bg-red-50 border border-red-100"}`}>
                 <Mail className={`h-4 w-4 shrink-0 ${employee.email ? "text-slate-400" : "text-red-400"}`} />
-                {employee.email ? (
-                  <span className="text-sm font-mono text-slate-700 truncate">{employee.email}</span>
-                ) : (
-                  <span className="text-sm text-red-500 font-medium flex items-center gap-1.5">
-                    <XCircle className="h-3.5 w-3.5" />Aucun email
-                  </span>
-                )}
+                {employee.email
+                  ? <span className="text-sm font-mono text-slate-700 truncate">{employee.email}</span>
+                  : <span className="text-sm text-red-500 font-medium flex items-center gap-1.5"><XCircle className="h-3.5 w-3.5" />Aucun email</span>}
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Motif</p>
                 <div className="grid grid-cols-2 gap-3">
                   <button onClick={() => setMotif("absent")}
-                    className={`flex flex-col items-center gap-2.5 py-5 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${
-                      motif === "absent"
-                        ? "border-red-400 bg-red-50 text-red-700"
-                        : "border-slate-200 text-slate-500 hover:border-slate-300"
-                    }`}>
-                    <div className={`p-2 rounded-xl ${motif === "absent" ? "bg-red-100" : "bg-slate-100"}`}>
-                      <UserMinus className="h-4 w-4" />
-                    </div>
-                    Absence
+                    className={`flex flex-col items-center gap-2.5 py-5 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${motif === "absent" ? "border-red-400 bg-red-50 text-red-700" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                    <div className={`p-2 rounded-xl ${motif === "absent" ? "bg-red-100" : "bg-slate-100"}`}><UserMinus className="h-4 w-4" /></div>Absence
                   </button>
                   <button onClick={() => setMotif("not_pointing")}
-                    className={`flex flex-col items-center gap-2.5 py-5 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${
-                      motif === "not_pointing"
-                        ? "border-amber-400 bg-amber-50 text-amber-700"
-                        : "border-slate-200 text-slate-500 hover:border-slate-300"
-                    }`}>
-                    <div className={`p-2 rounded-xl ${motif === "not_pointing" ? "bg-amber-100" : "bg-slate-100"}`}>
-                      <AlertTriangle className="h-4 w-4" />
-                    </div>
-                    Non pointage
+                    className={`flex flex-col items-center gap-2.5 py-5 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${motif === "not_pointing" ? "border-amber-400 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                    <div className={`p-2 rounded-xl ${motif === "not_pointing" ? "bg-amber-100" : "bg-slate-100"}`}><AlertTriangle className="h-4 w-4" /></div>Non pointage
                   </button>
                 </div>
               </div>
@@ -659,20 +684,10 @@ function AlertModal({
             </div>
             <div className="px-6 pb-6 flex gap-3">
               <button onClick={onClose} disabled={sending}
-                className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50">
-                Annuler
-              </button>
+                className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50">Annuler</button>
               <button onClick={() => onConfirm(motif)} disabled={sending || !employee.email}
-                className={`flex-1 py-2.5 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 ${
-                  !employee.email
-                    ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                    : "bg-camublue-900 hover:bg-camublue-800 text-white"
-                } disabled:opacity-60`}>
-                {sending ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" />Envoi…</>
-                ) : (
-                  <><Send className="h-4 w-4" />Envoyer</>
-                )}
+                className={`flex-1 py-2.5 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 ${!employee.email ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-camublue-900 hover:bg-camublue-800 text-white"} disabled:opacity-60`}>
+                {sending ? <><Loader2 className="h-4 w-4 animate-spin" />Envoi…</> : <><Send className="h-4 w-4" />Envoyer</>}
               </button>
             </div>
           </motion.div>
@@ -682,59 +697,49 @@ function AlertModal({
   );
 }
 
-function TableRow({
-  r, isLate, viewMode, onAlert, onDetail,
-}: {
-  r: FlatRecord; isLate: boolean; viewMode: ViewMode;
-  onAlert: () => void; onDetail: () => void;
+// ─── TableRow ─────────────────────────────────────────────────────────────────
+function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
+  r: FlatRecord; isLate: boolean; viewMode: ViewMode; onAlert: () => void; onDetail: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const deficit = r.deficit_minutes > 0;
 
   return (
     <>
-      {/* Desktop row */}
       <tr className={`hidden md:table-row border-b border-slate-100 transition-colors text-sm ${
-        isLate ? "bg-orange-50/50 hover:bg-orange-50"
-        : deficit ? "bg-rose-50/30 hover:bg-rose-50/60"
-        : "hover:bg-slate-50"
+        isLate ? "bg-orange-50/50 hover:bg-orange-50" : "hover:bg-slate-50"
       }`}>
-        <td className="px-4 py-3 font-mono text-slate-500 text-xs">{r.matricule || "—"}</td>
-        <td className="px-4 py-3 font-medium text-slate-800">{r.full_name}</td>
-        <td className="px-4 py-3 text-slate-600 text-xs">{r.department}</td>
-        <td className="px-4 py-3"><StatusPill status={r.status} /></td>
+        <td className="px-4 py-3 font-mono text-slate-500 text-xs"><div className="flex justify-center">{r.matricule || "—"}</div></td>
+        <td className="px-4 py-3 font-medium text-slate-800"><div className="flex justify-center">{r.full_name}</div></td>
+        <td className="px-4 py-3 text-slate-600 text-xs"><div className="flex justify-center">{r.department}</div></td>
+        <td className="px-4 py-3"><div className="flex justify-center"><StatusPill status={r.status} /></div></td>
         <td className="px-4 py-3">
-          {viewMode === "daily" ? (
-            <LateBadge minutes={r.computed_late_minutes} />
-          ) : r.is_late_api && r.late_label_api ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 ring-1 ring-orange-300">
-              <Clock className="h-3 w-3" />{r.late_label_api}
-            </span>
-          ) : (
-            <span className="text-slate-300 text-xs">—</span>
-          )}
+          <div className="flex justify-center">
+            {viewMode === "daily" ? (
+              <LateBadge minutes={r.computed_late_minutes} />
+            ) : r.is_late_api && r.late_label_api ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 ring-1 ring-orange-300">
+                <Clock className="h-3 w-3" />{r.late_label_api}
+              </span>
+            ) : (
+              <span className="text-slate-300 text-xs">—</span>
+            )}
+          </div>
         </td>
         <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.computed_late_minutes > 0 ? "text-red-600 font-semibold" : "text-slate-700"}`}>
-          {formatTime(r.in_time)}
+          <div className="flex justify-center">{formatTime(r.in_time)}</div>
         </td>
         <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.overtime_minutes > 0 ? "text-emerald-600 font-semibold" : "text-slate-700"}`}>
-          {formatTime(r.out_time)}
+          <div className="flex justify-center">{formatTime(r.out_time)}</div>
         </td>
-        <td className="px-4 py-3"><OvertimeBadge minutes={r.overtime_minutes} /></td>
-        <td className="px-4 py-3"><CompensationCell c={r.compensation} viewMode={viewMode} /></td>
-        <td className="px-4 py-3"><DeficitBadge minutes={r.deficit_minutes} /></td>
+        <td className="px-4 py-3"><div className="flex justify-center"><WorkedTimeBadge minutes={r.worked_minutes} /></div></td>
+        <td className="px-4 py-3"><div className="flex justify-center"><OvertimeBadge minutes={r.overtime_minutes} /></div></td>
+        <td className="px-4 py-3"><div className="flex justify-center"><CompensationCell c={r.compensation} viewMode={viewMode} /></div></td>
         <td className="px-4 py-3">
-          <div className="flex gap-2">
-            <button
-              onClick={onAlert}
-              disabled={r.status !== "absent" || !r.email}
+          <div className="flex gap-2 justify-center">
+            <button onClick={onAlert} disabled={r.status !== "absent" || !r.email}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                r.status === "absent" && r.email
-                  ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer"
-                  : "bg-slate-100 text-slate-400 cursor-not-allowed"
-              }`}
-              title={!r.email ? "Email manquant" : ""}
-            >
+                r.status === "absent" && r.email ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"
+              }`} title={!r.email ? "Email manquant" : ""}>
               <Bell className="h-3 w-3" />Alerter
             </button>
             <button onClick={onDetail}
@@ -745,20 +750,12 @@ function TableRow({
         </td>
       </tr>
 
-      {/* Mobile card row */}
-      <tr className={`md:hidden border-b border-slate-100 ${
-        isLate ? "bg-orange-50/40" : deficit ? "bg-rose-50/30" : ""
-      }`}>
+      <tr className={`md:hidden border-b border-slate-100 ${isLate ? "bg-orange-50/40" : ""}`}>
         <td colSpan={11} className="px-3 py-2">
-          <div
-            className="flex items-center justify-between gap-2 cursor-pointer"
-            onClick={() => setExpanded((v) => !v)}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="min-w-0">
-                <p className="font-semibold text-slate-800 text-sm truncate">{r.full_name}</p>
-                <p className="text-xs text-slate-400 font-mono">{r.matricule || "—"} · {r.department}</p>
-              </div>
+          <div className="flex items-center justify-between gap-2 cursor-pointer" onClick={() => setExpanded((v) => !v)}>
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-800 text-sm truncate">{r.full_name}</p>
+              <p className="text-xs text-slate-400 font-mono">{r.matricule || "—"} · {r.department}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <StatusPill status={r.status} />
@@ -766,46 +763,32 @@ function TableRow({
             </div>
           </div>
           {expanded && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mt-3 space-y-2 text-sm"
-            >
-              <div className="grid grid-cols-2 gap-2">
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }} className="mt-3 space-y-2 text-sm">
+              <div className="grid grid-cols-3 gap-2">
                 <div className="bg-slate-50 rounded-lg p-2">
                   <p className="text-xs text-slate-400 mb-0.5">Entrée</p>
-                  <p className={`font-mono font-semibold ${r.computed_late_minutes > 0 ? "text-red-600" : "text-slate-700"}`}>
-                    {formatTime(r.in_time)}
-                  </p>
+                  <p className={`font-mono font-semibold ${r.computed_late_minutes > 0 ? "text-red-600" : "text-slate-700"}`}>{formatTime(r.in_time)}</p>
                 </div>
                 <div className="bg-slate-50 rounded-lg p-2">
                   <p className="text-xs text-slate-400 mb-0.5">Sortie</p>
-                  <p className={`font-mono font-semibold ${r.overtime_minutes > 0 ? "text-emerald-600" : "text-slate-700"}`}>
-                    {formatTime(r.out_time)}
-                  </p>
+                  <p className={`font-mono font-semibold ${r.overtime_minutes > 0 ? "text-emerald-600" : "text-slate-700"}`}>{formatTime(r.out_time)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-2">
+                  <p className="text-xs text-slate-400 mb-0.5">Travaillé</p>
+                  <p className="font-mono font-semibold text-slate-700 text-sm">{r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—"}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {viewMode === "daily" && r.computed_late_minutes > 0 && (
-                  <LateBadge minutes={r.computed_late_minutes} />
-                )}
+                {viewMode === "daily" && r.computed_late_minutes > 0 && <LateBadge minutes={r.computed_late_minutes} />}
                 {r.overtime_minutes > 0 && <OvertimeBadge minutes={r.overtime_minutes} />}
-                {r.deficit_minutes > 0 && <DeficitBadge minutes={r.deficit_minutes} />}
-                {viewMode === "daily" && r.compensation.late_min > 0 && (
-                  <CompensationCell c={r.compensation} viewMode={viewMode} />
-                )}
+                {viewMode === "daily" && r.compensation.late_min > 0 && <CompensationCell c={r.compensation} viewMode={viewMode} />}
               </div>
               <div className="flex gap-2 pt-1">
-                <button
-                  onClick={onAlert}
-                  disabled={r.status !== "absent" || !r.email}
+                <button onClick={onAlert} disabled={r.status !== "absent" || !r.email}
                   className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    r.status === "absent" && r.email
-                      ? "bg-red-50 hover:bg-red-100 text-red-700"
-                      : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                  }`}
-                >
+                    r.status === "absent" && r.email ? "bg-red-50 hover:bg-red-100 text-red-700" : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  }`}>
                   <Bell className="h-3 w-3" />Alerter
                 </button>
                 <button onClick={onDetail}
@@ -821,13 +804,14 @@ function TableRow({
   );
 }
 
-// Page principale
+// ─── Page principale ──────────────────────────────────────────────────────────
 export default function AttendanceNormalesPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("daily");
   const [loading, setLoading] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [alertModalOpen, setAlertModalOpen] = useState(false);
+  const [workHoursOpen, setWorkHoursOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<FlatRecord | null>(null);
   const [sendingAlert, setSendingAlert] = useState(false);
@@ -842,13 +826,26 @@ export default function AttendanceNormalesPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [emailMap, setEmailMap] = useState<Map<string, string>>(new Map());
+  const [workHours, setWorkHours] = useState<WorkHoursSettings>(DEFAULT_WORK_HOURS);
+
+  // ── Set des matricules shifts — source de vérité : getShiftDailyStats ──────
+  const [shiftMatricules, setShiftMatricules] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    // Emails depuis la liste globale
     getEmployees()
       .then((list: Employee[]) => {
         const m = new Map<string, string>();
         list.forEach((e) => { if (e.matricule && e.email) m.set(e.matricule, e.email); });
         setEmailMap(m);
+      })
+      .catch(console.error);
+
+    // Matricules shifts depuis l'API shifts (source fiable)
+    getShiftDailyStats({ date: isoToday() })
+      .then((res) => {
+        const set = new Set<string>(res.records.map((r: { matricule: string }) => r.matricule));
+        setShiftMatricules(set);
       })
       .catch(console.error);
   }, []);
@@ -859,9 +856,7 @@ export default function AttendanceNormalesPage() {
       if (viewMode === "daily") setDaily(await getDailyStats(date));
       if (viewMode === "weekly") setWeekly(await getWeeklyStats(week));
       if (viewMode === "monthly") setMonthly(await getMonthlyStats(month));
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [viewMode, date, week, month]);
 
   useEffect(() => { fetchData(); }, [viewMode]);
@@ -870,54 +865,52 @@ export default function AttendanceNormalesPage() {
   const allRecords = useMemo((): FlatRecord[] => {
     const map = (r: any, isDaily: boolean): FlatRecord => {
       const mat = r.matricule ?? "";
+      const inTime = r.in_time ?? null;
+      const outTime = r.out_time ?? null;
+      const workedFromTimes = computeWorkedMinutesFromTimes(inTime, outTime);
+      const workedMin = workedFromTimes > 0 ? workedFromTimes : (r.worked_minutes ?? 0);
+      const lateMin = isDaily ? computeLateMinutes(inTime, workHours.startH, workHours.startM) : r.total_late_minutes ?? 0;
+      const overtimeMin = isDaily ? computeOvertimeMinutes(outTime, workHours.endH, workHours.endM) : 0;
       return {
         employee_id: r.employee_id,
         matricule: mat,
         full_name: r.full_name ?? `${r.nom ?? ""} ${r.prenom ?? ""}`.trim(),
         department: r.department ?? r.service ?? "—",
-        status: isDaily
-          ? r.status
-          : r.absent_days > 0 ? "absent" : r.incomplete_days > 0 ? "incomplete" : "ok",
+        status: isDaily ? r.status : r.absent_days > 0 ? "absent" : r.incomplete_days > 0 ? "incomplete" : "ok",
         is_late_api: r.is_late ?? r.late_days > 0,
         late_label_api: r.late_label ?? (r.late_days > 0 ? `${r.late_days}j · moy ${r.avg_late_minutes}min` : null),
         late_minutes_api: r.late_minutes ?? r.total_late_minutes ?? 0,
-        computed_late_minutes: isDaily ? computeLateMinutes(r.in_time ?? null) : r.total_late_minutes ?? 0,
-        overtime_minutes: isDaily ? computeOvertimeMinutes(r.out_time ?? null) : 0,
-        compensation: isDaily
-          ? computeCompensation(computeLateMinutes(r.in_time ?? null), computeOvertimeMinutes(r.out_time ?? null))
-          : computeCompensation(r.total_late_minutes ?? 0, 0),
-        deficit_minutes: computeDeficitMinutes(r.worked_minutes ?? 0, r.expected_minutes ?? 0),
-        in_time: r.in_time ?? null,
-        out_time: r.out_time ?? null,
+        computed_late_minutes: lateMin,
+        overtime_minutes: overtimeMin,
+        compensation: computeCompensation(lateMin, overtimeMin),
+        deficit_minutes: computeDeficitMinutes(workedMin, r.expected_minutes ?? 0),
+        in_time: inTime, out_time: outTime,
+        worked_minutes: workedMin,
         delta_minutes: r.delta_minutes ?? 0,
-        worked_minutes: r.worked_minutes ?? 0,
         expected_minutes: r.expected_minutes ?? 0,
         email: r.email ?? emailMap.get(mat) ?? null,
       };
     };
-    if (viewMode === "daily" && daily) return daily.records.map((r) => map(r, true));
-    if (viewMode === "weekly" && weekly) return weekly.by_employee.map((r: any) => map(r, false));
-    if (viewMode === "monthly" && monthly) return monthly.by_employee.map((r: any) => map(r, false));
+
+    // Exclure les matricules présents dans le tableau shifts
+    const isNormal = (r: any) => !shiftMatricules.has(r.matricule ?? "");
+
+    if (viewMode === "daily" && daily)
+      return daily.records.filter(isNormal).map((r) => map(r, true));
+    if (viewMode === "weekly" && weekly)
+      return weekly.by_employee.filter(isNormal).map((r: any) => map(r, false));
+    if (viewMode === "monthly" && monthly)
+      return monthly.by_employee.filter(isNormal).map((r: any) => map(r, false));
     return [];
-  }, [viewMode, daily, weekly, monthly, emailMap]);
+  }, [viewMode, daily, weekly, monthly, emailMap, workHours, shiftMatricules]);
 
   const kpis = useMemo(() => {
     const total = allRecords.length;
     if (viewMode === "daily" && daily)
-      return {
-        total,
-        absent: daily.kpis.absent,
-        late: allRecords.filter((r) => r.computed_late_minutes > 0).length,
-        anomaly: daily.kpis.anomalies,
-      };
+      return { total, absent: daily.kpis.absent, late: allRecords.filter((r) => r.computed_late_minutes > 0).length, anomaly: daily.kpis.anomalies };
     const emp = (viewMode === "weekly" ? weekly?.by_employee : monthly?.by_employee) as any[] | undefined;
     if (emp)
-      return {
-        total,
-        absent: emp.filter((r) => r.absent_days > 0).length,
-        late: emp.filter((r) => (r.late_days ?? 0) > 0).length,
-        anomaly: emp.filter((r) => r.anomaly_days > 0).length,
-      };
+      return { total, absent: emp.filter((r) => r.absent_days > 0).length, late: emp.filter((r) => (r.late_days ?? 0) > 0).length, anomaly: emp.filter((r) => r.anomaly_days > 0).length };
     return { total: 0, absent: 0, late: 0, anomaly: 0 };
   }, [viewMode, daily, weekly, monthly, allRecords]);
 
@@ -926,30 +919,22 @@ export default function AttendanceNormalesPage() {
     [viewMode]
   );
 
-  const filtered = useMemo(
-    () => allRecords.filter((r) => {
-      if (statusFilter === "late") { if (!isLateRecord(r)) return false; }
-      else if (statusFilter === "deficit") { if (r.deficit_minutes <= 0) return false; }
-      else if (statusFilter !== "all") { if (r.status !== statusFilter) return false; }
-      if (!searchQ) return true;
-      const q = searchQ.toLowerCase();
-      return (
-        r.full_name.toLowerCase().includes(q) ||
-        r.matricule.toLowerCase().includes(q) ||
-        r.department.toLowerCase().includes(q)
-      );
-    }),
-    [allRecords, statusFilter, searchQ, isLateRecord]
-  );
+  const filtered = useMemo(() => allRecords.filter((r) => {
+    if (statusFilter === "late") { if (!isLateRecord(r)) return false; }
+    else if (statusFilter === "deficit") { if (r.deficit_minutes <= 0) return false; }
+    else if (statusFilter !== "all") { if (r.status !== statusFilter) return false; }
+    if (!searchQ) return true;
+    const q = searchQ.toLowerCase();
+    return r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q) || r.department.toLowerCase().includes(q);
+  }), [allRecords, statusFilter, searchQ, isLateRecord]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageData = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const getPageNumbers = (): (number | "...")[] => {
     const pages: (number | "...")[] = [];
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
+    if (totalPages <= 7) { for (let i = 1; i <= totalPages; i++) pages.push(i); }
+    else {
       pages.push(1);
       if (page > 3) pages.push("...");
       for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
@@ -972,89 +957,68 @@ export default function AttendanceNormalesPage() {
     const res = await sendAlertEmail(selectedEmployee, motif);
     setSendingAlert(false);
     alert(res.success ? `Alerte envoyée à ${selectedEmployee.email}` : "Échec de l'envoi.");
-    setAlertModalOpen(false);
-    setSelectedEmployee(null);
+    setAlertModalOpen(false); setSelectedEmployee(null);
   };
+
+  const pad2 = (n: number) => String(n).padStart(2, "0");
 
   const tableHeaders = [
     "Matricule", "Nom", "Département", "Statut", "Retard",
-    "Entrée", "Sortie", "HS (>17h30)", "Compensation", "Heures moins", "Actions",
+    "Entrée", "Sortie", "Heure travaillée", "HS (>départ)", "Compensation", "Actions",
   ];
 
   return (
     <AppLayout>
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-3 p-3 sm:p-4 md:p-6"
-      >
+      <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}
+        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-3 p-3 sm:p-4 md:p-6">
+
         {/* En-tête */}
         <div className="flex flex-col sm:flex-row justify-between gap-3 sm:items-start shrink-0">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-camublue-900">Pointages Normaux</h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Seuil retard : arrivée après <strong>08h00</strong> — calculé sur l'heure d'entrée
+              Contexte : <strong className="text-slate-600">{workHours.context}</strong> —
+              Retard après <strong>{pad2(workHours.startH)}h{pad2(workHours.startM)}</strong> —
+              HS après <strong>{pad2(workHours.endH)}h{pad2(workHours.endM)}</strong>
             </p>
           </div>
-
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative w-full sm:w-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input
-                value={searchQ}
-                onChange={(e) => { setSearchQ(e.target.value); setPage(1); }}
+              <input value={searchQ} onChange={(e) => { setSearchQ(e.target.value); setPage(1); }}
                 placeholder="Nom, matricule…"
-                className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-48 md:w-56 focus:outline-none"
-              />
+                className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-48 md:w-56 focus:outline-none" />
             </div>
-
-            <select
-              value={viewMode}
-              onChange={(e) => setViewMode(e.target.value as ViewMode)}
-              className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none flex-1 sm:flex-none"
-            >
+            <select value={viewMode} onChange={(e) => setViewMode(e.target.value as ViewMode)}
+              className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none flex-1 sm:flex-none">
               <option value="daily">Journalier</option>
               <option value="weekly">Hebdomadaire</option>
               <option value="monthly">Mensuel</option>
             </select>
-
-            <button
-              onClick={() => setFilterOpen(true)}
+            <button onClick={() => setWorkHoursOpen(true)}
+              className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5 text-camublue-900 font-medium">
+              <Settings className="h-4 w-4" /><span className="hidden sm:inline">Heures de travail</span>
+            </button>
+            <button onClick={() => setFilterOpen(true)}
               className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 ${
-                statusFilter !== "all"
-                  ? "bg-orange-50 border-orange-300 text-orange-700"
-                  : "bg-white border-slate-300 hover:bg-slate-50"
-              }`}
-            >
-              <Filter className="h-4 w-4" />
-              <span className="hidden sm:inline">Filtrer</span>
-              {statusFilter !== "all" && (
-                <span className="bg-orange-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold leading-none">1</span>
-              )}
+                statusFilter !== "all" ? "bg-orange-50 border-orange-300 text-orange-700" : "bg-white border-slate-300 hover:bg-slate-50"
+              }`}>
+              <Filter className="h-4 w-4" /><span className="hidden sm:inline">Filtrer</span>
+              {statusFilter !== "all" && <span className="bg-orange-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold leading-none">1</span>}
             </button>
-
-            <button
-              onClick={() => exportCSV("pointage_normaux", filtered.map((r) => ({
-                Matricule: r.matricule, Nom: r.full_name, Département: r.department,
-                Statut: r.status,
-                Retard: r.computed_late_minutes > 0 ? `RETARD · ${formatMinutes(r.computed_late_minutes)}` : "Non",
-                Entrée: formatTime(r.in_time), Sortie: formatTime(r.out_time),
-                "Heures moins": r.deficit_minutes > 0 ? `−${formatMinutes(r.deficit_minutes)}` : "—",
-                Email: r.email ?? "Manquant",
-              })))}
-              className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              <span className="hidden sm:inline">Exporter</span>
+            <button onClick={() => exportCSV("pointage_normaux", filtered.map((r) => ({
+              Matricule: r.matricule, Nom: r.full_name, Département: r.department, Statut: r.status,
+              Retard: r.computed_late_minutes > 0 ? `RETARD · ${formatMinutes(r.computed_late_minutes)}` : "Non",
+              Entrée: formatTime(r.in_time), Sortie: formatTime(r.out_time),
+              "Heure travaillée": r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
+              Email: r.email ?? "Manquant",
+            })))}
+              className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
+              <FileSpreadsheet className="h-4 w-4" /><span className="hidden sm:inline">Exporter</span>
             </button>
-
-            <button
-              onClick={fetchData}
-              className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Rafraîchir</span>
+            <button onClick={fetchData}
+              className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
             </button>
           </div>
         </div>
@@ -1062,11 +1026,9 @@ export default function AttendanceNormalesPage() {
         {/* KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
           <AbsentsCard total={kpis.total} absent={kpis.absent} loading={loading} delay={0.05} />
-          <StatCard
-            icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
+          <StatCard icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
             active={statusFilter === "late"} sub="Cliquer pour filtrer"
-            onClick={() => setStatusFilter((f) => (f === "late" ? "all" : "late"))}
-          />
+            onClick={() => setStatusFilter((f) => (f === "late" ? "all" : "late"))} />
           <StatCard icon={AlertTriangle} label="Anomalies" value={kpis.anomaly} color="violet" delay={0.15} loading={loading} />
         </div>
 
@@ -1077,31 +1039,24 @@ export default function AttendanceNormalesPage() {
               const isActive = statusFilter === f.key;
               const count = filterCount(f.key);
               return (
-                <button
-                  key={f.key}
-                  onClick={() => { setStatusFilter(f.key); setPage(1); }}
+                <button key={f.key} onClick={() => { setStatusFilter(f.key); setPage(1); }}
                   className={`relative inline-flex flex-col items-center justify-center gap-0.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 whitespace-nowrap shrink-0 ${
                     isActive ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-white/60"
-                  }`}
-                >
+                  }`}>
                   <span className="inline-flex items-center gap-1">
                     <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActive ? f.activeDot : f.dotColor}`} />
                     <span className="hidden sm:inline">{f.label}</span>
                     <span className="sm:hidden">{f.label.split(" ")[0]}</span>
                   </span>
-                  <span className={`tabular-nums font-bold leading-none ${isActive ? "text-camublue-900" : "text-slate-400/70"}`}>
-                    {count}
-                  </span>
+                  <span className={`tabular-nums font-bold leading-none ${isActive ? "text-camublue-900" : "text-slate-400/70"}`}>{count}</span>
                 </button>
               );
             })}
             {statusFilter !== "all" && (
               <>
                 <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
-                <button
-                  onClick={() => setStatusFilter("all")}
-                  className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500 hover:bg-white/60 transition-all shrink-0"
-                >
+                <button onClick={() => setStatusFilter("all")}
+                  className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500 hover:bg-white/60 transition-all shrink-0">
                   <X className="h-3 w-3" />
                 </button>
               </>
@@ -1116,17 +1071,13 @@ export default function AttendanceNormalesPage() {
               <thead className="sticky top-0 z-10 bg-camublue-900 text-white hidden md:table-header-group">
                 <tr>
                   {tableHeaders.map((h) => (
-                    <th key={h} className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
-                      {h}
-                    </th>
+                    <th key={h} className="px-4 py-3 text-center border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <thead className="sticky top-0 z-10 bg-camublue-900 text-white md:hidden">
                 <tr>
-                  <th className="px-3 py-3 text-left text-sm font-semibold" colSpan={11}>
-                    Employés ({filtered.length})
-                  </th>
+                  <th className="px-3 py-3 text-left text-sm font-semibold" colSpan={11}>Employés ({filtered.length})</th>
                 </tr>
               </thead>
               <tbody>
@@ -1134,29 +1085,20 @@ export default function AttendanceNormalesPage() {
                   [...Array(5)].map((_, i) => (
                     <tr key={i} className="border-b border-slate-100">
                       {[...Array(tableHeaders.length)].map((_, j) => (
-                        <td key={j} className="px-4 py-3">
-                          <div className="h-4 bg-slate-100 rounded animate-pulse" />
-                        </td>
+                        <td key={j} className="px-4 py-3"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>
                       ))}
                     </tr>
                   ))
                 ) : pageData.length ? (
                   pageData.map((r) => (
-                    <TableRow
-                      key={r.employee_id}
-                      r={r}
-                      isLate={isLateRecord(r)}
-                      viewMode={viewMode}
+                    <TableRow key={r.employee_id} r={r} isLate={isLateRecord(r)} viewMode={viewMode}
                       onAlert={() => { setSelectedEmployee(r); setAlertModalOpen(true); }}
-                      onDetail={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
-                    />
+                      onDetail={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }} />
                   ))
                 ) : (
                   <tr>
                     <td colSpan={tableHeaders.length} className="text-center py-12 text-slate-400 text-sm">
-                      {statusFilter === "late" ? "Aucun retard."
-                        : statusFilter === "deficit" ? "Aucune heure manquante."
-                        : "Aucun enregistrement trouvé."}
+                      {statusFilter === "late" ? "Aucun retard." : statusFilter === "deficit" ? "Aucune heure manquante." : "Aucun enregistrement trouvé."}
                     </td>
                   </tr>
                 )}
@@ -1178,70 +1120,48 @@ export default function AttendanceNormalesPage() {
                   <div className="flex items-center gap-0.5">
                     {PAGE_SIZE_OPTIONS.map((size) => (
                       <button key={size} onClick={() => { setPageSize(size); setPage(1); }}
-                        className={`min-w-[28px] h-6 rounded text-xs font-semibold transition-all ${
-                          pageSize === size ? "bg-camublue-900 text-white" : "text-slate-500 hover:bg-slate-100"
-                        }`}>
+                        className={`min-w-[28px] h-6 rounded text-xs font-semibold transition-all ${pageSize === size ? "bg-camublue-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}>
                         {size}
                       </button>
                     ))}
                   </div>
                 </div>
               </div>
-
               <div className="flex items-center gap-1">
-                <button onClick={() => setPage(1)} disabled={page === 1}
-                  className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed">
-                  <FaAngleDoubleLeft size={12} />
-                </button>
-                <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page === 1}
-                  className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed">
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
+                <button onClick={() => setPage(1)} disabled={page === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleLeft size={12} /></button>
+                <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-4 w-4" /></button>
                 <div className="flex items-center gap-0.5 mx-1">
                   {getPageNumbers().map((p, i) =>
                     p === "..." ? (
                       <span key={`e-${i}`} className="px-1 text-slate-400 text-sm">…</span>
                     ) : (
                       <button key={p} onClick={() => setPage(p as number)}
-                        className={`min-w-[28px] sm:min-w-[32px] h-7 sm:h-8 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                          page === p ? "bg-camublue-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
-                        }`}>
+                        className={`min-w-[28px] sm:min-w-[32px] h-7 sm:h-8 rounded-md text-xs sm:text-sm font-medium transition-colors ${page === p ? "bg-camublue-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}>
                         {p}
                       </button>
                     )
                   )}
                 </div>
-                <button onClick={() => setPage((p) => Math.min(p + 1, totalPages))} disabled={page === totalPages}
-                  className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed">
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-                <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
-                  className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed">
-                  <FaAngleDoubleRight size={12} />
-                </button>
+                <button onClick={() => setPage((p) => Math.min(p + 1, totalPages))} disabled={page === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-4 w-4" /></button>
+                <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleRight size={12} /></button>
               </div>
             </div>
           )}
         </div>
 
         {/* Modals */}
-        <FilterModal
-          open={filterOpen} onClose={() => setFilterOpen(false)}
+        <WorkHoursModal open={workHoursOpen} onClose={() => setWorkHoursOpen(false)}
+          settings={workHours} onSave={(s) => { setWorkHours(s); setWorkHoursOpen(false); }} />
+        <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)}
           viewMode={viewMode} setViewMode={setViewMode}
-          date={date} setDate={setDate}
-          week={week} setWeek={setWeek}
+          date={date} setDate={setDate} week={week} setWeek={setWeek}
           month={month} setMonth={setMonth}
           statusFilter={statusFilter} setStatusFilter={setStatusFilter}
-          onApply={fetchData}
-        />
-        <DetailModal
-          open={detailModalOpen} onClose={() => setDetailModalOpen(false)}
-          employeeId={selectedEmployeeId} initialWeek={week}
-        />
-        <AlertModal
-          open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
-          employee={selectedEmployee} onConfirm={handleSendAlert} sending={sendingAlert}
-        />
+          onApply={fetchData} />
+        <DetailModal open={detailModalOpen} onClose={() => setDetailModalOpen(false)}
+          employeeId={selectedEmployeeId} initialWeek={week} />
+        <AlertModal open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
+          employee={selectedEmployee} onConfirm={handleSendAlert} sending={sendingAlert} />
       </motion.div>
     </AppLayout>
   );

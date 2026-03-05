@@ -15,7 +15,7 @@ import {
 import type {
   DailyStatsResponse, WeeklyStatsResponse, MonthlyStatsResponse, DailyRecord,
 } from "@/types/attendance";
-import type {  Employee, ContractType } from "@/types/employee";
+import type { Employee, ContractType } from "@/types/employee";
 import type { BulletinMonthSummary } from "@/services/employeeService";
 import {
   getEmployees, getEmployeesByContractType, fetchBulletinsSummary,
@@ -24,7 +24,7 @@ import {
   getDailyStats, getWeeklyStats, getMonthlyStats,
 } from "@/services/attendanceService";
 
-// ─── Helpers ────────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmt = (n: number) =>
   new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n);
 
@@ -51,16 +51,15 @@ const isoWeekFromDate = (d: Date) => {
 const yearMonthStr        = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}`;
 const firstDayOfYearMonth = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}-01`;
 
-// ─── Types ───────────────────────────────────────────────────────────────────────
-type EmpFilter = ContractType | "ALL";
+// ─── Types ───────────────────────────────────────────────────────────────────
+type EmpFilter  = ContractType | "ALL";
+type SectionKey = "employees" | "pointages" | "bulletins" | "conges";
 interface MonthYear { month: number; year: number }
 
-// ─── Helpers Top Présents ────────────────────────────────────────────────────────
-// Critère : in_time ≤ "08:00" ET out_time ≥ "17:30"
-const ARRIVAL_CUTOFF  = 8 * 60;       // 08:00 → 480 min
-const DEPARTURE_FLOOR = 17 * 60 + 30; // 17:30 → 1050 min
+// ─── Helpers Top Présents ────────────────────────────────────────────────────
+const ARRIVAL_CUTOFF  = 8 * 60;
+const DEPARTURE_FLOOR = 17 * 60 + 30;
 
-/** Convertit "HH:MM" ou "HH:MM:SS" en minutes depuis minuit. Retourne -1 si invalide. */
 const timeToMinutes = (t?: string | null): number => {
   if (!t) return -1;
   const parts = t.split(":").map(Number);
@@ -68,18 +67,12 @@ const timeToMinutes = (t?: string | null): number => {
   return parts[0] * 60 + parts[1];
 };
 
-/** Formatte "07:48:00" → "7h48" */
 const fmtTime = (t?: string | null): string => {
   if (!t) return "—";
   const parts = t.split(":");
   return `${parseInt(parts[0], 10)}h${parts[1]}`;
 };
 
-/**
- * Score de ponctualité 0–100 :
- *  - 50 pts max pour arrivée tôt  (meilleur score à 07:00, nul à 09:00)
- *  - 50 pts max pour départ tardif (meilleur score à 19:00, nul à 17:00)
- */
 const presenceScore = (inTime?: string | null, outTime?: string | null): number => {
   const arrMin = timeToMinutes(inTime);
   const depMin = timeToMinutes(outTime);
@@ -89,14 +82,6 @@ const presenceScore = (inTime?: string | null, outTime?: string | null): number 
   return Math.round(arrScore + depScore);
 };
 
-/**
- * Calcule le Top 10 présents depuis daily.records — 100% frontend.
- * Critères :
- *   - status === "ok"
- *   - in_time  ≤ 08:00
- *   - out_time ≥ 17:30
- * Tri : score ponctualité desc, puis worked_minutes desc.
- */
 const computeTopPresents = (records: DailyRecord[]): DailyRecord[] =>
   records
     .filter((r) => {
@@ -113,7 +98,45 @@ const computeTopPresents = (records: DailyRecord[]): DailyRecord[] =>
     })
     .slice(0, 10);
 
-// ─── Month Picker ─────────────────────────────────────────────────────────────────
+// ─── Section Tabs ─────────────────────────────────────────────────────────────
+const SECTION_TABS: { key: SectionKey; label: string; shortLabel: string; icon: any }[] = [
+  { key: "employees", label: "Employés",            shortLabel: "Emp.",   icon: Users    },
+  { key: "pointages", label: "Pointages",            shortLabel: "Point.", icon: Clock    },
+  { key: "bulletins", label: "Bulletins de salaire", shortLabel: "Bull.",  icon: FileText },
+  { key: "conges",    label: "Congés",               shortLabel: "Congés", icon: Calendar },
+];
+
+function SectionTabs({
+  active, onChange,
+}: {
+  active: SectionKey;
+  onChange: (s: SectionKey) => void;
+}) {
+  return (
+    <div className="flex items-center gap-0.5 overflow-x-auto">
+      {SECTION_TABS.map(({ key, label, shortLabel, icon: Icon }) => {
+        const isActive = key === active;
+        return (
+          <button
+            key={key}
+            onClick={() => onChange(key)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all
+              ${isActive
+                ? "bg-camublue-900 text-white shadow-sm"
+                : "text-slate-500 hover:text-camublue-900 hover:bg-slate-100"
+              }`}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            <span className="hidden sm:inline">{label}</span>
+            <span className="sm:hidden">{shortLabel}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Month Picker ─────────────────────────────────────────────────────────────
 function MonthPicker({ value, onChange }: { value: MonthYear; onChange: (m: MonthYear) => void }) {
   const [open, setOpen] = useState(false);
   const now = new Date();
@@ -124,7 +147,8 @@ function MonthPicker({ value, onChange }: { value: MonthYear; onChange: (m: Mont
 
   return (
     <div className="relative">
-      <button onClick={() => setOpen((o) => !o)}
+      <button
+        onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition shadow-sm"
       >
         <Calendar className="h-4 w-4 text-camublue-900" />
@@ -145,7 +169,9 @@ function MonthPicker({ value, onChange }: { value: MonthYear; onChange: (m: Mont
             {months.map((m) => {
               const active = m.month === value.month && m.year === value.year;
               return (
-                <button key={`${m.year}-${m.month}`} onClick={() => { onChange(m); setOpen(false); }}
+                <button
+                  key={`${m.year}-${m.month}`}
+                  onClick={() => { onChange(m); setOpen(false); }}
                   className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors
                     ${active ? "bg-camublue-900 text-white font-semibold" : "text-slate-700 hover:bg-slate-50"}`}
                 >
@@ -161,7 +187,7 @@ function MonthPicker({ value, onChange }: { value: MonthYear; onChange: (m: Mont
   );
 }
 
-// ─── Employee filter ──────────────────────────────────────────────────────────────
+// ─── Employee filter ──────────────────────────────────────────────────────────
 function EmpFilterToggle({ filter, onChange }: { filter: EmpFilter; onChange: (f: EmpFilter) => void }) {
   const opts = [
     { value: "ALL",     label: "Tous"    },
@@ -173,7 +199,9 @@ function EmpFilterToggle({ filter, onChange }: { filter: EmpFilter; onChange: (f
   return (
     <div className="flex flex-wrap items-center gap-1">
       {opts.map((opt) => (
-        <button key={opt.value} onClick={() => onChange(opt.value as EmpFilter)}
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value as EmpFilter)}
           className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all
             ${filter === opt.value
               ? "bg-camublue-900 text-white border-camublue-900 shadow-sm"
@@ -187,7 +215,7 @@ function EmpFilterToggle({ filter, onChange }: { filter: EmpFilter; onChange: (f
   );
 }
 
-// ─── KPI Card ────────────────────────────────────────────────────────────────────
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KPICard({
   icon: Icon, label, value, sub, delta, deltaLabel,
   color = "blue", delay = 0, loading = false,
@@ -210,7 +238,8 @@ function KPICard({
   const isDown = delta !== undefined && delta < 0;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+    <motion.div
+      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.35, ease: "easeOut" }}
       className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm hover:shadow-md transition-all"
     >
@@ -242,12 +271,13 @@ function KPICard({
   );
 }
 
-// ─── Section ──────────────────────────────────────────────────────────────────────
+// ─── Section ──────────────────────────────────────────────────────────────────
 function Section({ title, icon: Icon, children, delay = 0, action }: {
   title: string; icon: any; children: React.ReactNode; delay?: number; action?: React.ReactNode;
 }) {
   return (
-    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+    <motion.section
+      initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4 }} className="space-y-4"
     >
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -264,7 +294,7 @@ function Section({ title, icon: Icon, children, delay = 0, action }: {
   );
 }
 
-// ─── Chart card ───────────────────────────────────────────────────────────────────
+// ─── Chart card ───────────────────────────────────────────────────────────────
 function ChartCard({ title, sub, children, loading, minH = 220 }: {
   title: string; sub?: string; children: React.ReactNode; loading?: boolean; minH?: number;
 }) {
@@ -282,7 +312,7 @@ function ChartCard({ title, sub, children, loading, minH = 220 }: {
   );
 }
 
-// ─── Custom tooltip ───────────────────────────────────────────────────────────────
+// ─── Custom tooltip ───────────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
@@ -299,7 +329,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-// ─── Progress bar ─────────────────────────────────────────────────────────────────
+// ─── Progress bar ─────────────────────────────────────────────────────────────
 function ProgressBar({ value, max, color = "#1e3a5f", label, valueLabel }: {
   value: number; max: number; color?: string; label: string; valueLabel: string;
 }) {
@@ -311,7 +341,8 @@ function ProgressBar({ value, max, color = "#1e3a5f", label, valueLabel }: {
         <span className="font-bold text-slate-700">{valueLabel}</span>
       </div>
       <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-        <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+        <motion.div
+          initial={{ width: 0 }} animate={{ width: `${pct}%` }}
           transition={{ delay: 0.4, duration: 0.7, ease: "easeOut" }}
           className="h-full rounded-full" style={{ background: color }}
         />
@@ -320,7 +351,7 @@ function ProgressBar({ value, max, color = "#1e3a5f", label, valueLabel }: {
   );
 }
 
-// ─── Skeleton grid ────────────────────────────────────────────────────────────────
+// ─── Skeleton grid ────────────────────────────────────────────────────────────
 function SkeletonGrid({ count = 4 }: { count?: number }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -334,7 +365,7 @@ function SkeletonGrid({ count = 4 }: { count?: number }) {
   );
 }
 
-// ─── Top Absents list ─────────────────────────────────────────────────────────────
+// ─── Top Absents list ─────────────────────────────────────────────────────────
 function TopAbsentList({ items }: {
   items: { full_name: string; department?: string | null; count: number }[];
 }) {
@@ -371,8 +402,10 @@ function TopAbsentList({ items }: {
                 <div className="flex items-center gap-1.5">
                   <p className="text-[10px] text-slate-400 truncate w-16 shrink-0">{row.department}</p>
                   <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${pct}%`, background: barColor }} />
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%`, background: barColor }}
+                    />
                   </div>
                 </div>
               )}
@@ -384,13 +417,10 @@ function TopAbsentList({ items }: {
   );
 }
 
-// ─── Top Présents list ────────────────────────────────────────────────────────────
-// Source   : daily.records (DailyRecord[]) — aucun appel backend supplémentaire
-// Critères : status === "ok"  ET  in_time ≤ 08:00  ET  out_time ≥ 17:30
-// Tri      : score ponctualité desc → worked_minutes desc
+// ─── Top Présents list ────────────────────────────────────────────────────────
 function TopPresentList({ records }: { records: DailyRecord[] }) {
   const MEDALS    = ["🥇", "🥈", "🥉"];
-  const qualified = computeTopPresents(records); // filtre + tri + slice(10)
+  const qualified = computeTopPresents(records);
   const scoreMax  = 100;
 
   if (qualified.length === 0) {
@@ -425,8 +455,7 @@ function TopPresentList({ records }: { records: DailyRecord[] }) {
         return (
           <motion.div
             key={row.employee_id}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.045, duration: 0.25 }}
             className={`rounded-xl p-2 border transition-all
               ${isTop3
@@ -435,14 +464,11 @@ function TopPresentList({ records }: { records: DailyRecord[] }) {
               }`}
           >
             <div className="flex items-center gap-2">
-              {/* Rang / Médaille */}
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0
                 ${isTop3 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
                 {i < 3 ? MEDALS[i] : i + 1}
               </div>
-
               <div className="flex-1 min-w-0">
-                {/* Ligne 1 : Nom + durée travaillée */}
                 <div className="flex items-center justify-between gap-1">
                   <p className="text-xs font-semibold text-slate-700 truncate">{row.full_name}</p>
                   <span className={`shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-lg
@@ -450,39 +476,24 @@ function TopPresentList({ records }: { records: DailyRecord[] }) {
                     {fmtMinutes(row.worked_minutes)}
                   </span>
                 </div>
-
-                {/* Ligne 2 : Département + badges horaires + score */}
                 <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                   {row.department && (
-                    <span className="text-[10px] text-slate-400 truncate max-w-[56px]">
-                      {row.department}
-                    </span>
+                    <span className="text-[10px] text-slate-400 truncate max-w-[56px]">{row.department}</span>
                   )}
-
-                  {/* Badge arrivée — bleu si ≤ 08h00 */}
                   <span className={`flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md
                     ${earlyIn ? "bg-blue-50 text-blue-600" : "bg-slate-50 text-slate-400"}`}>
-                    <LogIn className="h-2.5 w-2.5" />
-                    {fmtTime(row.in_time)}
+                    <LogIn className="h-2.5 w-2.5" />{fmtTime(row.in_time)}
                   </span>
-
-                  {/* Badge départ — violet si ≥ 17h30 */}
                   <span className={`flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md
                     ${lateOut ? "bg-violet-50 text-violet-600" : "bg-slate-50 text-slate-400"}`}>
-                    <LogOut className="h-2.5 w-2.5" />
-                    {fmtTime(row.out_time)}
+                    <LogOut className="h-2.5 w-2.5" />{fmtTime(row.out_time)}
                   </span>
-
-                  {/* Score ponctualité — top 3 seulement */}
                   {isTop3 && (
                     <span className="ml-auto flex items-center gap-0.5 text-[10px] font-bold text-amber-600">
-                      <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />
-                      {score}pts
+                      <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />{score}pts
                     </span>
                   )}
                 </div>
-
-                {/* Barre de score animée */}
                 <div className="mt-1 h-1 bg-slate-100 rounded-full overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
@@ -496,17 +507,14 @@ function TopPresentList({ records }: { records: DailyRecord[] }) {
           </motion.div>
         );
       })}
-
-      {/* Légende critères en bas */}
       <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-3 justify-center">
         {[
-          { icon: <LogIn  className="h-2.5 w-2.5 text-blue-500"                  />, label: "Arrivée ≤ 08h00"   },
-          { icon: <LogOut className="h-2.5 w-2.5 text-violet-500"                />, label: "Départ ≥ 17h30"    },
-          { icon: <Star   className="h-2.5 w-2.5 text-amber-400 fill-amber-400"  />, label: "Score ponctualité" },
+          { icon: <LogIn  className="h-2.5 w-2.5 text-blue-500"                 />, label: "Arrivée ≤ 08h00"   },
+          { icon: <LogOut className="h-2.5 w-2.5 text-violet-500"               />, label: "Départ ≥ 17h30"    },
+          { icon: <Star   className="h-2.5 w-2.5 text-amber-400 fill-amber-400" />, label: "Score ponctualité" },
         ].map((leg) => (
           <div key={leg.label} className="flex items-center gap-1 text-[9px] text-slate-400">
-            {leg.icon}
-            <span>{leg.label}</span>
+            {leg.icon}<span>{leg.label}</span>
           </div>
         ))}
       </div>
@@ -514,21 +522,47 @@ function TopPresentList({ records }: { records: DailyRecord[] }) {
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────────
+// ─── Section Congés (placeholder) ────────────────────────────────────────────
+function CongesSection({ monthLabel }: { monthLabel: string }) {
+  return (
+    <Section title="Congés" icon={Calendar} delay={0.05}
+      action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
+    >
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KPICard icon={Calendar}    label="Demandes"   value="—" sub="Ce mois"    color="blue"  delay={0.08} />
+        <KPICard icon={CheckCircle} label="Approuvés"  value="—" sub="Ce mois"    color="green" delay={0.12} />
+        <KPICard icon={Clock}       label="En attente" value="—" sub="À traiter"  color="amber" delay={0.16} />
+        <KPICard icon={UserX}       label="Refusés"    value="—" sub="Ce mois"    color="red"   delay={0.20} />
+      </div>
+      <div className="flex flex-col items-center justify-center bg-white rounded-2xl border border-dashed border-slate-200 shadow-sm py-20 gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center">
+          <Calendar className="h-7 w-7 text-camublue-900 opacity-30" />
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-semibold text-slate-600">Module Congés</p>
+          <p className="text-xs text-slate-400 mt-1">La gestion des congés sera disponible prochainement.</p>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const now = new Date();
-  const [empFilter,     setEmpFilter]     = useState<EmpFilter>("ALL");
-  const [selectedMonth, setSelectedMonth] = useState<MonthYear>({
+  const [activeSection,  setActiveSection]  = useState<SectionKey>("employees");
+  const [empFilter,      setEmpFilter]      = useState<EmpFilter>("ALL");
+  const [selectedMonth,  setSelectedMonth]  = useState<MonthYear>({
     month: now.getMonth() + 1,
     year:  now.getFullYear(),
   });
   const [refreshing, setRefreshing] = useState(false);
 
-  const [employees,  setEmployees]  = useState<Employee[]>([]);
-  const [daily,      setDaily]      = useState<DailyStatsResponse | null>(null);
-  const [weekly,     setWeekly]     = useState<WeeklyStatsResponse | null>(null);
-  const [monthly,    setMonthly]    = useState<MonthlyStatsResponse | null>(null);
-  const [bulletins,  setBulletins]  = useState<BulletinMonthSummary[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [daily,     setDaily]     = useState<DailyStatsResponse | null>(null);
+  const [weekly,    setWeekly]    = useState<WeeklyStatsResponse | null>(null);
+  const [monthly,   setMonthly]   = useState<MonthlyStatsResponse | null>(null);
+  const [bulletins, setBulletins] = useState<BulletinMonthSummary[]>([]);
 
   const [loadEmp,      setLoadEmp]      = useState(true);
   const [loadDaily,    setLoadDaily]    = useState(true);
@@ -619,10 +653,6 @@ export default function DashboardPage() {
     { name: "En retard",  value: late,       fill: "#8b5cf6" },
   ].filter((d) => d.value > 0);
 
-  // ── Top 10 présents ─────────────────────────────────────────────────────────
-  // Calculé 100% côté frontend depuis daily.records
-  // Critères : status="ok"  +  in_time ≤ 08:00  +  out_time ≥ 17:30
-  // Aucun champ supplémentaire requis côté backend
   const dailyRecords = daily?.records ?? [];
 
   // ── Derived: Weekly ─────────────────────────────────────────────────────────
@@ -631,9 +661,9 @@ export default function DashboardPage() {
   const deltaMin    = weekly?.delta_minutes ?? 0;
   const semaineData = (weekly?.by_day ?? []).map((d) => ({
     jour:    d.weekday_label?.slice(0, 3) ?? d.date.slice(5),
-    present: d.ok_count          ?? 0,
-    absent:  d.absent_count      ?? 0,
-    retard:  d.late_count        ?? 0,
+    present: d.ok_count     ?? 0,
+    absent:  d.absent_count ?? 0,
+    retard:  d.late_count   ?? 0,
   }));
 
   const topAbsents = (weekly?.top_absent ?? []).slice(0, 10).map((e) => ({
@@ -664,290 +694,300 @@ export default function DashboardPage() {
       <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-slate-50">
 
         {/* ── Top bar ── */}
-        <div className="shrink-0 bg-white border-b border-slate-100 px-4 md:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold text-camublue-900 leading-tight">Tableau de bord RH</h1>
-            <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">Vue d'ensemble · {monthLabel}</p>
+        <div className="shrink-0 bg-white border-b border-slate-100 px-4 md:px-6 py-3 flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-camublue-900 leading-tight">Tableau de bord RH</h1>
+              <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">Vue d'ensemble · {monthLabel}</p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
+              <button
+                onClick={handleRefresh} disabled={refreshing}
+                className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition shadow-sm disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Actualiser</span>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
-            <button onClick={handleRefresh} disabled={refreshing}
-              className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition shadow-sm disabled:opacity-50"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Actualiser</span>
-            </button>
-          </div>
+          {/* Navigation par onglets */}
+          <SectionTabs active={activeSection} onChange={setActiveSection} />
         </div>
 
         {/* ── Scrollable content ── */}
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="px-4 md:px-6 py-5 space-y-10 pb-12">
+          <div className="px-4 md:px-6 py-5 pb-12">
+            <AnimatePresence mode="wait">
 
-            {/* ════ SECTION 1 — EMPLOYÉS ════ */}
-            <Section title="Employés" icon={Users} delay={0.05}
-              action={<EmpFilterToggle filter={empFilter} onChange={setEmpFilter} />}
-            >
-              {loadEmp ? <SkeletonGrid count={4} /> : (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <KPICard icon={Users}      label="Effectif total" value={fmt(total)}    sub="Tous statuts"              color="blue"  delay={0.08} />
-                  <KPICard icon={UserCheck}  label="Actifs"         value={fmt(actifs)}   delta={nouveaux} deltaLabel={`+${nouveaux} ce mois`} color="green" delay={0.12} />
-                  <KPICard icon={UserX}      label="Sortis"         value={fmt(sortis)}   sub="Total cumulé"              color="red"   delay={0.16} />
-                  <KPICard icon={TrendingUp} label="Recrutements"   value={fmt(nouveaux)} sub={monthLabel}                color="amber" delay={0.20} />
-                </div>
+              {/* ════ EMPLOYÉS ════ */}
+              {activeSection === "employees" && (
+                <motion.div key="employees"
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }} className="space-y-10"
+                >
+                  <Section title="Employés" icon={Users} delay={0.05}
+                    action={<EmpFilterToggle filter={empFilter} onChange={setEmpFilter} />}
+                  >
+                    {loadEmp ? <SkeletonGrid count={4} /> : (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <KPICard icon={Users}      label="Effectif total" value={fmt(total)}    sub="Tous statuts"                              color="blue"  delay={0.08} />
+                        <KPICard icon={UserCheck}  label="Actifs"         value={fmt(actifs)}   delta={nouveaux} deltaLabel={`+${nouveaux} ce mois`} color="green" delay={0.12} />
+                        <KPICard icon={UserX}      label="Sortis"         value={fmt(sortis)}   sub="Total cumulé"                             color="red"   delay={0.16} />
+                        <KPICard icon={TrendingUp} label="Recrutements"   value={fmt(nouveaux)} sub={monthLabel}                               color="amber" delay={0.20} />
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <ChartCard title="Types de contrats" sub="Employés actifs" loading={loadEmp} minH={200}>
+                        {contratData.length === 0
+                          ? <p className="text-xs text-slate-400 text-center pt-16">Aucune donnée</p>
+                          : (
+                            <ResponsiveContainer width="100%" height={200}>
+                              <PieChart>
+                                <Pie data={contratData} dataKey="value" nameKey="name" outerRadius={70} innerRadius={42} paddingAngle={3}>
+                                  {contratData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                                </Pie>
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11 }} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          )
+                        }
+                      </ChartCard>
+
+                      <ChartCard title="Répartition par genre" sub="Employés actifs" loading={loadEmp} minH={200}>
+                        {sexeData.length === 0
+                          ? <p className="text-xs text-slate-400 text-center pt-16">Aucune donnée genre</p>
+                          : (
+                            <>
+                              <ResponsiveContainer width="100%" height={160}>
+                                <PieChart>
+                                  <Pie data={sexeData} dataKey="value" nameKey="name" outerRadius={65} innerRadius={40} paddingAngle={3}>
+                                    <Cell fill="#2563eb" />
+                                    <Cell fill="#ec4899" />
+                                  </Pie>
+                                  <Tooltip content={<CustomTooltip />} />
+                                  <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11 }} />
+                                </PieChart>
+                              </ResponsiveContainer>
+                              {!loadEmp && actifs > 0 && (
+                                <div className="flex gap-4 justify-center mt-2">
+                                  <div className="text-center">
+                                    <div className="text-lg font-bold text-blue-700">{hommes}</div>
+                                    <div className="text-[10px] text-slate-400">Hommes · {Math.round(hommes / actifs * 100)}%</div>
+                                  </div>
+                                  <div className="w-px bg-slate-100" />
+                                  <div className="text-center">
+                                    <div className="text-lg font-bold text-pink-600">{femmes}</div>
+                                    <div className="text-[10px] text-slate-400">Femmes · {Math.round(femmes / actifs * 100)}%</div>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )
+                        }
+                      </ChartCard>
+
+                      <ChartCard title="Projets / Services" sub="Top 6 actifs" loading={loadEmp} minH={200}>
+                        {projetData.length === 0
+                          ? <p className="text-xs text-slate-400 text-center pt-16">Aucune donnée</p>
+                          : (
+                            <ResponsiveContainer width="100%" height={200}>
+                              <BarChart data={projetData} layout="vertical" margin={{ left: 0, right: 12, top: 0, bottom: 0 }}>
+                                <XAxis type="number" tick={{ fontSize: 10 }} />
+                                <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Bar dataKey="value" name="Employés" radius={[0, 4, 4, 0]}>
+                                  {projetData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )
+                        }
+                      </ChartCard>
+                    </div>
+                  </Section>
+                </motion.div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Contrats */}
-                <ChartCard title="Types de contrats" sub="Employés actifs" loading={loadEmp} minH={200}>
-                  {contratData.length === 0
-                    ? <p className="text-xs text-slate-400 text-center pt-16">Aucune donnée</p>
-                    : (
-                      <ResponsiveContainer width="100%" height={200}>
-                        <PieChart>
-                          <Pie data={contratData} dataKey="value" nameKey="name" outerRadius={70} innerRadius={42} paddingAngle={3}>
-                            {contratData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                          </Pie>
-                          <Tooltip content={<CustomTooltip />} />
-                          <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11 }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    )
-                  }
-                </ChartCard>
-
-                {/* Genre */}
-                <ChartCard title="Répartition par genre" sub="Employés actifs" loading={loadEmp} minH={200}>
-                  {sexeData.length === 0
-                    ? <p className="text-xs text-slate-400 text-center pt-16">Aucune donnée genre</p>
-                    : (
-                      <>
-                        <ResponsiveContainer width="100%" height={160}>
-                          <PieChart>
-                            <Pie data={sexeData} dataKey="value" nameKey="name" outerRadius={65} innerRadius={40} paddingAngle={3}>
-                              <Cell fill="#2563eb" />
-                              <Cell fill="#ec4899" />
-                            </Pie>
-                            <Tooltip content={<CustomTooltip />} />
-                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11 }} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                        {!loadEmp && actifs > 0 && (
-                          <div className="flex gap-4 justify-center mt-2">
-                            <div className="text-center">
-                              <div className="text-lg font-bold text-blue-700">{hommes}</div>
-                              <div className="text-[10px] text-slate-400">Hommes · {Math.round(hommes / actifs * 100)}%</div>
-                            </div>
-                            <div className="w-px bg-slate-100" />
-                            <div className="text-center">
-                              <div className="text-lg font-bold text-pink-600">{femmes}</div>
-                              <div className="text-[10px] text-slate-400">Femmes · {Math.round(femmes / actifs * 100)}%</div>
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )
-                  }
-                </ChartCard>
-
-                {/* Projets */}
-                <ChartCard title="Projets / Services" sub="Top 6 actifs" loading={loadEmp} minH={200}>
-                  {projetData.length === 0
-                    ? <p className="text-xs text-slate-400 text-center pt-16">Aucune donnée</p>
-                    : (
-                      <ResponsiveContainer width="100%" height={200}>
-                        <BarChart data={projetData} layout="vertical" margin={{ left: 0, right: 12, top: 0, bottom: 0 }}>
-                          <XAxis type="number" tick={{ fontSize: 10 }} />
-                          <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
-                          <Tooltip content={<CustomTooltip />} />
-                          <Bar dataKey="value" name="Employés" radius={[0, 4, 4, 0]}>
-                            {projetData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )
-                  }
-                </ChartCard>
-              </div>
-            </Section>
-
-            {/* ════ SECTION 2 — POINTAGES ════ */}
-            <Section title="Pointages" icon={Clock} delay={0.1}
-              action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
-            >
-              {/* Row 1 */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-                {/* Donut pointage du jour */}
-                <ChartCard title="Pointage aujourd'hui" sub={`Effectif suivi : ${totalPointing}`} loading={loadDaily} minH={220}>
-                  {attendanceDonut.length === 0
-                    ? <p className="text-xs text-slate-400 text-center pt-20">Aucun pointage enregistré</p>
-                    : (
-                      <>
-                        <ResponsiveContainer width="100%" height={150}>
-                          <PieChart>
-                            <Pie data={attendanceDonut} dataKey="value" outerRadius={62} innerRadius={40} paddingAngle={2}>
-                              {attendanceDonut.map((d, i) => <Cell key={i} fill={d.fill} />)}
-                            </Pie>
-                            <Tooltip content={<CustomTooltip />} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                        <div className="grid grid-cols-2 gap-1.5 mt-1">
-                          {attendanceDonut.map((d) => (
-                            <div key={d.name} className="flex items-center gap-1.5 text-xs">
-                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.fill }} />
-                              <span className="text-slate-500 truncate">{d.name}</span>
-                              <span className="font-bold text-slate-700 ml-auto">{d.value}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-3 pt-2 border-t border-slate-100">
-                          <ProgressBar
-                            value={present} max={actifs || totalPointing}
-                            color="#22c55e"
-                            label={`Présents / Effectif (${actifs || totalPointing})`}
-                            valueLabel={`${tauxPresence}%`}
-                          />
-                        </div>
-                      </>
-                    )
-                  }
-                </ChartCard>
-
-                {/* Présence par jour de la semaine */}
-                <ChartCard title="Présence — Semaine en cours" sub="Par jour de la semaine" loading={loadWeekly} minH={220}>
-                  {semaineData.length === 0
-                    ? <p className="text-xs text-slate-400 text-center pt-20">Aucune donnée</p>
-                    : (
-                      <ResponsiveContainer width="100%" height={220}>
-                        <BarChart data={semaineData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                          <XAxis dataKey="jour" tick={{ fontSize: 11 }} />
-                          <YAxis tick={{ fontSize: 10 }} />
-                          <Tooltip content={<CustomTooltip />} />
-                          <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
-                          <Bar dataKey="present" name="Présents"  fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={26} />
-                          <Bar dataKey="absent"  name="Absents"   fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={26} />
-                          <Bar dataKey="retard"  name="En retard" fill="#8b5cf6" radius={[3, 3, 0, 0]} maxBarSize={26} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )
-                  }
-                </ChartCard>
-
-                {/* Heures semaine */}
-                <ChartCard title="Heures — Semaine en cours" sub="Travaillées vs attendues" loading={loadWeekly} minH={220}>
-                  <div className="space-y-3 mt-2">
-                    <ProgressBar
-                      value={heuresTrav} max={Math.max(heuresAtt, heuresTrav)}
-                      color="#1e3a5f" label="Travaillées" valueLabel={`${fmt(heuresTrav)} h`}
-                    />
-                    <ProgressBar
-                      value={heuresAtt} max={Math.max(heuresAtt, heuresTrav)}
-                      color="#cbd5e1" label="Attendues" valueLabel={`${fmt(heuresAtt)} h`}
-                    />
-                    <div className="pt-2 border-t border-slate-100 flex justify-between items-center">
-                      <span className="text-xs text-slate-500 font-medium">Écart semaine</span>
-                      <span className={`text-sm font-bold flex items-center gap-0.5 ${deltaMin < 0 ? "text-red-500" : "text-emerald-600"}`}>
-                        {deltaMin < 0 ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
-                        {fmtMinutes(deltaMin)}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 pt-1">
-                      {[
-                        { label: "Présents",   value: present,    cls: "text-emerald-700 bg-emerald-50" },
-                        { label: "Absents",    value: absent,     cls: "text-red-700 bg-red-50"         },
-                        { label: "Incomplets", value: incomplete, cls: "text-amber-700 bg-amber-50"     },
-                      ].map((s) => (
-                        <div key={s.label} className={`rounded-xl p-2 text-center ${s.cls}`}>
-                          <div className="text-lg font-bold">{s.value}</div>
-                          <div className="text-[10px] font-semibold">{s.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </ChartCard>
-              </div>
-
-              {/* Row 2 */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-                {/* Heures par semaine du mois */}
-                <ChartCard title={`Heures — ${monthLabel}`} sub="Travaillées vs attendues par semaine" loading={loadMonthly} minH={220}>
-                  {heuresMens.length === 0
-                    ? <p className="text-xs text-slate-400 text-center pt-20">Aucune donnée mensuelle</p>
-                    : (
-                      <ResponsiveContainer width="100%" height={220}>
-                        <BarChart data={heuresMens} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                          <XAxis dataKey="sem" tick={{ fontSize: 11 }} />
-                          <YAxis tick={{ fontSize: 10 }} unit="h" />
-                          <Tooltip content={<CustomTooltip />} />
-                          <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
-                          <Bar dataKey="travaillees" name="Travaillées" fill="#1e3a5f" radius={[4, 4, 0, 0]} maxBarSize={30} />
-                          <Bar dataKey="attendues"   name="Attendues"   fill="#cbd5e1" radius={[4, 4, 0, 0]} maxBarSize={30} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )
-                  }
-                </ChartCard>
-
-                {/* Top 10 absents */}
-                <ChartCard title="Top 10 absents" sub="Semaine en cours" loading={loadWeekly} minH={220}>
-                  <TopAbsentList items={topAbsents} />
-                </ChartCard>
-
-                {/* ── Top 10 présents ── */}
-                {/* Calculé 100% frontend depuis daily.records          */}
-                {/* Critères : status="ok" + in_time≤08h + out_time≥17h30 */}
-                <ChartCard
-                  title="Top 10 présents"
-                  sub="Aujourd'hui · Arrivée ≤ 08h00 · Départ ≥ 17h30"
-                  loading={loadDaily}
-                  minH={220}
+              {/* ════ POINTAGES ════ */}
+              {activeSection === "pointages" && (
+                <motion.div key="pointages"
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }} className="space-y-10"
                 >
-                  <TopPresentList records={dailyRecords} />
-                </ChartCard>
+                  <Section title="Pointages" icon={Clock} delay={0.05}
+                    action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <ChartCard title="Pointage aujourd'hui" sub={`Effectif suivi : ${totalPointing}`} loading={loadDaily} minH={220}>
+                        {attendanceDonut.length === 0
+                          ? <p className="text-xs text-slate-400 text-center pt-20">Aucun pointage enregistré</p>
+                          : (
+                            <>
+                              <ResponsiveContainer width="100%" height={150}>
+                                <PieChart>
+                                  <Pie data={attendanceDonut} dataKey="value" outerRadius={62} innerRadius={40} paddingAngle={2}>
+                                    {attendanceDonut.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                                  </Pie>
+                                  <Tooltip content={<CustomTooltip />} />
+                                </PieChart>
+                              </ResponsiveContainer>
+                              <div className="grid grid-cols-2 gap-1.5 mt-1">
+                                {attendanceDonut.map((d) => (
+                                  <div key={d.name} className="flex items-center gap-1.5 text-xs">
+                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.fill }} />
+                                    <span className="text-slate-500 truncate">{d.name}</span>
+                                    <span className="font-bold text-slate-700 ml-auto">{d.value}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="mt-3 pt-2 border-t border-slate-100">
+                                <ProgressBar
+                                  value={present} max={actifs || totalPointing}
+                                  color="#22c55e"
+                                  label={`Présents / Effectif (${actifs || totalPointing})`}
+                                  valueLabel={`${tauxPresence}%`}
+                                />
+                              </div>
+                            </>
+                          )
+                        }
+                      </ChartCard>
 
-              </div>
-            </Section>
+                      <ChartCard title="Présence — Semaine en cours" sub="Par jour de la semaine" loading={loadWeekly} minH={220}>
+                        {semaineData.length === 0
+                          ? <p className="text-xs text-slate-400 text-center pt-20">Aucune donnée</p>
+                          : (
+                            <ResponsiveContainer width="100%" height={220}>
+                              <BarChart data={semaineData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                <XAxis dataKey="jour" tick={{ fontSize: 11 }} />
+                                <YAxis tick={{ fontSize: 10 }} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
+                                <Bar dataKey="present" name="Présents"  fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={26} />
+                                <Bar dataKey="absent"  name="Absents"   fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={26} />
+                                <Bar dataKey="retard"  name="En retard" fill="#8b5cf6" radius={[3, 3, 0, 0]} maxBarSize={26} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )
+                        }
+                      </ChartCard>
 
-            {/* ════ SECTION 3 — BULLETINS ════ */}
-            <Section title="Bulletins de salaire" icon={FileText} delay={0.15}
-              action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
-            >
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <KPICard icon={FileText}      label="Générés"      value={totalBulletins}                     color="blue"  delay={0.18} loading={loadBulletin} sub={monthLabel} />
-                <KPICard icon={CheckCircle}   label="Envoyés"      value={totalEnvoyes}                       color="green" delay={0.21} loading={loadBulletin} sub="Ce mois" />
-                <KPICard icon={AlertTriangle} label="Non envoyés"  value={Math.max(0, actifs - totalEnvoyes)} color="amber" delay={0.24} loading={loadBulletin || loadEmp} sub="Actifs sans bulletin" />
-                <KPICard icon={TrendingUp}    label="Taux d'envoi" value={`${tauxEnvoi}%`}
-                  color={tauxEnvoi >= 90 ? "green" : tauxEnvoi >= 60 ? "amber" : "red"}
-                  delay={0.27} loading={loadBulletin || loadEmp} sub="Envoyés / Actifs"
-                />
-              </div>
+                      <ChartCard title="Heures — Semaine en cours" sub="Travaillées vs attendues" loading={loadWeekly} minH={220}>
+                        <div className="space-y-3 mt-2">
+                          <ProgressBar value={heuresTrav} max={Math.max(heuresAtt, heuresTrav)} color="#1e3a5f" label="Travaillées" valueLabel={`${fmt(heuresTrav)} h`} />
+                          <ProgressBar value={heuresAtt}  max={Math.max(heuresAtt, heuresTrav)} color="#cbd5e1" label="Attendues"   valueLabel={`${fmt(heuresAtt)} h`} />
+                          <div className="pt-2 border-t border-slate-100 flex justify-between items-center">
+                            <span className="text-xs text-slate-500 font-medium">Écart semaine</span>
+                            <span className={`text-sm font-bold flex items-center gap-0.5 ${deltaMin < 0 ? "text-red-500" : "text-emerald-600"}`}>
+                              {deltaMin < 0 ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
+                              {fmtMinutes(deltaMin)}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 pt-1">
+                            {[
+                              { label: "Présents",   value: present,    cls: "text-emerald-700 bg-emerald-50" },
+                              { label: "Absents",    value: absent,     cls: "text-red-700 bg-red-50"         },
+                              { label: "Incomplets", value: incomplete, cls: "text-amber-700 bg-amber-50"     },
+                            ].map((s) => (
+                              <div key={s.label} className={`rounded-xl p-2 text-center ${s.cls}`}>
+                                <div className="text-lg font-bold">{s.value}</div>
+                                <div className="text-[10px] font-semibold">{s.label}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </ChartCard>
+                    </div>
 
-              <ChartCard title="Bulletins — Historique" sub="Envoyés vs générés par mois" loading={loadBulletin} minH={200}>
-                {bulletinsChart.length === 0
-                  ? <p className="text-xs text-slate-400 text-center pt-20">Aucune donnée</p>
-                  : (
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={bulletinsChart} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                        <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 10 }} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
-                        <Bar dataKey="envoyes" name="Envoyés"  fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={32} />
-                        <Bar dataKey="total"   name="Générés"  fill="#93c5fd" radius={[4, 4, 0, 0]} maxBarSize={32} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )
-                }
-              </ChartCard>
-            </Section>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <ChartCard title={`Heures — ${monthLabel}`} sub="Travaillées vs attendues par semaine" loading={loadMonthly} minH={220}>
+                        {heuresMens.length === 0
+                          ? <p className="text-xs text-slate-400 text-center pt-20">Aucune donnée mensuelle</p>
+                          : (
+                            <ResponsiveContainer width="100%" height={220}>
+                              <BarChart data={heuresMens} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                <XAxis dataKey="sem" tick={{ fontSize: 11 }} />
+                                <YAxis tick={{ fontSize: 10 }} unit="h" />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
+                                <Bar dataKey="travaillees" name="Travaillées" fill="#1e3a5f" radius={[4, 4, 0, 0]} maxBarSize={30} />
+                                <Bar dataKey="attendues"   name="Attendues"   fill="#cbd5e1" radius={[4, 4, 0, 0]} maxBarSize={30} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )
+                        }
+                      </ChartCard>
 
+                      <ChartCard title="Top 10 absents" sub="Semaine en cours" loading={loadWeekly} minH={220}>
+                        <TopAbsentList items={topAbsents} />
+                      </ChartCard>
+
+                      <ChartCard title="Top 10 présents" sub="Aujourd'hui · Arrivée ≤ 08h00 · Départ ≥ 17h30" loading={loadDaily} minH={220}>
+                        <TopPresentList records={dailyRecords} />
+                      </ChartCard>
+                    </div>
+                  </Section>
+                </motion.div>
+              )}
+
+              {/* ════ BULLETINS ════ */}
+              {activeSection === "bulletins" && (
+                <motion.div key="bulletins"
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }} className="space-y-10"
+                >
+                  <Section title="Bulletins de salaire" icon={FileText} delay={0.05}
+                    action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
+                  >
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <KPICard icon={FileText}      label="Générés"      value={totalBulletins}                     color="blue"  delay={0.08} loading={loadBulletin} sub={monthLabel} />
+                      <KPICard icon={CheckCircle}   label="Envoyés"      value={totalEnvoyes}                       color="green" delay={0.11} loading={loadBulletin} sub="Ce mois" />
+                      <KPICard icon={AlertTriangle} label="Non envoyés"  value={Math.max(0, actifs - totalEnvoyes)} color="amber" delay={0.14} loading={loadBulletin || loadEmp} sub="Actifs sans bulletin" />
+                      <KPICard icon={TrendingUp}    label="Taux d'envoi" value={`${tauxEnvoi}%`}
+                        color={tauxEnvoi >= 90 ? "green" : tauxEnvoi >= 60 ? "amber" : "red"}
+                        delay={0.17} loading={loadBulletin || loadEmp} sub="Envoyés / Actifs"
+                      />
+                    </div>
+                    <ChartCard title="Bulletins — Historique" sub="Envoyés vs générés par mois" loading={loadBulletin} minH={200}>
+                      {bulletinsChart.length === 0
+                        ? <p className="text-xs text-slate-400 text-center pt-20">Aucune donnée</p>
+                        : (
+                          <ResponsiveContainer width="100%" height={200}>
+                            <BarChart data={bulletinsChart} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                              <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
+                              <YAxis tick={{ fontSize: 10 }} />
+                              <Tooltip content={<CustomTooltip />} />
+                              <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
+                              <Bar dataKey="envoyes" name="Envoyés" fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                              <Bar dataKey="total"   name="Générés" fill="#93c5fd" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )
+                      }
+                    </ChartCard>
+                  </Section>
+                </motion.div>
+              )}
+
+              {/* ════ CONGÉS ════ */}
+              {activeSection === "conges" && (
+                <motion.div key="conges"
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <CongesSection monthLabel={monthLabel} />
+                </motion.div>
+              )}
+
+            </AnimatePresence>
           </div>
         </div>
+
       </div>
     </AppLayout>
   );
