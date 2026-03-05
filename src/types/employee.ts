@@ -1,12 +1,10 @@
-// types/employee.ts
 export type EmployeeStatus = 'ACTIVE' | 'EXITED' | 'SUSPENDED';
 
-// ✅ Mise à jour : ajout de CDD, STAGE en plus de CDI et INTERIM
 export type ContractType = 'CDI' | 'CDD' | 'STAGE' | 'INTERIM';
 
 export interface Employee {
   id: number;
-  employee_id:Int16Array;
+  employee_id: Int16Array;
   matricule: string;
   department: string;
   nom: string;
@@ -23,8 +21,6 @@ export interface Employee {
   email?: string | null;
   telephone?: string | null;
   type_contrat: ContractType;
-
-  // Backend
   status: EmployeeStatus;
   date_sortie?: string | null;
   motif_sortie?: string | null;
