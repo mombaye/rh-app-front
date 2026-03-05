@@ -208,9 +208,10 @@ function DeficitBadge({ minutes }: { minutes: number }) {
   );
 }
 
-function WorkedTimeBadge({ minutes }: { minutes: number }) {
+function WorkedTimeBadge({ minutes, expectedMin }: { minutes: number; expectedMin?: number }) {
   if (minutes <= 0) return <span className="text-slate-300 text-xs">—</span>;
-  const color = minutes < MAX_WORKDAY_MIN
+  const threshold = expectedMin ?? MAX_WORKDAY_MIN;
+  const color = minutes < threshold
     ? "bg-amber-50 text-amber-700 ring-amber-200"
     : "bg-emerald-50 text-emerald-700 ring-emerald-200";
   return (
@@ -731,7 +732,7 @@ function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
         <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.overtime_minutes > 0 ? "text-emerald-600 font-semibold" : "text-slate-700"}`}>
           <div className="flex justify-center">{formatTime(r.out_time)}</div>
         </td>
-        <td className="px-4 py-3"><div className="flex justify-center"><WorkedTimeBadge minutes={r.worked_minutes} /></div></td>
+        <td className="px-4 py-3"><div className="flex justify-center"><WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} /></div></td>
         <td className="px-4 py-3"><div className="flex justify-center"><OvertimeBadge minutes={r.overtime_minutes} /></div></td>
         <td className="px-4 py-3"><div className="flex justify-center"><CompensationCell c={r.compensation} viewMode={viewMode} /></div></td>
         <td className="px-4 py-3">
@@ -863,12 +864,14 @@ export default function AttendanceNormalesPage() {
   useEffect(() => { setPage(1); }, [statusFilter, searchQ, viewMode, daily, weekly, monthly, pageSize]);
 
   const allRecords = useMemo((): FlatRecord[] => {
+    const effectiveWorkMin = workDayMinutes(workHours);
     const map = (r: any, isDaily: boolean): FlatRecord => {
       const mat = r.matricule ?? "";
       const inTime = r.in_time ?? null;
       const outTime = r.out_time ?? null;
       const workedFromTimes = computeWorkedMinutesFromTimes(inTime, outTime);
-      const workedMin = workedFromTimes > 0 ? workedFromTimes : (r.worked_minutes ?? 0);
+      const workedRaw = workedFromTimes > 0 ? workedFromTimes : (r.worked_minutes ?? 0);
+      const workedMin = isDaily ? Math.max(0, workedRaw - workHours.breakMin) : workedRaw;
       const lateMin = isDaily ? computeLateMinutes(inTime, workHours.startH, workHours.startM) : r.total_late_minutes ?? 0;
       const overtimeMin = isDaily ? computeOvertimeMinutes(outTime, workHours.endH, workHours.endM) : 0;
       return {
@@ -883,11 +886,11 @@ export default function AttendanceNormalesPage() {
         computed_late_minutes: lateMin,
         overtime_minutes: overtimeMin,
         compensation: computeCompensation(lateMin, overtimeMin),
-        deficit_minutes: computeDeficitMinutes(workedMin, r.expected_minutes ?? 0),
+        deficit_minutes: computeDeficitMinutes(workedMin, isDaily ? effectiveWorkMin : (r.expected_minutes ?? 0)),
         in_time: inTime, out_time: outTime,
         worked_minutes: workedMin,
         delta_minutes: r.delta_minutes ?? 0,
-        expected_minutes: r.expected_minutes ?? 0,
+        expected_minutes: isDaily ? effectiveWorkMin : (r.expected_minutes ?? 0),
         email: r.email ?? emailMap.get(mat) ?? null,
       };
     };
@@ -980,6 +983,7 @@ export default function AttendanceNormalesPage() {
               Contexte : <strong className="text-slate-600">{workHours.context}</strong> —
               Retard après <strong>{pad2(workHours.startH)}h{pad2(workHours.startM)}</strong> —
               HS après <strong>{pad2(workHours.endH)}h{pad2(workHours.endM)}</strong>
+              {workHours.breakMin > 0 && <> — Pause <strong>{formatMinutes(workHours.breakMin)}</strong></>}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">

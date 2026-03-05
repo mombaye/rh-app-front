@@ -219,9 +219,10 @@ function DeficitBadge({ minutes }: { minutes: number }) {
   );
 }
 
-function WorkedTimeBadge({ minutes }: { minutes: number }) {
+function WorkedTimeBadge({ minutes, expectedMin }: { minutes: number; expectedMin?: number }) {
   if (minutes <= 0) return <span className="text-slate-300 text-xs">—</span>;
-  const color = minutes < MAX_WORKDAY_MIN ? "bg-amber-50 text-amber-700 ring-amber-200" : "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  const threshold = expectedMin ?? MAX_WORKDAY_MIN;
+  const color = minutes < threshold ? "bg-amber-50 text-amber-700 ring-amber-200" : "bg-emerald-50 text-emerald-700 ring-emerald-200";
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ring-1 whitespace-nowrap ${color}`}>
       <Clock className="h-3 w-3 shrink-0" />{formatMinutes(minutes)}
@@ -809,7 +810,7 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
             {formatTime(r.out_time)}
           </div>
         </td>
-        <td className="px-4 py-3"><div className="flex justify-center"><WorkedTimeBadge minutes={r.worked_minutes} /></div></td>
+        <td className="px-4 py-3"><div className="flex justify-center"><WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} /></div></td>
         <td className="px-4 py-3"><div className="flex justify-center"><OvertimeBadge minutes={r.overtime_minutes} /></div></td>
         <td className="px-4 py-3"><div className="flex justify-center"><CompensationCell c={r.compensation} /></div></td>
         <td className="px-4 py-3">
@@ -934,9 +935,11 @@ export default function AttendanceShiftsPage() {
 
   const allRecords = useMemo((): FlatRecord[] => {
     if (!shiftData) return [];
+    const effectiveWorkMin = workDayMinutes(workHours);
     return shiftData.records.map((r: ShiftRecord): FlatRecord => {
       const workedFromTimes = computeWorkedMinutesFromTimes(r.in_time, r.out_time);
       const workedMin = workedFromTimes > 0 ? workedFromTimes : (r.worked_minutes ?? 0);
+      const workedNetMin = Math.max(0, workedMin - workHours.breakMin);
       const lateMin = computeLateMinutes(r.in_time, workHours.startH, workHours.startM);
       const overtimeMin = computeOvertimeMinutes(r.out_time, workHours.endH, workHours.endM);
       return {
@@ -945,9 +948,9 @@ export default function AttendanceShiftsPage() {
         is_late_api: r.is_late, late_label_api: r.late_label,
         computed_late_minutes: lateMin, overtime_minutes: overtimeMin,
         compensation: computeCompensation(lateMin, overtimeMin),
-        deficit_minutes: computeDeficitMinutes(workedMin, r.expected_minutes),
-        in_time: r.in_time, out_time: r.out_time, worked_minutes: workedMin,
-        expected_minutes: r.expected_minutes, email: emailMap.get(r.matricule) ?? null,
+        deficit_minutes: computeDeficitMinutes(workedNetMin, effectiveWorkMin),
+        in_time: r.in_time, out_time: r.out_time, worked_minutes: workedNetMin,
+        expected_minutes: effectiveWorkMin, email: emailMap.get(r.matricule) ?? null,
         shift_team: r.shift_team, shift_team_label: r.shift_team_label ?? "",
       };
     });
@@ -1025,7 +1028,7 @@ export default function AttendanceShiftsPage() {
             <p className="text-xs text-slate-400 mt-0.5">
               {activeTeamCfg
                 ? <span className="text-indigo-500 font-semibold">{activeTeamCfg.label} · {activeTeamCfg.horaire}</span>
-                : <>Toutes les équipes — Contexte : <strong className="text-slate-600">{workHours.context}</strong> — Retard après <strong>{pad2(workHours.startH)}h{pad2(workHours.startM)}</strong> — HS après <strong>{pad2(workHours.endH)}h{pad2(workHours.endM)}</strong></>
+                : <>Toutes les équipes — Contexte : <strong className="text-slate-600">{workHours.context}</strong> — Retard après <strong>{pad2(workHours.startH)}h{pad2(workHours.startM)}</strong> — HS après <strong>{pad2(workHours.endH)}h{pad2(workHours.endM)}</strong>{workHours.breakMin > 0 && <> — Pause <strong>{formatMinutes(workHours.breakMin)}</strong></>}</>
               }
             </p>
           </div>
