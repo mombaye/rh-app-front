@@ -75,7 +75,7 @@ interface CompensationResult {
 }
 
 interface FlatRecord {
-  employee_id: number; matricule: string; full_name: string; department: string;
+  employee_id: number; matricule: string; full_name: string; department: string; project: string;
   status: "ok" | "absent" | "incomplete" | "anomaly";
   is_late_api: boolean; late_label_api: string | null; late_minutes_api: number;
   computed_late_minutes: number; overtime_minutes: number;
@@ -86,7 +86,7 @@ interface FlatRecord {
 }
 
 interface SummaryRecord {
-  employee_id: number; matricule: string; full_name: string; department: string;
+  employee_id: number; matricule: string; full_name: string; department: string; project: string;
   nb_jours: number; worked_minutes: number;
 }
 
@@ -293,7 +293,8 @@ function SummaryTable({
     return rows.filter((r) =>
       r.full_name.toLowerCase().includes(q) ||
       r.matricule.toLowerCase().includes(q) ||
-      r.department.toLowerCase().includes(q)
+      r.department.toLowerCase().includes(q) ||
+      r.project.toLowerCase().includes(q)
     );
   }, [rows, searchQ]);
 
@@ -337,7 +338,7 @@ function SummaryTable({
         <table className="min-w-full text-sm">
           <thead className="bg-camublue-900 text-white sticky top-0 z-10">
             <tr>
-              {["Matricule","Nom complet","Département","Nb jours","Heures trav."].map((h) => (
+              {["Matricule","Nom complet","Projet / Département","Nb jours","Heures trav."].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800">{h}</th>
               ))}
               <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800 min-w-[220px]">
@@ -358,7 +359,16 @@ function SummaryTable({
                 className="hover:bg-slate-50 transition-colors">
                 <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{row.matricule}</td>
                 <td className="px-4 py-2.5 font-medium text-slate-800">{row.full_name}</td>
-                <td className="px-4 py-2.5 text-slate-600 text-xs">{row.department || "—"}</td>
+                <td className="px-4 py-2.5 text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-semibold text-camublue-900 text-xs leading-tight tracking-wide">
+                      {row.project !== "—" ? row.project : row.department || "—"}
+                    </span>
+                    {row.project !== "—" && (
+                      <span className="text-[10px] text-slate-400 leading-tight">{row.department || "—"}</span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-2.5">
                   <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-xs font-bold text-slate-600">{row.nb_jours}</span>
                 </td>
@@ -1064,7 +1074,16 @@ function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
       <tr className={`hidden md:table-row border-b border-slate-100 transition-colors text-sm ${isLate ? "bg-orange-50/50 hover:bg-orange-50" : "hover:bg-slate-50"}`}>
         <td className="px-4 py-3 font-mono text-slate-500 text-xs"><div className="flex justify-center">{r.matricule || "—"}</div></td>
         <td className="px-4 py-3 font-medium text-slate-800"><div className="flex justify-center">{r.full_name}</div></td>
-        <td className="px-4 py-3 text-slate-600 text-xs"><div className="flex justify-center">{r.department}</div></td>
+        <td className="px-4 py-3 text-xs">
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="font-semibold text-camublue-900 leading-tight tracking-wide">
+              {r.project !== "—" ? r.project : r.department}
+            </span>
+            {r.project !== "—" && (
+              <span className="text-[10px] text-slate-400 leading-tight">{r.department}</span>
+            )}
+          </div>
+        </td>
         <td className="px-4 py-3"><div className="flex justify-center"><StatusPill status={r.status} /></div></td>
         <td className="px-4 py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
         <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.computed_late_minutes > 0 ? "text-red-600 font-semibold" : "text-slate-700"}`}>
@@ -1093,7 +1112,7 @@ function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
           <div className="flex items-center justify-between gap-2 cursor-pointer" onClick={() => setExpanded((v) => !v)}>
             <div className="min-w-0">
               <p className="font-semibold text-slate-800 text-sm truncate">{r.full_name}</p>
-              <p className="text-xs text-slate-400 font-mono">{r.matricule || "—"} · {r.department}</p>
+              <p className="text-xs text-slate-400 font-mono">{r.matricule || "—"} · {r.project !== "—" ? `${r.project} / ` : ""}{r.department}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <StatusPill status={r.status} />
@@ -1188,6 +1207,7 @@ export default function AttendanceNormalesPage() {
   const [pageSize,     setPageSize]     = useState(10);
   const [emailMap,      setEmailMap]      = useState<Map<string,string>>(new Map());
   const [departmentMap, setDepartmentMap] = useState<Map<string,string>>(new Map());
+  const [projectMap,    setProjectMap]    = useState<Map<string,string>>(new Map());
   const [shiftMatricules, setShiftMatricules] = useState<Set<string>>(new Set());
 
   // ── Horaires actifs — persistés dans localStorage ─────────────────────────
@@ -1245,13 +1265,18 @@ export default function AttendanceNormalesPage() {
       .then((list: Employee[]) => {
         const m  = new Map<string,string>();
         const dm = new Map<string,string>();
+        const pm = new Map<string,string>();
         list.forEach((e) => {
           if (e.matricule && e.email)       m.set(e.matricule, e.email);
           if (e.matricule && (e.department ?? (e as any).service))
             dm.set(e.matricule, (e.department ?? (e as any).service).toUpperCase());
+          const proj = (e as any).project ?? (e as any).projet ?? (e as any).project_name ?? (e as any).site ?? null;
+          if (e.matricule && proj)
+            pm.set(e.matricule, String(proj).toUpperCase());
         });
         setEmailMap(m);
         setDepartmentMap(dm);
+        setProjectMap(pm);
       }).catch(console.error);
 
     getShiftDailyStats({ date: isoToday() })
@@ -1292,6 +1317,10 @@ export default function AttendanceNormalesPage() {
         matricule: mat,
         full_name: r.full_name ?? `${r.nom ?? ""} ${r.prenom ?? ""}`.trim(),
         department: (r.department ?? r.service ?? "—").toUpperCase(),
+        project: (() => {
+          const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
+          return p ? String(p).toUpperCase() : (projectMap.get(mat) ?? "—");
+        })(),
         status: isDaily ? r.status : r.absent_days > 0 ? "absent" : r.incomplete_days > 0 ? "incomplete" : "ok",
         is_late_api: r.is_late ?? r.late_days > 0,
         late_label_api: r.late_label ?? (r.late_days > 0 ? `${r.late_days}j · moy ${r.avg_late_minutes}min` : null),
@@ -1312,13 +1341,17 @@ export default function AttendanceNormalesPage() {
     if (viewMode === "weekly"  && weekly)  return weekly.by_employee.filter(isNormal).map((r: any) => map(r, false));
     if (viewMode === "monthly" && monthly) return monthly.by_employee.filter(isNormal).map((r: any) => map(r, false));
     return [];
-  }, [viewMode, daily, weekly, monthly, emailMap, effectiveSchedule, shiftMatricules]);
+  }, [viewMode, daily, weekly, monthly, emailMap, effectiveSchedule, shiftMatricules, projectMap]);
 
   // ── Transformation → SummaryRecord (hebdo / mensuel) ─────────────────────
   const summaryRecords = useMemo((): SummaryRecord[] => {
     const isNormal = (r: any) => !shiftMatricules.has(r.matricule ?? "");
     const resolveDept = (r: any) =>
       (r.department ?? r.service ?? departmentMap.get(r.matricule ?? "") ?? "—").toUpperCase();
+    const resolveProject = (r: any) => {
+      const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
+      return p ? String(p).toUpperCase() : (projectMap.get(r.matricule ?? "") ?? "—");
+    };
 
     if (viewMode === "weekly" && weekly) {
       return weekly.by_employee.filter(isNormal).map((r: any) => ({
@@ -1326,6 +1359,7 @@ export default function AttendanceNormalesPage() {
         matricule:      r.matricule ?? "",
         full_name:      r.full_name ?? "",
         department:     resolveDept(r),
+        project:        resolveProject(r),
         nb_jours:       r.present_days ?? r.worked_days ?? 0,
         worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
       }));
@@ -1336,12 +1370,13 @@ export default function AttendanceNormalesPage() {
         matricule:      r.matricule ?? "",
         full_name:      r.full_name ?? "",
         department:     resolveDept(r),
+        project:        resolveProject(r),
         nb_jours:       r.present_days ?? r.worked_days ?? 0,
         worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
       }));
     }
     return [];
-  }, [viewMode, weekly, monthly, shiftMatricules, departmentMap]);
+  }, [viewMode, weekly, monthly, shiftMatricules, departmentMap, projectMap]);
 
   const kpis = useMemo(() => {
     const total = allRecords.length;
@@ -1361,7 +1396,7 @@ export default function AttendanceNormalesPage() {
     else if (statusFilter !== "all")  { if (r.status !== statusFilter) return false; }
     if (!searchQ) return true;
     const q = searchQ.toLowerCase();
-    return r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q) || r.department.toLowerCase().includes(q);
+    return r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q) || r.department.toLowerCase().includes(q) || r.project.toLowerCase().includes(q);
   }), [allRecords, statusFilter, searchQ, isLateRecord]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -1399,7 +1434,7 @@ export default function AttendanceNormalesPage() {
   const handleExport = () => {
     if (viewMode === "daily") {
       exportXLSX("pointage_normaux_journalier", filtered.map((r) => ({
-        Matricule: r.matricule, Nom: r.full_name, Département: r.department, Statut: r.status,
+        Matricule: r.matricule, Nom: r.full_name, Projet: r.project !== "—" ? r.project : "", Département: r.department, Statut: r.status,
         Retard: r.computed_late_minutes > 0 ? `RETARD · ${formatMinutes(r.computed_late_minutes)}` : "Non",
         Entrée: formatTime(r.in_time), Sortie: formatTime(r.out_time),
         "Heure travaillée": r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
@@ -1408,7 +1443,7 @@ export default function AttendanceNormalesPage() {
       })));
     } else {
       exportXLSX(`pointage_normaux_${viewMode === "weekly" ? "hebdo" : "mensuel"}`, summaryRecords.map((r) => ({
-        Matricule: r.matricule, Nom: r.full_name, Département: r.department,
+        Matricule: r.matricule, Nom: r.full_name, Projet: r.project !== "—" ? r.project : "", Département: r.department,
         "Nb jours": r.nb_jours,
         "Heures travaillées": formatMinutes(r.worked_minutes) || "0h",
         "% quota (40h)": `${Math.min(100, Math.round((r.worked_minutes / (viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN*4.33))) * 100))}%`,
@@ -1416,7 +1451,7 @@ export default function AttendanceNormalesPage() {
     }
   };
 
-  const tableHeaders = ["Matricule","Nom","Département","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
+  const tableHeaders = ["Matricule","Nom","Projet / Département","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
   const isActiveLocked = activeSchedule ? isPeriodActive(activeSchedule) : false;
 
   return (

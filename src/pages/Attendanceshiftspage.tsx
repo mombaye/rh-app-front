@@ -87,7 +87,7 @@ interface CompensationResult {
 }
 
 interface FlatRecord {
-  employee_id: number; matricule: string; full_name: string; department: string;
+  employee_id: number; matricule: string; full_name: string; department: string; project: string;
   status: "ok"|"absent"|"incomplete"|"anomaly";
   is_late_api: boolean; late_label_api: string|null;
   computed_late_minutes: number; overtime_minutes: number;
@@ -98,7 +98,7 @@ interface FlatRecord {
 }
 
 interface SummaryRecord {
-  employee_id: number; matricule: string; full_name: string; department: string;
+  employee_id: number; matricule: string; full_name: string; department: string; project: string;
   shift_team: ShiftTeamKey|null;
   nb_jours: number; worked_minutes: number;
 }
@@ -291,7 +291,7 @@ function SummaryTable({ rows, mode, isLoading }: {
         <table className="min-w-full text-sm">
           <thead className="bg-camublue-900 text-white sticky top-0 z-10">
             <tr>
-              {["Matricule","Nom complet","Département","Équipe","Nb jours","Heures trav."].map((h)=>(
+              {["Matricule","Nom complet","Projet / Département","Équipe","Nb jours","Heures trav."].map((h)=>(
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800">{h}</th>
               ))}
               <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800 min-w-[220px]">
@@ -309,7 +309,16 @@ function SummaryTable({ rows, mode, isLoading }: {
                   <motion.tr key={row.employee_id} initial={{opacity:0,y:4}} animate={{opacity:1,y:0}} transition={{delay:idx*0.015}} className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{row.matricule}</td>
                     <td className="px-4 py-2.5 font-medium text-slate-800">{row.full_name}</td>
-                    <td className="px-4 py-2.5 text-slate-600 text-xs">{row.department||"—"}</td>
+                    <td className="px-4 py-2.5 text-xs">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-semibold text-camublue-900 text-xs leading-tight tracking-wide">
+                          {row.project !== "—" ? row.project : row.department || "—"}
+                        </span>
+                        {row.project !== "—" && (
+                          <span className="text-[10px] text-slate-400 leading-tight">{row.department || "—"}</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-2.5"><ShiftTeamPill teamKey={row.shift_team}/></td>
                     <td className="px-4 py-2.5"><span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-xs font-bold text-slate-600">{row.nb_jours}</span></td>
                     <td className="px-4 py-2.5"><span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold tabular-nums ${cls}`}>{formatMinutes(row.worked_minutes)||"0h"}</span></td>
@@ -902,7 +911,7 @@ function GestionShiftsModal({ open, onClose, employees, assignments, onSave }: {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-slate-800 truncate">{r.full_name}</p>
-                            <p className="text-xs text-slate-400 font-mono truncate">{mat}{r.department&&r.department!=="—"?` · ${r.department}`:""}</p>
+                            <p className="text-xs text-slate-400 font-mono truncate">{mat}{(r.project&&r.project!=="—")||(r.department&&r.department!=="—")?` · ${r.project!=="—"?r.project+"/":""} ${r.department!=="—"?r.department:""}`.trim():""}</p>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
                             {SHIFT_TEAMS.map((t)=>{
@@ -1004,7 +1013,16 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
       <tr className={`hidden md:table-row border-b border-slate-100 transition-colors text-sm ${isLate?"bg-orange-50/50 hover:bg-orange-50":deficit?"bg-rose-50/30 hover:bg-rose-50/60":"hover:bg-slate-50"}`}>
         <td className="px-4 py-3"><div className="flex justify-center font-mono text-slate-500 text-xs">{r.matricule||"—"}</div></td>
         <td className="px-4 py-3"><div className="flex justify-center font-medium text-slate-800">{r.full_name}</div></td>
-        <td className="px-4 py-3"><div className="flex justify-center text-slate-600 text-xs">{r.department}</div></td>
+        <td className="px-4 py-3 text-xs">
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="font-semibold text-camublue-900 leading-tight tracking-wide">
+              {r.project !== "—" ? r.project : r.department}
+            </span>
+            {r.project !== "—" && (
+              <span className="text-[10px] text-slate-400 leading-tight">{r.department}</span>
+            )}
+          </div>
+        </td>
         <td className="px-4 py-3"><div className="flex justify-center"><ShiftTeamPill teamKey={r.shift_team}/></div></td>
         <td className="px-4 py-3"><div className="flex justify-center"><StatusPill status={r.status}/></div></td>
         <td className="px-4 py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes}/></div></td>
@@ -1028,7 +1046,7 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
           <div className="flex items-center justify-between gap-2 cursor-pointer" onClick={()=>setExpanded((v)=>!v)}>
             <div className="min-w-0">
               <p className="font-semibold text-slate-800 text-sm truncate">{r.full_name}</p>
-              <p className="text-xs text-slate-400 font-mono">{r.matricule||"—"} · {r.department}</p>
+              <p className="text-xs text-slate-400 font-mono">{r.matricule||"—"} · {r.project !== "—" ? `${r.project} / ` : ""}{r.department}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <StatusPill status={r.status}/>
@@ -1084,6 +1102,7 @@ export default function AttendanceShiftsPage() {
   const [pageSize,     setPageSize]     = useState(10);
   const [emailMap,      setEmailMap]      = useState<Map<string,string>>(new Map());
   const [departmentMap, setDepartmentMap] = useState<Map<string,string>>(new Map());
+  const [projectMap,    setProjectMap]    = useState<Map<string,string>>(new Map());
   const [alertModalOpen,  setAlertModalOpen]  = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedEmployee,   setSelectedEmployee]   = useState<FlatRecord|null>(null);
@@ -1155,15 +1174,21 @@ export default function AttendanceShiftsPage() {
     getEmployees().then((list:Employee[])=>{
       const m  = new Map<string,string>();
       const dm = new Map<string,string>();
+      const pm = new Map<string,string>();
       const apiAssignments: AssignmentMap = {};
       list.forEach((e)=>{
         if (e.matricule && e.email) m.set(e.matricule, e.email);
         if (e.matricule && (e.department ?? (e as any).service))
           dm.set(e.matricule, (e.department ?? (e as any).service).toUpperCase());
+        if (e.matricule && (e as any).project)
+          pm.set(e.matricule, ((e as any).project as string).toUpperCase());
+        const proj = (e as any).project ?? (e as any).projet ?? (e as any).project_name ?? (e as any).site ?? null;
+        if (e.matricule && proj) pm.set(e.matricule, String(proj).toUpperCase());
         if (e.matricule && (e as any).shift_team) apiAssignments[e.matricule] = (e as any).shift_team;
       });
       setEmailMap(m);
       setDepartmentMap(dm);
+      setProjectMap(pm);
       // Fusionner : localStorage prime sur l'API pour les entrées déjà stockées
       setAssignments((prev) => ({ ...apiAssignments, ...prev }));
     }).catch(console.error);
@@ -1197,6 +1222,7 @@ export default function AttendanceShiftsPage() {
       const overtimeMin = computeOvertimeMinutes(r.out_time, sched.endH, sched.endM);
       return{
         employee_id:r.employee_id, matricule:r.matricule, full_name:r.full_name, department:(r.department??"—").toUpperCase(),
+        project: (() => { const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null; return p ? String(p).toUpperCase() : (projectMap.get(r.matricule) ?? "—"); })(),
         status:r.status, is_late_api:r.is_late, late_label_api:r.late_label,
         computed_late_minutes:lateMin, overtime_minutes:overtimeMin,
         compensation:computeCompensation(lateMin,overtimeMin),
@@ -1206,17 +1232,22 @@ export default function AttendanceShiftsPage() {
         shift_team:r.shift_team, shift_team_label:r.shift_team_label??"",
       };
     });
-  },[shiftData,emailMap,effectiveSchedule,viewMode]);
+  },[shiftData,emailMap,effectiveSchedule,viewMode,projectMap]);
 
   // SummaryRecords (hebdo/mensuel)
   const summaryRecords = useMemo(():SummaryRecord[]=>{
     const resolveDept = (r: any) =>
       (r.department ?? r.service ?? departmentMap.get(r.matricule ?? "") ?? "—").toUpperCase();
+    const resolveProject = (r: any) => {
+      const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
+      return p ? String(p).toUpperCase() : (projectMap.get(r.matricule ?? "") ?? "—");
+    };
     const mapEmp = (r:any, team:ShiftTeamKey|null):SummaryRecord=>({
       employee_id:    r.employee_id,
       matricule:      r.matricule ?? "",
       full_name:      r.full_name ?? "",
       department:     resolveDept(r),
+      project:        resolveProject(r),
       shift_team:     team ?? r.shift_team ?? null,
       nb_jours:       r.present_days ?? r.worked_days ?? 0,
       worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
@@ -1224,7 +1255,7 @@ export default function AttendanceShiftsPage() {
     if (viewMode==="weekly"  && weeklyData)  return weeklyData.by_employee.map((r:any)=>mapEmp(r, assignments[r.matricule??""] ?? r.shift_team ?? null));
     if (viewMode==="monthly" && monthlyData) return monthlyData.by_employee.map((r:any)=>mapEmp(r, assignments[r.matricule??""] ?? r.shift_team ?? null));
     return [];
-  },[viewMode, weeklyData, monthlyData, assignments, departmentMap]);
+  },[viewMode, weeklyData, monthlyData, assignments, departmentMap, projectMap]);
 
   // filteredSummaryRecords
   const filteredSummaryRecords = useMemo(():SummaryRecord[] => {
@@ -1236,6 +1267,7 @@ export default function AttendanceShiftsPage() {
         r.full_name.toLowerCase().includes(q) ||
         r.matricule.toLowerCase().includes(q) ||
         r.department.toLowerCase().includes(q) ||
+        r.project.toLowerCase().includes(q) ||
         (SHIFT_TEAMS.find((t) => t.key === r.shift_team)?.label ?? "").toLowerCase().includes(q)
       );
     }
@@ -1255,7 +1287,7 @@ export default function AttendanceShiftsPage() {
     else if(statusFilter!=="all"){if(r.status!==statusFilter)return false;}
     if(!searchQ)return true;
     const q=searchQ.toLowerCase();
-    return r.full_name.toLowerCase().includes(q)||r.matricule.toLowerCase().includes(q)||r.department.toLowerCase().includes(q)||(r.shift_team_label??"").toLowerCase().includes(q);
+    return r.full_name.toLowerCase().includes(q)||r.matricule.toLowerCase().includes(q)||r.department.toLowerCase().includes(q)||(r.shift_team_label??"").toLowerCase().includes(q)||r.project.toLowerCase().includes(q);
   }),[allRecords,statusFilter,searchQ]);
 
   const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
@@ -1269,7 +1301,7 @@ export default function AttendanceShiftsPage() {
   const handleExport=()=>{
     if (viewMode==="daily") {
       exportXLSX(`shift_${selectedTeam??"all"}_journalier`, filtered.map((r)=>({
-        Matricule:r.matricule, Nom:r.full_name, Département:r.department, Équipe:r.shift_team_label||r.shift_team||"—",
+        Matricule:r.matricule, Nom:r.full_name, Projet:r.project !== "—" ? r.project : "", Département:r.department, Équipe:r.shift_team_label||r.shift_team||"—",
         Statut:r.status, Retard:r.computed_late_minutes>0?`RETARD · ${formatMinutes(r.computed_late_minutes)}`:"Non",
         Entrée:formatTime(r.in_time), Sortie:formatTime(r.out_time),
         "Heure travaillée":r.worked_minutes>0?formatMinutes(r.worked_minutes):"—",
@@ -1279,7 +1311,7 @@ export default function AttendanceShiftsPage() {
       })));
     } else {
       exportXLSX(`shift_${viewMode==="weekly"?"hebdo":"mensuel"}`, filteredSummaryRecords.map((r)=>({
-        Matricule:r.matricule, Nom:r.full_name, Département:r.department,
+        Matricule:r.matricule, Nom:r.full_name, Projet:r.project !== "—" ? r.project : "", Département:r.department,
         Équipe:SHIFT_TEAMS.find((t)=>t.key===r.shift_team)?.short||r.shift_team||"—",
         "Nb jours":r.nb_jours,
         "Heures travaillées":formatMinutes(r.worked_minutes)||"0h",
@@ -1289,7 +1321,7 @@ export default function AttendanceShiftsPage() {
   };
 
   const activeTeamCfg = SHIFT_TEAMS.find((t)=>t.key===selectedTeam);
-  const tableHeaders = ["Matricule","Nom","Département","Équipe","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
+  const tableHeaders = ["Matricule","Nom","Projet / Département","Équipe","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
 
   return (
     <AppLayout>
