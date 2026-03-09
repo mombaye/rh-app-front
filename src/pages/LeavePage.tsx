@@ -166,12 +166,12 @@ export default function LeavePage() {
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-4 p-6"
+        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-3 p-3 sm:p-4 md:p-6"
       >
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between gap-3 md:items-center shrink-0">
           <div>
-            <h1 className="text-3xl font-bold text-camublue-900">{pageTitle}</h1>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-camublue-900">{pageTitle}</h1>
             <p className="text-sm text-gray-500 mt-1">
               {requests.length} demande{requests.length !== 1 ? "s" : ""}
               {statusFilter !== "ALL" && (
@@ -189,7 +189,7 @@ export default function LeavePage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Dropdown filtre */}
             <div className="relative" ref={dropdownRef}>
               <button
@@ -410,7 +410,7 @@ export default function LeavePage() {
         <AnimatePresence>
           {selected && (
             <div
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
               onClick={closeModal}
             >
               <motion.div
@@ -418,10 +418,10 @@ export default function LeavePage() {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.97, y: 10 }}
                 transition={{ duration: 0.2 }}
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-[520px] max-h-[90vh] overflow-y-auto"
+                className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-[520px] max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex justify-between items-start px-8 pt-8 pb-0">
+                <div className="flex justify-between items-start px-4 sm:px-8 pt-6 sm:pt-8 pb-0">
                   <div>
                     <h2 className="text-xl font-bold text-gray-900">Détail de la demande</h2>
                     <p className="text-sm text-gray-400 mt-0.5">Réf. #{selected.id}</p>
@@ -434,7 +434,7 @@ export default function LeavePage() {
                   </button>
                 </div>
 
-                <div className="px-8 py-6 space-y-4">
+                <div className="px-4 sm:px-8 py-4 sm:py-6 space-y-4">
                   <span
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold"
                     style={{

@@ -533,7 +533,7 @@ export default function EmployeesTable({
                 Date d'embauche
               </th>
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
-                Projet
+                Projet/Département
               </th>
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                 Manager

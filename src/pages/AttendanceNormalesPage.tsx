@@ -630,12 +630,12 @@ function WorkScheduleModal({
                       );
                     })}
                   </div>
-
-                  <button onClick={() => openForm()}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-camublue-900 hover:text-camublue-900 transition-all text-sm font-medium">
-                    <Plus className="h-4 w-4" />Ajouter un contexte
-                  </button>
                 </div>
+
+                <button onClick={() => openForm()}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-camublue-900 hover:text-camublue-900 transition-all text-sm font-medium">
+                  <Plus className="h-4 w-4" />Ajouter un contexte
+                </button>
 
                 <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
                   <button onClick={onClose}
@@ -1053,7 +1053,9 @@ function AlertModal({ open, onClose, employee, onConfirm, sending }: {
             <div className="px-6 pb-6 flex gap-3">
               <button onClick={onClose} disabled={sending} className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50">Annuler</button>
               <button onClick={() => onConfirm(motif)} disabled={sending || !employee.email}
-                className={`flex-1 py-2.5 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 ${!employee.email ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-camublue-900 hover:bg-camublue-800 text-white"} disabled:opacity-60`}>
+                className={`flex-1 py-2.5 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-60 ${
+                  !employee.email ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-camublue-900 hover:bg-camublue-800 text-white"
+                }`}>
                 {sending ? <><Loader2 className="h-4 w-4 animate-spin" />Envoi…</> : <><Send className="h-4 w-4" />Envoyer</>}
               </button>
             </div>
@@ -1069,6 +1071,20 @@ function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
   r: FlatRecord; isLate: boolean; viewMode: ViewMode; onAlert: () => void; onDetail: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+
+  // ✅ Badge Service — badge violet avec truncate + tooltip natif sur hover
+  const ServiceBadge = ({ service }: { service: string }) => {
+    if (!service || service === "—") return <span className="text-slate-300 text-xs">—</span>;
+    return (
+      <span
+        title={service}
+        className="inline-flex items-center rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 max-w-[160px] truncate whitespace-nowrap"
+      >
+        {service}
+      </span>
+    );
+  };
+
   return (
     <>
       <tr className={`hidden md:table-row border-b border-slate-100 transition-colors text-sm ${isLate ? "bg-orange-50/50 hover:bg-orange-50" : "hover:bg-slate-50"}`}>
@@ -1076,13 +1092,16 @@ function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
         <td className="px-4 py-3 font-medium text-slate-800"><div className="flex justify-center">{r.full_name}</div></td>
         <td className="px-4 py-3 text-xs">
           <div className="flex flex-col items-center gap-0.5">
-            <span className="font-semibold text-camublue-900 leading-tight tracking-wide">
+            <span className="font-semibold text-camublue-900 text-xs leading-tight tracking-wide">
               {r.project !== "—" ? r.project : r.department}
             </span>
             {r.project !== "—" && (
-              <span className="text-[10px] text-slate-400 leading-tight">{r.department}</span>
+              <span className="text-[10px] text-slate-400 leading-tight">{r.department || "—"}</span>
             )}
           </div>
+        </td>
+        <td className="px-4 py-3">
+          <ServiceBadge service={r.department} />
         </td>
         <td className="px-4 py-3"><div className="flex justify-center"><StatusPill status={r.status} /></div></td>
         <td className="px-4 py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
@@ -1380,11 +1399,15 @@ export default function AttendanceNormalesPage() {
 
   const kpis = useMemo(() => {
     const total = allRecords.length;
-    if (viewMode === "daily" && daily)
-      return { total, absent: daily.kpis.absent, late: allRecords.filter((r) => r.computed_late_minutes > 0).length, anomaly: daily.kpis.anomalies };
+    if (viewMode === "daily" && daily) {
+      const absent = allRecords.filter((r) => r.status === "absent").length;
+      return { total, absent, late: allRecords.filter((r) => r.computed_late_minutes > 0).length, anomaly: daily.kpis.anomalies };
+    }
     const emp = (viewMode === "weekly" ? weekly?.by_employee : monthly?.by_employee) as any[] | undefined;
-    if (emp)
-      return { total, absent: emp.filter((r) => r.absent_days > 0).length, late: emp.filter((r) => (r.late_days ?? 0) > 0).length, anomaly: emp.filter((r) => r.anomaly_days > 0).length };
+    if (emp) {
+      const absent = allRecords.filter((r) => r.status === "absent").length;
+      return { total, absent, late: emp.filter((r) => (r.late_days ?? 0) > 0).length, anomaly: emp.filter((r) => r.anomaly_days > 0).length };
+    }
     return { total: 0, absent: 0, late: 0, anomaly: 0 };
   }, [viewMode, daily, weekly, monthly, allRecords]);
 
@@ -1446,12 +1469,12 @@ export default function AttendanceNormalesPage() {
         Matricule: r.matricule, Nom: r.full_name, Projet: r.project !== "—" ? r.project : "", Service: r.department,
         "Nb jours": r.nb_jours,
         "Heures travaillées": formatMinutes(r.worked_minutes) || "0h",
-        "% quota (40h)": `${Math.min(100, Math.round((r.worked_minutes / (viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN*4.33))) * 100))}%`,
+        "% quota (40h)": `${Math.min(100, Math.round((r.worked_minutes / (viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WORKDAY_MIN*4.33))) * 100))}%`,
       })));
     }
   };
 
-  const tableHeaders = ["Matricule","Nom","Projet / Service","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
+  const tableHeaders = ["Matricule","Nom","Projet/Département","Service","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
   const isActiveLocked = activeSchedule ? isPeriodActive(activeSchedule) : false;
 
   return (
@@ -1565,16 +1588,18 @@ export default function AttendanceNormalesPage() {
             {/* Tableau journalier */}
             <div className="flex-1 min-h-0 flex flex-col gap-2">
               <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
-                <table className="min-w-full bg-white">
-                  <thead className="sticky top-0 z-10 bg-camublue-900 text-white hidden md:table-header-group">
+                <table className="min-w-max w-full bg-white">
+                  <thead className="bg-camublue-900 text-white sticky top-0 z-10">
                     <tr>
                       {tableHeaders.map((h) => (
-                        <th key={h} className="px-4 py-3 text-center border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">{h}</th>
+                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800 whitespace-nowrap">
+                          {h}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <thead className="sticky top-0 z-10 bg-camublue-900 text-white md:hidden">
-                    <tr><th className="px-3 py-3 text-left text-sm font-semibold" colSpan={11}>Employés ({filtered.length})</th></tr>
+                    <tr><th className="px-3 py-3 text-left text-sm font-semibold" colSpan={12}>Employés ({filtered.length})</th></tr>
                   </thead>
                   <tbody>
                     {loading ? (

@@ -121,7 +121,7 @@ export default function LeaveRequestForm({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
       onClick={onClose}
     >
       <motion.div
@@ -129,10 +129,10 @@ export default function LeaveRequestForm({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 10 }}
         transition={{ duration: 0.2 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-[540px] max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-[540px] max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-start px-8 pt-8">
+        <div className="flex justify-between items-start px-4 sm:px-8 pt-6 sm:pt-8">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Nouvelle demande</h2>
             <p className="text-sm text-gray-400 mt-1">
@@ -147,7 +147,7 @@ export default function LeaveRequestForm({
           </button>
         </div>
 
-        <div className="px-8 py-6 space-y-4">
+        <div className="px-4 sm:px-8 py-4 sm:py-6 space-y-4">
           <AnimatePresence>
             {error && (
               <motion.div
@@ -205,7 +205,7 @@ export default function LeaveRequestForm({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
                 Date début <span className="text-red-500">*</span>
