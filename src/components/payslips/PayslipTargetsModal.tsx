@@ -71,20 +71,20 @@ export default function PayslipTargetsModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold text-slate-800">Sélection des destinataires</h3>
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-2xl bg-white rounded-t-2xl sm:rounded-2xl shadow-xl p-4 sm:p-5 max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between gap-3 shrink-0">
+          <h3 className="text-base sm:text-lg font-semibold text-slate-800">Sélection des destinataires</h3>
           <button
             onClick={onClose}
             disabled={sending}
-            className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700"
+            className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 shrink-0"
           >
             Fermer
           </button>
         </div>
 
-        <div className="mt-3 flex items-center gap-3">
+        <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -93,7 +93,7 @@ export default function PayslipTargetsModal({
           <button
             onClick={toggleAll}
             disabled={sending || canSendItems.length === 0}
-            className="px-3 py-2 rounded-md border border-slate-300 bg-white hover:bg-slate-50"
+            className="px-3 py-2 rounded-md border border-slate-300 bg-white hover:bg-slate-50 shrink-0"
           >
             {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
           </button>
@@ -124,7 +124,7 @@ export default function PayslipTargetsModal({
         )}
 
 
-        <div className="mt-3 max-h-[360px] overflow-auto rounded-xl border border-slate-300">
+        <div className="mt-3 flex-1 min-h-0 overflow-auto rounded-xl border border-slate-300">
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 bg-slate-50 border-b border-slate-300">
               <tr>
@@ -178,7 +178,7 @@ export default function PayslipTargetsModal({
           </table>
         </div>
 
-        <div className="mt-4 flex items-center justify-between">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="text-sm text-slate-600">
             Sélectionnés : <b>{selected.size}</b>
           </div>
@@ -186,7 +186,7 @@ export default function PayslipTargetsModal({
           <button
             onClick={() => onConfirm(Array.from(selected))}
              disabled={loading || sending || selected.size === 0}
-            className="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white inline-flex items-center gap-2 disabled:opacity-50"
+            className="flex-1 sm:flex-none px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white inline-flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {sending ? <ImSpinner2 className="animate-spin" /> : null}
             Envoyer aux sélectionnés

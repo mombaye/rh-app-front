@@ -66,9 +66,9 @@ export default function PayslipUploader({
 
   return (
     <div className="p-4 bg-white rounded-xl shadow space-y-4">
-      <h2 className="text-xl font-semibold text-gray-800">Importer le fichier PDF des bulletins</h2>
+      <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Importer le fichier PDF des bulletins</h2>
 
-      <div className="flex flex-col md:flex-row md:items-center gap-3">
+      <div className="flex flex-col gap-3">
         <input
           type="file"
           ref={fileRef}
@@ -77,21 +77,23 @@ export default function PayslipUploader({
           className="hidden"
         />
 
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 inline-flex items-center gap-2 w-fit"
-        >
-          <FaFilePdf /> Choisir un fichier
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 inline-flex items-center gap-2"
+          >
+            <FaFilePdf /> Choisir un fichier
+          </button>
 
-        {file && <span className="text-sm italic text-gray-600">{file.name}</span>}
+          {file && <span className="text-sm italic text-gray-600 truncate max-w-[200px] sm:max-w-xs">{file.name}</span>}
+        </div>
 
-        <div className="flex items-center gap-2 md:ml-auto">
+        <div className="flex flex-wrap items-center gap-2">
           {/* ✅ Flow 1 : auto */}
           <button
             onClick={() => run("auto")}
             disabled={disabled}
-            className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-500 disabled:opacity-50 inline-flex items-center gap-2"
+            className="flex-1 sm:flex-none px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-500 disabled:opacity-50 inline-flex items-center justify-center gap-2"
             title="Envoie automatiquement à tous les employés détectés (emails valides)"
           >
             {modeLoading === "auto" ? <ImSpinner2 className="animate-spin" /> : null}
@@ -102,7 +104,7 @@ export default function PayslipUploader({
           <button
             onClick={() => run("select")}
             disabled={disabled}
-            className="px-4 py-2 bg-camublue-900 text-white rounded hover:bg-camublue-800 disabled:opacity-50 inline-flex items-center gap-2"
+            className="flex-1 sm:flex-none px-4 py-2 bg-camublue-900 text-white rounded hover:bg-camublue-800 disabled:opacity-50 inline-flex items-center justify-center gap-2"
             title="Analyse le PDF, puis vous choisissez les destinataires"
           >
             {modeLoading === "select" ? <ImSpinner2 className="animate-spin" /> : null}

@@ -482,12 +482,12 @@ export default function InterimEmployeesPage() {
     <AppLayout>
       <motion.div
         initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}
-        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-4 p-6"
+        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-3 p-3 sm:p-4 md:p-6"
       >
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between gap-3 md:items-center shrink-0">
           <div>
-            <h1 className="text-3xl font-bold text-camublue-900">Gestion des employés intérimaires</h1>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-camublue-900">Gestion des employés intérimaires</h1>
             {profileFilter !== "ALL" && (
               <p className="text-sm mt-1 flex items-center gap-2">
                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -504,7 +504,7 @@ export default function InterimEmployeesPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {/* ── Filtre profil dropdown ── */}
             <div className="relative" ref={profileDropdownRef}>
               <button

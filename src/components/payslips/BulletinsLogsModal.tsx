@@ -99,11 +99,11 @@ export default function BulletinsLogsModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-          <div>
-            <div className="text-lg font-semibold text-slate-800">{title}</div>
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-5xl bg-white rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden border border-slate-200 max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+        <div className="px-4 sm:px-5 py-4 border-b border-slate-200 flex items-start sm:items-center justify-between shrink-0">
+          <div className="min-w-0 flex-1 mr-3">
+            <div className="text-lg font-semibold text-slate-800 truncate">{title}</div>
             <div className="text-xs text-slate-500">
               Période : {start} → {end}
               {scope?.year && scope?.month ? ` • Mois: ${scope.year}-${String(scope.month).padStart(2, "0")}` : ""}
@@ -111,24 +111,24 @@ export default function BulletinsLogsModal({
           </div>
           <button
             onClick={onClose}
-            className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700"
+            className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 shrink-0"
           >
             Fermer
           </button>
         </div>
 
-        <div className="px-5 py-3 border-b border-slate-200 flex flex-col md:flex-row gap-2 md:items-center">
+        <div className="px-4 sm:px-5 py-3 border-b border-slate-200 flex flex-col sm:flex-row gap-2 sm:items-center shrink-0">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher (matricule / email)…"
-            className="w-full md:w-80 border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-camublue-900"
+            className="w-full sm:w-80 border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-camublue-900 shrink-0"
           />
 
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as StatusFilter)}
-            className="w-full md:w-48 border border-slate-300 rounded-lg px-3 py-2 bg-white"
+            className="w-full sm:w-48 border border-slate-300 rounded-lg px-3 py-2 bg-white"
           >
             <option value="all">Tous statuts</option>
             <option value="sent">Succès</option>
@@ -136,12 +136,12 @@ export default function BulletinsLogsModal({
             <option value="pending">En attente</option>
           </select>
 
-          <div className="md:ml-auto text-sm text-slate-600">
+          <div className="sm:ml-auto text-sm text-slate-600">
             {loading ? "Chargement…" : <span>Total : <b>{count}</b></span>}
           </div>
         </div>
 
-        <div className="overflow-auto max-h-[520px]">
+        <div className="overflow-auto flex-1">
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 bg-slate-50 border-b border-slate-300">
               <tr>
@@ -205,7 +205,7 @@ export default function BulletinsLogsModal({
           </table>
         </div>
 
-        <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-between">
+        <div className="px-4 sm:px-5 py-3 border-t border-slate-200 flex items-center justify-between shrink-0">
           <div className="text-sm text-slate-600">
             Page <b>{page}</b> / <b>{totalPages}</b>
           </div>

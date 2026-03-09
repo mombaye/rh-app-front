@@ -267,12 +267,12 @@ export default function PayslipPage() {
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-6 p-6"
+        className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-4 p-4 md:p-6"
       >
         {/* ── En-tête (fixe) ── */}
-        <div className="flex flex-col md:flex-row justify-between gap-3 md:items-center shrink-0">
-          <h1 className="text-3xl font-bold text-camublue-900">Bulletins de salaire</h1>
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 shrink-0">
+          <h1 className="text-2xl sm:text-3xl font-bold text-camublue-900">Bulletins de salaire</h1>
+          <div className="flex flex-wrap items-center gap-2">
             {/* Recherche */}
             <div className="relative">
               <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
@@ -281,7 +281,7 @@ export default function PayslipPage() {
                 placeholder="Rechercher un bulletin..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-52"
+                className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-52"
               />
             </div>
             {/* Filtre rapide */}

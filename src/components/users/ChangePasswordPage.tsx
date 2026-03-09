@@ -37,9 +37,9 @@ export default function ChangePasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-tr from-camublue-900/10 via-white to-camublue-900/10">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-tr from-camublue-900/10 via-white to-camublue-900/10 px-4 py-8">
       <Card className="shadow-lg rounded-2xl border-0 w-full max-w-md">
-        <CardContent className="p-8 flex flex-col items-center">
+        <CardContent className="p-5 sm:p-8 flex flex-col items-center">
           <h2 className="text-xl font-bold text-camublue-900 mb-2">
             Première connexion : changez votre mot de passe
           </h2>

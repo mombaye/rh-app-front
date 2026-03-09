@@ -38,7 +38,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-tr from-camublue-900/20 via-white to-camublue-900/10 overflow-hidden">
+    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-tr from-camublue-900/20 via-white to-camublue-900/10 overflow-hidden px-4 py-8">
       {/* Fond animé en bulles */}
       <div className="absolute inset-0 z-0 overflow-hidden">
         <div className="absolute w-72 h-72 bg-camublue-900/10 rounded-full top-10 left-10 blur-3xl animate-pulse"></div>
@@ -55,7 +55,7 @@ export default function LoginPage() {
         className="relative z-10 w-full max-w-md"
       >
         <Card className="shadow-xl rounded-2xl border-0">
-          <CardContent className="p-8 flex flex-col items-center">
+          <CardContent className="p-5 sm:p-8 flex flex-col items-center">
             
             <img
               src={welcome}
