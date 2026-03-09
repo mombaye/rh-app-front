@@ -1,11 +1,11 @@
 // src/components/leaves/LeaveRequestForm.tsx
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { leaveTypeService, leaveRequestService } from "@/services/leaveService";
+import { leaveTypeService, leaveRequestService, leaveBalanceService } from "@/services/leaveService";
 import { getEmployees } from "@/services/employeeService";
-import { ContractType, LeaveType } from "@/types/leave";
+import { ContractType, LeaveType, LeaveBalance } from "@/types/leave";
 import { Employee } from "@/types/employee";
-import { FiX, FiSearch } from "react-icons/fi";
+import { FiX, FiSearch, FiAlertTriangle } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
 
 interface Props {
@@ -53,6 +53,8 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   const [error,           setError]           = useState<string | null>(null);
   const [isLoadingTypes,  setIsLoadingTypes]  = useState(true);
   const [isLoadingEmps,   setIsLoadingEmps]   = useState(true);
+  const [balanceInfo,     setBalanceInfo]     = useState<LeaveBalance | null | undefined>(undefined);
+  const [checkingBalance, setCheckingBalance] = useState(false);
 
   // Charger types de congés → GET /api/leaves/types/
   useEffect(() => {
@@ -77,6 +79,30 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
       .catch(() => setError("Impossible de charger la liste des employés."))
       .finally(() => setIsLoadingEmps(false));
   }, [contractType]);
+
+  // Vérifier le solde quand employé + type + année sont sélectionnés
+  useEffect(() => {
+    const empId      = parseInt(form.employee_id, 10);
+    const typeId     = parseInt(form.leave_type_id, 10);
+    const year       = form.start_date ? new Date(form.start_date).getFullYear() : new Date().getFullYear();
+    const leaveType  = leaveTypes.find((t) => t.id === typeId);
+
+    if (!empId || !typeId || !leaveType) {
+      setBalanceInfo(undefined);
+      return;
+    }
+    // Pas besoin de vérifier pour les types non payés
+    if (!leaveType.is_paid) {
+      setBalanceInfo(null); // null = pas nécessaire
+      return;
+    }
+
+    setCheckingBalance(true);
+    leaveBalanceService.checkBalance(empId, typeId, year)
+      .then(setBalanceInfo)
+      .catch(() => setBalanceInfo(undefined))
+      .finally(() => setCheckingBalance(false));
+  }, [form.employee_id, form.leave_type_id, form.start_date, leaveTypes]);
 
   // Calcul automatique du nombre de jours
   useEffect(() => {
@@ -183,6 +209,51 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                 <span>{error}</span>
               </motion.div>
             )}
+          </AnimatePresence>
+
+          {/* Info solde */}
+          <AnimatePresence>
+            {checkingBalance && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="flex items-center gap-2 text-xs text-gray-400">
+                <ImSpinner2 className="animate-spin" size={12} /> Vérification du solde…
+              </motion.div>
+            )}
+            {!checkingBalance && balanceInfo === null && form.leave_type_id && form.employee_id && (
+              <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm rounded-xl px-4 py-2.5 flex items-center gap-2">
+                <span>✓</span>
+                <span>Congé non payé — aucun solde requis.</span>
+              </motion.div>
+            )}
+            {!checkingBalance && balanceInfo && balanceInfo.leave_type && (
+              <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className={`text-sm rounded-xl px-4 py-2.5 flex items-center gap-2 border ${
+                  parseFloat(balanceInfo.remaining) <= 0
+                    ? "bg-red-50 border-red-200 text-red-700"
+                    : "bg-emerald-50 border-emerald-100 text-emerald-700"
+                }`}>
+                <span>{parseFloat(balanceInfo.remaining) <= 0 ? "⚠️" : "✓"}</span>
+                <span>
+                  Solde disponible : <strong>{balanceInfo.remaining}j</strong>
+                  {" "}({balanceInfo.leave_type.label})
+                  {parseFloat(balanceInfo.remaining) <= 0 && " — Solde insuffisant"}
+                </span>
+              </motion.div>
+            )}
+            {!checkingBalance && balanceInfo === undefined && form.leave_type_id && form.employee_id && (() => {
+              const lt = leaveTypes.find((t) => t.id === parseInt(form.leave_type_id, 10));
+              return lt?.is_paid ? (
+                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-xl px-4 py-2.5 flex items-start gap-2">
+                  <FiAlertTriangle size={15} className="shrink-0 mt-0.5" />
+                  <span>
+                    Aucun solde défini pour ce type de congé en {new Date().getFullYear()}.
+                    Créez d'abord un solde dans l'onglet <strong>Soldes</strong>.
+                  </span>
+                </motion.div>
+              ) : null;
+            })()}
           </AnimatePresence>
 
           {/* ── Sélection employé ── */}
