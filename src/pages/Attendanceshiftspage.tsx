@@ -291,7 +291,7 @@ function SummaryTable({ rows, mode, isLoading }: {
         <table className="min-w-full text-sm">
           <thead className="bg-camublue-900 text-white sticky top-0 z-10">
             <tr>
-              {["Matricule","Nom complet","Projet / Département","Équipe","Nb jours","Heures trav."].map((h)=>(
+              {["Matricule","Nom complet","Projet / Service","Équipe","Nb jours","Heures trav."].map((h)=>(
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800">{h}</th>
               ))}
               <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800 min-w-[220px]">
@@ -1301,7 +1301,7 @@ export default function AttendanceShiftsPage() {
   const handleExport=()=>{
     if (viewMode==="daily") {
       exportXLSX(`shift_${selectedTeam??"all"}_journalier`, filtered.map((r)=>({
-        Matricule:r.matricule, Nom:r.full_name, Projet:r.project !== "—" ? r.project : "", Département:r.department, Équipe:r.shift_team_label||r.shift_team||"—",
+        Matricule:r.matricule, Nom:r.full_name, Projet:r.project !== "—" ? r.project : "", Service:r.department, Équipe:r.shift_team_label||r.shift_team||"—",
         Statut:r.status, Retard:r.computed_late_minutes>0?`RETARD · ${formatMinutes(r.computed_late_minutes)}`:"Non",
         Entrée:formatTime(r.in_time), Sortie:formatTime(r.out_time),
         "Heure travaillée":r.worked_minutes>0?formatMinutes(r.worked_minutes):"—",
@@ -1311,7 +1311,7 @@ export default function AttendanceShiftsPage() {
       })));
     } else {
       exportXLSX(`shift_${viewMode==="weekly"?"hebdo":"mensuel"}`, filteredSummaryRecords.map((r)=>({
-        Matricule:r.matricule, Nom:r.full_name, Projet:r.project !== "—" ? r.project : "", Département:r.department,
+        Matricule:r.matricule, Nom:r.full_name, Projet:r.project !== "—" ? r.project : "", Service:r.department,
         Équipe:SHIFT_TEAMS.find((t)=>t.key===r.shift_team)?.short||r.shift_team||"—",
         "Nb jours":r.nb_jours,
         "Heures travaillées":formatMinutes(r.worked_minutes)||"0h",
@@ -1321,7 +1321,7 @@ export default function AttendanceShiftsPage() {
   };
 
   const activeTeamCfg = SHIFT_TEAMS.find((t)=>t.key===selectedTeam);
-  const tableHeaders = ["Matricule","Nom","Projet / Département","Équipe","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
+  const tableHeaders = ["Matricule","Nom","Projet / Service","Équipe","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
 
   return (
     <AppLayout>

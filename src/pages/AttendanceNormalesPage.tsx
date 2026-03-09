@@ -338,7 +338,7 @@ function SummaryTable({
         <table className="min-w-full text-sm">
           <thead className="bg-camublue-900 text-white sticky top-0 z-10">
             <tr>
-              {["Matricule","Nom complet","Projet / Département","Nb jours","Heures trav."].map((h) => (
+              {["Matricule","Nom complet","Projet / Service","Nb jours","Heures trav."].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800">{h}</th>
               ))}
               <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800 min-w-[220px]">
@@ -1434,7 +1434,7 @@ export default function AttendanceNormalesPage() {
   const handleExport = () => {
     if (viewMode === "daily") {
       exportXLSX("pointage_normaux_journalier", filtered.map((r) => ({
-        Matricule: r.matricule, Nom: r.full_name, Projet: r.project !== "—" ? r.project : "", Département: r.department, Statut: r.status,
+        Matricule: r.matricule, Nom: r.full_name, Projet: r.project !== "—" ? r.project : "", Service: r.department, Statut: r.status,
         Retard: r.computed_late_minutes > 0 ? `RETARD · ${formatMinutes(r.computed_late_minutes)}` : "Non",
         Entrée: formatTime(r.in_time), Sortie: formatTime(r.out_time),
         "Heure travaillée": r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
@@ -1443,7 +1443,7 @@ export default function AttendanceNormalesPage() {
       })));
     } else {
       exportXLSX(`pointage_normaux_${viewMode === "weekly" ? "hebdo" : "mensuel"}`, summaryRecords.map((r) => ({
-        Matricule: r.matricule, Nom: r.full_name, Projet: r.project !== "—" ? r.project : "", Département: r.department,
+        Matricule: r.matricule, Nom: r.full_name, Projet: r.project !== "—" ? r.project : "", Service: r.department,
         "Nb jours": r.nb_jours,
         "Heures travaillées": formatMinutes(r.worked_minutes) || "0h",
         "% quota (40h)": `${Math.min(100, Math.round((r.worked_minutes / (viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN*4.33))) * 100))}%`,
@@ -1451,7 +1451,7 @@ export default function AttendanceNormalesPage() {
     }
   };
 
-  const tableHeaders = ["Matricule","Nom","Projet / Département","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
+  const tableHeaders = ["Matricule","Nom","Projet / Service","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
   const isActiveLocked = activeSchedule ? isPeriodActive(activeSchedule) : false;
 
   return (
