@@ -10,6 +10,7 @@ import InterimEmployeesPage from "@/pages/InterimEmployeesPage";
 import InterneEmployeesPage from "./pages/InterneEmployeesPage";
 import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
 import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
+import LeavePage from "@/pages/LeavePage";
 
 function App() {
   return (
@@ -95,6 +96,17 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <AttendanceShiftsPage />
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/leaves"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <LeavePage />
               </FirstLoginGuard>
             </ProtectedRoute>
           }
