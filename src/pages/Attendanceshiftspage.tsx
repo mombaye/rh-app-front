@@ -846,66 +846,89 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
 }
 
 // ─── Parsing Excel planning ───────────────────────────────────────────────────
-function parsePlanningExcel(buffer: ArrayBuffer): PlanningEntry[] {
-  const wb = XLSX.read(buffer, { type: "array", cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as any[][];
+interface ParsedSheet {
+  name:    string;
+  count:   number;
+  dateMin: string;
+  dateMax: string;
+}
+interface ParsedPlanning {
+  entries: PlanningEntry[];
+  sheets:  ParsedSheet[];
+}
 
+/** Convertit une valeur de cellule en ISO date string YYYY-MM-DD */
+function cellToDateStr(cell: unknown): string {
+  if (cell instanceof Date) {
+    return `${cell.getFullYear()}-${String(cell.getMonth()+1).padStart(2,"0")}-${String(cell.getDate()).padStart(2,"0")}`;
+  }
+  if (typeof cell === "number" && cell > 40000) {
+    const d = new Date(Math.round((cell - 25569) * 86400 * 1000));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
+  }
+  if (typeof cell === "string" && cell.trim()) {
+    const s = cell.trim();
+    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (m) return `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+  }
+  return "";
+}
+
+/** Détecte le type de shift depuis un libellé (ex: "08H-16H") */
+function detectShiftLabel(label: string): ShiftTeamKey | null {
+  const s = label.toUpperCase().replace(/\s/g, "");
+  if (s.includes("08") && s.includes("16")) return "jour";
+  if (s.includes("16") && s.includes("22")) return "soir1";
+  if (s.includes("22") && s.includes("08")) return "soir2";
+  return null;
+}
+
+/** Parse un seul onglet de planning */
+function parseOneSheet(ws: XLSX.WorkSheet): PlanningEntry[] {
+  const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as unknown[][];
   const entries: PlanningEntry[] = [];
-  const headerRow = rawRows[0] ?? [];
+  const headerRow = (rawRows[0] ?? []) as unknown[];
 
-  // Parse date columns (index 1+)
   const dates: string[] = [];
   for (let c = 1; c < headerRow.length; c++) {
-    const cell = headerRow[c];
-    let ds = "";
-    if (cell instanceof Date) {
-      ds = `${cell.getFullYear()}-${String(cell.getMonth() + 1).padStart(2, "0")}-${String(cell.getDate()).padStart(2, "0")}`;
-    } else if (typeof cell === "number" && cell > 40000) {
-      // Excel serial date
-      const d = new Date(Math.round((cell - 25569) * 86400 * 1000));
-      ds = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-    } else if (typeof cell === "string" && cell.trim()) {
-      const s = cell.trim();
-      // "26/01/2026" → "2026-01-26"
-      const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-      if (m) ds = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
-    }
-    dates.push(ds);
+    dates.push(cellToDateStr(headerRow[c]));
   }
-
-  // Map shift label → shift key
-  const detectShift = (label: string): ShiftTeamKey | null => {
-    const s = label.toUpperCase().replace(/\s/g, "");
-    if (s.includes("08") && s.includes("16")) return "jour";
-    if (s.includes("16") && s.includes("22")) return "soir1";
-    if (s.includes("22") && s.includes("08")) return "soir2";
-    if (s.includes("08H") || s.includes("8H")) return "jour";
-    if (s.includes("16H")) return "soir1";
-    if (s.includes("22H")) return "soir2";
-    return null;
-  };
 
   let currentShift: ShiftTeamKey | null = null;
   for (let row = 1; row < rawRows.length; row++) {
-    const rowData = rawRows[row] as any[];
+    const rowData = rawRows[row] as unknown[];
     const shiftCell = String(rowData[0] ?? "").trim();
     if (shiftCell) {
-      const detected = detectShift(shiftCell);
+      const detected = detectShiftLabel(shiftCell);
       if (detected) currentShift = detected;
     }
     if (!currentShift) continue;
-
     for (let c = 1; c < rowData.length; c++) {
       const name = String(rowData[c] ?? "").trim();
       const date = dates[c - 1];
-      if (name && date) {
-        entries.push({ date, shift_type: currentShift, employee_name: name });
-      }
+      if (name && date) entries.push({ date, shift_type: currentShift, employee_name: name });
     }
   }
-
   return entries;
+}
+
+/** Parse tous les onglets du fichier Excel.
+ *  Chaque onglet représente une période (semaine, mois…) du planning. */
+function parsePlanningExcel(buffer: ArrayBuffer): ParsedPlanning {
+  const wb = XLSX.read(buffer, { type: "array", cellDates: true });
+  const allEntries: PlanningEntry[] = [];
+  const sheets: ParsedSheet[] = [];
+
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    const entries = parseOneSheet(ws);
+    if (!entries.length) continue;          // ignorer les onglets vides
+    const dates = entries.map((e) => e.date).filter(Boolean).sort();
+    sheets.push({ name: sheetName, count: entries.length, dateMin: dates[0], dateMax: dates[dates.length - 1] });
+    allEntries.push(...entries);
+  }
+
+  return { entries: allEntries, sheets };
 }
 
 // ─── Helpers date / planning ──────────────────────────────────────────────────
@@ -1003,26 +1026,28 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
   };
 
   // ── Import ────────────────────────────────────────────────────────────────
-  const [file,     setFile]     = useState<File | null>(null);
-  const [preview,  setPreview]  = useState<PlanningEntry[]>([]);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
-  const [uploaded, setUploaded] = useState(false);
+  const [file,         setFile]         = useState<File | null>(null);
+  const [preview,      setPreview]      = useState<PlanningEntry[]>([]);
+  const [parsedSheets, setParsedSheets] = useState<ParsedSheet[]>([]);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState("");
+  const [uploaded,     setUploaded]     = useState(false);
 
   useEffect(() => {
-    if (open) { setFile(null); setPreview([]); setError(""); setUploaded(false); setAddingCell(null); setNewName(""); }
+    if (open) { setFile(null); setPreview([]); setParsedSheets([]); setError(""); setUploaded(false); setAddingCell(null); setNewName(""); }
   }, [open]);
 
   const handleFile = (f: File | null) => {
-    if (!f) { setFile(null); setPreview([]); return; }
+    if (!f) { setFile(null); setPreview([]); setParsedSheets([]); return; }
     setFile(f); setError("");
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const parsed = parsePlanningExcel(ev.target!.result as ArrayBuffer);
-        if (!parsed.length) { setError("Aucune donnée trouvée dans ce fichier."); setPreview([]); return; }
-        setPreview(parsed);
-      } catch { setError("Erreur lors de la lecture du fichier Excel."); setPreview([]); }
+        const { entries, sheets } = parsePlanningExcel(ev.target!.result as ArrayBuffer);
+        if (!entries.length) { setError("Aucune donnée trouvée dans ce fichier."); setPreview([]); setParsedSheets([]); return; }
+        setPreview(entries);
+        setParsedSheets(sheets);
+      } catch { setError("Erreur lors de la lecture du fichier Excel."); setPreview([]); setParsedSheets([]); }
     };
     reader.readAsArrayBuffer(f);
   };
@@ -1049,6 +1074,28 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
     const dates = new Set(preview.map((e) => e.date));
     return { jour: c.jour, soir1: c.soir1, soir2: c.soir2, dates: dates.size, total: preview.length };
   }, [preview]);
+
+  // Compteurs shift pour le mois affiché
+  const monthShiftCounts = useMemo(() => {
+    const c: Record<string, number> = { jour: 0, soir1: 0, soir2: 0 };
+    entries.forEach((e) => { if (e.shift_type in c) c[e.shift_type]++; });
+    return c;
+  }, [entries]);
+
+  // Helper : initiales d'un nom
+  const initials = (name: string) =>
+    name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? "").slice(0, 2).join("");
+
+  // Helper : numéro de semaine ISO
+  const isoWeek = (dateStr: string): number => {
+    const d = new Date(dateStr + "T00:00:00");
+    const day = d.getDay() || 7;
+    d.setDate(d.getDate() + 4 - day);
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  };
+
+  const MONTHS_SHORT = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
 
   const [y, m] = viewMonth.split("-").map(Number);
 
@@ -1093,116 +1140,175 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
             {tab === "view" && (
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Navigation mois */}
-                <div className="flex items-center justify-between px-5 py-3 shrink-0">
-                  <button onClick={() => setViewMonth(prevMonth(viewMonth))} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
-                    <ChevronLeft className="h-4 w-4 text-slate-500" />
+                <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
+                  <button onClick={() => setViewMonth(prevMonth(viewMonth))}
+                    className="p-2 rounded-xl hover:bg-slate-100 transition text-slate-500 hover:text-slate-700">
+                    <ChevronLeft className="h-4 w-4" />
                   </button>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-800">{MONTHS_FR[m - 1]} {y}</span>
-                    {hasAnyData && (
-                      <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                        {entries.length} assignations
-                      </span>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="font-bold text-slate-800 text-base">{MONTHS_FR[m - 1]} {y}</span>
+                    {hasAnyData ? (
+                      <div className="flex items-center gap-2">
+                        {SHIFT_KEYS.map((s) => monthShiftCounts[s.key] > 0 && (
+                          <span key={s.key} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.bg} ${s.text} border ${s.border}`}>
+                            {s.label} · {monthShiftCounts[s.key]}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">Aucun planning ce mois</span>
                     )}
                   </div>
-                  <button onClick={() => setViewMonth(nextMonth(viewMonth))} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
-                    <ChevronRight className="h-4 w-4 text-slate-500" />
+                  <button onClick={() => setViewMonth(nextMonth(viewMonth))}
+                    className="p-2 rounded-xl hover:bg-slate-100 transition text-slate-500 hover:text-slate-700">
+                    <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>
 
                 {/* Grille planning */}
-                <div className="flex-1 overflow-auto px-4 pb-4">
+                <div className="flex-1 overflow-auto">
                   {loadingVue ? (
                     <div className="flex items-center justify-center py-16 text-slate-400">
                       <Loader2 className="h-6 w-6 animate-spin mr-2" />Chargement…
                     </div>
                   ) : !hasAnyData ? (
                     <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
-                      <CalendarRange className="h-12 w-12 text-slate-200" />
-                      <p className="text-sm font-medium">Aucun planning pour ce mois</p>
+                      <CalendarRange className="h-14 w-14 text-slate-200" />
+                      <p className="text-sm font-medium">Aucun planning importé pour ce mois</p>
                       <button onClick={() => setTab("import")}
                         className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
-                        <Upload className="h-3.5 w-3.5" />Importer un planning
+                        <Upload className="h-3.5 w-3.5" />Importer un planning Excel
                       </button>
                     </div>
                   ) : (
-                    <div className="rounded-xl border border-slate-200 overflow-hidden">
-                      <table className="min-w-full text-xs">
-                        <thead className="sticky top-0 z-10 bg-camublue-900 text-white">
-                          <tr>
-                            <th className="px-3 py-2.5 text-left font-semibold w-24">Date</th>
-                            {SHIFT_KEYS.map((s) => (
-                              <th key={s.key} className={`px-3 py-2.5 text-center font-semibold min-w-[180px]`}>
-                                {s.label}
+                    <table className="min-w-full text-xs border-collapse">
+                      <thead className="sticky top-0 z-10">
+                        <tr className="bg-camublue-900 text-white">
+                          <th className="px-4 py-3 text-left font-semibold w-20 border-r border-white/10">Date</th>
+                          {SHIFT_KEYS.map((s) => {
+                            const team = SHIFT_TEAMS.find((t) => t.key === s.key);
+                            return (
+                              <th key={s.key} className="px-4 py-3 text-center font-semibold min-w-[220px] border-r border-white/10 last:border-r-0">
+                                <div className="flex items-center justify-center gap-2">
+                                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${team?.dot}`} />
+                                  <span>{s.label}</span>
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${s.bg} ${s.text} opacity-90`}>
+                                    {monthShiftCounts[s.key] ?? 0}
+                                  </span>
+                                </div>
                               </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {monthDays.map((date) => {
+                            );
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          let lastWeek = -1;
+                          return monthDays.map((date) => {
                             const dayData = grouped[date];
                             const dateObj = new Date(date + "T00:00:00");
                             const isToday = date === todayISO();
                             const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
                             const hasEntries = dayData && SHIFT_KEYS.some((s) => (dayData[s.key]?.length ?? 0) > 0);
-                            if (!hasEntries && !isToday) return null; // masquer jours vides sauf aujourd'hui
+                            if (!hasEntries && !isToday) return null;
+
+                            // Séparateur de semaine
+                            const week = isoWeek(date);
+                            const showWeekSep = week !== lastWeek;
+                            lastWeek = week;
+
                             return (
-                              <tr key={date} className={isToday ? "bg-blue-50/60" : isWeekend ? "bg-slate-50/60" : ""}>
-                                <td className="px-3 py-2 font-medium text-slate-600 whitespace-nowrap">
-                                  <span className={`text-xs font-semibold ${isToday ? "text-blue-600" : "text-slate-400"}`}>
-                                    {DAYS_FR[dateObj.getDay()]}
-                                  </span>
-                                  <span className={`ml-1.5 font-bold ${isToday ? "text-blue-700" : "text-slate-700"}`}>
-                                    {dateObj.getDate()}
-                                  </span>
-                                </td>
-                                {SHIFT_KEYS.map((s) => {
-                                  const cellEntries = dayData?.[s.key] ?? [];
-                                  const isAdding = addingCell?.date === date && addingCell?.shift === s.key;
-                                  return (
-                                    <td key={s.key} className={`px-2 py-1.5 align-top`}>
-                                      <div className="flex flex-wrap gap-1">
-                                        {cellEntries.map((e) => (
-                                          <span key={e.employee_name}
-                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text} border ${s.border}`}>
-                                            {e.employee_name}
-                                            <button onClick={() => handleRemove(e)}
-                                              className="ml-0.5 hover:text-red-600 transition text-current opacity-60 hover:opacity-100">
-                                              <X className="h-2.5 w-2.5" />
-                                            </button>
-                                          </span>
-                                        ))}
-                                        {isAdding ? (
-                                          <div className="flex items-center gap-1">
-                                            <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
-                                              onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAddingCell(null); setNewName(""); } }}
-                                              placeholder="Nom employé…"
-                                              className="text-xs border border-slate-300 rounded-lg px-2 py-0.5 w-32 focus:ring-1 focus:ring-camublue-900 focus:outline-none" />
-                                            <button onClick={handleAdd} disabled={saving || !newName.trim()}
-                                              className="p-0.5 rounded text-green-600 hover:bg-green-100 disabled:opacity-40">
-                                              <Check className="h-3 w-3" />
-                                            </button>
-                                            <button onClick={() => { setAddingCell(null); setNewName(""); }}
-                                              className="p-0.5 rounded text-slate-400 hover:bg-slate-100">
-                                              <X className="h-3 w-3" />
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          <button onClick={() => { setAddingCell({ date, shift: s.key }); setNewName(""); }}
-                                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition border border-dashed border-slate-300`}>
-                                            <Plus className="h-2.5 w-2.5" />Ajouter
-                                          </button>
-                                        )}
-                                      </div>
+                              <>
+                                {showWeekSep && (
+                                  <tr key={`week-${week}`} className="bg-slate-100">
+                                    <td colSpan={4} className="px-4 py-1">
+                                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                        Semaine {week}
+                                      </span>
                                     </td>
-                                  );
-                                })}
-                              </tr>
+                                  </tr>
+                                )}
+                                <tr key={date}
+                                  className={`border-b transition-colors ${
+                                    isToday       ? "border-blue-200 bg-blue-50/40"
+                                    : isWeekend   ? "border-slate-100 bg-slate-50/50"
+                                    : "border-slate-100 hover:bg-slate-50/60"
+                                  }`}>
+                                  {/* Colonne date */}
+                                  <td className={`py-2 px-2 border-r border-slate-100 align-middle ${isToday ? "border-r-blue-200" : ""}`}>
+                                    <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl mx-auto ${isToday ? "bg-blue-600 text-white shadow-md shadow-blue-200" : isWeekend ? "bg-slate-200/70 text-slate-500" : "bg-slate-100 text-slate-600"}`}>
+                                      <span className="text-[9px] font-bold uppercase tracking-wider leading-none">{DAYS_FR[dateObj.getDay()]}</span>
+                                      <span className="text-xl font-black leading-tight">{dateObj.getDate()}</span>
+                                      <span className="text-[9px] font-semibold leading-none opacity-70">{MONTHS_SHORT[dateObj.getMonth()]}</span>
+                                    </div>
+                                  </td>
+
+                                  {/* Colonnes shifts */}
+                                  {SHIFT_KEYS.map((s) => {
+                                    const cellEntries = dayData?.[s.key] ?? [];
+                                    const isAdding = addingCell?.date === date && addingCell?.shift === s.key;
+                                    const isEmpty = cellEntries.length === 0 && !isAdding;
+                                    return (
+                                      <td key={s.key} className={`px-3 py-2 align-top border-r border-slate-100 last:border-r-0 ${isAdding ? `${s.bg}/60` : ""}`}>
+                                        <div className="flex flex-wrap gap-1 min-h-[28px]">
+                                          {/* Chips employés */}
+                                          {cellEntries.map((e) => (
+                                            <span key={e.employee_name} title={e.employee_name}
+                                              className={`group inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full text-xs font-semibold ${s.bg} ${s.text} border ${s.border} shadow-sm`}>
+                                              <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-[9px] font-black shrink-0 ${s.text}`}>
+                                                {initials(e.employee_name)}
+                                              </span>
+                                              <span className="max-w-[90px] truncate">{e.employee_name}</span>
+                                              <button onClick={() => handleRemove(e)}
+                                                className="ml-0.5 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all shrink-0">
+                                                <X className="h-2.5 w-2.5" />
+                                              </button>
+                                            </span>
+                                          ))}
+
+                                          {/* Placeholder vide */}
+                                          {isEmpty && !isAdding && (
+                                            <span className="text-[10px] text-slate-300 italic self-center">Aucun</span>
+                                          )}
+
+                                          {/* Formulaire d'ajout inline */}
+                                          {isAdding ? (
+                                            <div className="flex items-center gap-1 w-full mt-0.5">
+                                              <input autoFocus value={newName}
+                                                onChange={(e) => setNewName(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                  if (e.key === "Enter") handleAdd();
+                                                  if (e.key === "Escape") { setAddingCell(null); setNewName(""); }
+                                                }}
+                                                placeholder="Nom de l'employé…"
+                                                className={`flex-1 text-xs border-2 ${s.border} rounded-lg px-2 py-1 bg-white focus:ring-2 focus:ring-offset-1 focus:outline-none min-w-0`} />
+                                              <button onClick={handleAdd} disabled={saving || !newName.trim()}
+                                                className="p-1 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-40 shrink-0">
+                                                <Check className="h-3 w-3" />
+                                              </button>
+                                              <button onClick={() => { setAddingCell(null); setNewName(""); }}
+                                                className="p-1 rounded-lg bg-slate-200 text-slate-500 hover:bg-slate-300 shrink-0">
+                                                <X className="h-3 w-3" />
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <button
+                                              onClick={() => { setAddingCell({ date, shift: s.key }); setNewName(""); }}
+                                              className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold text-slate-400 hover:${s.bg} hover:${s.text} transition-all border border-dashed border-slate-200 hover:border-transparent`}>
+                                              <Plus className="h-2.5 w-2.5" />Ajouter
+                                            </button>
+                                          )}
+                                        </div>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              </>
                             );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                          });
+                        })()}
+                      </tbody>
+                    </table>
                   )}
                 </div>
               </div>
@@ -1214,58 +1320,74 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                 {/* Drop zone */}
                 <label className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl p-8 cursor-pointer transition-all ${file ? "border-green-400 bg-green-50" : "border-slate-200 bg-slate-50 hover:border-camublue-900 hover:bg-camublue-900/5"}`}>
                   <Upload className={`h-8 w-8 ${file ? "text-green-600" : "text-slate-300"}`} />
-                  {file
-                    ? <><p className="text-sm font-semibold text-green-700">{file.name}</p><p className="text-xs text-green-600">{preview.length} assignations lues</p></>
-                    : <><p className="text-sm font-semibold text-slate-600">Cliquer pour choisir un fichier Excel</p><p className="text-xs text-slate-400">.xlsx, .xls — Colonne A = shift, colonnes B+ = dates</p></>}
+                  {file ? (
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-green-700">{file.name}</p>
+                      <p className="text-xs text-green-600 mt-0.5">
+                        {parsedSheets.length} onglet{parsedSheets.length > 1 ? "s" : ""} · {stats.total} assignations lues
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-slate-600">Cliquer pour choisir un fichier Excel</p>
+                      <p className="text-xs text-slate-400 mt-1">.xlsx, .xls — Plusieurs onglets supportés</p>
+                      <p className="text-xs text-slate-400">Colonne A = shift · Colonnes B+ = dates avec employés</p>
+                    </div>
+                  )}
                   <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
                 </label>
 
+                {/* Résumé par onglet Excel */}
+                {parsedSheets.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Onglets détectés</p>
+                    <div className="grid gap-2">
+                      {parsedSheets.map((sheet) => (
+                        <div key={sheet.name} className="flex items-center justify-between px-4 py-3 rounded-xl bg-slate-50 border border-slate-200">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center shrink-0">
+                              <FileSpreadsheet className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-700">{sheet.name}</p>
+                              <p className="text-xs text-slate-400 font-mono">{sheet.dateMin} → {sheet.dateMax}</p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-bold text-slate-600 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full">
+                            {sheet.count} lignes
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Compteurs globaux */}
                 {preview.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
-                      { label: "Jours",    value: stats.dates, color: "bg-blue-50 text-blue-700" },
-                      { label: "08H-16H",  value: stats.jour,  color: "bg-teal-50 text-teal-700" },
-                      { label: "16H-22H",  value: stats.soir1, color: "bg-yellow-50 text-yellow-700" },
-                      { label: "22H-08H",  value: stats.soir2, color: "bg-orange-50 text-orange-700" },
+                      { label: "Jours couverts", value: stats.dates,  color: "bg-blue-50 text-blue-700 border-blue-200" },
+                      { label: "08H-16H",         value: stats.jour,   color: "bg-teal-50 text-teal-700 border-teal-200" },
+                      { label: "16H-22H",         value: stats.soir1,  color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+                      { label: "22H-08H",         value: stats.soir2,  color: "bg-orange-50 text-orange-700 border-orange-200" },
                     ].map((s) => (
-                      <div key={s.label} className={`rounded-xl px-3 py-2 text-center ${s.color}`}>
-                        <p className="text-lg font-bold">{s.value}</p><p className="text-xs font-medium">{s.label}</p>
+                      <div key={s.label} className={`rounded-xl px-3 py-2.5 text-center border ${s.color}`}>
+                        <p className="text-xl font-black">{s.value}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide mt-0.5 opacity-80">{s.label}</p>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {preview.length > 0 && (
-                  <div className="rounded-xl border border-slate-200 overflow-hidden">
-                    <div className="bg-camublue-900 text-white px-3 py-2 text-xs font-semibold flex justify-between">
-                      <span>Aperçu (5 premiers)</span><span>{stats.total} lignes au total</span>
-                    </div>
-                    <table className="min-w-full text-xs">
-                      <thead className="bg-slate-50">
-                        <tr>{["Date","Shift","Employé"].map((h) => <th key={h} className="px-3 py-2 text-left text-slate-500 font-semibold">{h}</th>)}</tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {preview.slice(0, 5).map((e, i) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="px-3 py-1.5 font-mono">{e.date}</td>
-                            <td className="px-3 py-1.5"><ShiftTeamPill teamKey={e.shift_type as ShiftTeamKey} /></td>
-                            <td className="px-3 py-1.5 font-medium">{e.employee_name}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
                 {error && <p className="text-sm text-red-500 font-medium bg-red-50 rounded-xl px-4 py-3 border border-red-100">⚠️ {error}</p>}
 
-                <div className="flex gap-3">
-                  <button onClick={onClose} className="flex-1 py-2 rounded-2xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Annuler</button>
+                <div className="flex gap-3 pt-1">
+                  <button onClick={onClose} className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Annuler</button>
                   <button onClick={handleUpload} disabled={!preview.length || loading || uploaded}
-                    className={`flex-1 py-2 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${uploaded ? "bg-emerald-500 text-white" : "bg-camublue-900 hover:bg-camublue-800 text-white"}`}>
-                    {loading  ? <><Loader2 className="h-4 w-4 animate-spin" />Import…</>
-                   : uploaded ? <><CheckCircle className="h-4 w-4" />Importé !</>
-                              : <><Upload className="h-4 w-4" />Importer {stats.total} lignes</>}
+                    className={`flex-1 py-2.5 rounded-2xl text-sm font-bold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${uploaded ? "bg-emerald-500 text-white" : "bg-camublue-900 hover:bg-camublue-800 text-white"}`}>
+                    {loading  ? <><Loader2 className="h-4 w-4 animate-spin" />Importation…</>
+                   : uploaded ? <><CheckCircle className="h-4 w-4" />Importé avec succès !</>
+                              : <><Upload className="h-4 w-4" />Importer {stats.total} assignations</>}
                   </button>
                 </div>
               </div>
