@@ -21,10 +21,12 @@ const STATUS_CONFIG: Record<
   LeaveStatus,
   { label: string; color: string; bg: string; dotClass: string }
 > = {
-  PENDING:   { label: "En attente", color: "#f59e0b", bg: "#fffbeb", dotClass: "bg-amber-400"   },
-  APPROVED:  { label: "Approuvé",   color: "#10b981", bg: "#ecfdf5", dotClass: "bg-emerald-500"  },
-  REJECTED:  { label: "Rejeté",     color: "#ef4444", bg: "#fef2f2", dotClass: "bg-red-500"      },
-  CANCELLED: { label: "Annulé",     color: "#64748b", bg: "#f8fafc", dotClass: "bg-slate-400"    },
+  PENDING:        { label: "En attente",          color: "#f59e0b", bg: "#fffbeb", dotClass: "bg-amber-400"   },
+  PENDING_SECOND: { label: "En att. 2ème valid.", color: "#7c3aed", bg: "#f5f3ff", dotClass: "bg-violet-500"  },
+  APPROVED:       { label: "Approuvé",            color: "#10b981", bg: "#ecfdf5", dotClass: "bg-emerald-500" },
+  REJECTED:       { label: "Rejeté",              color: "#ef4444", bg: "#fef2f2", dotClass: "bg-red-500"     },
+  CANCELLED:      { label: "Annulé",              color: "#64748b", bg: "#f8fafc", dotClass: "bg-slate-400"   },
+  REVOKED:        { label: "Révoqué",             color: "#b45309", bg: "#fff7ed", dotClass: "bg-orange-500"  },
 };
 
 // Convertit le filtre UI → LeaveStatus API

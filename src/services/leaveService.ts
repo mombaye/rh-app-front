@@ -11,6 +11,8 @@ import {
   LeaveRequestFilters,
   LeaveSummary,
   LeaveCalendarEntry,
+  ApprovePayload,
+  RevokePayload,
 } from "../types/leave";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
@@ -195,13 +197,14 @@ export const leaveRequestService = {
 
   /**
    * POST /api/leaves/requests/<id>/approve/
-   * Enregistré par le router via @action(detail=True, url_path="approve")
-   * Backend : status → APPROVED, déduit balance.taken
+   * Body optionnel :
+   *   - reviewer_id        : ID employé validateur
+   *   - second_approver_id : si présent → passe en PENDING_SECOND
    */
-  approve: async (id: number): Promise<LeaveRequest> => {
+  approve: async (id: number, payload?: ApprovePayload): Promise<LeaveRequest> => {
     const res = await axios.post(
       `${API}/requests/${id}/approve/`,
-      {},
+      payload ?? {},
       { headers: getAuthHeaders() }
     );
     return res.data;
@@ -251,13 +254,26 @@ export const leaveRequestService = {
 
   /**
    * GET /api/leaves/requests/stats/summary/
-   * Route manuelle dans urls.py : path('stats/summary/', ...)
-   * Retourne : total, pending, approved, rejected, cancelled, total_days_approved
+   * Retourne : total, pending, approved, rejected, cancelled, revoked, total_days_approved
    */
   getSummary: async (): Promise<LeaveSummary> => {
     const res = await axios.get(`${API}/requests/stats/summary/`, {
       headers: getAuthHeaders(),
     });
+    return res.data;
+  },
+
+  /**
+   * POST /api/leaves/requests/<id>/revoke/
+   * Body : { revoke_reason, revoker_id?, recall_date? }
+   * Révoque un congé approuvé (rappel d'urgence) et restitue les jours restants.
+   */
+  revoke: async (id: number, payload: RevokePayload): Promise<LeaveRequest & { days_restored: string }> => {
+    const res = await axios.post(
+      `${API}/requests/${id}/revoke/`,
+      payload,
+      { headers: getAuthHeaders() }
+    );
     return res.data;
   },
 };
