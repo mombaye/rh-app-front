@@ -198,10 +198,18 @@ export const leaveRequestService = {
    * Enregistré par le router via @action(detail=True, url_path="approve")
    * Backend : status → APPROVED, déduit balance.taken
    */
-  approve: async (id: number): Promise<LeaveRequest> => {
+  /**
+   * Approbation avec support du workflow double validation (N+2).
+   * - reviewer_id        : ID de l'approbateur courant (optionnel)
+   * - second_approver_id : si fourni → passe en PENDING_SECOND et notifie le N+2
+   */
+  approve: async (
+    id: number,
+    options?: { reviewer_id?: number; second_approver_id?: number }
+  ): Promise<LeaveRequest> => {
     const res = await axios.post(
       `${API}/requests/${id}/approve/`,
-      {},
+      options || {},
       { headers: getAuthHeaders() }
     );
     return res.data;
@@ -251,13 +259,30 @@ export const leaveRequestService = {
 
   /**
    * GET /api/leaves/requests/stats/summary/
-   * Route manuelle dans urls.py : path('stats/summary/', ...)
-   * Retourne : total, pending, approved, rejected, cancelled, total_days_approved
+   * Retourne : total, pending, approved, rejected, cancelled, revoked, total_days_approved
    */
   getSummary: async (): Promise<LeaveSummary> => {
     const res = await axios.get(`${API}/requests/stats/summary/`, {
       headers: getAuthHeaders(),
     });
+    return res.data;
+  },
+
+  /**
+   * POST /api/leaves/requests/<id>/revoke/
+   * Révocation d'urgence : rappel employé en congé approuvé.
+   * Body : { revoke_reason, recall_date?, revoker_id? }
+   * Retourne la demande mise à jour + days_restored
+   */
+  revoke: async (
+    id: number,
+    data: { revoke_reason: string; recall_date?: string; revoker_id?: number }
+  ): Promise<LeaveRequest & { days_restored: string }> => {
+    const res = await axios.post(
+      `${API}/requests/${id}/revoke/`,
+      data,
+      { headers: getAuthHeaders() }
+    );
     return res.data;
   },
 };

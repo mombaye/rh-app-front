@@ -10,13 +10,15 @@ import { FaClipboardList, FaCheckCircle, FaClock } from "react-icons/fa";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
 
-type StatusFilter = "ALL" | "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+type StatusFilter = "ALL" | "PENDING" | "PENDING_SECOND" | "APPROVED" | "REJECTED" | "CANCELLED" | "REVOKED";
 
 const STATUS_CONFIG: Record<LeaveStatus, { label: string; color: string; bg: string; dotClass: string }> = {
-  PENDING:   { label: "En attente", color: "#f59e0b", bg: "#fffbeb", dotClass: "bg-amber-400"   },
-  APPROVED:  { label: "Approuvé",   color: "#10b981", bg: "#ecfdf5", dotClass: "bg-emerald-500" },
-  REJECTED:  { label: "Rejeté",     color: "#ef4444", bg: "#fef2f2", dotClass: "bg-red-500"     },
-  CANCELLED: { label: "Annulé",     color: "#64748b", bg: "#f8fafc", dotClass: "bg-slate-400"   },
+  PENDING:        { label: "En attente",          color: "#f59e0b", bg: "#fffbeb", dotClass: "bg-amber-400"   },
+  PENDING_SECOND: { label: "2ème approbation",     color: "#3b82f6", bg: "#eff6ff", dotClass: "bg-blue-400"    },
+  APPROVED:       { label: "Approuvé",             color: "#10b981", bg: "#ecfdf5", dotClass: "bg-emerald-500" },
+  REJECTED:       { label: "Rejeté",               color: "#ef4444", bg: "#fef2f2", dotClass: "bg-red-500"     },
+  CANCELLED:      { label: "Annulé",               color: "#64748b", bg: "#f8fafc", dotClass: "bg-slate-400"   },
+  REVOKED:        { label: "Révoqué (urgence)",    color: "#f97316", bg: "#fff7ed", dotClass: "bg-orange-400"  },
 };
 
 const FILTER_OPTIONS: {
@@ -41,6 +43,13 @@ const FILTER_OPTIONS: {
     btnClass: "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100",
   },
   {
+    value: "PENDING_SECOND",
+    label: "2ème approbation",
+    icon: <FaClock size={13} className="text-blue-500" />,
+    activeClass: "text-blue-700 bg-blue-50",
+    btnClass: "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100",
+  },
+  {
     value: "APPROVED",
     label: "Approuvées",
     icon: <FaCheckCircle size={13} className="text-emerald-500" />,
@@ -61,6 +70,13 @@ const FILTER_OPTIONS: {
     activeClass: "text-slate-700 bg-slate-50",
     btnClass: "bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100",
   },
+  {
+    value: "REVOKED",
+    label: "Révoquées",
+    icon: <FaClipboardList size={13} className="text-orange-400" />,
+    activeClass: "text-orange-700 bg-orange-50",
+    btnClass: "bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100",
+  },
 ];
 
 function fmtDate(d?: string | null): string {
@@ -79,9 +95,12 @@ export default function LeavePage() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<LeaveRequest | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
+  const [rejectReason,  setRejectReason]  = useState("");
+  const [revokeReason,  setRevokeReason]  = useState("");
+  const [recallDate,    setRecallDate]    = useState("");
+  const [showRevokeFor, setShowRevokeFor] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [contractType, setContractType] = useState<ContractType>("INTERNE");
+  const [contractType, setContractType]   = useState<ContractType>("INTERNE");
 
   const currentFilter = FILTER_OPTIONS.find((o) => o.value === statusFilter)!;
 
@@ -154,8 +173,27 @@ export default function LeavePage() {
     } finally { setActionLoading(false); }
   };
 
-  const openDetail = (r: LeaveRequest) => { setSelected(r); setRejectReason(""); };
-  const closeModal = () => { setSelected(null); setRejectReason(""); };
+  const handleRevoke = async (id: number) => {
+    if (!revokeReason.trim()) { toast.error("Le motif de révocation est obligatoire."); return; }
+    setActionLoading(true);
+    try {
+      const result = await leaveRequestService.revoke(id, {
+        revoke_reason: revokeReason.trim(),
+        recall_date:   recallDate || undefined,
+      });
+      toast.success(`Congé révoqué. ${result.days_restored} jour(s) restitués.`);
+      await fetchRequests();
+      setShowRevokeFor(null);
+      setRevokeReason("");
+      setRecallDate("");
+      setSelected(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors de la révocation");
+    } finally { setActionLoading(false); }
+  };
+
+  const openDetail = (r: LeaveRequest) => { setSelected(r); setRejectReason(""); setShowRevokeFor(null); };
+  const closeModal = () => { setSelected(null); setRejectReason(""); setShowRevokeFor(null); setRevokeReason(""); setRecallDate(""); };
 
   const pageTitle = "Congés & Absences";
 
@@ -385,13 +423,22 @@ export default function LeavePage() {
                                   </>
                                 )}
                                 {r.status === "APPROVED" && (
-                                  <button
-                                    onClick={() => handleCancel(r.id)}
-                                    disabled={actionLoading}
-                                    className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-semibold rounded-lg transition disabled:opacity-50 whitespace-nowrap"
-                                  >
-                                    Annuler
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => handleCancel(r.id)}
+                                      disabled={actionLoading}
+                                      className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-semibold rounded-lg transition disabled:opacity-50 whitespace-nowrap"
+                                    >
+                                      Annuler
+                                    </button>
+                                    <button
+                                      onClick={() => { openDetail(r); setShowRevokeFor(r.id); }}
+                                      disabled={actionLoading}
+                                      className="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 whitespace-nowrap"
+                                    >
+                                      ⚠ Révoquer
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -520,15 +567,86 @@ export default function LeavePage() {
                     </div>
                   )}
 
-                  {selected.status === "APPROVED" && (
-                    <button
-                      disabled={actionLoading}
-                      onClick={() => handleCancel(selected.id)}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-semibold rounded-xl transition disabled:opacity-50"
-                    >
-                      {actionLoading && <ImSpinner2 className="animate-spin" size={13} />}
-                      Annuler cette demande
-                    </button>
+                  {selected.status === "APPROVED" && !showRevokeFor && (
+                    <div className="flex gap-3">
+                      <button
+                        disabled={actionLoading}
+                        onClick={() => handleCancel(selected.id)}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-semibold rounded-xl transition disabled:opacity-50"
+                      >
+                        {actionLoading && <ImSpinner2 className="animate-spin" size={13} />}
+                        Annuler
+                      </button>
+                      <button
+                        onClick={() => setShowRevokeFor(selected.id)}
+                        className="flex-1 py-2.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-xl transition"
+                      >
+                        ⚠ Révoquer (urgence)
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Formulaire de révocation */}
+                  {selected.status === "APPROVED" && showRevokeFor === selected.id && (
+                    <div className="space-y-3 bg-orange-50 border border-orange-200 rounded-xl p-4">
+                      <p className="text-sm font-semibold text-orange-700">Révocation d'urgence</p>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 block mb-1">
+                          Date de rappel effectif
+                        </label>
+                        <input
+                          type="date"
+                          className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                          value={recallDate}
+                          min={selected.start_date}
+                          max={selected.end_date}
+                          onChange={(e) => setRecallDate(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 block mb-1">
+                          Motif de révocation <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          value={revokeReason}
+                          onChange={(e) => setRevokeReason(e.target.value)}
+                          placeholder="Ex : Urgence projet critique nécessitant la présence de l'employé…"
+                          rows={2}
+                          className="w-full border border-gray-200 rounded-xl p-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200 resize-none transition"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setShowRevokeFor(null); setRevokeReason(""); setRecallDate(""); }}
+                          className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-xl transition"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          disabled={actionLoading || !revokeReason.trim()}
+                          onClick={() => handleRevoke(selected.id)}
+                          className="flex-1 flex items-center justify-center gap-2 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50"
+                        >
+                          {actionLoading && <ImSpinner2 className="animate-spin" size={13} />}
+                          Confirmer la révocation
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Infos révocation (statut REVOKED) */}
+                  {selected.status === "REVOKED" && (
+                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-1">
+                      <p className="text-xs font-semibold text-orange-600 uppercase">Congé révoqué</p>
+                      {selected.revoke_reason && (
+                        <p className="text-sm text-orange-800"><strong>Motif :</strong> {selected.revoke_reason}</p>
+                      )}
+                      {selected.days_remaining_at_revocation && (
+                        <p className="text-sm text-green-700">
+                          <strong>Jours restitués :</strong> {selected.days_remaining_at_revocation}j
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               </motion.div>

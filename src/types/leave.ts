@@ -11,6 +11,7 @@ export interface LeaveType {
   is_paid:                 boolean;
   requires_justification:  boolean;
   color:                   string;
+  monthly_accrual:         string;  // accrual automatique mensuel (ex: "2.0")
 }
 
 // ── EmployeeMini ── mirrors EmployeeMiniSerializer ────────────────────────────
@@ -24,7 +25,13 @@ export interface EmployeeMini {
 }
 
 // ── LeaveStatus ── mirrors LeaveRequest.Status choices ───────────────────────
-export type LeaveStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+export type LeaveStatus =
+  | "PENDING"
+  | "PENDING_SECOND"
+  | "APPROVED"
+  | "REJECTED"
+  | "CANCELLED"
+  | "REVOKED";
 
 // ── LeaveRequest ── mirrors LeaveRequestSerializer ───────────────────────────
 export interface LeaveRequest {
@@ -38,15 +45,24 @@ export interface LeaveRequest {
   motif:         string;
   status:        LeaveStatus;
   status_label:  string;        // get_status_display()
+  // 1ère validation
   reviewed_by:   EmployeeMini | null;
   reviewed_at:   string | null;
   reject_reason: string;
+  // 2ème validation
+  requires_second_approval: boolean;
+  second_reviewer:          EmployeeMini | null;
+  second_reviewed_at:       string | null;
+  // Révocation
+  revoke_reason:                 string;
+  revoked_by:                    EmployeeMini | null;
+  revoked_at:                    string | null;
+  days_remaining_at_revocation:  string | null;
   created_at:    string;
   updated_at:    string;
 }
 
 // ── LeaveRequestCreate ── mirrors LeaveRequestCreateSerializer ────────────────
-// Champs attendus par POST /api/leaves/requests/
 export interface LeaveRequestCreate {
   employee_id:   number;
   leave_type_id: number;
@@ -54,8 +70,6 @@ export interface LeaveRequestCreate {
   end_date:      string;
   days:          number;
   motif:         string;
-  // contract_type n'est PAS envoyé au backend (pas dans le serializer)
-  // il est utilisé uniquement côté frontend pour le filtrage GET
 }
 
 // ── LeaveBalance ── mirrors LeaveBalanceSerializer ───────────────────────────
@@ -82,6 +96,7 @@ export interface LeaveSummary {
   approved:             number;
   rejected:             number;
   cancelled:            number;
+  revoked:              number;
   total_days_approved:  number;
 }
 
@@ -97,13 +112,12 @@ export interface LeaveCalendarEntry {
 }
 
 // ── LeaveRequestFilters ── query params supportés par get_queryset() ──────────
-// NB : contract_type est géré côté frontend uniquement (pas de filtre Django)
 export interface LeaveRequestFilters {
   status?:        LeaveStatus;
   employee_id?:   number;
   leave_type_id?: number;
   start_date?:    string;
   end_date?:      string;
-  department?:    string;       // filtre sur employee__service__icontains
-  contract_type?: ContractType; // filtré côté frontend après réception
+  department?:    string;
+  contract_type?: ContractType; // filtré côté frontend uniquement
 }
