@@ -299,7 +299,7 @@ function ReplacementBadge() {
 function RestDayBadge() {
   return (
     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 ring-1 ring-slate-200 whitespace-nowrap">
-      Repos
+      Pas de service
     </span>
   );
 }
@@ -1247,8 +1247,9 @@ export default function AttendanceShiftsPage() {
   const [selectedEmployee,   setSelectedEmployee]   = useState<FlatRecord | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [sendingAlert, setSendingAlert] = useState(false);
-  const [scheduleOpen,     setScheduleOpen]     = useState(false);
-  const [planningOpen,     setPlanningOpen]     = useState(false);
+  const [scheduleOpen,       setScheduleOpen]       = useState(false);
+  const [planningOpen,       setPlanningOpen]       = useState(false);
+  const [showNotScheduled,   setShowNotScheduled]   = useState(false);
   const [week,  setWeek]  = useState(isoWeekNow());
   const [month, setMonth] = useState(yyyyMmToday());
   const currentWeek = isoWeekNow();
@@ -1490,25 +1491,40 @@ export default function AttendanceShiftsPage() {
 
   const isLateRecord = (r: FlatRecord) => r.computed_late_minutes > 0;
 
-  const filtered = useMemo(() => allRecords.filter((r) => {
-    if (statusFilter === "late")   { if (!isLateRecord(r)) return false; }
-    else if (statusFilter === "deficit") { if (r.deficit_minutes <= 0) return false; }
-    else if (statusFilter !== "all")     { if (r.status !== statusFilter) return false; }
-    if (!searchQ) return true;
+  const matchSearch = (r: FlatRecord, q: string) =>
+    !q || r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q) ||
+    r.department.toLowerCase().includes(q) || (r.shift_team_label ?? "").toLowerCase().includes(q) ||
+    r.project.toLowerCase().includes(q);
+
+  // Tableau principal : employés planifiés uniquement
+  const filtered = useMemo(() => {
     const q = searchQ.toLowerCase();
-    return r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q) ||
-           r.department.toLowerCase().includes(q) || (r.shift_team_label ?? "").toLowerCase().includes(q) ||
-           r.project.toLowerCase().includes(q);
-  }), [allRecords, statusFilter, searchQ]);
+    return allRecords.filter((r) => {
+      if (r.not_scheduled_rest) return false; // toujours dans la section séparée
+      if (statusFilter === "late")    { if (!isLateRecord(r)) return false; }
+      else if (statusFilter === "deficit") { if (r.deficit_minutes <= 0) return false; }
+      else if (statusFilter === "absent")  { if (r.status !== "absent") return false; }
+      else if (statusFilter !== "all")     { if (r.status !== statusFilter) return false; }
+      return matchSearch(r, q);
+    });
+  }, [allRecords, statusFilter, searchQ]);
+
+  // Section séparée : non planifiés ce jour (Pas de service)
+  const notScheduledRows = useMemo(() => {
+    const q = searchQ.toLowerCase();
+    return allRecords.filter((r) => r.not_scheduled_rest && matchSearch(r, q));
+  }, [allRecords, searchQ]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageData   = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const filterCount = (key: StatusFilter) => {
-    if (key === "all")    return allRecords.length;
-    if (key === "late")   return allRecords.filter(isLateRecord).length;
-    if (key === "deficit")return allRecords.filter((r) => r.deficit_minutes > 0).length;
-    return allRecords.filter((r) => r.status === key).length;
+    const scheduled = allRecords.filter((r) => !r.not_scheduled_rest);
+    if (key === "all")    return scheduled.length;
+    if (key === "late")   return scheduled.filter(isLateRecord).length;
+    if (key === "deficit")return scheduled.filter((r) => r.deficit_minutes > 0).length;
+    if (key === "absent") return scheduled.filter((r) => r.status === "absent").length;
+    return scheduled.filter((r) => r.status === key).length;
   };
 
   const getPageNumbers = (): (number | "...")[] => {
@@ -1755,6 +1771,46 @@ export default function AttendanceShiftsPage() {
                   </div>
                 </div>
               )}
+            {/* ── Section : Non planifiés ce jour ── */}
+            {notScheduledRows.length > 0 && (
+              <div className="shrink-0 rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                <button
+                  onClick={() => setShowNotScheduled((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-sm text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showNotScheduled ? "rotate-180" : ""}`} />
+                    <span className="font-semibold text-slate-700">Non planifiés ce jour</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-600">
+                      {notScheduledRows.length}
+                    </span>
+                    <span className="text-xs text-slate-400">— Pas de service · non comptés dans les absences</span>
+                  </div>
+                </button>
+                {showNotScheduled && (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full bg-white">
+                      <tbody className="divide-y divide-slate-100">
+                        {notScheduledRows.map((r) => (
+                          <tr key={r.employee_id} className="bg-slate-50/60 text-sm">
+                            <td className="px-4 py-2.5 font-mono text-xs text-slate-400 w-24">{r.matricule || "—"}</td>
+                            <td className="px-4 py-2.5 font-medium text-slate-700">{r.full_name}</td>
+                            <td className="px-4 py-2.5 text-xs text-slate-500">{r.department !== "—" ? r.department : "—"}</td>
+                            <td className="px-4 py-2.5"><ShiftTeamPill teamKey={r.shift_team} /></td>
+                            <td className="px-4 py-2.5"><RestDayBadge /></td>
+                            <td className="px-4 py-2.5">
+                              <button onClick={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
+                                Détail
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
             </div>
           </>
         ) : (
