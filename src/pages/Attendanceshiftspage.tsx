@@ -5,10 +5,14 @@ import {
   Clock, AlertTriangle, UserMinus, FileSpreadsheet, X, ChevronLeft, ChevronRight,
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
   Settings2, Check, Users, Settings, CheckCircle, Lock, CalendarDays,
-  TrendingUp, Pencil, Plus, Trash2, Filter,
+  TrendingUp, Pencil, Plus, Trash2, Filter, Upload, CalendarRange, ArrowLeftRight,
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
-import { getShiftDailyStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats } from "@/services/attendanceService";
+import {
+  getShiftDailyStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
+  getShiftSchedule, saveShiftSchedule, uploadShiftPlanning, getShiftPlanningForDate,
+} from "@/services/attendanceService";
+import type { PlanningEntry } from "@/services/attendanceService";
 import { getEmployees } from "@/services/employeeService";
 import type {
   ShiftDailyStatsResponse, ShiftTeamKey, ShiftRecord,
@@ -23,6 +27,11 @@ type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" 
 type MotifType    = "absent" | "not_pointing";
 type AssignmentMap = Record<string, ShiftTeamKey | null>;
 type ViewMode     = "daily" | "weekly" | "monthly";
+
+// Planning : map date → shift_type → [employee names/matricules]
+type DayPlanningMap = Record<string, { employee_name: string; employee_matricule?: string | null }[]>;
+// "jour" | "soir1" | "soir2" → DayPlanningMap
+type PlanningMap = { jour: DayPlanningMap; soir1: DayPlanningMap; soir2: DayPlanningMap };
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const MAX_WORKDAY_MIN   = 8  * 60;
@@ -93,6 +102,10 @@ interface FlatRecord {
   in_time: string | null; out_time: string | null;
   worked_minutes: number; expected_minutes: number; email: string | null;
   shift_team: ShiftTeamKey | null; shift_team_label: string;
+  // Planning
+  is_scheduled: boolean;      // true if employee is in today's planning
+  is_replacement: boolean;    // true if present but NOT in planning (replacement)
+  not_scheduled_rest: boolean; // true if not scheduled (rest day) → hide from absent count
 }
 
 interface SummaryRecord {
@@ -271,6 +284,20 @@ function CompensationCell({ c }: { c: CompensationResult }) {
   return c.is_compensated
     ? <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 whitespace-nowrap">✓ Compensé</span>
     : <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 ring-1 ring-red-200 whitespace-nowrap">✗ Non compensé</span>;
+}
+function ReplacementBadge() {
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700 ring-1 ring-purple-300 whitespace-nowrap">
+      <ArrowLeftRight className="h-3 w-3 shrink-0" />Remplaçant
+    </span>
+  );
+}
+function RestDayBadge() {
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 ring-1 ring-slate-200 whitespace-nowrap">
+      Repos
+    </span>
+  );
 }
 
 // ─── Barre de progression ─────────────────────────────────────────────────────
@@ -812,6 +839,212 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
   );
 }
 
+// ─── Parsing Excel planning ───────────────────────────────────────────────────
+function parsePlanningExcel(buffer: ArrayBuffer): PlanningEntry[] {
+  const wb = XLSX.read(buffer, { type: "array", cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as any[][];
+
+  const entries: PlanningEntry[] = [];
+  const headerRow = rawRows[0] ?? [];
+
+  // Parse date columns (index 1+)
+  const dates: string[] = [];
+  for (let c = 1; c < headerRow.length; c++) {
+    const cell = headerRow[c];
+    let ds = "";
+    if (cell instanceof Date) {
+      ds = `${cell.getFullYear()}-${String(cell.getMonth() + 1).padStart(2, "0")}-${String(cell.getDate()).padStart(2, "0")}`;
+    } else if (typeof cell === "number" && cell > 40000) {
+      // Excel serial date
+      const d = new Date(Math.round((cell - 25569) * 86400 * 1000));
+      ds = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    } else if (typeof cell === "string" && cell.trim()) {
+      const s = cell.trim();
+      // "26/01/2026" → "2026-01-26"
+      const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (m) ds = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    }
+    dates.push(ds);
+  }
+
+  // Map shift label → shift key
+  const detectShift = (label: string): ShiftTeamKey | null => {
+    const s = label.toUpperCase().replace(/\s/g, "");
+    if (s.includes("08") && s.includes("16")) return "jour";
+    if (s.includes("16") && s.includes("22")) return "soir1";
+    if (s.includes("22") && s.includes("08")) return "soir2";
+    if (s.includes("08H") || s.includes("8H")) return "jour";
+    if (s.includes("16H")) return "soir1";
+    if (s.includes("22H")) return "soir2";
+    return null;
+  };
+
+  let currentShift: ShiftTeamKey | null = null;
+  for (let row = 1; row < rawRows.length; row++) {
+    const rowData = rawRows[row] as any[];
+    const shiftCell = String(rowData[0] ?? "").trim();
+    if (shiftCell) {
+      const detected = detectShift(shiftCell);
+      if (detected) currentShift = detected;
+    }
+    if (!currentShift) continue;
+
+    for (let c = 1; c < rowData.length; c++) {
+      const name = String(rowData[c] ?? "").trim();
+      const date = dates[c - 1];
+      if (name && date) {
+        entries.push({ date, shift_type: currentShift, employee_name: name });
+      }
+    }
+  }
+
+  return entries;
+}
+
+// ─── Modal : Import Planning Excel ────────────────────────────────────────────
+function PlanningUploadModal({ open, onClose, onSuccess }: {
+  open: boolean; onClose: () => void; onSuccess: (count: number) => void;
+}) {
+  const [file,     setFile]     = useState<File | null>(null);
+  const [preview,  setPreview]  = useState<PlanningEntry[]>([]);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState("");
+  const [uploaded, setUploaded] = useState(false);
+
+  useEffect(() => { if (open) { setFile(null); setPreview([]); setError(""); setUploaded(false); } }, [open]);
+
+  const handleFile = (f: File | null) => {
+    if (!f) { setFile(null); setPreview([]); return; }
+    setFile(f); setError("");
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const entries = parsePlanningExcel(ev.target!.result as ArrayBuffer);
+        if (!entries.length) { setError("Aucune donnée trouvée dans ce fichier."); setPreview([]); return; }
+        setPreview(entries);
+      } catch { setError("Erreur lors de la lecture du fichier Excel."); setPreview([]); }
+    };
+    reader.readAsArrayBuffer(f);
+  };
+
+  const handleUpload = async () => {
+    if (!preview.length) return;
+    setLoading(true); setError("");
+    try {
+      const batchId = `upload_${Date.now()}`;
+      const res = await uploadShiftPlanning({ batch_id: batchId, entries: preview });
+      setUploaded(true);
+      setTimeout(() => { onSuccess(res.created); onClose(); }, 800);
+    } catch { setError("Erreur lors de l'envoi du planning. Réessayez."); } finally { setLoading(false); }
+  };
+
+  // Stats by shift
+  const stats = useMemo(() => {
+    const c: Record<string, number> = { jour: 0, soir1: 0, soir2: 0 };
+    preview.forEach((e) => { if (e.shift_type in c) c[e.shift_type]++; });
+    const dates = new Set(preview.map((e) => e.date));
+    return { jour: c.jour, soir1: c.soir1, soir2: c.soir2, dates: dates.size, total: preview.length };
+  }, [preview]);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <motion.div className="relative w-full sm:max-w-xl bg-white sm:rounded-3xl shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90dvh]"
+            initial={{ y: 60, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 60, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-green-600 text-white"><CalendarRange className="h-4 w-4" /></div>
+                <div>
+                  <p className="font-bold text-slate-800">Importer un Planning Excel</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Format : colonne A = shift, colonnes B+ = dates avec employés</p>
+                </div>
+              </div>
+              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 transition"><X className="h-4 w-4 text-slate-500" /></button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* Drop zone */}
+              <label className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl p-8 cursor-pointer transition-all ${file ? "border-green-400 bg-green-50" : "border-slate-200 bg-slate-50 hover:border-camublue-900 hover:bg-camublue-900/5"}`}>
+                <Upload className={`h-8 w-8 ${file ? "text-green-600" : "text-slate-300"}`} />
+                {file
+                  ? <><p className="text-sm font-semibold text-green-700">{file.name}</p><p className="text-xs text-green-600">{preview.length} assignations lues</p></>
+                  : <><p className="text-sm font-semibold text-slate-600">Cliquer pour choisir un fichier</p><p className="text-xs text-slate-400">.xlsx, .xls</p></>}
+                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
+              </label>
+
+              {/* Preview stats */}
+              {preview.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { label: "Jours", value: stats.dates, color: "bg-blue-50 text-blue-700" },
+                    { label: "Journée (08–16h)", value: stats.jour, color: "bg-amber-50 text-amber-700" },
+                    { label: "Soir 1 (16–22h)", value: stats.soir1, color: "bg-indigo-50 text-indigo-700" },
+                    { label: "Soir 2 (22–08h)", value: stats.soir2, color: "bg-slate-100 text-slate-700" },
+                  ].map((s) => (
+                    <div key={s.label} className={`rounded-xl px-3 py-2 text-center ${s.color}`}>
+                      <p className="text-lg font-bold">{s.value}</p>
+                      <p className="text-xs font-medium">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Preview table */}
+              {preview.length > 0 && (
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="bg-camublue-900 text-white px-3 py-2 text-xs font-semibold flex justify-between">
+                    <span>Aperçu (5 premiers)</span>
+                    <span>{stats.total} lignes au total</span>
+                  </div>
+                  <table className="min-w-full text-xs">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        {["Date", "Shift", "Employé"].map((h) => (
+                          <th key={h} className="px-3 py-2 text-left text-slate-500 font-semibold">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {preview.slice(0, 5).map((e, i) => (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="px-3 py-1.5 font-mono">{e.date}</td>
+                          <td className="px-3 py-1.5"><ShiftTeamPill teamKey={e.shift_type as ShiftTeamKey} /></td>
+                          <td className="px-3 py-1.5 font-medium">{e.employee_name}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {error && <p className="text-sm text-red-500 font-medium bg-red-50 rounded-xl px-4 py-3 border border-red-100">⚠️ {error}</p>}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-4 border-t border-slate-100 flex gap-3 shrink-0">
+              <button onClick={onClose} className="flex-1 py-2 rounded-2xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Annuler</button>
+              <button onClick={handleUpload} disabled={!preview.length || loading || uploaded}
+                className={`flex-1 py-2 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${uploaded ? "bg-emerald-500 text-white" : "bg-camublue-900 hover:bg-camublue-800 text-white"}`}>
+                {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Import…</>
+                 : uploaded ? <><CheckCircle className="h-4 w-4" />Importé !</>
+                 : <><Upload className="h-4 w-4" />Importer {stats.total} lignes</>}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 // ─── Modal : Gestion des shifts ───────────────────────────────────────────────
 function GestionShiftsModal({ open, onClose, employees, assignments, onSave }: {
   open: boolean; onClose: () => void; employees: FlatRecord[]; assignments: AssignmentMap; onSave: (map: AssignmentMap) => void;
@@ -1020,11 +1253,25 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
 }) {
   const [expanded, setExpanded] = useState(false);
   const deficit = r.deficit_minutes > 0;
+  // Styling for replacement and rest-day rows
+  const rowBg = r.is_replacement ? "bg-purple-50/40 hover:bg-purple-50/70"
+    : r.not_scheduled_rest ? "bg-slate-50/60 opacity-70 hover:opacity-100"
+    : isLate ? "bg-orange-50/50 hover:bg-orange-50"
+    : deficit ? "bg-rose-50/30 hover:bg-rose-50/60"
+    : "hover:bg-slate-50";
   return (
     <>
-      <tr className={`hidden md:table-row border-b border-slate-100 transition-colors text-sm ${isLate ? "bg-orange-50/50 hover:bg-orange-50" : deficit ? "bg-rose-50/30 hover:bg-rose-50/60" : "hover:bg-slate-50"}`}>
+      <tr className={`hidden md:table-row border-b border-slate-100 transition-colors text-sm ${rowBg}`}>
         <td className="px-4 py-3"><div className="flex justify-center font-mono text-slate-500 text-xs">{r.matricule || "—"}</div></td>
-        <td className="px-4 py-3"><div className="flex justify-center font-medium text-slate-800">{r.full_name}</div></td>
+        <td className="px-4 py-3">
+          <div className="flex flex-col items-center gap-1">
+            <span className="font-medium text-slate-800">{r.full_name}</span>
+            <div className="flex gap-1 flex-wrap justify-center">
+              {r.is_replacement && <ReplacementBadge />}
+              {r.not_scheduled_rest && <RestDayBadge />}
+            </div>
+          </div>
+        </td>
         <td className="px-4 py-3 text-xs">
           <span className="font-semibold text-camublue-900 text-xs leading-tight tracking-wide">
             {r.project !== "—" ? r.project : "—"}
@@ -1036,7 +1283,12 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
           </span>
         </td>
         <td className="px-4 py-3"><div className="flex justify-center"><ShiftTeamPill teamKey={r.shift_team} /></div></td>
-        <td className="px-4 py-3"><div className="flex justify-center"><StatusPill status={r.status} /></div></td>
+        <td className="px-4 py-3">
+          <div className="flex flex-col items-center gap-1">
+            <StatusPill status={r.not_scheduled_rest ? "absent" : r.status} />
+            {r.not_scheduled_rest && <span className="text-[10px] text-slate-400">(non planifié)</span>}
+          </div>
+        </td>
         <td className="px-4 py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
         <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.computed_late_minutes > 0 ? "text-red-600 font-semibold" : "text-slate-700"}`}><div className="flex justify-center">{formatTime(r.in_time)}</div></td>
         <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.overtime_minutes > 0 ? "text-emerald-600 font-semibold" : "text-slate-700"}`}><div className="flex justify-center">{formatTime(r.out_time)}</div></td>
@@ -1045,15 +1297,15 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
         <td className="px-4 py-3"><div className="flex justify-center"><CompensationCell c={r.compensation} /></div></td>
         <td className="px-4 py-3">
           <div className="flex gap-2 justify-center">
-            <button onClick={onAlert} disabled={r.status !== "absent" || !r.email}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
+            <button onClick={onAlert} disabled={r.status !== "absent" || !r.email || r.not_scheduled_rest}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email && !r.not_scheduled_rest ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
               <Bell className="h-3 w-3" />Alerter
             </button>
             <button onClick={onDetail} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">Détail</button>
           </div>
         </td>
       </tr>
-      <tr className={`md:hidden border-b border-slate-100 ${isLate ? "bg-orange-50/40" : deficit ? "bg-rose-50/30" : ""}`}>
+      <tr className={`md:hidden border-b border-slate-100 ${r.is_replacement ? "bg-purple-50/40" : r.not_scheduled_rest ? "bg-slate-50/60 opacity-70" : isLate ? "bg-orange-50/40" : deficit ? "bg-rose-50/30" : ""}`}>
         <td colSpan={12} className="px-3 py-2">
           <div className="flex items-center justify-between gap-2 cursor-pointer" onClick={() => setExpanded((v) => !v)}>
             <div className="min-w-0">
@@ -1061,6 +1313,7 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
               <p className="text-xs text-slate-400 font-mono">{r.matricule || "—"} · {r.project !== "—" ? `${r.project} / ` : ""}{r.department}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {r.is_replacement && <ReplacementBadge />}
               <StatusPill status={r.status} />
               <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
             </div>
@@ -1137,13 +1390,23 @@ export default function AttendanceShiftsPage() {
   const [selectedEmployee,   setSelectedEmployee]   = useState<FlatRecord | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [sendingAlert, setSendingAlert] = useState(false);
-  const [gestionOpen,  setGestionOpen]  = useState(false);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [gestionOpen,      setGestionOpen]      = useState(false);
+  const [scheduleOpen,     setScheduleOpen]     = useState(false);
+  const [planningOpen,     setPlanningOpen]     = useState(false);
   const [week,  setWeek]  = useState(isoWeekNow());
   const [month, setMonth] = useState(yyyyMmToday());
   const currentWeek = isoWeekNow();
 
-  // ── Horaires actifs ────────────────────────────────────────────────────────
+  // ── Planning du jour ───────────────────────────────────────────────────────
+  // assignments par shift pour today : { jour: Set<name|mat>, soir1: ..., soir2: ... }
+  const [todayPlanning, setTodayPlanning] = useState<{
+    jour: { employee_name: string; employee_matricule?: string | null }[];
+    soir1: { employee_name: string; employee_matricule?: string | null }[];
+    soir2: { employee_name: string; employee_matricule?: string | null }[];
+    loaded: boolean;
+  }>({ jour: [], soir1: [], soir2: [], loaded: false });
+
+  // ── Horaires actifs (stockés sur le serveur + fallback localStorage) ─────
   const [activeSchedule, setActiveSchedule] = useState<ActiveSchedule | null>(() => {
     try {
       const stored = localStorage.getItem(LS_SHIFT_ACTIVE_SCHEDULE_KEY);
@@ -1152,6 +1415,32 @@ export default function AttendanceShiftsPage() {
     const d = new Date(), end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
     return { ...DEFAULT_PRESETS[0], dateStart: todayISO(), dateEnd: end.toISOString().slice(0, 10), locked: true };
   });
+
+  // Charger le planning du serveur au montage (remplace le localStorage si plus récent)
+  useEffect(() => {
+    getShiftSchedule().then((remote) => {
+      if (!remote) return;
+      const sched: ActiveSchedule = {
+        context: remote.context, startH: remote.startH, startM: remote.startM,
+        endH: remote.endH, endM: remote.endM, breakMin: remote.breakMin,
+        dateStart: remote.dateStart, dateEnd: remote.dateEnd,
+        locked: todayISO() >= remote.dateStart && todayISO() <= remote.dateEnd,
+      };
+      setActiveSchedule(sched);
+      // Mettre aussi à jour les presets si ce contexte n'existe pas encore
+      setPresets((prev) => {
+        if (prev.some((p) => p.context === remote.context)) return prev;
+        return [...prev, { context: remote.context, startH: remote.startH, startM: remote.startM, endH: remote.endH, endM: remote.endM, breakMin: remote.breakMin }];
+      });
+    }).catch(() => { /* silencieux – on garde le localStorage */ });
+
+    // Charger le planning du jour
+    getShiftPlanningForDate(todayISO()).then((res) => {
+      setTodayPlanning({ ...res.assignments, loaded: true });
+    }).catch(() => {
+      setTodayPlanning((p) => ({ ...p, loaded: true }));
+    });
+  }, []);
 
   const [presets, setPresets] = useState<WorkSchedulePreset[]>(() => {
     try {
@@ -1233,8 +1522,22 @@ export default function AttendanceShiftsPage() {
   // ── FlatRecords — vue journalière ─────────────────────────────────────────
   const allRecords = useMemo((): FlatRecord[] => {
     if (!shiftData || viewMode !== "daily") return [];
-    const sched          = effectiveSchedule;
+    const sched            = effectiveSchedule;
     const effectiveWorkMin = workDayMinutes(sched);
+    const planningLoaded   = todayPlanning.loaded;
+
+    // Helpers pour le matching planning
+    const normName = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
+    const isInPlanningForShift = (mat: string, name: string, shift: ShiftTeamKey | null): boolean => {
+      if (!planningLoaded || !shift) return false;
+      const entries = (todayPlanning as any)[shift] as { employee_name: string; employee_matricule?: string | null }[] | undefined;
+      if (!entries?.length) return false;
+      return entries.some((e) =>
+        (e.employee_matricule && mat && e.employee_matricule === mat) ||
+        normName(e.employee_name) === normName(name)
+      );
+    };
+    const hasPlanningData = planningLoaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length > 0);
 
     return shiftData.records.map((r: ShiftRecord): FlatRecord => {
       const workedRaw    = computeWorkedMinutesFromTimes(r.in_time, r.out_time) || (r.worked_minutes ?? 0);
@@ -1247,6 +1550,13 @@ export default function AttendanceShiftsPage() {
         assignments[r.matricule] ?? r.shift_team ?? detectShiftTeamFromTime(r.in_time);
       const resolvedLabel =
         r.shift_team_label ?? SHIFT_TEAMS.find((t) => t.key === resolvedTeam)?.label ?? "";
+
+      // ── Planning-aware flags ──────────────────────────────────────────────
+      const isScheduled = !hasPlanningData || isInPlanningForShift(r.matricule, r.full_name, resolvedTeam);
+      // Remplaçant : présent (non absent) mais pas dans le planning
+      const isReplacement = hasPlanningData && !isScheduled && r.status !== "absent";
+      // Repos : absent mais pas planifié → on ne compte pas comme une vraie absence
+      const notScheduledRest = hasPlanningData && !isScheduled && r.status === "absent";
 
       return {
         employee_id: r.employee_id, matricule: r.matricule, full_name: r.full_name,
@@ -1263,9 +1573,12 @@ export default function AttendanceShiftsPage() {
         expected_minutes: effectiveWorkMin, email: emailMap.get(r.matricule) ?? null,
         shift_team: resolvedTeam,
         shift_team_label: resolvedLabel,
+        is_scheduled:       isScheduled,
+        is_replacement:     isReplacement,
+        not_scheduled_rest: notScheduledRest,
       };
     });
-  }, [shiftData, emailMap, effectiveSchedule, viewMode, projectMap, assignments]);
+  }, [shiftData, emailMap, effectiveSchedule, viewMode, projectMap, assignments, todayPlanning]);
 
   // ── SummaryRecords — hebdo/mensuel ────────────────────────────────────────
   const summaryRecords = useMemo((): SummaryRecord[] => {
@@ -1310,7 +1623,8 @@ export default function AttendanceShiftsPage() {
   const kpis = useMemo(() => {
     if (viewMode === "daily" && shiftData) return {
       total:   allRecords.length,
-      absent:  allRecords.filter((r) => r.status === "absent").length,
+      // N'inclut pas les employés non planifiés (jours de repos) dans les absents
+      absent:  allRecords.filter((r) => r.status === "absent" && !r.not_scheduled_rest).length,
       late:    allRecords.filter((r) => r.computed_late_minutes > 0).length,
       anomaly: allRecords.filter((r) => r.status === "anomaly").length,
     };
@@ -1410,6 +1724,13 @@ export default function AttendanceShiftsPage() {
                 {effectiveSchedule.breakMin > 0 && ` · Pause ${effectiveSchedule.breakMin}min`}
               </span>
               {activeTeamCfg && <span className="text-indigo-500 font-semibold text-xs">{activeTeamCfg.label} · {activeTeamCfg.horaire}</span>}
+              {/* Planning du jour */}
+              {todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full ring-1 ring-green-200">
+                  <CalendarRange className="h-3 w-3" />
+                  Planning actif · {todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length} assignés
+                </span>
+              )}
               {/* ✅ Légende des plages de détection automatique */}
               <span className="inline-flex items-center gap-2 text-[10px] text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full ring-1 ring-slate-200">
                 <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />07h–16h</span>
@@ -1438,6 +1759,13 @@ export default function AttendanceShiftsPage() {
             <button onClick={() => setGestionOpen(true)}
               className="border-2 px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 bg-white border-camublue-900 text-camublue-900 hover:bg-camublue-900/5">
               <Settings2 className="h-4 w-4" /><span className="hidden sm:inline">Gestion Shifts</span>
+            </button>
+            <button onClick={() => setPlanningOpen(true)}
+              className={`border px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 ? "bg-green-50 border-green-400 text-green-700 hover:bg-green-100" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
+              <CalendarRange className="h-4 w-4" /><span className="hidden sm:inline">Planning</span>
+              {todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 && (
+                <span className="text-[10px] font-bold bg-green-200 text-green-800 px-1.5 py-0.5 rounded-full hidden sm:inline">Actif</span>
+              )}
             </button>
             <button onClick={handleExport}
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
@@ -1585,7 +1913,16 @@ export default function AttendanceShiftsPage() {
         <WorkScheduleModal
           open={scheduleOpen} onClose={() => setScheduleOpen(false)}
           active={activeSchedule} presets={presets}
-          onSave={(s) => setActiveSchedule(s)} onPresetsChange={(p) => setPresets(p)} />
+          onSave={(s) => {
+            setActiveSchedule(s);
+            // Persiste sur le serveur (partagé entre tous les RH)
+            saveShiftSchedule({
+              context: s.context, startH: s.startH, startM: s.startM,
+              endH: s.endH, endM: s.endM, breakMin: s.breakMin,
+              dateStart: s.dateStart, dateEnd: s.dateEnd,
+            }).catch(console.error);
+          }}
+          onPresetsChange={(p) => setPresets(p)} />
         <GestionShiftsModal
           open={gestionOpen} onClose={() => setGestionOpen(false)}
           employees={allRecords} assignments={assignments}
@@ -1596,6 +1933,14 @@ export default function AttendanceShiftsPage() {
         <AlertModal
           open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
           employee={selectedEmployee} onConfirm={handleSendAlert} sending={sendingAlert} />
+        <PlanningUploadModal
+          open={planningOpen} onClose={() => setPlanningOpen(false)}
+          onSuccess={(count) => {
+            // Recharger le planning du jour après l'upload
+            getShiftPlanningForDate(todayISO()).then((res) => {
+              setTodayPlanning({ ...res.assignments, loaded: true });
+            }).catch(console.error);
+          }} />
       </motion.div>
     </AppLayout>
   );

@@ -41,3 +41,66 @@ export async function getShiftDailyStats(params: {
   const { data } = await api.get("/api/attendance/shift-daily-stats/", { params: cleanParams });
   return data;
 }
+
+// ─── Shift Schedule (horaires partagés entre tous les RH) ─────────────────────
+
+export interface ShiftSchedulePayload {
+  context:   string;
+  startH:    number;
+  startM:    number;
+  endH:      number;
+  endM:      number;
+  breakMin:  number;
+  dateStart: string;
+  dateEnd:   string;
+}
+
+export interface ShiftScheduleResponse extends ShiftSchedulePayload {
+  id:         number;
+  updatedAt:  string;
+  updatedBy:  string | null;
+}
+
+export async function getShiftSchedule(): Promise<ShiftScheduleResponse | null> {
+  const { data } = await api.get("/api/attendance/shift-schedule/");
+  return data ?? null;
+}
+
+export async function saveShiftSchedule(payload: ShiftSchedulePayload): Promise<ShiftScheduleResponse> {
+  const { data } = await api.post("/api/attendance/shift-schedule/", payload);
+  return data;
+}
+
+// ─── Shift Planning (planning mensuel importé depuis Excel) ───────────────────
+
+export interface PlanningEntry {
+  date:               string;
+  shift_type:         string;
+  employee_name:      string;
+  employee_matricule?: string | null;
+}
+
+export interface ShiftPlanningUpload {
+  batch_id: string;
+  entries:  PlanningEntry[];
+}
+
+export async function getShiftPlanning(dateFrom: string, dateTo: string): Promise<PlanningEntry[]> {
+  const { data } = await api.get("/api/attendance/shift-planning/", {
+    params: { date_from: dateFrom, date_to: dateTo },
+  });
+  return data;
+}
+
+export async function uploadShiftPlanning(payload: ShiftPlanningUpload): Promise<{ created: number; ok: boolean }> {
+  const { data } = await api.post("/api/attendance/shift-planning/", payload);
+  return data;
+}
+
+export async function getShiftPlanningForDate(date: string): Promise<{
+  date: string;
+  assignments: { jour: PlanningEntry[]; soir1: PlanningEntry[]; soir2: PlanningEntry[] };
+}> {
+  const { data } = await api.get("/api/attendance/shift-planning/date/", { params: { date } });
+  return data;
+}
