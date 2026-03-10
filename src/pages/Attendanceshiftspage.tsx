@@ -959,10 +959,10 @@ function yyyyMmNow(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,"0")}`;
 }
 
-const SHIFT_KEYS: { key: ShiftTeamKey; label: string; bg: string; text: string; border: string }[] = [
-  { key: "jour",  label: "08H-16H", bg: "bg-teal-50",   text: "text-teal-800",   border: "border-teal-200" },
-  { key: "soir1", label: "16H-22H", bg: "bg-yellow-50", text: "text-yellow-800", border: "border-yellow-200" },
-  { key: "soir2", label: "22H-08H", bg: "bg-orange-50", text: "text-orange-800", border: "border-orange-200" },
+const SHIFT_KEYS: { key: ShiftTeamKey; label: string; bg: string; text: string; border: string; addBtn: string }[] = [
+  { key: "jour",  label: "08H-16H", bg: "bg-teal-50",   text: "text-teal-800",   border: "border-teal-200",   addBtn: "bg-teal-500 hover:bg-teal-600 text-white" },
+  { key: "soir1", label: "16H-22H", bg: "bg-yellow-50", text: "text-yellow-800", border: "border-yellow-200", addBtn: "bg-amber-400 hover:bg-amber-500 text-amber-950" },
+  { key: "soir2", label: "22H-08H", bg: "bg-orange-50", text: "text-orange-800", border: "border-orange-200", addBtn: "bg-orange-500 hover:bg-orange-600 text-white" },
 ];
 
 // ─── Modal : Planning (Vue + Import) ─────────────────────────────────────────
@@ -1294,8 +1294,11 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                                           ) : (
                                             <button
                                               onClick={() => { setAddingCell({ date, shift: s.key }); setNewName(""); }}
-                                              className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold text-slate-400 hover:${s.bg} hover:${s.text} transition-all border border-dashed border-slate-200 hover:border-transparent`}>
-                                              <Plus className="h-2.5 w-2.5" />Ajouter
+                                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold shadow-sm active:scale-95 transition-all duration-150 ${s.addBtn}`}>
+                                              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-white/30">
+                                                <Plus className="h-2.5 w-2.5" />
+                                              </span>
+                                              Ajouter
                                             </button>
                                           )}
                                         </div>
