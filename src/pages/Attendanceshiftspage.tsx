@@ -4,7 +4,7 @@ import AppLayout from "@/layouts/AppLayout";
 import {
   Clock, AlertTriangle, UserMinus, FileSpreadsheet, X, ChevronLeft, ChevronRight,
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
-  Settings2, Check, Users, Settings, CheckCircle, Lock, CalendarDays,
+  Check, Settings, CheckCircle, Lock, CalendarDays,
   TrendingUp, Pencil, Plus, Trash2, Filter, Upload, CalendarRange, ArrowLeftRight,
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
@@ -52,8 +52,9 @@ interface WorkSchedulePreset {
 }
 
 const DEFAULT_PRESETS: WorkSchedulePreset[] = [
-  { context: "Normale", startH: 8, startM: 0, endH: 17, endM: 30, breakMin: 60 },
-  { context: "Ramadan", startH: 8, startM: 0, endH: 16, endM: 30, breakMin: 30 },
+  { context: "08H-16H", startH: 8,  startM: 0, endH: 16, endM: 0, breakMin: 60 },
+  { context: "16H-22H", startH: 16, startM: 0, endH: 22, endM: 0, breakMin: 30 },
+  { context: "22H-08H", startH: 22, startM: 0, endH: 8,  endM: 0, breakMin: 60 },
 ];
 
 interface ActiveSchedule extends WorkSchedulePreset {
@@ -126,19 +127,19 @@ const SHIFT_TEAMS: {
   dot: string; activeBg: string; activeText: string; activeBorder: string; pillBg: string; headerBg: string;
 }[] = [
   {
-    key: "jour", label: "Équipe Journée", short: "Journée", horaire: "07h – 16h",
-    dot: "bg-amber-500", activeBg: "bg-amber-50", activeText: "text-amber-800",
-    activeBorder: "border-amber-400", pillBg: "bg-amber-100 text-amber-800 ring-1 ring-amber-300", headerBg: "bg-amber-600",
+    key: "jour", label: "Shift 08H-16H", short: "08H-16H", horaire: "08h – 16h",
+    dot: "bg-teal-500", activeBg: "bg-teal-50", activeText: "text-teal-800",
+    activeBorder: "border-teal-400", pillBg: "bg-teal-100 text-teal-800 ring-1 ring-teal-300", headerBg: "bg-teal-700",
   },
   {
-    key: "soir1", label: "Équipe Soir 1", short: "Soir 1", horaire: "17h – 22h",
-    dot: "bg-indigo-500", activeBg: "bg-indigo-50", activeText: "text-indigo-800",
-    activeBorder: "border-indigo-400", pillBg: "bg-indigo-100 text-indigo-800 ring-1 ring-indigo-300", headerBg: "bg-indigo-700",
+    key: "soir1", label: "Shift 16H-22H", short: "16H-22H", horaire: "16h – 22h",
+    dot: "bg-yellow-500", activeBg: "bg-yellow-50", activeText: "text-yellow-800",
+    activeBorder: "border-yellow-400", pillBg: "bg-yellow-100 text-yellow-800 ring-1 ring-yellow-300", headerBg: "bg-yellow-600",
   },
   {
-    key: "soir2", label: "Équipe Soir 2", short: "Soir 2", horaire: "22h – 07h",
-    dot: "bg-slate-600", activeBg: "bg-slate-800", activeText: "text-slate-100",
-    activeBorder: "border-slate-600", pillBg: "bg-slate-800 text-slate-100 ring-1 ring-slate-600", headerBg: "bg-slate-800",
+    key: "soir2", label: "Shift 22H-08H", short: "22H-08H", horaire: "22h – 08h",
+    dot: "bg-orange-500", activeBg: "bg-orange-50", activeText: "text-orange-800",
+    activeBorder: "border-orange-400", pillBg: "bg-orange-100 text-orange-800 ring-1 ring-orange-300", headerBg: "bg-orange-700",
   },
 ];
 
@@ -209,8 +210,11 @@ function detectShiftTeamFromTime(inIso: string | null): ShiftTeamKey | null {
   const d = new Date(inIso);
   if (isNaN(d.getTime())) return null;
   const h = d.getHours();
-  if (h >= 7  && h < 17) return "jour";
-  if (h >= 17 && h < 22) return "soir1";
+  // 08H-16H : entrée entre 5h et 14h
+  if (h >= 5 && h < 14) return "jour";
+  // 16H-22H : entrée entre 14h et 20h
+  if (h >= 14 && h < 20) return "soir1";
+  // 22H-08H : entrée entre 20h et 5h (nuit)
   return "soir2";
 }
 
@@ -985,9 +989,9 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
                     { label: "Jours", value: stats.dates, color: "bg-blue-50 text-blue-700" },
-                    { label: "Journée (08–16h)", value: stats.jour, color: "bg-amber-50 text-amber-700" },
-                    { label: "Soir 1 (16–22h)", value: stats.soir1, color: "bg-indigo-50 text-indigo-700" },
-                    { label: "Soir 2 (22–08h)", value: stats.soir2, color: "bg-slate-100 text-slate-700" },
+                    { label: "08H-16H", value: stats.jour,  color: "bg-teal-50 text-teal-700"     },
+                    { label: "16H-22H", value: stats.soir1, color: "bg-yellow-50 text-yellow-700"  },
+                    { label: "22H-08H", value: stats.soir2, color: "bg-orange-50 text-orange-700"  },
                   ].map((s) => (
                     <div key={s.label} className={`rounded-xl px-3 py-2 text-center ${s.color}`}>
                       <p className="text-lg font-bold">{s.value}</p>
@@ -1037,155 +1041,6 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                  : uploaded ? <><CheckCircle className="h-4 w-4" />Importé !</>
                  : <><Upload className="h-4 w-4" />Importer {stats.total} lignes</>}
               </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-// ─── Modal : Gestion des shifts ───────────────────────────────────────────────
-function GestionShiftsModal({ open, onClose, employees, assignments, onSave }: {
-  open: boolean; onClose: () => void; employees: FlatRecord[]; assignments: AssignmentMap; onSave: (map: AssignmentMap) => void;
-}) {
-  const [local,      setLocal]      = useState<AssignmentMap>({});
-  const [search,     setSearch]     = useState("");
-  const [filterTeam, setFilterTeam] = useState<ShiftTeamKey | "all">("all");
-  const [saving,     setSaving]     = useState(false);
-
-  useEffect(() => {
-    if (open) {
-      const a: AssignmentMap = {};
-      employees.forEach((r) => { if (r.matricule) a[r.matricule] = r.shift_team; });
-      setLocal({ ...a, ...assignments }); setSearch(""); setFilterTeam("all");
-    }
-  }, [open, employees, assignments]);
-
-  const assign = (mat: string, team: ShiftTeamKey) => setLocal((prev) => ({ ...prev, [mat]: team }));
-  const handleSave = async () => {
-    setSaving(true);
-    await new Promise((r) => setTimeout(r, 400));
-    onSave(local); setSaving(false); onClose();
-  };
-
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { jour: 0, soir1: 0, soir2: 0 };
-    employees.forEach((r) => { const t = r.matricule ? (local[r.matricule] ?? r.shift_team) : null; if (t) c[t] = (c[t] ?? 0) + 1; });
-    return c;
-  }, [local, employees]);
-
-  const filteredEmployees = useMemo(() => employees.filter((r) => {
-    const q           = search.toLowerCase();
-    const matchSearch = !q || r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q) || r.department.toLowerCase().includes(q);
-    const assigned    = r.matricule ? (local[r.matricule] ?? r.shift_team) : null;
-    return matchSearch && (filterTeam === "all" ? true : assigned === filterTeam);
-  }), [employees, search, filterTeam, local]);
-
-  const changedCount = useMemo(() => Object.entries(local).filter(([mat, team]) => {
-    const original = employees.find((r) => r.matricule === mat)?.shift_team ?? assignments[mat];
-    return original !== team;
-  }).length, [local, employees, assignments]);
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <motion.div className="relative w-full sm:max-w-2xl bg-white sm:rounded-3xl shadow-2xl overflow-hidden z-10 flex flex-col"
-            style={{ maxHeight: "calc(100dvh - 0px)" }}
-            initial={{ y: 60, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 60, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-slate-100 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-camublue-900 text-white"><Settings2 className="h-4 w-4" /></div>
-                <div>
-                  <p className="font-bold text-slate-800 text-sm sm:text-base">Gestion des Shifts</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{employees.length} employé{employees.length > 1 ? "s" : ""} en shift</p>
-                </div>
-              </div>
-              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 transition"><X className="h-4 w-4 text-slate-500" /></button>
-            </div>
-
-            {/* Compteurs par équipe */}
-            <div className="px-4 sm:px-5 py-3 border-b border-slate-100 shrink-0">
-              <div className="grid grid-cols-3 gap-2">
-                {SHIFT_TEAMS.map((t) => (
-                  <button key={t.key} onClick={() => setFilterTeam(filterTeam === t.key ? "all" : t.key)}
-                    className={`flex flex-col items-center py-2 px-2 rounded-xl border-2 transition-all ${filterTeam === t.key ? `${t.activeBorder} ${t.activeBg} ${t.activeText}` : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full mb-1 ${t.dot}`} />
-                    <span className="text-sm font-bold tabular-nums">{counts[t.key] ?? 0}</span>
-                    <span className="text-[10px] text-slate-400 mt-0.5">{t.short}</span>
-                    <span className="text-[9px] text-slate-400 mt-0.5">{t.horaire}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Recherche */}
-            <div className="px-4 sm:px-5 py-3 border-b border-slate-100 shrink-0">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher…"
-                  className="pl-8 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
-              </div>
-            </div>
-
-            {/* Liste employés */}
-            <div className="flex-1 overflow-y-auto">
-              {filteredEmployees.length === 0
-                ? <div className="flex flex-col items-center justify-center py-12 text-slate-400"><Users className="h-10 w-10 mb-2 text-slate-200" /><p className="text-sm">Aucun employé trouvé</p></div>
-                : <div className="divide-y divide-slate-100">
-                    {filteredEmployees.map((r) => {
-                      const mat     = r.matricule;
-                      const current = local[mat] ?? r.shift_team;
-                      return (
-                        <div key={r.employee_id} className="flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-3 hover:bg-slate-50/80 transition-colors">
-                          <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-camublue-900/10 flex items-center justify-center shrink-0">
-                            <span className="text-xs sm:text-sm font-bold text-camublue-900">{r.full_name.charAt(0).toUpperCase()}</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-slate-800 truncate">{r.full_name}</p>
-                            <p className="text-xs text-slate-400 font-mono truncate">{mat}{(r.project && r.project !== "—") || (r.department && r.department !== "—") ? ` · ${r.project !== "—" ? r.project + "/" : ""} ${r.department !== "—" ? r.department : ""}`.trim() : ""}</p>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {SHIFT_TEAMS.map((t) => {
-                              const isSel = current === t.key;
-                              return (
-                                <button key={t.key} onClick={() => assign(mat, t.key)} title={`${t.label} · ${t.horaire}`}
-                                  className={`h-7 px-1.5 sm:px-2 rounded-lg border-2 flex items-center gap-1 text-xs font-bold transition-all ${isSel ? `${t.activeBorder} ${t.activeBg} ${t.activeText}` : "border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50"}`}>
-                                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${t.dot}`} />
-                                  <span className="hidden sm:inline">{t.short}</span>
-                                  {isSel && <Check className="h-3 w-3 shrink-0" />}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-              }
-            </div>
-
-            {/* Footer */}
-            <div className="px-4 sm:px-5 py-4 border-t border-slate-100 flex items-center justify-between gap-3 shrink-0 bg-slate-50/60">
-              <div className="text-xs min-w-0">
-                {changedCount > 0
-                  ? <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-50 px-2.5 py-1 rounded-full ring-1 ring-amber-200 truncate">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />{changedCount} modif.
-                    </span>
-                  : <span className="text-slate-400">Aucune modification</span>}
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <button onClick={onClose} className="px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-100 transition">Annuler</button>
-                <button onClick={handleSave} disabled={saving || changedCount === 0}
-                  className="px-4 py-2 rounded-xl bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {saving ? <><Loader2 className="h-4 w-4 animate-spin" /><span className="hidden sm:inline">Enregistrement…</span></> : <><Check className="h-4 w-4" /><span>Enregistrer</span></>}
-                </button>
-              </div>
             </div>
           </motion.div>
         </motion.div>
@@ -1264,12 +1119,8 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
       <tr className={`hidden md:table-row border-b border-slate-100 transition-colors text-sm ${rowBg}`}>
         <td className="px-4 py-3"><div className="flex justify-center font-mono text-slate-500 text-xs">{r.matricule || "—"}</div></td>
         <td className="px-4 py-3">
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex justify-center">
             <span className="font-medium text-slate-800">{r.full_name}</span>
-            <div className="flex gap-1 flex-wrap justify-center">
-              {r.is_replacement && <ReplacementBadge />}
-              {r.not_scheduled_rest && <RestDayBadge />}
-            </div>
           </div>
         </td>
         <td className="px-4 py-3 text-xs">
@@ -1284,9 +1135,12 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
         </td>
         <td className="px-4 py-3"><div className="flex justify-center"><ShiftTeamPill teamKey={r.shift_team} /></div></td>
         <td className="px-4 py-3">
-          <div className="flex flex-col items-center gap-1">
-            <StatusPill status={r.not_scheduled_rest ? "absent" : r.status} />
-            {r.not_scheduled_rest && <span className="text-[10px] text-slate-400">(non planifié)</span>}
+          <div className="flex justify-center">
+            {r.not_scheduled_rest
+              ? <RestDayBadge />
+              : r.is_replacement
+                ? <ReplacementBadge />
+                : <StatusPill status={r.status} />}
           </div>
         </td>
         <td className="px-4 py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
@@ -1313,8 +1167,11 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
               <p className="text-xs text-slate-400 font-mono">{r.matricule || "—"} · {r.project !== "—" ? `${r.project} / ` : ""}{r.department}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {r.is_replacement && <ReplacementBadge />}
-              <StatusPill status={r.status} />
+              {r.not_scheduled_rest
+                ? <RestDayBadge />
+                : r.is_replacement
+                  ? <ReplacementBadge />
+                  : <StatusPill status={r.status} />}
               <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
             </div>
           </div>
@@ -1390,7 +1247,6 @@ export default function AttendanceShiftsPage() {
   const [selectedEmployee,   setSelectedEmployee]   = useState<FlatRecord | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [sendingAlert, setSendingAlert] = useState(false);
-  const [gestionOpen,      setGestionOpen]      = useState(false);
   const [scheduleOpen,     setScheduleOpen]     = useState(false);
   const [planningOpen,     setPlanningOpen]     = useState(false);
   const [week,  setWeek]  = useState(isoWeekNow());
@@ -1756,10 +1612,6 @@ export default function AttendanceShiftsPage() {
               className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 font-medium ${isActiveLocked ? "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100" : "bg-white border-slate-300 text-camublue-900 hover:bg-slate-50"}`}>
               <Settings className="h-4 w-4" /><span className="hidden sm:inline">Heures de travail</span>{isActiveLocked && <Lock className="h-3 w-3" />}
             </button>
-            <button onClick={() => setGestionOpen(true)}
-              className="border-2 px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 bg-white border-camublue-900 text-camublue-900 hover:bg-camublue-900/5">
-              <Settings2 className="h-4 w-4" /><span className="hidden sm:inline">Gestion Shifts</span>
-            </button>
             <button onClick={() => setPlanningOpen(true)}
               className={`border px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 ? "bg-green-50 border-green-400 text-green-700 hover:bg-green-100" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
               <CalendarRange className="h-4 w-4" /><span className="hidden sm:inline">Planning</span>
@@ -1923,10 +1775,6 @@ export default function AttendanceShiftsPage() {
             }).catch(console.error);
           }}
           onPresetsChange={(p) => setPresets(p)} />
-        <GestionShiftsModal
-          open={gestionOpen} onClose={() => setGestionOpen(false)}
-          employees={allRecords} assignments={assignments}
-          onSave={(map) => { setAssignments(map); fetchData(); }} />
         <DetailModal
           open={detailModalOpen} onClose={() => setDetailModalOpen(false)}
           employeeId={selectedEmployeeId} initialWeek={currentWeek} />
