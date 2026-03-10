@@ -1874,6 +1874,12 @@ export default function AttendanceShiftsPage() {
     });
   }, [allRecords, statusFilter, searchQ]);
 
+  // Pas de planning importé pour la date du jour
+  const noPlanningToday =
+    viewMode === "daily" &&
+    todayPlanning.loaded &&
+    todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length === 0;
+
   // Section séparée : non planifiés ce jour (Pas de service)
   const notScheduledRows = useMemo(() => {
     const q = searchQ.toLowerCase();
@@ -2095,8 +2101,18 @@ export default function AttendanceShiftsPage() {
                               onAlert={() => { setSelectedEmployee(r); setAlertModalOpen(true); }}
                               onDetail={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }} />
                           ))
-                        : <tr><td colSpan={tableHeaders.length} className="text-center py-12 text-slate-400 text-sm">
-                            {statusFilter === "late" ? "Aucun retard." : statusFilter === "deficit" ? "Aucune heure manquante." : "Aucun enregistrement trouvé."}
+                        : <tr><td colSpan={tableHeaders.length} className="text-center py-16 text-slate-400 text-sm">
+                            {noPlanningToday && statusFilter === "all"
+                              ? <div className="flex flex-col items-center gap-3">
+                                  <CalendarRange className="h-12 w-12 text-slate-200" />
+                                  <p className="font-medium text-slate-500">Pas de planning disponible pour aujourd'hui</p>
+                                  <p className="text-xs text-slate-400">Importez un planning pour voir les assignations de l'équipe.</p>
+                                  <button onClick={() => setPlanningOpen(true)}
+                                    className="mt-1 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
+                                    <Upload className="h-4 w-4" /> Importer un planning
+                                  </button>
+                                </div>
+                              : statusFilter === "late" ? "Aucun retard." : statusFilter === "deficit" ? "Aucune heure manquante." : "Aucun enregistrement trouvé."}
                           </td></tr>
                     }
                   </tbody>
