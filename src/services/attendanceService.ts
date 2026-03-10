@@ -104,3 +104,25 @@ export async function getShiftPlanningForDate(date: string): Promise<{
   const { data } = await api.get("/api/attendance/shift-planning/date/", { params: { date } });
   return data;
 }
+
+/** Supprime une seule entrée du planning (sans toucher aux autres). */
+export async function deleteSinglePlanningEntry(
+  date: string,
+  shift_type: string,
+  employee_name: string,
+): Promise<{ deleted: number }> {
+  const { data } = await api.delete("/api/attendance/shift-planning/entry/", {
+    data: { date, shift_type, employee_name },
+  });
+  return data;
+}
+
+/** Ajoute une seule entrée au planning (sans supprimer les autres). */
+export async function addSinglePlanningEntry(entry: {
+  date: string;
+  shift_type: string;
+  employee_name: string;
+}): Promise<{ created: boolean; employee_matricule: string | null }> {
+  const { data } = await api.post("/api/attendance/shift-planning/entry/", entry);
+  return data;
+}

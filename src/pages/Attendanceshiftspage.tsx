@@ -6,11 +6,13 @@ import {
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
   Check, Settings, CheckCircle, Lock, CalendarDays,
   TrendingUp, Pencil, Plus, Trash2, Filter, Upload, CalendarRange, ArrowLeftRight,
+  Table2, UserPlus,
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import {
   getShiftDailyStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning, getShiftPlanningForDate,
+  getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
 } from "@/services/attendanceService";
 import type { PlanningEntry } from "@/services/attendanceService";
 import { getEmployees } from "@/services/employeeService";
@@ -906,17 +908,110 @@ function parsePlanningExcel(buffer: ArrayBuffer): PlanningEntry[] {
   return entries;
 }
 
-// ─── Modal : Import Planning Excel ────────────────────────────────────────────
+// ─── Helpers date / planning ──────────────────────────────────────────────────
+const DAYS_FR = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+const MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+
+function daysInMonth(ym: string): string[] {
+  const [y, m] = ym.split("-").map(Number);
+  const days: string[] = [];
+  const last = new Date(y, m, 0).getDate();
+  for (let d = 1; d <= last; d++)
+    days.push(`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`);
+  return days;
+}
+
+function prevMonth(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2,"0")}`;
+}
+
+function nextMonth(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2,"0")}`;
+}
+
+function yyyyMmNow(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,"0")}`;
+}
+
+const SHIFT_KEYS: { key: ShiftTeamKey; label: string; bg: string; text: string; border: string }[] = [
+  { key: "jour",  label: "08H-16H", bg: "bg-teal-50",   text: "text-teal-800",   border: "border-teal-200" },
+  { key: "soir1", label: "16H-22H", bg: "bg-yellow-50", text: "text-yellow-800", border: "border-yellow-200" },
+  { key: "soir2", label: "22H-08H", bg: "bg-orange-50", text: "text-orange-800", border: "border-orange-200" },
+];
+
+// ─── Modal : Planning (Vue + Import) ─────────────────────────────────────────
 function PlanningUploadModal({ open, onClose, onSuccess }: {
   open: boolean; onClose: () => void; onSuccess: (count: number) => void;
 }) {
+  const [tab, setTab] = useState<"view" | "import">("view");
+
+  // ── Vue planning ──────────────────────────────────────────────────────────
+  const [viewMonth,  setViewMonth]  = useState(yyyyMmNow());
+  const [entries,    setEntries]    = useState<PlanningEntry[]>([]);
+  const [loadingVue, setLoadingVue] = useState(false);
+  // Ajout inline : {date, shift} | null
+  const [addingCell, setAddingCell] = useState<{ date: string; shift: ShiftTeamKey } | null>(null);
+  const [newName,    setNewName]    = useState("");
+  const [saving,     setSaving]     = useState(false);
+
+  const loadMonthPlanning = useCallback(async (ym: string) => {
+    setLoadingVue(true);
+    try {
+      const days = daysInMonth(ym);
+      const data = await getShiftPlanning(days[0], days[days.length - 1]);
+      setEntries(data);
+    } catch { /* silently ignore */ } finally { setLoadingVue(false); }
+  }, []);
+
+  useEffect(() => {
+    if (open && tab === "view") loadMonthPlanning(viewMonth);
+  }, [open, tab, viewMonth, loadMonthPlanning]);
+
+  // Groupé par date + shift
+  const grouped = useMemo(() => {
+    const map: Record<string, Record<string, PlanningEntry[]>> = {};
+    for (const e of entries) {
+      if (!map[e.date]) map[e.date] = { jour: [], soir1: [], soir2: [] };
+      (map[e.date][e.shift_type] ??= []).push(e);
+    }
+    return map;
+  }, [entries]);
+
+  const monthDays = useMemo(() => daysInMonth(viewMonth), [viewMonth]);
+  const hasAnyData = entries.length > 0;
+
+  const handleRemove = async (entry: PlanningEntry) => {
+    setEntries((prev) => prev.filter(
+      (e) => !(e.date === entry.date && e.shift_type === entry.shift_type && e.employee_name === entry.employee_name)
+    ));
+    try { await deleteSinglePlanningEntry(entry.date, entry.shift_type, entry.employee_name); }
+    catch { loadMonthPlanning(viewMonth); } // revert on error
+  };
+
+  const handleAdd = async () => {
+    if (!addingCell || !newName.trim() || saving) return;
+    setSaving(true);
+    const name = newName.trim();
+    const optimistic: PlanningEntry = { date: addingCell.date, shift_type: addingCell.shift, employee_name: name };
+    setEntries((prev) => [...prev, optimistic]);
+    setAddingCell(null); setNewName("");
+    try { await addSinglePlanningEntry({ date: addingCell.date, shift_type: addingCell.shift, employee_name: name }); }
+    catch { loadMonthPlanning(viewMonth); } finally { setSaving(false); }
+  };
+
+  // ── Import ────────────────────────────────────────────────────────────────
   const [file,     setFile]     = useState<File | null>(null);
   const [preview,  setPreview]  = useState<PlanningEntry[]>([]);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
   const [uploaded, setUploaded] = useState(false);
 
-  useEffect(() => { if (open) { setFile(null); setPreview([]); setError(""); setUploaded(false); } }, [open]);
+  useEffect(() => {
+    if (open) { setFile(null); setPreview([]); setError(""); setUploaded(false); setAddingCell(null); setNewName(""); }
+  }, [open]);
 
   const handleFile = (f: File | null) => {
     if (!f) { setFile(null); setPreview([]); return; }
@@ -924,9 +1019,9 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const entries = parsePlanningExcel(ev.target!.result as ArrayBuffer);
-        if (!entries.length) { setError("Aucune donnée trouvée dans ce fichier."); setPreview([]); return; }
-        setPreview(entries);
+        const parsed = parsePlanningExcel(ev.target!.result as ArrayBuffer);
+        if (!parsed.length) { setError("Aucune donnée trouvée dans ce fichier."); setPreview([]); return; }
+        setPreview(parsed);
       } catch { setError("Erreur lors de la lecture du fichier Excel."); setPreview([]); }
     };
     reader.readAsArrayBuffer(f);
@@ -939,11 +1034,15 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
       const batchId = `upload_${Date.now()}`;
       const res = await uploadShiftPlanning({ batch_id: batchId, entries: preview });
       setUploaded(true);
-      setTimeout(() => { onSuccess(res.created); onClose(); }, 800);
+      setTimeout(() => {
+        onSuccess(res.created);
+        setTab("view");
+        loadMonthPlanning(viewMonth);
+        setFile(null); setPreview([]); setUploaded(false);
+      }, 800);
     } catch { setError("Erreur lors de l'envoi du planning. Réessayez."); } finally { setLoading(false); }
   };
 
-  // Stats by shift
   const stats = useMemo(() => {
     const c: Record<string, number> = { jour: 0, soir1: 0, soir2: 0 };
     preview.forEach((e) => { if (e.shift_type in c) c[e.shift_type]++; });
@@ -951,97 +1050,226 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
     return { jour: c.jour, soir1: c.soir1, soir2: c.soir2, dates: dates.size, total: preview.length };
   }, [preview]);
 
+  const [y, m] = viewMonth.split("-").map(Number);
+
   return (
     <AnimatePresence>
       {open && (
         <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <motion.div className="relative w-full sm:max-w-xl bg-white sm:rounded-3xl shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90dvh]"
+          <motion.div
+            className="relative w-full sm:max-w-4xl bg-white sm:rounded-3xl shadow-2xl overflow-hidden z-10 flex flex-col"
+            style={{ maxHeight: "calc(100dvh - 2rem)" }}
             initial={{ y: 60, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 60, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
+
+            {/* ── Header ── */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-green-600 text-white"><CalendarRange className="h-4 w-4" /></div>
-                <div>
-                  <p className="font-bold text-slate-800">Importer un Planning Excel</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Format : colonne A = shift, colonnes B+ = dates avec employés</p>
-                </div>
+                <p className="font-bold text-slate-800">Planning des Shifts</p>
               </div>
-              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 transition"><X className="h-4 w-4 text-slate-500" /></button>
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {/* Drop zone */}
-              <label className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl p-8 cursor-pointer transition-all ${file ? "border-green-400 bg-green-50" : "border-slate-200 bg-slate-50 hover:border-camublue-900 hover:bg-camublue-900/5"}`}>
-                <Upload className={`h-8 w-8 ${file ? "text-green-600" : "text-slate-300"}`} />
-                {file
-                  ? <><p className="text-sm font-semibold text-green-700">{file.name}</p><p className="text-xs text-green-600">{preview.length} assignations lues</p></>
-                  : <><p className="text-sm font-semibold text-slate-600">Cliquer pour choisir un fichier</p><p className="text-xs text-slate-400">.xlsx, .xls</p></>}
-                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
-              </label>
-
-              {/* Preview stats */}
-              {preview.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[
-                    { label: "Jours", value: stats.dates, color: "bg-blue-50 text-blue-700" },
-                    { label: "08H-16H", value: stats.jour,  color: "bg-teal-50 text-teal-700"     },
-                    { label: "16H-22H", value: stats.soir1, color: "bg-yellow-50 text-yellow-700"  },
-                    { label: "22H-08H", value: stats.soir2, color: "bg-orange-50 text-orange-700"  },
-                  ].map((s) => (
-                    <div key={s.label} className={`rounded-xl px-3 py-2 text-center ${s.color}`}>
-                      <p className="text-lg font-bold">{s.value}</p>
-                      <p className="text-xs font-medium">{s.label}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Preview table */}
-              {preview.length > 0 && (
-                <div className="rounded-xl border border-slate-200 overflow-hidden">
-                  <div className="bg-camublue-900 text-white px-3 py-2 text-xs font-semibold flex justify-between">
-                    <span>Aperçu (5 premiers)</span>
-                    <span>{stats.total} lignes au total</span>
-                  </div>
-                  <table className="min-w-full text-xs">
-                    <thead className="bg-slate-50">
-                      <tr>
-                        {["Date", "Shift", "Employé"].map((h) => (
-                          <th key={h} className="px-3 py-2 text-left text-slate-500 font-semibold">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {preview.slice(0, 5).map((e, i) => (
-                        <tr key={i} className="hover:bg-slate-50">
-                          <td className="px-3 py-1.5 font-mono">{e.date}</td>
-                          <td className="px-3 py-1.5"><ShiftTeamPill teamKey={e.shift_type as ShiftTeamKey} /></td>
-                          <td className="px-3 py-1.5 font-medium">{e.employee_name}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {error && <p className="text-sm text-red-500 font-medium bg-red-50 rounded-xl px-4 py-3 border border-red-100">⚠️ {error}</p>}
-            </div>
-
-            {/* Footer */}
-            <div className="px-5 py-4 border-t border-slate-100 flex gap-3 shrink-0">
-              <button onClick={onClose} className="flex-1 py-2 rounded-2xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Annuler</button>
-              <button onClick={handleUpload} disabled={!preview.length || loading || uploaded}
-                className={`flex-1 py-2 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${uploaded ? "bg-emerald-500 text-white" : "bg-camublue-900 hover:bg-camublue-800 text-white"}`}>
-                {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Import…</>
-                 : uploaded ? <><CheckCircle className="h-4 w-4" />Importé !</>
-                 : <><Upload className="h-4 w-4" />Importer {stats.total} lignes</>}
+              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 transition">
+                <X className="h-4 w-4 text-slate-500" />
               </button>
             </div>
+
+            {/* ── Tabs ── */}
+            <div className="flex gap-1 px-5 pt-3 shrink-0">
+              {([
+                { id: "view",   icon: Table2,  label: "Vue du planning" },
+                { id: "import", icon: Upload,  label: "Importer Excel" },
+              ] as const).map(({ id, icon: Icon, label }) => (
+                <button key={id} onClick={() => setTab(id)}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${tab === id ? "bg-camublue-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"}`}>
+                  <Icon className="h-3.5 w-3.5" />{label}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Tab : Vue planning ── */}
+            {tab === "view" && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Navigation mois */}
+                <div className="flex items-center justify-between px-5 py-3 shrink-0">
+                  <button onClick={() => setViewMonth(prevMonth(viewMonth))} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
+                    <ChevronLeft className="h-4 w-4 text-slate-500" />
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800">{MONTHS_FR[m - 1]} {y}</span>
+                    {hasAnyData && (
+                      <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                        {entries.length} assignations
+                      </span>
+                    )}
+                  </div>
+                  <button onClick={() => setViewMonth(nextMonth(viewMonth))} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
+                    <ChevronRight className="h-4 w-4 text-slate-500" />
+                  </button>
+                </div>
+
+                {/* Grille planning */}
+                <div className="flex-1 overflow-auto px-4 pb-4">
+                  {loadingVue ? (
+                    <div className="flex items-center justify-center py-16 text-slate-400">
+                      <Loader2 className="h-6 w-6 animate-spin mr-2" />Chargement…
+                    </div>
+                  ) : !hasAnyData ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
+                      <CalendarRange className="h-12 w-12 text-slate-200" />
+                      <p className="text-sm font-medium">Aucun planning pour ce mois</p>
+                      <button onClick={() => setTab("import")}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
+                        <Upload className="h-3.5 w-3.5" />Importer un planning
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-slate-200 overflow-hidden">
+                      <table className="min-w-full text-xs">
+                        <thead className="sticky top-0 z-10 bg-camublue-900 text-white">
+                          <tr>
+                            <th className="px-3 py-2.5 text-left font-semibold w-24">Date</th>
+                            {SHIFT_KEYS.map((s) => (
+                              <th key={s.key} className={`px-3 py-2.5 text-center font-semibold min-w-[180px]`}>
+                                {s.label}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {monthDays.map((date) => {
+                            const dayData = grouped[date];
+                            const dateObj = new Date(date + "T00:00:00");
+                            const isToday = date === todayISO();
+                            const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                            const hasEntries = dayData && SHIFT_KEYS.some((s) => (dayData[s.key]?.length ?? 0) > 0);
+                            if (!hasEntries && !isToday) return null; // masquer jours vides sauf aujourd'hui
+                            return (
+                              <tr key={date} className={isToday ? "bg-blue-50/60" : isWeekend ? "bg-slate-50/60" : ""}>
+                                <td className="px-3 py-2 font-medium text-slate-600 whitespace-nowrap">
+                                  <span className={`text-xs font-semibold ${isToday ? "text-blue-600" : "text-slate-400"}`}>
+                                    {DAYS_FR[dateObj.getDay()]}
+                                  </span>
+                                  <span className={`ml-1.5 font-bold ${isToday ? "text-blue-700" : "text-slate-700"}`}>
+                                    {dateObj.getDate()}
+                                  </span>
+                                </td>
+                                {SHIFT_KEYS.map((s) => {
+                                  const cellEntries = dayData?.[s.key] ?? [];
+                                  const isAdding = addingCell?.date === date && addingCell?.shift === s.key;
+                                  return (
+                                    <td key={s.key} className={`px-2 py-1.5 align-top`}>
+                                      <div className="flex flex-wrap gap-1">
+                                        {cellEntries.map((e) => (
+                                          <span key={e.employee_name}
+                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text} border ${s.border}`}>
+                                            {e.employee_name}
+                                            <button onClick={() => handleRemove(e)}
+                                              className="ml-0.5 hover:text-red-600 transition text-current opacity-60 hover:opacity-100">
+                                              <X className="h-2.5 w-2.5" />
+                                            </button>
+                                          </span>
+                                        ))}
+                                        {isAdding ? (
+                                          <div className="flex items-center gap-1">
+                                            <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
+                                              onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAddingCell(null); setNewName(""); } }}
+                                              placeholder="Nom employé…"
+                                              className="text-xs border border-slate-300 rounded-lg px-2 py-0.5 w-32 focus:ring-1 focus:ring-camublue-900 focus:outline-none" />
+                                            <button onClick={handleAdd} disabled={saving || !newName.trim()}
+                                              className="p-0.5 rounded text-green-600 hover:bg-green-100 disabled:opacity-40">
+                                              <Check className="h-3 w-3" />
+                                            </button>
+                                            <button onClick={() => { setAddingCell(null); setNewName(""); }}
+                                              className="p-0.5 rounded text-slate-400 hover:bg-slate-100">
+                                              <X className="h-3 w-3" />
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <button onClick={() => { setAddingCell({ date, shift: s.key }); setNewName(""); }}
+                                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition border border-dashed border-slate-300`}>
+                                            <Plus className="h-2.5 w-2.5" />Ajouter
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Tab : Import ── */}
+            {tab === "import" && (
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {/* Drop zone */}
+                <label className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl p-8 cursor-pointer transition-all ${file ? "border-green-400 bg-green-50" : "border-slate-200 bg-slate-50 hover:border-camublue-900 hover:bg-camublue-900/5"}`}>
+                  <Upload className={`h-8 w-8 ${file ? "text-green-600" : "text-slate-300"}`} />
+                  {file
+                    ? <><p className="text-sm font-semibold text-green-700">{file.name}</p><p className="text-xs text-green-600">{preview.length} assignations lues</p></>
+                    : <><p className="text-sm font-semibold text-slate-600">Cliquer pour choisir un fichier Excel</p><p className="text-xs text-slate-400">.xlsx, .xls — Colonne A = shift, colonnes B+ = dates</p></>}
+                  <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
+                </label>
+
+                {preview.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { label: "Jours",    value: stats.dates, color: "bg-blue-50 text-blue-700" },
+                      { label: "08H-16H",  value: stats.jour,  color: "bg-teal-50 text-teal-700" },
+                      { label: "16H-22H",  value: stats.soir1, color: "bg-yellow-50 text-yellow-700" },
+                      { label: "22H-08H",  value: stats.soir2, color: "bg-orange-50 text-orange-700" },
+                    ].map((s) => (
+                      <div key={s.label} className={`rounded-xl px-3 py-2 text-center ${s.color}`}>
+                        <p className="text-lg font-bold">{s.value}</p><p className="text-xs font-medium">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {preview.length > 0 && (
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <div className="bg-camublue-900 text-white px-3 py-2 text-xs font-semibold flex justify-between">
+                      <span>Aperçu (5 premiers)</span><span>{stats.total} lignes au total</span>
+                    </div>
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-slate-50">
+                        <tr>{["Date","Shift","Employé"].map((h) => <th key={h} className="px-3 py-2 text-left text-slate-500 font-semibold">{h}</th>)}</tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {preview.slice(0, 5).map((e, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="px-3 py-1.5 font-mono">{e.date}</td>
+                            <td className="px-3 py-1.5"><ShiftTeamPill teamKey={e.shift_type as ShiftTeamKey} /></td>
+                            <td className="px-3 py-1.5 font-medium">{e.employee_name}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {error && <p className="text-sm text-red-500 font-medium bg-red-50 rounded-xl px-4 py-3 border border-red-100">⚠️ {error}</p>}
+
+                <div className="flex gap-3">
+                  <button onClick={onClose} className="flex-1 py-2 rounded-2xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Annuler</button>
+                  <button onClick={handleUpload} disabled={!preview.length || loading || uploaded}
+                    className={`flex-1 py-2 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${uploaded ? "bg-emerald-500 text-white" : "bg-camublue-900 hover:bg-camublue-800 text-white"}`}>
+                    {loading  ? <><Loader2 className="h-4 w-4 animate-spin" />Import…</>
+                   : uploaded ? <><CheckCircle className="h-4 w-4" />Importé !</>
+                              : <><Upload className="h-4 w-4" />Importer {stats.total} lignes</>}
+                  </button>
+                </div>
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}
@@ -1385,15 +1613,22 @@ export default function AttendanceShiftsPage() {
 
     // Helpers pour le matching planning
     const normName = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
-    const isInPlanningForShift = (mat: string, name: string, shift: ShiftTeamKey | null): boolean => {
-      if (!planningLoaded || !shift) return false;
-      const entries = (todayPlanning as any)[shift] as { employee_name: string; employee_matricule?: string | null }[] | undefined;
-      if (!entries?.length) return false;
-      return entries.some((e) =>
-        (e.employee_matricule && mat && e.employee_matricule === mat) ||
-        normName(e.employee_name) === normName(name)
-      );
+
+    /** Cherche l'employé dans TOUS les shifts du planning du jour (pas seulement le shift détecté).
+     *  Gère les arrivées anticipées : un employé du shift 16H-22H arrivant à 14h30
+     *  sera quand même reconnu comme planifié pour son vrai shift.
+     *  Retourne le shift planifié ou null si non trouvé. */
+    const findPlannedShift = (mat: string, name: string): ShiftTeamKey | null => {
+      for (const key of (["jour", "soir1", "soir2"] as ShiftTeamKey[])) {
+        const entries = todayPlanning[key];
+        if (entries?.some((e) =>
+          (e.employee_matricule && mat && e.employee_matricule === mat) ||
+          normName(e.employee_name) === normName(name)
+        )) return key;
+      }
+      return null;
     };
+
     const hasPlanningData = planningLoaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length > 0);
 
     return shiftData.records.map((r: ShiftRecord): FlatRecord => {
@@ -1402,17 +1637,22 @@ export default function AttendanceShiftsPage() {
       const lateMin      = computeLateMinutes(r.in_time, sched.startH, sched.startM);
       const overtimeMin  = computeOvertimeMinutes(r.out_time, sched.endH, sched.endM);
 
-      // ✅ Résolution du shift : manuel (localStorage) > API > auto-détection par heure
+      // ✅ Résolution du shift :
+      //  1. Planning (priorité absolue — gère les arrivées anticipées)
+      //  2. Assignation manuelle (localStorage)
+      //  3. API shift_team
+      //  4. Auto-détection par heure de pointage (fallback)
+      const plannedShift  = hasPlanningData ? findPlannedShift(r.matricule, r.full_name) : null;
       const resolvedTeam: ShiftTeamKey | null =
-        assignments[r.matricule] ?? r.shift_team ?? detectShiftTeamFromTime(r.in_time);
+        plannedShift ?? assignments[r.matricule] ?? r.shift_team ?? detectShiftTeamFromTime(r.in_time);
       const resolvedLabel =
         r.shift_team_label ?? SHIFT_TEAMS.find((t) => t.key === resolvedTeam)?.label ?? "";
 
       // ── Planning-aware flags ──────────────────────────────────────────────
-      const isScheduled = !hasPlanningData || isInPlanningForShift(r.matricule, r.full_name, resolvedTeam);
+      const isScheduled = !hasPlanningData || plannedShift !== null;
       // Remplaçant : présent (non absent) mais pas dans le planning
       const isReplacement = hasPlanningData && !isScheduled && r.status !== "absent";
-      // Repos : absent mais pas planifié → on ne compte pas comme une vraie absence
+      // Pas de service : absent mais pas planifié → non compté comme vraie absence
       const notScheduledRest = hasPlanningData && !isScheduled && r.status === "absent";
 
       return {
