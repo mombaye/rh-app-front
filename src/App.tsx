@@ -2,11 +2,12 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
 import PayslipPage from "@/pages/PayslipPage";
+import LeavePage from "@/pages/LeavePage";
 import ChangePasswordPage from "@/components/users/ChangePasswordPage";
 import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import FirstLoginGuard from "@/components/FirstLoginGuard";
-import InterimEmployeesPage from "@/pages/InterimEmployeesPage"; 
+import InterimEmployeesPage from "@/pages/InterimEmployeesPage";
 import InterneEmployeesPage from "./pages/InterneEmployeesPage";
 import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
 import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
@@ -95,6 +96,17 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <AttendanceShiftsPage />
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/leaves"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <LeavePage />
               </FirstLoginGuard>
             </ProtectedRoute>
           }
