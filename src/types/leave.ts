@@ -64,6 +64,9 @@ export interface LeaveRequest {
   revoked_at:                   string | null;
   days_remaining_at_revocation: string | null;
 
+  // Justificatif
+  justification_document: string | null;
+
   created_at:    string;
   updated_at:    string;
 }

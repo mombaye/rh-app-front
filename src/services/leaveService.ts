@@ -264,6 +264,29 @@ export const leaveRequestService = {
   },
 
   /**
+   * PATCH /api/leaves/requests/<id>/ — modifie une demande PENDING
+   */
+  updatePending: async (id: number, data: Partial<LeaveRequestCreate>): Promise<LeaveRequest> => {
+    const res = await axios.patch(`${API}/requests/${id}/`, data, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
+
+  /**
+   * POST /api/leaves/requests/<id>/upload_document/
+   * Multipart: champ 'document' (PDF/image, max 5 Mo)
+   */
+  uploadDocument: async (id: number, file: File): Promise<LeaveRequest> => {
+    const form = new FormData();
+    form.append("document", file);
+    const res = await axios.post(`${API}/requests/${id}/upload_document/`, form, {
+      headers: { ...getAuthHeaders(), "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
+  /**
    * POST /api/leaves/requests/<id>/revoke/
    * Body : { revoke_reason, revoker_id?, recall_date? }
    * Révoque un congé approuvé (rappel d'urgence) et restitue les jours restants.
