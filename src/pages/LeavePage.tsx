@@ -3,17 +3,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";
 import LeaveRequestForm from "@/components/leaves/LeaveRequestForm";
-import LeaveBalances from "@/components/leaves/LeaveBalances";
 import LeaveCalendar from "@/components/leaves/LeaveCalendar";
-import { leaveRequestService } from "@/services/leaveService";
+import { leaveRequestService, leaveTypeService } from "@/services/leaveService";
 import {
-  ContractType, LeaveRequest, LeaveStatus, LeaveSummary,
+  ContractType, LeaveRequest, LeaveStatus, LeaveSummary, LeaveType,
   ApprovePayload, RevokePayload,
 } from "@/types/leave";
 import {
   CalendarDays, RefreshCw, Plus, X, CheckCircle2, XCircle,
-  Ban, RotateCcw, ChevronDown, Table2, Wallet, CalendarRange,
-  Download, Loader2, AlertTriangle, Clock,
+  Ban, RotateCcw, ChevronDown, Table2, CalendarRange,
+  Download, Loader2, AlertTriangle, Clock, Pencil, Paperclip,
+  FileCheck, Upload, ExternalLink,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
@@ -31,12 +31,11 @@ const STATUS_CFG: Record<
   REVOKED:        { label: "Révoqué (urgence)",   color: "#b45309", bg: "#fff7ed", border: "#fed7aa", dot: "bg-orange-500"  },
 };
 
-type TabId         = "requests" | "balances" | "calendar";
-type StatusFilter  = "ALL" | LeaveStatus;
+type TabId        = "requests" | "calendar";
+type StatusFilter = "ALL" | LeaveStatus;
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
   { id: "requests", label: "Demandes",   Icon: Table2       },
-  { id: "balances", label: "Soldes",     Icon: Wallet       },
   { id: "calendar", label: "Calendrier", Icon: CalendarRange },
 ];
 
@@ -68,7 +67,7 @@ function StatusBadge({ status }: { status: LeaveStatus }) {
   );
 }
 
-// ─── KpiCard ─────────────────────────────────────────────────────────────────
+// ─── KpiCard ──────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, sub, color, onClick, active }: {
   label: string; value: number | string; sub?: string;
   color: string; onClick?: () => void; active?: boolean;
@@ -76,9 +75,7 @@ function KpiCard({ label, value, sub, color, onClick, active }: {
   return (
     <button onClick={onClick}
       className={`flex-1 min-w-[110px] rounded-2xl px-4 py-3 text-left transition-all border-2 ${
-        active
-          ? "border-current shadow-md scale-[1.02]"
-          : "border-transparent bg-white shadow-sm hover:shadow-md hover:scale-[1.01]"
+        active ? "border-current shadow-md scale-[1.02]" : "border-transparent bg-white shadow-sm hover:shadow-md hover:scale-[1.01]"
       }`}
       style={{ color, backgroundColor: active ? color + "18" : undefined }}>
       <p className="text-2xl font-black tabular-nums">{value}</p>
@@ -99,6 +96,7 @@ export default function LeavePage() {
   const [contractType, setContractType] = useState<ContractType>("INTERNE");
   const [showForm,     setShowForm]     = useState(false);
   const [selected,     setSelected]     = useState<LeaveRequest | null>(null);
+  const [editTarget,   setEditTarget]   = useState<LeaveRequest | null>(null);
   const [filterOpen,   setFilterOpen]   = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
 
@@ -110,7 +108,6 @@ export default function LeavePage() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  // ── Fetch ────────────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     setLoading(true); setFetchError(null);
     try {
@@ -129,7 +126,6 @@ export default function LeavePage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── Export Excel ─────────────────────────────────────────────────────────────
   const handleExport = () => {
     const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
     const token    = localStorage.getItem("access_token");
@@ -147,6 +143,7 @@ export default function LeavePage() {
   const openDetail  = (r: LeaveRequest) => setSelected(r);
   const closeDetail = ()                 => setSelected(null);
   const afterAction = async ()           => { closeDetail(); await fetchAll(); };
+  const afterEdit   = async ()           => { setEditTarget(null); await fetchAll(); };
 
   const currentFilterLabel = STATUS_FILTERS.find((f) => f.value === statusFilter)?.label ?? "Toutes";
 
@@ -168,7 +165,6 @@ export default function LeavePage() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Toggle contrat */}
               <div className="flex bg-slate-100 rounded-xl p-0.5 text-xs font-semibold">
                 {(["INTERNE", "INTERIM"] as ContractType[]).map((c) => (
                   <button key={c} onClick={() => setContractType(c)}
@@ -200,20 +196,20 @@ export default function LeavePage() {
           {/* KPI Cards */}
           {summary && (
             <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
-              <KpiCard label="Total"     value={summary.total}    color="#003c71" />
-              <KpiCard label="En attente" value={summary.pending} color="#d97706"
+              <KpiCard label="Total"      value={summary.total}    color="#003c71" />
+              <KpiCard label="En attente" value={summary.pending}  color="#d97706"
                 active={statusFilter === "PENDING" || statusFilter === "PENDING_SECOND"}
                 onClick={() => setStatusFilter(
                   (statusFilter === "PENDING" || statusFilter === "PENDING_SECOND") ? "ALL" : "PENDING"
                 )} />
-              <KpiCard label="Approuvés" value={summary.approved} color="#059669"
+              <KpiCard label="Approuvés"  value={summary.approved} color="#059669"
                 sub={`${summary.total_days_approved}j accordés`}
                 active={statusFilter === "APPROVED"}
                 onClick={() => setStatusFilter(statusFilter === "APPROVED" ? "ALL" : "APPROVED")} />
-              <KpiCard label="Rejetés"  value={summary.rejected} color="#dc2626"
+              <KpiCard label="Rejetés"    value={summary.rejected} color="#dc2626"
                 active={statusFilter === "REJECTED"}
                 onClick={() => setStatusFilter(statusFilter === "REJECTED" ? "ALL" : "REJECTED")} />
-              <KpiCard label="Révoqués" value={summary.revoked ?? 0} color="#b45309"
+              <KpiCard label="Révoqués"   value={summary.revoked ?? 0} color="#b45309"
                 active={statusFilter === "REVOKED"}
                 onClick={() => setStatusFilter(statusFilter === "REVOKED" ? "ALL" : "REVOKED")} />
             </div>
@@ -268,7 +264,6 @@ export default function LeavePage() {
         {/* ── Content ─────────────────────────────────────────────────────────── */}
         <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4">
 
-          {/* Tab Demandes */}
           {tab === "requests" && (
             <>
               {loading && (
@@ -307,9 +302,9 @@ export default function LeavePage() {
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 border-b border-slate-100">
                           <tr>
-                            {["Employé", "Type de congé", "Période", "Durée", "Statut", "Actions"].map((h) => (
+                            {["Employé", "Type de congé", "Période", "Durée", "Statut", "Justificatif", "Actions"].map((h) => (
                               <th key={h}
-                                className="text-left px-5 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                                className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                                 {h}
                               </th>
                             ))}
@@ -318,6 +313,8 @@ export default function LeavePage() {
                         <tbody className="divide-y divide-slate-50">
                           {requests.map((r, i) => {
                             const lc = r.leave_type?.color ?? "#6b7280";
+                            const isPending = r.status === "PENDING" || r.status === "PENDING_SECOND";
+                            const needsDoc  = r.leave_type?.requires_justification && !r.justification_document;
                             return (
                               <motion.tr key={r.id}
                                 initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
@@ -325,50 +322,79 @@ export default function LeavePage() {
                                 onClick={() => openDetail(r)}
                                 className={`hover:bg-slate-50/80 transition cursor-pointer ${i % 2 !== 0 ? "bg-slate-50/20" : ""}`}>
 
-                                <td className="px-5 py-4">
+                                {/* Employé */}
+                                <td className="px-4 py-3.5">
                                   <div className="flex items-center gap-3">
                                     <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black text-white shrink-0"
                                       style={{ backgroundColor: lc }}>
                                       {(r.employee?.full_name ?? "??").slice(0, 2).toUpperCase()}
                                     </div>
                                     <div>
-                                      <p className="font-semibold text-slate-800 truncate max-w-[150px]">
+                                      <p className="font-semibold text-slate-800 truncate max-w-[140px]">
                                         {r.employee?.full_name ?? "—"}
                                       </p>
-                                      <p className="text-xs text-slate-400 truncate max-w-[150px]">
+                                      <p className="text-xs text-slate-400 truncate max-w-[140px]">
                                         {r.employee?.matricule} · {r.employee?.service ?? "—"}
                                       </p>
                                     </div>
                                   </div>
                                 </td>
 
-                                <td className="px-5 py-4">
+                                {/* Type */}
+                                <td className="px-4 py-3.5">
                                   <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap"
                                     style={{ backgroundColor: lc + "20", color: lc }}>
                                     {r.leave_type?.label ?? "—"}
                                   </span>
                                 </td>
 
-                                <td className="px-5 py-4 text-slate-600 text-xs whitespace-nowrap font-mono">
+                                {/* Période */}
+                                <td className="px-4 py-3.5 text-slate-600 text-xs whitespace-nowrap font-mono">
                                   {fmtDate(r.start_date)} → {fmtDate(r.end_date)}
                                 </td>
 
-                                <td className="px-5 py-4 font-bold text-slate-800 whitespace-nowrap">
+                                {/* Durée */}
+                                <td className="px-4 py-3.5 font-bold text-slate-800 whitespace-nowrap">
                                   {r.days ?? r.duration_days ?? "—"}j
                                 </td>
 
-                                <td className="px-5 py-4">
+                                {/* Statut */}
+                                <td className="px-4 py-3.5">
                                   <StatusBadge status={r.status} />
                                 </td>
 
-                                <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                                {/* Justificatif */}
+                                <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                                  {r.leave_type?.requires_justification ? (
+                                    r.justification_document ? (
+                                      <a href={r.justification_document} target="_blank" rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700">
+                                        <FileCheck className="h-3.5 w-3.5" /> Voir
+                                      </a>
+                                    ) : (
+                                      <span className={`inline-flex items-center gap-1 text-xs font-semibold ${needsDoc ? "text-amber-600" : "text-slate-400"}`}>
+                                        <Paperclip className="h-3.5 w-3.5" />
+                                        {needsDoc ? "Requis" : "—"}
+                                      </span>
+                                    )
+                                  ) : (
+                                    <span className="text-xs text-slate-300">—</span>
+                                  )}
+                                </td>
+
+                                {/* Actions */}
+                                <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                                   <div className="flex gap-1.5 flex-wrap">
-                                    {(r.status === "PENDING" || r.status === "PENDING_SECOND") && (
+                                    {isPending && (
                                       <>
                                         <QuickApproveBtn request={r} onDone={fetchAll} />
                                         <button onClick={() => openDetail(r)}
                                           className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap">
                                           Rejeter
+                                        </button>
+                                        <button onClick={(e) => { e.stopPropagation(); setEditTarget(r); }}
+                                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+                                          <Pencil className="h-3 w-3" /> Modifier
                                         </button>
                                       </>
                                     )}
@@ -376,6 +402,12 @@ export default function LeavePage() {
                                       <button onClick={() => openDetail(r)}
                                         className="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-semibold rounded-lg transition whitespace-nowrap">
                                         Révoquer
+                                      </button>
+                                    )}
+                                    {r.leave_type?.requires_justification && !r.justification_document && (
+                                      <button onClick={() => openDetail(r)}
+                                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+                                        <Upload className="h-3 w-3" /> Doc
                                       </button>
                                     )}
                                   </div>
@@ -392,7 +424,6 @@ export default function LeavePage() {
             </>
           )}
 
-          {tab === "balances" && <LeaveBalances contractType={contractType} />}
           {tab === "calendar" && <LeaveCalendar />}
         </div>
       </div>
@@ -400,6 +431,9 @@ export default function LeavePage() {
       {/* Modals */}
       <AnimatePresence>
         {selected && <DetailModal request={selected} onClose={closeDetail} onDone={afterAction} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {editTarget && <EditModal request={editTarget} onClose={() => setEditTarget(null)} onDone={afterEdit} />}
       </AnimatePresence>
       <AnimatePresence>
         {showForm && (
@@ -412,7 +446,7 @@ export default function LeavePage() {
   );
 }
 
-// ─── Bouton d'approbation rapide (inline) ─────────────────────────────────────
+// ─── Bouton d'approbation rapide ──────────────────────────────────────────────
 function QuickApproveBtn({ request, onDone }: { request: LeaveRequest; onDone: () => void }) {
   const [loading, setLoading] = useState(false);
   const handle = async (e: React.MouseEvent) => {
@@ -435,16 +469,141 @@ function QuickApproveBtn({ request, onDone }: { request: LeaveRequest; onDone: (
   );
 }
 
+// ─── Modal Modifier (PENDING only) ───────────────────────────────────────────
+function EditModal({ request: r, onClose, onDone }: {
+  request: LeaveRequest; onClose: () => void; onDone: () => void;
+}) {
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [form, setForm] = useState({
+    leave_type_id: String(r.leave_type?.id ?? ""),
+    start_date:    r.start_date,
+    end_date:      r.end_date,
+    days:          r.days ?? r.duration_days ?? "",
+    motif:         r.motif ?? "",
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    leaveTypeService.getAll().then(setLeaveTypes).catch(() => {});
+    // Recalcul jours si dates changent
+  }, []);
+
+  useEffect(() => {
+    if (form.start_date && form.end_date) {
+      const s = new Date(form.start_date), e = new Date(form.end_date);
+      if (e >= s) {
+        const diff = Math.ceil((e.getTime() - s.getTime()) / 86400000) + 1;
+        setForm((f) => ({ ...f, days: String(diff) }));
+      }
+    }
+  }, [form.start_date, form.end_date]);
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      await leaveRequestService.updatePending(r.id, {
+        leave_type_id: parseInt(form.leave_type_id, 10),
+        start_date:    form.start_date,
+        end_date:      form.end_date,
+        days:          parseFloat(form.days),
+        motif:         form.motif.trim(),
+      });
+      toast.success("Demande modifiée ✓");
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors de la modification");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+      onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 20 }} transition={{ duration: 0.2 }}
+        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-[500px] max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}>
+
+        <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 px-6 pt-5 pb-4 flex items-center justify-between z-10">
+          <div className="flex items-center gap-2">
+            <Pencil className="h-4 w-4 text-camublue-900" />
+            <p className="font-black text-slate-800">Modifier la demande #{r.id}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 transition">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Type de congé</label>
+            <select value={form.leave_type_id} onChange={(e) => setForm((f) => ({ ...f, leave_type_id: e.target.value }))}
+              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition">
+              {leaveTypes.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Date début</label>
+              <input type="date" value={form.start_date}
+                onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Date fin</label>
+              <input type="date" value={form.end_date} min={form.start_date}
+                onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
+            </div>
+          </div>
+
+          {form.days && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-700 flex items-center gap-2">
+              <CalendarDays className="h-4 w-4" />
+              Durée calculée : {form.days} jour(s) calendaires
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Motif</label>
+            <textarea value={form.motif} onChange={(e) => setForm((f) => ({ ...f, motif: e.target.value }))}
+              rows={3} placeholder="Motif de la demande…"
+              className="w-full border border-slate-200 rounded-xl p-3 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 resize-none transition" />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose}
+              className="flex-1 border border-slate-200 text-slate-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition">
+              Annuler
+            </button>
+            <button onClick={handleSubmit} disabled={loading}
+              className="flex-[2] bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-bold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
+              {loading ? <ImSpinner2 className="animate-spin" size={14} /> : <CheckCircle2 className="h-4 w-4" />}
+              Enregistrer les modifications
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Modal Détail + Actions ───────────────────────────────────────────────────
 function DetailModal({ request: r, onClose, onDone }: {
   request: LeaveRequest; onClose: () => void; onDone: () => void;
 }) {
-  const [actionLoading,   setActionLoading]   = useState(false);
-  const [rejectReason,    setRejectReason]    = useState("");
-  const [secondApproverId,setSecondApproverId]= useState("");
-  const [revokeReason,    setRevokeReason]    = useState("");
-  const [recallDate,      setRecallDate]      = useState(new Date().toISOString().slice(0, 10));
-  const [showRevoke,      setShowRevoke]      = useState(false);
+  const [actionLoading,    setActionLoading]    = useState(false);
+  const [rejectReason,     setRejectReason]     = useState("");
+  const [secondApproverId, setSecondApproverId] = useState("");
+  const [revokeReason,     setRevokeReason]     = useState("");
+  const [recallDate,       setRecallDate]       = useState(new Date().toISOString().slice(0, 10));
+  const [showRevoke,       setShowRevoke]       = useState(false);
+  const [docFile,          setDocFile]          = useState<File | null>(null);
+  const [docLoading,       setDocLoading]       = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const run = async (fn: () => Promise<void>, msg: string) => {
     setActionLoading(true);
@@ -470,25 +629,37 @@ function DetailModal({ request: r, onClose, onDone }: {
     run(() => leaveRequestService.revoke(r.id, payload).then(() => {}), "Congé révoqué — jours restitués ✓");
   };
 
-  const isPending  = r.status === "PENDING" || r.status === "PENDING_SECOND";
-  const lc         = r.leave_type?.color ?? "#6b7280";
+  const handleUploadDoc = async () => {
+    if (!docFile) return;
+    setDocLoading(true);
+    try {
+      await leaveRequestService.uploadDocument(r.id, docFile);
+      toast.success("Justificatif envoyé ✓");
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors de l'envoi");
+    } finally { setDocLoading(false); }
+  };
+
+  const isPending = r.status === "PENDING" || r.status === "PENDING_SECOND";
+  const lc        = r.leave_type?.color ?? "#6b7280";
+  const needsDoc  = r.leave_type?.requires_justification;
 
   const infoRows: [string, string][] = [
-    ["Employé",    r.employee?.full_name ?? "—"],
-    ["Matricule",  r.employee?.matricule ?? "—"],
-    ["Service",    r.employee?.service ?? "—"],
-    ["Manager",    r.employee?.manager ?? "—"],
-    ["Fonction",   r.employee?.fonction ?? "—"],
-    ["Type",       r.leave_type?.label ?? "—"],
-    ["Durée",      `${r.days ?? r.duration_days ?? "—"} jour(s)`],
-    ["Du",         fmtDate(r.start_date)],
-    ["Au",         fmtDate(r.end_date)],
-    ["Soumis le",  fmtDate(r.created_at?.slice(0, 10))],
-    ...(r.reviewed_at    ? [["1ère validation", fmtDate(r.reviewed_at.slice(0,10))]] as [string,string][] : []),
-    ...(r.reviewed_by    ? [["Validé par",      r.reviewed_by.full_name]]            as [string,string][] : []),
-    ...(r.second_reviewer? [["2ème validateur", r.second_reviewer.full_name]]        as [string,string][] : []),
-    ...(r.revoked_at     ? [["Révoqué le",      fmtDate(r.revoked_at.slice(0,10))]] as [string,string][] : []),
-    ...(r.revoked_by     ? [["Révoqué par",     r.revoked_by.full_name]]             as [string,string][] : []),
+    ["Employé",   r.employee?.full_name ?? "—"],
+    ["Matricule", r.employee?.matricule ?? "—"],
+    ["Service",   r.employee?.service ?? "—"],
+    ["Manager",   r.employee?.manager ?? "—"],
+    ["Type",      r.leave_type?.label ?? "—"],
+    ["Durée",     `${r.days ?? r.duration_days ?? "—"} jour(s)`],
+    ["Du",        fmtDate(r.start_date)],
+    ["Au",        fmtDate(r.end_date)],
+    ["Soumis le", fmtDate(r.created_at?.slice(0, 10))],
+    ...(r.reviewed_by     ? [["Validé par",      r.reviewed_by.full_name]]             as [string,string][] : []),
+    ...(r.reviewed_at     ? [["1ère valid.",      fmtDate(r.reviewed_at.slice(0,10))]]  as [string,string][] : []),
+    ...(r.second_reviewer ? [["2ème validateur",  r.second_reviewer.full_name]]         as [string,string][] : []),
+    ...(r.revoked_at      ? [["Révoqué le",       fmtDate(r.revoked_at.slice(0,10))]]  as [string,string][] : []),
+    ...(r.revoked_by      ? [["Révoqué par",      r.revoked_by.full_name]]              as [string,string][] : []),
     ...(r.days_remaining_at_revocation != null
         ? [["Jours restitués", `${r.days_remaining_at_revocation}j`]] as [string,string][] : []),
   ];
@@ -521,13 +692,23 @@ function DetailModal({ request: r, onClose, onDone }: {
         </div>
 
         <div className="px-6 py-4 space-y-4">
-          {/* Badges */}
+          {/* Badges statut + type */}
           <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={r.status} />
             <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap"
               style={{ backgroundColor: lc + "20", color: lc }}>
               {r.leave_type?.label}
             </span>
+            {needsDoc && (
+              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap ${
+                r.justification_document ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+              }`}>
+                {r.justification_document
+                  ? <><FileCheck className="h-3 w-3" /> Justificatif fourni</>
+                  : <><Paperclip className="h-3 w-3" /> Justificatif requis</>
+                }
+              </span>
+            )}
           </div>
 
           {/* Grille d'infos */}
@@ -545,6 +726,52 @@ function DetailModal({ request: r, onClose, onDone }: {
             <div className="bg-slate-50 rounded-xl p-3">
               <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Motif</p>
               <p className="text-sm text-slate-700">{r.motif}</p>
+            </div>
+          )}
+
+          {/* ── Section Justificatif ─────────────────────────────────────────── */}
+          {needsDoc && (
+            <div className={`rounded-2xl border-2 p-4 space-y-3 ${
+              r.justification_document ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"
+            }`}>
+              <p className={`text-sm font-bold flex items-center gap-2 ${
+                r.justification_document ? "text-emerald-700" : "text-amber-700"
+              }`}>
+                {r.justification_document
+                  ? <><FileCheck className="h-4 w-4" /> Document justificatif fourni</>
+                  : <><Paperclip className="h-4 w-4" /> Document justificatif requis</>
+                }
+              </p>
+              <p className={`text-xs ${r.justification_document ? "text-emerald-600" : "text-amber-600"}`}>
+                Ce type de congé ({r.leave_type?.label}) nécessite un justificatif (acte de mariage, de naissance, certificat…)
+              </p>
+
+              {r.justification_document ? (
+                <a href={r.justification_document} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition">
+                  <ExternalLink className="h-3.5 w-3.5" /> Ouvrir le document
+                </a>
+              ) : (
+                <div className="space-y-2">
+                  <div
+                    className="border-2 border-dashed border-amber-300 rounded-xl p-4 text-center cursor-pointer hover:bg-amber-50/50 transition"
+                    onClick={() => fileRef.current?.click()}>
+                    <Upload className="h-6 w-6 mx-auto text-amber-400 mb-1" />
+                    <p className="text-xs text-amber-600 font-semibold">
+                      {docFile ? docFile.name : "Cliquer pour sélectionner un fichier (PDF, JPEG, PNG — max 5 Mo)"}
+                    </p>
+                  </div>
+                  <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden"
+                    onChange={(e) => setDocFile(e.target.files?.[0] ?? null)} />
+                  {docFile && (
+                    <button onClick={handleUploadDoc} disabled={docLoading}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition disabled:opacity-50">
+                      {docLoading ? <ImSpinner2 className="animate-spin" size={13} /> : <Upload className="h-4 w-4" />}
+                      Envoyer le justificatif
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -582,15 +809,13 @@ function DetailModal({ request: r, onClose, onDone }: {
                   className="w-full border border-slate-200 rounded-xl p-3 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 resize-none transition" />
               </div>
 
-              {/* 2ème approbateur uniquement depuis PENDING */}
               {r.status === "PENDING" && (
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">
                     2ème approbateur — ID employé{" "}
                     <span className="normal-case font-normal text-slate-400">(laisser vide pour approbation directe)</span>
                   </label>
-                  <input type="number" min={1}
-                    placeholder="Ex : 12"
+                  <input type="number" min={1} placeholder="Ex : 12"
                     value={secondApproverId} onChange={(e) => setSecondApproverId(e.target.value)}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition" />
                 </div>
@@ -630,7 +855,6 @@ function DetailModal({ request: r, onClose, onDone }: {
                 Annuler la demande
               </button>
 
-              {/* Zone révocation */}
               <div className="rounded-2xl border-2 border-orange-200 bg-orange-50 p-4 space-y-3">
                 <button onClick={() => setShowRevoke((v) => !v)}
                   className="flex items-center gap-2 text-orange-700 font-bold text-sm w-full">
@@ -644,9 +868,8 @@ function DetailModal({ request: r, onClose, onDone }: {
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }} className="overflow-hidden space-y-3">
                       <p className="text-xs text-orange-700">
-                        L'employé est rappelé d'urgence. Les jours restants depuis la date de rappel seront restitués dans son solde de congés.
+                        L'employé est rappelé d'urgence. Les jours restants depuis la date de rappel seront restitués dans son solde.
                       </p>
-
                       <div>
                         <label className="text-xs font-bold text-orange-700 uppercase block mb-1.5">
                           Date de rappel effectif <span className="text-red-500">*</span>
@@ -655,17 +878,14 @@ function DetailModal({ request: r, onClose, onDone }: {
                           min={r.start_date} max={r.end_date}
                           className="w-full border border-orange-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-200 transition bg-white" />
                       </div>
-
                       <div>
                         <label className="text-xs font-bold text-orange-700 uppercase block mb-1.5">
                           Motif de révocation <span className="text-red-500">*</span>
                         </label>
                         <textarea value={revokeReason} onChange={(e) => setRevokeReason(e.target.value)}
-                          placeholder="Situation d'urgence nécessitant l'intervention de l'employé…"
-                          rows={2}
+                          placeholder="Situation d'urgence nécessitant l'intervention de l'employé…" rows={2}
                           className="w-full border border-orange-200 rounded-xl p-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-200 resize-none transition bg-white" />
                       </div>
-
                       <button disabled={actionLoading || !revokeReason.trim()} onClick={handleRevoke}
                         className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-xl transition disabled:opacity-50">
                         {actionLoading ? <ImSpinner2 className="animate-spin" size={13} /> : <RotateCcw className="h-4 w-4" />}
