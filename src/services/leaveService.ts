@@ -11,10 +11,8 @@ import {
   LeaveRequestFilters,
   LeaveSummary,
   LeaveCalendarEntry,
-  LeaveTypeStatRow,
-  LeaveDeptStatRow,
-  ApproveLeaveData,
-  RevokeLeaveData,
+  ApprovePayload,
+  RevokePayload,
 } from "../types/leave";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
@@ -31,7 +29,7 @@ const getAuthHeaders = () => {
 export const leaveTypeService = {
   /** GET /api/leaves/types/ */
   getAll: async (): Promise<LeaveType[]> => {
-    const res = await axios.get(`${API}/types/`, {
+    const res = await axios.get(`${API}/types`, {
       headers: getAuthHeaders(),
     });
     return res.data;
@@ -65,7 +63,10 @@ export const leaveTypeService = {
 // LeaveBalance  →  /api/leaves/balances/
 // ─────────────────────────────────────────────────────────────────────────────
 export const leaveBalanceService = {
-  /** GET /api/leaves/balances/?year=Y&employee_id=X */
+  /**
+   * GET /api/leaves/balances/
+   * Query params : year, employee_id  (via get_queryset)
+   */
   getAll: async (year?: number): Promise<LeaveBalance[]> => {
     const params: Record<string, string> = {};
     if (year) params.year = String(year);
@@ -76,7 +77,11 @@ export const leaveBalanceService = {
     return res.data;
   },
 
-  /** GET /api/leaves/balances/employee/<id>/?year=Y */
+  /**
+   * GET /api/leaves/balances/employee/<employeeId>/
+   * Route déclarée dans urls.py : balances/employee/<int:employee_id>/
+   * Query param optionnel : year
+   */
   getByEmployee: async (employeeId: number, year?: number): Promise<LeaveBalance[]> => {
     const params: Record<string, string> = {};
     if (year) params.year = String(year);
@@ -95,7 +100,11 @@ export const leaveBalanceService = {
     return res.data;
   },
 
-  /** PATCH /api/leaves/balances/<id>/adjust/  body: { adjusted } */
+  /**
+   * PATCH /api/leaves/balances/<id>/adjust/
+   * Body : { adjusted: number }
+   * Enregistré par le router via @action(detail=True, url_path="adjust")
+   */
   adjust: async (id: number, data: LeaveBalanceAdjust): Promise<LeaveBalance> => {
     const res = await axios.patch(`${API}/balances/${id}/adjust/`, data, {
       headers: getAuthHeaders(),
@@ -110,11 +119,15 @@ export const leaveBalanceService = {
 export const leaveRequestService = {
   /**
    * GET /api/leaves/requests/
+   * Query params supportés par get_queryset() :
+   *   status, employee_id, leave_type_id, start_date, end_date, department
+   *
    * contract_type retiré des params (pas de filtre Django sur ce champ)
    */
   getAll: async (filters?: LeaveRequestFilters): Promise<LeaveRequest[]> => {
+    // On extrait contract_type pour ne pas l'envoyer à Django
     const { contract_type, ...apiFilters } = filters ?? {};
-    void contract_type;
+    void contract_type; // utilisé uniquement pour le routing frontend
 
     const res = await axios.get(`${API}/requests/`, {
       headers: getAuthHeaders(),
@@ -131,7 +144,11 @@ export const leaveRequestService = {
     return res.data;
   },
 
-  /** GET /api/leaves/requests/employee/<id>/?status=X */
+  /**
+   * GET /api/leaves/requests/employee/<employeeId>/
+   * Route déclarée dans urls.py : requests/employee/<int:employee_id>/
+   * Query param optionnel : status
+   */
   getByEmployee: async (
     employeeId: number,
     filters?: Pick<LeaveRequestFilters, "status">
@@ -143,7 +160,16 @@ export const leaveRequestService = {
     return res.data;
   },
 
-  /** POST /api/leaves/requests/ */
+  /**
+   * POST /api/leaves/requests/
+   * Body (LeaveRequestCreateSerializer) :
+   *   employee_id, leave_type_id, start_date, end_date, days, motif
+   *
+   * Validations backend :
+   *   1. end_date >= start_date
+   *   2. Pas de doublon sur la période (PENDING/APPROVED)
+   *   3. Solde suffisant si leave_type.is_paid
+   */
   create: async (data: LeaveRequestCreate): Promise<LeaveRequest> => {
     const res = await axios.post(`${API}/requests/`, data, {
       headers: getAuthHeaders(),
@@ -152,7 +178,10 @@ export const leaveRequestService = {
   },
 
   /** PATCH /api/leaves/requests/<id>/ */
-  update: async (id: number, data: Partial<LeaveRequestCreate>): Promise<LeaveRequest> => {
+  update: async (
+    id: number,
+    data: Partial<LeaveRequestCreate>
+  ): Promise<LeaveRequest> => {
     const res = await axios.patch(`${API}/requests/${id}/`, data, {
       headers: getAuthHeaders(),
     });
@@ -168,14 +197,14 @@ export const leaveRequestService = {
 
   /**
    * POST /api/leaves/requests/<id>/approve/
-   * - Sans second_approver_id → approbation directe (APPROVED)
-   * - Avec second_approver_id → bascule en PENDING_SECOND + notifie 2ème approbateur
-   * - reviewer_id (optionnel) : ID de l'employé qui approuve
+   * Body optionnel :
+   *   - reviewer_id        : ID employé validateur
+   *   - second_approver_id : si présent → passe en PENDING_SECOND
    */
-  approve: async (id: number, data?: ApproveLeaveData): Promise<LeaveRequest> => {
+  approve: async (id: number, payload?: ApprovePayload): Promise<LeaveRequest> => {
     const res = await axios.post(
       `${API}/requests/${id}/approve/`,
-      data ?? {},
+      payload ?? {},
       { headers: getAuthHeaders() }
     );
     return res.data;
@@ -183,16 +212,14 @@ export const leaveRequestService = {
 
   /**
    * POST /api/leaves/requests/<id>/reject/
-   * Body : { reject_reason, reviewer_id? }
+   * Enregistré par le router via @action(detail=True, url_path="reject")
+   * Body : { reject_reason: string }
+   * Backend : status → REJECTED, stocke reject_reason
    */
-  reject: async (
-    id: number,
-    reject_reason: string,
-    reviewer_id?: number
-  ): Promise<LeaveRequest> => {
+  reject: async (id: number, reject_reason: string): Promise<LeaveRequest> => {
     const res = await axios.post(
       `${API}/requests/${id}/reject/`,
-      { reject_reason, ...(reviewer_id ? { reviewer_id } : {}) },
+      { reject_reason },
       { headers: getAuthHeaders() }
     );
     return res.data;
@@ -200,7 +227,8 @@ export const leaveRequestService = {
 
   /**
    * POST /api/leaves/requests/<id>/cancel/
-   * Si APPROVED → restaure balance.taken, status → CANCELLED
+   * Enregistré par le router via @action(detail=True, url_path="cancel")
+   * Backend : si APPROVED → restaure balance.taken, status → CANCELLED
    */
   cancel: async (id: number): Promise<LeaveRequest> => {
     const res = await axios.post(
@@ -212,22 +240,10 @@ export const leaveRequestService = {
   },
 
   /**
-   * POST /api/leaves/requests/<id>/revoke/
-   * Rappel d'urgence : révoque un congé approuvé et restitue les jours restants.
-   * Body : { revoke_reason, revoker_id?, recall_date? }
+   * GET /api/leaves/requests/calendar/?month=M&year=Y
+   * Route manuelle dans urls.py : path('calendar/', ...)
+   * Retourne les absences APPROVED du mois
    */
-  revoke: async (id: number, data: RevokeLeaveData): Promise<LeaveRequest & { days_restored: string }> => {
-    const res = await axios.post(
-      `${API}/requests/${id}/revoke/`,
-      data,
-      { headers: getAuthHeaders() }
-    );
-    return res.data;
-  },
-
-  // ── Calendrier ─────────────────────────────────────────────────────────────
-
-  /** GET /api/leaves/requests/calendar/?month=M&year=Y */
   getCalendar: async (month: number, year: number): Promise<LeaveCalendarEntry[]> => {
     const res = await axios.get(`${API}/requests/calendar/`, {
       headers: getAuthHeaders(),
@@ -236,72 +252,26 @@ export const leaveRequestService = {
     return res.data;
   },
 
-  // ── Statistiques ───────────────────────────────────────────────────────────
-
-  /** GET /api/leaves/requests/stats/summary/ */
-  getSummary: async (year?: number): Promise<LeaveSummary> => {
-    const params: Record<string, string> = {};
-    if (year) params.year = String(year);
+  /**
+   * GET /api/leaves/requests/stats/summary/
+   * Retourne : total, pending, approved, rejected, cancelled, revoked, total_days_approved
+   */
+  getSummary: async (): Promise<LeaveSummary> => {
     const res = await axios.get(`${API}/requests/stats/summary/`, {
       headers: getAuthHeaders(),
-      params,
     });
     return res.data;
   },
-
-  /** GET /api/leaves/requests/stats/by-type/ */
-  getStatsByType: async (year?: number): Promise<LeaveTypeStatRow[]> => {
-    const params: Record<string, string> = {};
-    if (year) params.year = String(year);
-    const res = await axios.get(`${API}/requests/stats/by-type/`, {
-      headers: getAuthHeaders(),
-      params,
-    });
-    return res.data;
-  },
-
-  /** GET /api/leaves/requests/stats/by-department/ */
-  getStatsByDepartment: async (year?: number): Promise<LeaveDeptStatRow[]> => {
-    const params: Record<string, string> = {};
-    if (year) params.year = String(year);
-    const res = await axios.get(`${API}/requests/stats/by-department/`, {
-      headers: getAuthHeaders(),
-      params,
-    });
-    return res.data;
-  },
-
-  // ── Export Excel ───────────────────────────────────────────────────────────
 
   /**
-   * GET /api/leaves/requests/export/excel/
-   * Déclenche le téléchargement du fichier Excel via une nouvelle fenêtre.
+   * POST /api/leaves/requests/<id>/revoke/
+   * Body : { revoke_reason, revoker_id?, recall_date? }
+   * Révoque un congé approuvé (rappel d'urgence) et restitue les jours restants.
    */
-  downloadExcel: (): void => {
-    const token = localStorage.getItem("access_token");
-    const url = `${API}/requests/export/excel/`;
-    // Ouvre via fetch pour inclure le token Bearer
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.blob())
-      .then((blob) => {
-        const href = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = href;
-        const now = new Date();
-        const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-        a.download = `conges_${ts}.xlsx`;
-        a.click();
-        URL.revokeObjectURL(href);
-      });
-  },
-
-  // ── Accrual mensuel manuel (admin) ─────────────────────────────────────────
-
-  /** POST /api/leaves/requests/trigger-monthly-credit/ */
-  triggerMonthlyCredit: async (): Promise<{ task_id: string; message: string }> => {
+  revoke: async (id: number, payload: RevokePayload): Promise<LeaveRequest & { days_restored: string }> => {
     const res = await axios.post(
-      `${API}/requests/trigger-monthly-credit/`,
-      {},
+      `${API}/requests/${id}/revoke/`,
+      payload,
       { headers: getAuthHeaders() }
     );
     return res.data;
