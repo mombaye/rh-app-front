@@ -28,7 +28,7 @@ import * as XLSX from "xlsx";
 type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" | "deficit";
 type MotifType    = "absent" | "not_pointing";
 type AssignmentMap = Record<string, ShiftTeamKey | null>;
-type ViewMode     = "daily" | "weekly" | "monthly";
+type ViewMode     = "daily" | "weekly" | "monthly" | "planning";
 
 // Planning : map date → shift_type → [employee names/matricules]
 type DayPlanningMap = Record<string, { employee_name: string; employee_matricule?: string | null }[]>;
@@ -109,6 +109,7 @@ interface FlatRecord {
   is_scheduled: boolean;         // true if employee is in today's planning
   is_replacement: boolean;       // true if present but NOT in planning (replacement)
   not_scheduled_rest: boolean;   // true if not scheduled (rest day) → hide from absent count
+  is_shift_pending: boolean;     // true if scheduled but shift hasn't started yet (don't count as absent)
   team_id: string;               // identifiant d'équipe (ex: "equipe-1")
   replaced_by: string | null;    // nom du remplaçant (si cet employé est absent et a été remplacé)
 }
@@ -154,6 +155,7 @@ const STATUS_CFG = {
   incomplete:  { label: "Incomplet",   dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200"       },
   anomaly:     { label: "Anomalie",    dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200"    },
   not_working: { label: "Repos",       dot: "bg-slate-400",   badge: "bg-slate-50 text-slate-500 ring-slate-200"       },
+  pending:     { label: "En attente",  dot: "bg-blue-400",    badge: "bg-blue-50 text-blue-600 ring-blue-200"          },
 };
 
 const QUICK_FILTERS = [
@@ -222,6 +224,43 @@ function detectShiftTeamFromTime(inIso: string | null): ShiftTeamKey | null {
   if (h >= 14 && h < 20) return "soir1";
   // 22H-08H : entrée entre 20h et 5h (nuit)
   return "soir2";
+}
+
+// ─── Statut actuel d'un shift (actif / à venir / terminé) ────────────────────
+function getShiftActiveStatus(shiftKey: ShiftTeamKey): "active" | "upcoming" | "ended" {
+  const now    = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  if (shiftKey === "jour") {
+    // Fenêtre d'entrée 05h–14h, fin shift 16h
+    if (nowMin >= 5 * 60 && nowMin < 16 * 60) return "active";
+    if (nowMin < 5 * 60) return "upcoming";
+    return "ended";
+  }
+  if (shiftKey === "soir1") {
+    // Fenêtre d'entrée 14h–20h, fin shift 22h
+    if (nowMin >= 14 * 60 && nowMin < 22 * 60) return "active";
+    if (nowMin < 14 * 60) return "upcoming";
+    return "ended";
+  }
+  // soir2 : fenêtre 20h–06h (passe minuit)
+  if (nowMin >= 20 * 60 || nowMin < 8 * 60) return "active";
+  return "upcoming";
+}
+
+// ─── Jours ISO d'une semaine ──────────────────────────────────────────────────
+function weekDaysFromISO(isoWeek: string): string[] {
+  const [yearStr, weekStr] = isoWeek.split("-W");
+  const year = parseInt(yearStr, 10);
+  const week = parseInt(weekStr, 10);
+  // Lundi de la semaine ISO
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const startOfWeek = new Date(jan4);
+  startOfWeek.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() || 7) - 1) + (week - 1) * 7);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(startOfWeek);
+    d.setUTCDate(startOfWeek.getUTCDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
 }
 
 // ─── Export XLSX ──────────────────────────────────────────────────────────────
@@ -365,8 +404,9 @@ function TodayPlanningPanel({
           const emps = todayPlanning[team.key as ShiftTeamKey];
           if (!emps || emps.length === 0) return null;
 
+          const shiftStatus = getShiftActiveStatus(team.key as ShiftTeamKey);
           const present = emps.filter((e) => { const r = getRecord(e); return r && r.status !== "absent"; }).length;
-          const absent  = emps.length - present;
+          const absent  = shiftStatus === "upcoming" ? 0 : emps.length - present;
 
           return (
             <div key={team.key}>
@@ -384,14 +424,17 @@ function TodayPlanningPanel({
               </div>
               {/* Employee list */}
               {emps.map((emp) => {
-                const rec    = getRecord(emp);
-                const status = rec?.status ?? "absent";
-                const isLate = (rec?.computed_late_minutes ?? 0) > 0;
-                const pal    = (emp.team_id && emp.team_id !== "") ? getTeamPalette(emp.team_id) : null;
+                const rec         = getRecord(emp);
+                // Si le shift n'a pas encore commencé, ne pas afficher "absent" mais "en attente"
+                const effectiveStatus = rec?.status ?? (shiftStatus === "upcoming" ? "pending" : "absent");
+                const status      = effectiveStatus;
+                const isLate      = (rec?.computed_late_minutes ?? 0) > 0;
+                const pal         = (emp.team_id && emp.team_id !== "") ? getTeamPalette(emp.team_id) : null;
 
                 const statusDot =
                   status === "ok"         ? "bg-emerald-500" :
                   status === "absent"     ? "bg-red-500"     :
+                  status === "pending"    ? "bg-blue-400"    :
                   status === "incomplete" ? "bg-amber-500"   :
                                             "bg-violet-500";
 
@@ -399,6 +442,7 @@ function TodayPlanningPanel({
                   <div key={emp.employee_name}
                     className={`flex items-center gap-2 px-3 py-1.5 text-[10px] border-b border-slate-50 transition-colors ${
                       status === "absent"     ? "bg-red-50/50"    :
+                      status === "pending"    ? "bg-blue-50/30"   :
                       status === "ok"         ? ""                :
                       status === "incomplete" ? "bg-amber-50/30"  :
                                                 "bg-violet-50/30"
@@ -408,7 +452,7 @@ function TodayPlanningPanel({
                       {emp.employee_matricule && (
                         <div className="font-mono text-[8px] text-slate-400 leading-none">{emp.employee_matricule}</div>
                       )}
-                      <div className={`font-medium truncate leading-tight ${status === "absent" ? "text-red-700" : "text-slate-700"}`}
+                      <div className={`font-medium truncate leading-tight ${status === "absent" ? "text-red-700" : status === "pending" ? "text-blue-600" : "text-slate-700"}`}
                         title={emp.employee_name}>
                         {emp.employee_name}
                       </div>
@@ -429,9 +473,10 @@ function TodayPlanningPanel({
       <div className="px-3 py-2 border-t border-slate-100 bg-slate-50 shrink-0">
         <div className="flex items-center gap-3 flex-wrap">
           {[
-            { dot: "bg-emerald-500", label: "Présent"  },
-            { dot: "bg-red-500",     label: "Absent"   },
-            { dot: "bg-amber-500",   label: "Incomplet"},
+            { dot: "bg-emerald-500", label: "Présent"   },
+            { dot: "bg-red-500",     label: "Absent"    },
+            { dot: "bg-blue-400",    label: "En attente"},
+            { dot: "bg-amber-500",   label: "Incomplet" },
           ].map((l) => (
             <span key={l.label} className="flex items-center gap-1 text-[9px] text-slate-500">
               <span className={`h-1.5 w-1.5 rounded-full ${l.dot}`} />{l.label}
@@ -1979,6 +2024,222 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", delay = 0, lo
   );
 }
 
+// ─── Vue hebdomadaire du planning (style Excel) ────────────────────────────────
+function WeeklyPlanningGrid({
+  planningEntries,
+  weekDays,
+  weekAttendance,
+  loading,
+}: {
+  planningEntries: PlanningEntry[];
+  weekDays: string[];
+  weekAttendance: Record<string, Record<string, string>>;
+  loading: boolean;
+}) {
+  const today = todayISO();
+
+  // Grouper les employés par shift pour toute la semaine
+  // Pour chaque shift : liste d'employés uniques + leurs jours
+  const shiftGroups = useMemo(() => {
+    const result: Record<ShiftTeamKey, {
+      employee: string;
+      matricule: string | null;
+      team_id: string;
+      days: Record<string, boolean>; // date → scheduled
+    }[]> = { jour: [], soir1: [], soir2: [] };
+
+    for (const entry of planningEntries) {
+      const shift = entry.shift_type as ShiftTeamKey;
+      if (!(shift in result)) continue;
+      const existing = result[shift].find((e) => e.employee === entry.employee_name);
+      if (existing) {
+        existing.days[entry.date] = true;
+      } else {
+        result[shift].push({
+          employee:  entry.employee_name,
+          matricule: entry.employee_matricule || null,
+          team_id:   entry.team_id || "",
+          days:      { [entry.date]: true },
+        });
+      }
+    }
+    return result;
+  }, [planningEntries]);
+
+  const hasAny = SHIFT_TEAMS.some((t) => shiftGroups[t.key]?.length > 0);
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center gap-3 text-slate-400">
+        <Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Chargement du planning…</span>
+      </div>
+    );
+  }
+
+  if (!hasAny) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400 py-16">
+        <CalendarRange className="h-14 w-14 text-slate-200" />
+        <p className="text-sm font-medium">Aucun planning pour cette semaine</p>
+        <p className="text-xs text-slate-400">Importez un planning pour voir les assignations.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm bg-white">
+      {/* Légende */}
+      <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 border-b border-slate-200 sticky top-0 z-20 flex-wrap">
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Légende :</span>
+        {[
+          { label: "M = 08H-16H", style: "bg-teal-100 text-teal-800 border border-teal-300"     },
+          { label: "S = 16H-22H", style: "bg-amber-100 text-amber-800 border border-amber-300"  },
+          { label: "N = 22H-08H", style: "bg-indigo-100 text-indigo-800 border border-indigo-300"},
+          { label: "✓ Présent",   style: "bg-emerald-100 text-emerald-800 border border-emerald-300" },
+          { label: "✗ Absent",    style: "bg-red-100 text-red-700 border border-red-300"         },
+          { label: "? Incomplet", style: "bg-amber-100 text-amber-700 border border-amber-300"   },
+        ].map((item) => (
+          <span key={item.label} className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${item.style}`}>
+            {item.label}
+          </span>
+        ))}
+      </div>
+
+      <table className="min-w-full text-xs border-collapse">
+        <thead className="sticky top-[41px] z-10">
+          <tr className="bg-camublue-900 text-white">
+            <th className="px-4 py-3 text-left font-bold min-w-[170px] sticky left-0 bg-camublue-900 z-20 border-r border-white/20">
+              SHIFT / Employés
+            </th>
+            {weekDays.map((date) => {
+              const d         = new Date(date + "T00:00:00");
+              const isToday   = date === today;
+              const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+              const isFuture  = date > today;
+              return (
+                <th key={date}
+                  className={`px-2 py-3 text-center font-semibold min-w-[100px] border-r border-white/10 last:border-r-0 ${
+                    isToday ? "bg-blue-600" : isWeekend ? "bg-camublue-800/70" : ""
+                  }`}>
+                  <div className="flex flex-col items-center leading-none gap-0.5">
+                    <span className="text-[9px] font-bold uppercase">{DAYS_FR[d.getDay()]}</span>
+                    <span className="text-base font-black">{d.getDate()}</span>
+                    <span className="text-[9px] opacity-70">{String(d.getMonth() + 1).padStart(2, "0")}/{d.getFullYear()}</span>
+                    {isFuture && <span className="text-[8px] bg-white/20 px-1 rounded mt-0.5">Futur</span>}
+                    {isToday  && <span className="text-[8px] bg-white/30 px-1 rounded mt-0.5 font-bold">Aujourd'hui</span>}
+                  </div>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {SHIFT_TEAMS.map((team) => {
+            const employees = shiftGroups[team.key] ?? [];
+            if (employees.length === 0) return null;
+
+            const shiftLetter = team.key === "jour" ? "M" : team.key === "soir1" ? "S" : "N";
+            const cellStyle   = team.key === "jour"
+              ? "bg-teal-100 text-teal-800 border border-teal-300"
+              : team.key === "soir1"
+              ? "bg-amber-100 text-amber-800 border border-amber-300"
+              : "bg-indigo-100 text-indigo-800 border border-indigo-300";
+
+            return (
+              <React.Fragment key={team.key}>
+                {/* En-tête section shift */}
+                <tr>
+                  <td colSpan={weekDays.length + 1}
+                    className={`px-4 py-2 font-bold text-sm border-b-2 ${team.activeBorder} ${team.activeBg} sticky left-0`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`h-3 w-3 rounded-full ${team.dot}`} />
+                      <span className={team.activeText}>{team.label}</span>
+                      <span className={`text-xs font-normal opacity-70 ${team.activeText}`}>{team.horaire}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${team.pillBg}`}>{employees.length} agents</span>
+                    </div>
+                  </td>
+                </tr>
+
+                {/* Lignes employés */}
+                {employees.map((emp, idx) => {
+                  const pal = emp.team_id && emp.team_id !== "" ? getTeamPalette(emp.team_id) : null;
+                  return (
+                    <tr key={emp.employee}
+                      className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
+                      {/* Cellule nom employé */}
+                      <td className={`px-3 py-2 sticky left-0 z-10 border-r border-slate-200 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          {pal && <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${pal.dot}`} />}
+                          <div className="min-w-0">
+                            {emp.matricule && (
+                              <div className="text-[8px] font-mono text-slate-400 leading-none">{emp.matricule}</div>
+                            )}
+                            <div className="text-[11px] font-semibold text-slate-700 truncate max-w-[130px]" title={emp.employee}>
+                              {emp.employee}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Cellule par date */}
+                      {weekDays.map((date) => {
+                        const isScheduled = !!emp.days[date];
+                        const isToday     = date === today;
+                        const isPast      = date < today;
+                        const isFuture    = date > today;
+                        const d           = new Date(date + "T00:00:00");
+                        const isWeekend   = d.getDay() === 0 || d.getDay() === 6;
+
+                        // Statut de présence (pour les jours passés et aujourd'hui)
+                        let attStatus: string | null = null;
+                        if (isScheduled && (isPast || isToday)) {
+                          const dayMap = weekAttendance[date] ?? {};
+                          const key    = emp.matricule || emp.employee.toLowerCase();
+                          attStatus    = dayMap[key] ?? null;
+                        }
+
+                        return (
+                          <td key={date}
+                            className={`px-1 py-2 text-center border-r border-slate-100 last:border-r-0 ${
+                              isToday ? "bg-blue-50/40" : isWeekend ? "bg-slate-50" : ""
+                            }`}>
+                            {isScheduled ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold ${cellStyle}`}>
+                                  {shiftLetter}
+                                </span>
+                                {attStatus && (
+                                  <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${
+                                    attStatus === "ok"         ? "bg-emerald-100 text-emerald-700" :
+                                    attStatus === "absent"     ? "bg-red-100 text-red-600"         :
+                                    attStatus === "incomplete" ? "bg-amber-100 text-amber-700"     :
+                                                                 "bg-violet-100 text-violet-700"
+                                  }`}>
+                                    {attStatus === "ok" ? "✓" : attStatus === "absent" ? "✗" : attStatus === "incomplete" ? "?" : "!"}
+                                  </span>
+                                )}
+                                {isScheduled && (isPast || isToday) && !attStatus && !isFuture && (
+                                  <span className="text-[9px] text-slate-300">—</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-200 text-sm">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function AttendanceShiftsPage() {
   const [loading,      setLoading]      = useState(false);
@@ -2005,6 +2266,12 @@ export default function AttendanceShiftsPage() {
   const [week,  setWeek]  = useState(isoWeekNow());
   const [month, setMonth] = useState(yyyyMmToday());
   const currentWeek = isoWeekNow();
+
+  // ── Planning vue hebdomadaire ───────────────────────────────────────────────
+  const [planningWeek,       setPlanningWeek]       = useState(isoWeekNow());
+  const [planningEntries,    setPlanningEntries]    = useState<PlanningEntry[]>([]);
+  const [loadingPlanning,    setLoadingPlanning]    = useState(false);
+  const [weekAttendance,     setWeekAttendance]     = useState<Record<string, Record<string, string>>>({});
 
   // ── Planning du jour ───────────────────────────────────────────────────────
   // assignments par shift pour today : { jour: Set<name|mat>, soir1: ..., soir2: ... }
@@ -2125,6 +2392,39 @@ export default function AttendanceShiftsPage() {
     } finally { setLoading(false); }
   }, [viewMode, selectedTeam, week, month]);
 
+  // ── Charger le planning hebdomadaire ────────────────────────────────────────
+  const fetchWeekPlanning = useCallback(async (isoWeek: string) => {
+    setLoadingPlanning(true);
+    try {
+      const days = weekDaysFromISO(isoWeek);
+      const [entries] = await Promise.all([
+        getShiftPlanning(days[0], days[days.length - 1]),
+      ]);
+      setPlanningEntries(entries);
+
+      // Charger les données de présence pour les jours passés + aujourd'hui
+      const today = todayISO();
+      const daysToFetch = days.filter((d) => d <= today);
+      const attResults: Record<string, Record<string, string>> = {};
+      await Promise.all(daysToFetch.map(async (date) => {
+        try {
+          const stats = await getShiftDailyStats({ date });
+          const dayMap: Record<string, string> = {};
+          for (const rec of stats.records ?? []) {
+            if (rec.matricule) dayMap[rec.matricule] = rec.status;
+            dayMap[rec.full_name.toLowerCase()] = rec.status;
+          }
+          attResults[date] = dayMap;
+        } catch { /* ignore */ }
+      }));
+      setWeekAttendance(attResults);
+    } catch { /* ignore */ } finally { setLoadingPlanning(false); }
+  }, []);
+
+  useEffect(() => {
+    if (viewMode === "planning") fetchWeekPlanning(planningWeek);
+  }, [viewMode, planningWeek, fetchWeekPlanning]);
+
   useEffect(() => { fetchData(); }, [viewMode, selectedTeam]);
   useEffect(() => { setPage(1); }, [statusFilter, searchQ, shiftData, weeklyData, monthlyData, pageSize]);
 
@@ -2187,6 +2487,13 @@ export default function AttendanceShiftsPage() {
       const isReplacement    = hasPlanningData && !isScheduled && r.status !== "absent";
       const notScheduledRest = hasPlanningData && !isScheduled && r.status === "absent";
 
+      // Shift non commencé : l'employé est planifié mais son shift n'a pas encore débuté
+      const effectiveShiftKey = plannedShift ?? resolvedTeam;
+      const isShiftPending = (
+        isScheduled && r.status === "absent" && effectiveShiftKey !== null &&
+        getShiftActiveStatus(effectiveShiftKey) === "upcoming"
+      );
+
       // Récupérer le team_id depuis le planning
       const teamId = plannedEntry?.team_id ?? "";
 
@@ -2215,6 +2522,7 @@ export default function AttendanceShiftsPage() {
         is_scheduled:       isScheduled,
         is_replacement:     isReplacement,
         not_scheduled_rest: notScheduledRest,
+        is_shift_pending:   isShiftPending,
         team_id:            teamId,
         replaced_by:        replacedBy,
       };
@@ -2264,8 +2572,8 @@ export default function AttendanceShiftsPage() {
   const kpis = useMemo(() => {
     if (viewMode === "daily" && shiftData) return {
       total:   allRecords.length,
-      // N'inclut pas les employés non planifiés (jours de repos) dans les absents
-      absent:  allRecords.filter((r) => r.status === "absent" && !r.not_scheduled_rest).length,
+      // N'inclut pas les non-planifiés (repos) ni les shifts pas encore commencés
+      absent:  allRecords.filter((r) => r.status === "absent" && !r.not_scheduled_rest && !r.is_shift_pending).length,
       late:    allRecords.filter((r) => r.computed_late_minutes > 0).length,
       anomaly: allRecords.filter((r) => r.status === "anomaly").length,
     };
@@ -2285,9 +2593,10 @@ export default function AttendanceShiftsPage() {
     const q = searchQ.toLowerCase();
     return allRecords.filter((r) => {
       if (r.not_scheduled_rest) return false; // toujours dans la section séparée
+      if (r.is_shift_pending && statusFilter === "all") return false; // dans une section séparée
       if (statusFilter === "late")    { if (!isLateRecord(r)) return false; }
       else if (statusFilter === "deficit") { if (r.deficit_minutes <= 0) return false; }
-      else if (statusFilter === "absent")  { if (r.status !== "absent") return false; }
+      else if (statusFilter === "absent")  { if (r.status !== "absent" || r.is_shift_pending) return false; }
       else if (statusFilter !== "all")     { if (r.status !== statusFilter) return false; }
       return matchSearch(r, q);
     });
@@ -2305,15 +2614,22 @@ export default function AttendanceShiftsPage() {
     return allRecords.filter((r) => r.not_scheduled_rest && matchSearch(r, q));
   }, [allRecords, searchQ]);
 
+  // Section séparée : planifiés mais shift pas encore commencé
+  const [showPendingShifts, setShowPendingShifts] = useState(true);
+  const pendingShiftRows = useMemo(() => {
+    const q = searchQ.toLowerCase();
+    return allRecords.filter((r) => r.is_shift_pending && matchSearch(r, q));
+  }, [allRecords, searchQ]);
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageData   = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const filterCount = (key: StatusFilter) => {
     const scheduled = allRecords.filter((r) => !r.not_scheduled_rest);
-    if (key === "all")    return scheduled.length;
+    if (key === "all")    return scheduled.filter((r) => !r.is_shift_pending).length;
     if (key === "late")   return scheduled.filter(isLateRecord).length;
     if (key === "deficit")return scheduled.filter((r) => r.deficit_minutes > 0).length;
-    if (key === "absent") return scheduled.filter((r) => r.status === "absent").length;
+    if (key === "absent") return scheduled.filter((r) => r.status === "absent" && !r.is_shift_pending).length;
     return scheduled.filter((r) => r.status === key).length;
   };
 
@@ -2411,6 +2727,7 @@ export default function AttendanceShiftsPage() {
             <select value={viewMode} onChange={(e) => setViewMode(e.target.value as ViewMode)}
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none flex-1 sm:flex-none">
               <option value="daily">Journalier</option>
+              <option value="planning">Planning Semaine</option>
               <option value="weekly">Hebdomadaire</option>
               <option value="monthly">Mensuel</option>
             </select>
@@ -2429,46 +2746,109 @@ export default function AttendanceShiftsPage() {
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
             </button>
-            <button onClick={fetchData}
+            <button onClick={() => viewMode === "planning" ? fetchWeekPlanning(planningWeek) : fetchData()}
               className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
+              <RefreshCw className={`h-4 w-4 ${(loading || loadingPlanning) ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
             </button>
           </div>
         </div>
 
         {/* ── Sélecteur équipe ── */}
-        <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
-          <button onClick={() => setSelectedTeam(null)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${selectedTeam === null ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
-            <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" /><span className="truncate text-xs sm:text-sm">Toutes</span>
-          </button>
-          {SHIFT_TEAMS.map((team) => {
-            const isActive  = selectedTeam === team.key;
-            const kpiTeam   = shiftData?.kpis.by_team?.[team.key];
-            return (
-              <button key={team.key} onClick={() => setSelectedTeam(isActive ? null : team.key)}
-                className={`flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${isActive ? `${team.activeBg} ${team.activeText} ${team.activeBorder}` : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
-                <div className="flex flex-col items-start min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full shrink-0 ${team.dot}`} />
-                    <span className="truncate text-xs sm:text-sm">{team.short}</span>
+        {viewMode !== "planning" && (
+          <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+            <button onClick={() => setSelectedTeam(null)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${selectedTeam === null ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
+              <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" /><span className="truncate text-xs sm:text-sm">Toutes</span>
+            </button>
+            {SHIFT_TEAMS.map((team) => {
+              const isActive  = selectedTeam === team.key;
+              const kpiTeam   = shiftData?.kpis.by_team?.[team.key];
+              return (
+                <button key={team.key} onClick={() => setSelectedTeam(isActive ? null : team.key)}
+                  className={`flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${isActive ? `${team.activeBg} ${team.activeText} ${team.activeBorder}` : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
+                  <div className="flex flex-col items-start min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`h-2 w-2 rounded-full shrink-0 ${team.dot}`} />
+                      <span className="truncate text-xs sm:text-sm">{team.short}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 pl-3.5 leading-tight">{team.horaire}</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 pl-3.5 leading-tight">{team.horaire}</span>
-                </div>
-                {kpiTeam && <span className={`text-xs font-bold tabular-nums shrink-0 ${isActive ? team.activeText : "text-slate-500"}`}>{kpiTeam.present}/{kpiTeam.total}</span>}
-              </button>
-            );
-          })}
-        </div>
+                  {kpiTeam && <span className={`text-xs font-bold tabular-nums shrink-0 ${isActive ? team.activeText : "text-slate-500"}`}>{kpiTeam.present}/{kpiTeam.total}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
-          <AbsentsCard total={kpis.total} absent={kpis.absent} loading={loading} delay={0.05} />
-          <StatCard icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
-            active={statusFilter === "late"} sub="Cliquer pour filtrer"
-            onClick={() => setStatusFilter((f) => f === "late" ? "all" : "late")} />
-          <StatCard icon={AlertTriangle} label="Anomalies" value={kpis.anomaly} color="violet" delay={0.15} loading={loading} />
-        </div>
+        {viewMode !== "planning" && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+            <AbsentsCard total={kpis.total} absent={kpis.absent} loading={loading} delay={0.05} />
+            <StatCard icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
+              active={statusFilter === "late"} sub="Cliquer pour filtrer"
+              onClick={() => setStatusFilter((f) => f === "late" ? "all" : "late")} />
+            <StatCard icon={AlertTriangle} label="Anomalies" value={kpis.anomaly} color="violet" delay={0.15} loading={loading} />
+          </div>
+        )}
+
+        {/* ── Vue Planning Semaine ── */}
+        {viewMode === "planning" && (() => {
+          const planDays = weekDaysFromISO(planningWeek);
+          const [py, pw] = planningWeek.split("-W").map(Number);
+          const [cy, cw] = isoWeekNow().split("-W").map(Number);
+          const isCurrentWeek = py === cy && pw === cw;
+
+          const prevWeekISO = (w: string) => {
+            const [y2, wn] = w.split("-W").map(Number);
+            if (wn === 1) { const yw = new Date(y2 - 1, 11, 28); const wk2 = Math.ceil(((yw.getTime() - new Date(y2-1,0,1).getTime()) / 86400000 + 1) / 7); return `${y2-1}-W${String(wk2).padStart(2, "0")}`; }
+            return `${y2}-W${String(wn - 1).padStart(2, "0")}`;
+          };
+          const nextWeekISO = (w: string) => {
+            const [y2, wn] = w.split("-W").map(Number);
+            const maxW = new Date(y2, 11, 28).getDay() === 4 ? 53 : 52;
+            if (wn >= maxW) return `${y2+1}-W01`;
+            return `${y2}-W${String(wn + 1).padStart(2, "0")}`;
+          };
+
+          return (
+            <div className="flex-1 min-h-0 flex flex-col gap-2">
+              {/* Navigation semaine */}
+              <div className="shrink-0 flex items-center justify-between px-1">
+                <button onClick={() => setPlanningWeek(prevWeekISO(planningWeek))}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-sm hover:bg-slate-50 transition">
+                  <ChevronLeft className="h-4 w-4" />Semaine préc.
+                </button>
+                <div className="flex flex-col items-center">
+                  <span className="font-bold text-slate-800">
+                    Semaine {pw} — {planDays[0].split("-").reverse().slice(0,2).join("/")} au {planDays[6].split("-").reverse().slice(0,2).join("/")} {py}
+                  </span>
+                  {isCurrentWeek && (
+                    <span className="text-xs text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-full">Semaine courante</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isCurrentWeek && (
+                    <button onClick={() => setPlanningWeek(isoWeekNow())}
+                      className="px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700 text-sm bg-blue-50 hover:bg-blue-100 transition font-semibold">
+                      Aujourd'hui
+                    </button>
+                  )}
+                  <button onClick={() => setPlanningWeek(nextWeekISO(planningWeek))}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-sm hover:bg-slate-50 transition">
+                    Semaine suiv.<ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <WeeklyPlanningGrid
+                planningEntries={planningEntries}
+                weekDays={planDays}
+                weekAttendance={weekAttendance}
+                loading={loadingPlanning}
+              />
+            </div>
+          );
+        })()}
 
         {/* ── Contenu principal ── */}
         {viewMode === "daily" ? (
@@ -2581,6 +2961,52 @@ export default function AttendanceShiftsPage() {
                   </div>
                 </div>
               )}
+            {/* ── Section : Shifts à venir (pas encore commencés) ── */}
+            {pendingShiftRows.length > 0 && (
+              <div className="shrink-0 rounded-xl border border-blue-200 overflow-hidden shadow-sm">
+                <button
+                  onClick={() => setShowPendingShifts((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors text-sm text-blue-700">
+                  <div className="flex items-center gap-2">
+                    <ChevronDown className={`h-4 w-4 text-blue-400 transition-transform ${showPendingShifts ? "rotate-180" : ""}`} />
+                    <Clock className="h-4 w-4 text-blue-400" />
+                    <span className="font-semibold text-blue-800">Shifts à venir — En attente de pointage</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-200 text-blue-700">
+                      {pendingShiftRows.length}
+                    </span>
+                    <span className="text-xs text-blue-500">— Non comptés dans les absences</span>
+                  </div>
+                </button>
+                {showPendingShifts && (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full bg-white">
+                      <tbody className="divide-y divide-blue-50">
+                        {pendingShiftRows.map((r) => (
+                          <tr key={r.employee_id} className="bg-blue-50/30 text-sm">
+                            <td className="px-4 py-2.5 font-mono text-xs text-slate-400 w-24">{r.matricule || "—"}</td>
+                            <td className="px-4 py-2.5 font-medium text-slate-700">{r.full_name}</td>
+                            <td className="px-4 py-2.5 text-xs text-slate-500">{r.department !== "—" ? r.department : "—"}</td>
+                            <td className="px-4 py-2.5"><ShiftTeamPill teamKey={r.shift_team} /></td>
+                            <td className="px-4 py-2.5">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 ring-1 ring-blue-200 whitespace-nowrap">
+                                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />En attente
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <button onClick={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
+                                Détail
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ── Section : Non planifiés ce jour ── */}
             {notScheduledRows.length > 0 && (
               <div className="shrink-0 rounded-xl border border-slate-200 overflow-hidden shadow-sm">
