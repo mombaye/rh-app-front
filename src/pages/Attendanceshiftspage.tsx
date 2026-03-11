@@ -31,7 +31,7 @@ import * as XLSX from "xlsx";
 type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" | "deficit" | "pending";
 type MotifType = "absent" | "not_pointing";
 type AssignmentMap = Record<string, ShiftTeamKey | null>;
-type ViewMode = "daily" | "weekly" | "monthly"; // "planning" supprimé
+type ViewMode = "daily" | "weekly" | "monthly";
 type CycleType = "M" | "S" | "N" | "R"; // Matin, Soir, Nuit, Repos
 
 interface CompensationResult {
@@ -1270,12 +1270,17 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
 }
 
 // ============================================================================
-// COMPOSANT: PlanningUploadModal
+// COMPOSANT: PlanningUploadModal (modifié pour ajouter colonne matricule)
 // ============================================================================
 
-function PlanningUploadModal({ open, onClose, onSuccess }: {
-  open: boolean; onClose: () => void; onSuccess: (count: number) => void;
-}) {
+interface PlanningUploadModalProps {
+  open: boolean;
+  onClose: () => void;
+  onSuccess: (count: number) => void;
+  employeeNameToMatricule: Map<string, string>; // nom normalisé -> matricule
+}
+
+function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule }: PlanningUploadModalProps) {
   const [tab, setTab] = useState<"view" | "import">("view");
   const [viewMonth, setViewMonth] = useState(yyyyMmToday());
   const [entries, setEntries] = useState<PlanningEntry[]>([]);
@@ -1351,8 +1356,14 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
     reader.onload = (ev) => {
       try {
         const { entries, sheets } = parsePlanningExcel(ev.target!.result as ArrayBuffer);
-        if (!entries.length) { setError("Aucune donnée trouvée dans ce fichier."); setPreview([]); setParsedSheets([]); return; }
-        setPreview(entries);
+        // Enrichir avec les matricules
+        const enrichedEntries = entries.map(entry => ({
+          ...entry,
+          employee_matricule: employeeNameToMatricule.get(
+            entry.employee_name.trim().toLowerCase().replace(/\s+/g, ' ')
+          ) ?? null
+        }));
+        setPreview(enrichedEntries);
         setParsedSheets(sheets);
       } catch { setError("Erreur lors de la lecture du fichier Excel."); setPreview([]); setParsedSheets([]); }
     };
@@ -1387,10 +1398,16 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
     if (!addingCell || !newName.trim() || saving) return;
     setSaving(true);
     const name = newName.trim();
-    const optimistic: PlanningEntry = { date: addingCell.date, shift_type: addingCell.shift, employee_name: name };
+    const matricule = employeeNameToMatricule.get(name.trim().toLowerCase().replace(/\s+/g, ' ')) ?? null;
+    const optimistic: PlanningEntry = {
+      date: addingCell.date,
+      shift_type: addingCell.shift,
+      employee_name: name,
+      employee_matricule: matricule
+    };
     setEntries((prev) => [...prev, optimistic]);
     setAddingCell(null); setNewName("");
-    try { await addSinglePlanningEntry({ date: addingCell.date, shift_type: addingCell.shift, employee_name: name }); }
+    try { await addSinglePlanningEntry({ date: addingCell.date, shift_type: addingCell.shift, employee_name: name, employee_matricule: matricule }); }
     catch { loadMonthPlanning(viewMonth); } finally { setSaving(false); }
   };
 
@@ -1516,6 +1533,9 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                             <th className="px-3 py-2.5 text-left font-bold min-w-[130px] border-r border-white/20 sticky left-0 bg-camublue-900 z-20">
                               Équipe / Employés
                             </th>
+                            <th className="px-3 py-2.5 text-left font-bold min-w-[80px] border-r border-white/20 sticky left-[130px] bg-camublue-900 z-20">
+                              Matricule
+                            </th>
                             {activeDays.map((date) => {
                               const d = new Date(date + "T00:00:00");
                               const isToday = date === todayISO();
@@ -1542,8 +1562,9 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
 
                             return (
                               <React.Fragment key={tid}>
+                                {/* En-tête équipe (fusionne les deux premières colonnes) */}
                                 <tr className={`border-b-2 ${pal.border}`}>
-                                  <td className={`px-3 py-1.5 sticky left-0 z-10 ${pal.header} text-white`}>
+                                  <td className={`px-3 py-1.5 sticky left-0 z-10 ${pal.header} text-white`} colSpan={2}>
                                     <div className="flex items-center gap-2">
                                       <span className="h-2 w-2 rounded-full bg-white/70 shrink-0" />
                                       <span className="font-bold text-[11px] uppercase tracking-wide">
@@ -1573,21 +1594,20 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                                   })}
                                 </tr>
 
+                                {/* Lignes employés */}
                                 {emps.map((emp, eIdx) => (
                                   <tr key={emp.name}
                                     className={`border-b border-slate-100 ${eIdx % 2 === 0 ? pal.bg : "bg-white"}`}>
                                     <td className={`px-3 py-1 sticky left-0 z-10 ${eIdx % 2 === 0 ? pal.bg : "bg-white"} border-r ${pal.border}`}>
                                       <div className="flex items-center gap-2 min-w-0">
                                         {pal && <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${pal.dot}`} />}
-                                        <div className="min-w-0">
-                                          {emp.matricule && (
-                                            <span className="text-[8px] font-mono text-slate-400 leading-none">{emp.matricule}</span>
-                                          )}
-                                          <span className={`text-[11px] font-medium ${pal.text} truncate max-w-[90px]`} title={emp.name}>
-                                            {emp.name}
-                                          </span>
-                                        </div>
+                                        <span className={`text-[11px] font-medium ${pal.text} truncate max-w-[90px]`} title={emp.name}>
+                                          {emp.name}
+                                        </span>
                                       </div>
+                                    </td>
+                                    <td className={`px-3 py-1 sticky left-[130px] z-10 ${eIdx % 2 === 0 ? pal.bg : "bg-white"} border-r ${pal.border}`}>
+                                      <span className="text-[10px] font-mono text-slate-600">{emp.matricule || "—"}</span>
                                     </td>
                                     {activeDays.map((date) => {
                                       const shiftForTeam = tg.dateShifts[date];
@@ -1618,6 +1638,7 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                       </table>
                     </div>
                   ) : (
+                    // Vue sans équipes : on ajoute aussi une colonne matricule
                     <table className="min-w-full text-xs border-collapse">
                       <thead className="sticky top-0 z-10">
                         <tr className="bg-camublue-900 text-white">
@@ -2002,8 +2023,7 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", delay = 0, lo
 }
 
 // ============================================================================
-// COMPOSANT: EnhancedWeeklyPlanningGrid (gardé car utilisé pour le planning, mais plus accessible via vue)
-// Note: Ce composant n'est plus utilisé car on a retiré la vue planning, mais on le garde car il pourrait être réutilisé ailleurs.
+// COMPOSANT: EnhancedWeeklyPlanningGrid (gardé mais plus utilisé)
 // ============================================================================
 
 function EnhancedWeeklyPlanningGrid({
@@ -2288,6 +2308,9 @@ export default function AttendanceShiftsPage() {
   const [month, setMonth] = useState(yyyyMmToday());
   const currentWeek = isoWeekNow();
 
+  // Liste des employés pour la correspondance nom -> matricule
+  const [employeesList, setEmployeesList] = useState<Employee[]>([]);
+
   // États pour le planning (conservés pour l'import et l'affichage latéral)
   const [planningEntries, setPlanningEntries] = useState<PlanningEntry[]>([]);
   const [loadingPlanning, setLoadingPlanning] = useState(false);
@@ -2325,6 +2348,18 @@ export default function AttendanceShiftsPage() {
     } catch { }
     return {};
   });
+
+  // Map nom normalisé -> matricule
+  const employeeNameToMatricule = useMemo(() => {
+    const map = new Map<string, string>();
+    employeesList.forEach(emp => {
+      if (emp.full_name && emp.matricule) {
+        const normalized = emp.full_name.trim().toLowerCase().replace(/\s+/g, ' ');
+        map.set(normalized, emp.matricule);
+      }
+    });
+    return map;
+  }, [employeesList]);
 
   useEffect(() => {
     try {
@@ -2366,6 +2401,7 @@ export default function AttendanceShiftsPage() {
 
   useEffect(() => {
     getEmployees().then((list: Employee[]) => {
+      setEmployeesList(list);
       const m = new Map<string, string>();
       const dm = new Map<string, string>();
       const pm = new Map<string, string>();
@@ -2572,23 +2608,19 @@ export default function AttendanceShiftsPage() {
     r.department.toLowerCase().includes(q) || (r.shift_team_label ?? "").toLowerCase().includes(q) ||
     r.project.toLowerCase().includes(q);
 
-  // ── FILTRE PRINCIPAL (adapté à la demande) ─────────────────────────
+  // ── FILTRE PRINCIPAL ─────────────────────────
   const filtered = useMemo(() => {
     const q = searchQ.toLowerCase();
 
-    // Cas où un shift spécifique est sélectionné
     if (selectedTeam) {
-      // Récupérer la liste des employés planifiés pour ce shift aujourd'hui
       const planEmps = todayPlanning.loaded ? (todayPlanning[selectedTeam] ?? []) : [];
 
-      // Si le planning n'est pas chargé ou vide, on affiche un tableau vide
       if (!todayPlanning.loaded || planEmps.length === 0) {
         return [];
       }
 
       const shiftStat = getShiftActiveStatus(selectedTeam);
 
-      // Pour chaque employé planifié, on cherche ses données de pointage
       const base = planEmps.map((e) => {
         const rec = allRecords.find((r) =>
           (e.employee_matricule && r.matricule && r.matricule === e.employee_matricule) ||
@@ -2596,7 +2628,6 @@ export default function AttendanceShiftsPage() {
         );
 
         if (rec) {
-          // Employé trouvé : on garde ses vraies données, mais on s'assure que le shift_team est celui du planning
           return {
             ...rec,
             shift_team: selectedTeam,
@@ -2607,7 +2638,6 @@ export default function AttendanceShiftsPage() {
           };
         }
 
-        // Employé planifié mais sans pointage → création d'un enregistrement virtuel
         return {
           employee_id: -1,
           matricule: e.employee_matricule ?? "",
@@ -2644,7 +2674,6 @@ export default function AttendanceShiftsPage() {
         } satisfies FlatRecord;
       });
 
-      // Appliquer les filtres de statut (late, deficit, absent, etc.) sur cette base
       return base.filter((r) => {
         if (!matchSearch(r, q)) return false;
         if (statusFilter === "late") return isLateRecord(r);
@@ -2655,13 +2684,11 @@ export default function AttendanceShiftsPage() {
       });
     }
 
-    // Vue "Tous" : afficher uniquement les employés dont le shift est actif ou déjà passé
     return allRecords.filter((r) => {
       if (r.not_scheduled_rest) return false;
       if (r.is_shift_pending) return false;
 
       if (statusFilter === "all") {
-        // En mode "Tous", on exclut les shifts à venir et les employés sans pointage ni shift détecté
         if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
         if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
       } else if (statusFilter === "late") {
@@ -2936,10 +2963,9 @@ export default function AttendanceShiftsPage() {
           <StatCard icon={AlertTriangle} label="Anomalies" value={kpis.anomaly} color="violet" delay={0.15} loading={loading} />
         </div>
 
-        {/* ── Contenu principal (Journalier uniquement ici, mais on garde la structure pour weekly/monthly) ── */}
+        {/* ── Contenu principal ── */}
         {viewMode === "daily" ? (
           <>
-            {/* Filtres rapides */}
             <div className="shrink-0 w-full overflow-x-auto">
               <div className="flex items-center gap-1 bg-slate-100/80 rounded-xl p-1 border border-camublue-900/20 shadow-sm min-w-max">
                 {QUICK_FILTERS.map((f) => {
@@ -2963,7 +2989,6 @@ export default function AttendanceShiftsPage() {
               </div>
             </div>
 
-            {/* Layout splitté : Planning du jour (gauche) | Tableau (droite) */}
             <div className="flex-1 min-h-0 flex gap-3">
               {todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 && (
                 <div className="w-60 xl:w-72 shrink-0 rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col hidden lg:flex">
@@ -3163,7 +3188,9 @@ export default function AttendanceShiftsPage() {
             getShiftPlanningForDate(todayISO()).then((res) => {
               setTodayPlanning({ ...res.assignments, loaded: true });
             }).catch(console.error);
-          }} />
+          }}
+          employeeNameToMatricule={employeeNameToMatricule}
+        />
       </motion.div>
     </AppLayout>
   );
