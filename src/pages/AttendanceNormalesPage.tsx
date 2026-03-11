@@ -1,4 +1,3 @@
-// src/pages/attendance/AttendanceNormalesPage.tsx
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";

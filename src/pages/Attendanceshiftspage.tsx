@@ -5,8 +5,8 @@ import {
   Clock, AlertTriangle, UserMinus, FileSpreadsheet, X, ChevronLeft, ChevronRight,
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
   Check, Settings, CheckCircle, Lock, CalendarDays,
-  TrendingUp, Pencil, Plus, Trash2, Filter, Upload, CalendarRange, ArrowLeftRight,
-  Table2, UserPlus,
+  TrendingUp, Pencil, Plus, Trash2, Upload, CalendarRange, ArrowLeftRight,
+  Table2,
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import {
@@ -24,73 +24,16 @@ import type {
 import type { Employee } from "@/types/employee";
 import * as XLSX from "xlsx";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" | "deficit";
-type MotifType    = "absent" | "not_pointing";
+// ============================================================================
+// TYPES ET INTERFACES
+// ============================================================================
+
+type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" | "deficit" | "pending";
+type MotifType = "absent" | "not_pointing";
 type AssignmentMap = Record<string, ShiftTeamKey | null>;
-type ViewMode     = "daily" | "weekly" | "monthly" | "planning";
+type ViewMode = "daily" | "weekly" | "monthly"; // "planning" supprimé
+type CycleType = "M" | "S" | "N" | "R"; // Matin, Soir, Nuit, Repos
 
-// Planning : map date → shift_type → [employee names/matricules]
-type DayPlanningMap = Record<string, { employee_name: string; employee_matricule?: string | null }[]>;
-// "jour" | "soir1" | "soir2" → DayPlanningMap
-type PlanningMap = { jour: DayPlanningMap; soir1: DayPlanningMap; soir2: DayPlanningMap };
-
-// ─── Constantes ───────────────────────────────────────────────────────────────
-const MAX_WORKDAY_MIN   = 8  * 60;
-const MAX_WEEKLY_MIN    = 40 * 60;
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
-
-// ─── localStorage keys ────────────────────────────────────────────────────────
-const LS_SHIFT_ACTIVE_SCHEDULE_KEY = "camu_shift_active_schedule";
-const LS_SHIFT_ASSIGNMENTS_KEY     = "camu_shift_assignments";
-const LS_SHIFT_PRESETS_KEY         = "camu_shift_work_schedule_presets";
-
-// ─── Presets horaires ─────────────────────────────────────────────────────────
-interface WorkSchedulePreset {
-  context: string;
-  startH: number; startM: number;
-  endH:   number; endM:   number;
-  breakMin: number;
-}
-
-const DEFAULT_PRESETS: WorkSchedulePreset[] = [
-  { context: "08H-16H", startH: 8,  startM: 0, endH: 16, endM: 0, breakMin: 60 },
-  { context: "16H-22H", startH: 16, startM: 0, endH: 22, endM: 0, breakMin: 30 },
-  { context: "22H-08H", startH: 22, startM: 0, endH: 8,  endM: 0, breakMin: 60 },
-];
-
-interface ActiveSchedule extends WorkSchedulePreset {
-  dateStart: string;
-  dateEnd:   string;
-  locked:    boolean;
-}
-
-function workDayMinutes(s: WorkSchedulePreset): number {
-  return Math.max(0, (s.endH * 60 + s.endM) - (s.startH * 60 + s.startM) - s.breakMin);
-}
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function isPeriodActive(s: ActiveSchedule): boolean {
-  const today = todayISO();
-  return today >= s.dateStart && today <= s.dateEnd;
-}
-function isoWeekNow(): string {
-  const d    = new Date();
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const day  = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - day);
-  const ys = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  const w  = Math.ceil((((date.getTime() - ys.getTime()) / 86400000) + 1) / 7);
-  return `${date.getUTCFullYear()}-W${String(w).padStart(2, "0")}`;
-}
-function yyyyMmToday(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-// ─── Interfaces ───────────────────────────────────────────────────────────────
 interface CompensationResult {
   late_min: number; overtime_min: number; compensated_min: number;
   remaining_min: number; is_compensated: boolean; has_overtime: boolean;
@@ -98,7 +41,7 @@ interface CompensationResult {
 
 interface FlatRecord {
   employee_id: number; matricule: string; full_name: string; department: string; project: string;
-  status: "ok" | "absent" | "incomplete" | "anomaly";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "pending" | "not_working";
   is_late_api: boolean; late_label_api: string | null;
   computed_late_minutes: number; overtime_minutes: number;
   compensation: CompensationResult; deficit_minutes: number;
@@ -108,10 +51,10 @@ interface FlatRecord {
   // Planning
   is_scheduled: boolean;         // true if employee is in today's planning
   is_replacement: boolean;       // true if present but NOT in planning (replacement)
-  not_scheduled_rest: boolean;   // true if not scheduled (rest day) → hide from absent count
-  is_shift_pending: boolean;     // true if scheduled but shift hasn't started yet (don't count as absent)
+  not_scheduled_rest: boolean;   // true if not scheduled (rest day)
+  is_shift_pending: boolean;     // true if scheduled but shift hasn't started yet
   team_id: string;               // identifiant d'équipe (ex: "equipe-1")
-  replaced_by: string | null;    // nom du remplaçant (si cet employé est absent et a été remplacé)
+  replaced_by: string | null;    // nom du remplaçant
 }
 
 interface SummaryRecord {
@@ -127,7 +70,45 @@ interface Pointage {
   is_planned?: boolean;
 }
 
-// ─── Shift teams config ───────────────────────────────────────────────────────
+interface WorkSchedulePreset {
+  context: string;
+  startH: number; startM: number;
+  endH: number; endM: number;
+  breakMin: number;
+}
+
+interface ActiveSchedule extends WorkSchedulePreset {
+  dateStart: string;
+  dateEnd: string;
+  locked: boolean;
+}
+
+interface ParsedSheet {
+  name: string;
+  count: number;
+  dateMin: string;
+  dateMax: string;
+  teams: number;
+}
+
+// ============================================================================
+// CONSTANTES
+// ============================================================================
+
+const MAX_WORKDAY_MIN = 8 * 60;
+const MAX_WEEKLY_MIN = 40 * 60;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+const LS_SHIFT_ACTIVE_SCHEDULE_KEY = "camu_shift_active_schedule";
+const LS_SHIFT_ASSIGNMENTS_KEY = "camu_shift_assignments";
+const LS_SHIFT_PRESETS_KEY = "camu_shift_work_schedule_presets";
+
+const DEFAULT_PRESETS: WorkSchedulePreset[] = [
+  { context: "08H-16H", startH: 8, startM: 0, endH: 16, endM: 0, breakMin: 60 },
+  { context: "16H-22H", startH: 16, startM: 0, endH: 22, endM: 0, breakMin: 30 },
+  { context: "22H-08H", startH: 22, startM: 0, endH: 8, endM: 0, breakMin: 60 },
+];
+
 const SHIFT_TEAMS: {
   key: ShiftTeamKey; label: string; short: string; horaire: string;
   dot: string; activeBg: string; activeText: string; activeBorder: string; pillBg: string; headerBg: string;
@@ -150,109 +131,85 @@ const SHIFT_TEAMS: {
 ];
 
 const STATUS_CFG = {
-  ok:          { label: "OK",          dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-  absent:      { label: "Absent",      dot: "bg-red-500",     badge: "bg-red-50 text-red-700 ring-red-200"             },
-  incomplete:  { label: "Incomplet",   dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200"       },
-  anomaly:     { label: "Anomalie",    dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200"    },
-  not_working: { label: "Repos",       dot: "bg-slate-400",   badge: "bg-slate-50 text-slate-500 ring-slate-200"       },
-  pending:     { label: "En attente",  dot: "bg-blue-400",    badge: "bg-blue-50 text-blue-600 ring-blue-200"          },
+  ok: { label: "OK", dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+  absent: { label: "Absent", dot: "bg-red-500", badge: "bg-red-50 text-red-700 ring-red-200" },
+  incomplete: { label: "Incomplet", dot: "bg-amber-500", badge: "bg-amber-50 text-amber-800 ring-amber-200" },
+  anomaly: { label: "Anomalie", dot: "bg-violet-500", badge: "bg-violet-50 text-violet-700 ring-violet-200" },
+  not_working: { label: "Repos", dot: "bg-slate-400", badge: "bg-slate-50 text-slate-500 ring-slate-200" },
+  pending: { label: "En attente", dot: "bg-blue-400", badge: "bg-blue-50 text-blue-600 ring-blue-200" },
 };
 
 const QUICK_FILTERS = [
-  { key: "all"        as StatusFilter, label: "Tous",         dotColor: "bg-slate-400",  activeDot: "bg-white"         },
-  { key: "ok"         as StatusFilter, label: "OK",           dotColor: "bg-emerald-400",activeDot: "bg-emerald-500"   },
-  { key: "absent"     as StatusFilter, label: "Absents",      dotColor: "bg-red-400",    activeDot: "bg-red-500"       },
-  { key: "late"       as StatusFilter, label: "Retards",      dotColor: "bg-orange-400", activeDot: "bg-orange-500"    },
-  { key: "incomplete" as StatusFilter, label: "Incomplets",   dotColor: "bg-amber-400",  activeDot: "bg-amber-500"     },
-  { key: "anomaly"    as StatusFilter, label: "Anomalies",    dotColor: "bg-violet-400", activeDot: "bg-violet-500"    },
-  { key: "deficit"    as StatusFilter, label: "Heures moins", dotColor: "bg-rose-400",   activeDot: "bg-rose-500"      },
+  { key: "all" as StatusFilter, label: "Tous", dotColor: "bg-slate-400", activeDot: "bg-white" },
+  { key: "ok" as StatusFilter, label: "OK", dotColor: "bg-emerald-400", activeDot: "bg-emerald-500" },
+  { key: "absent" as StatusFilter, label: "Absents", dotColor: "bg-red-400", activeDot: "bg-red-500" },
+  { key: "late" as StatusFilter, label: "Retards", dotColor: "bg-orange-400", activeDot: "bg-orange-500" },
+  { key: "incomplete" as StatusFilter, label: "Incomplets", dotColor: "bg-amber-400", activeDot: "bg-amber-500" },
+  { key: "anomaly" as StatusFilter, label: "Anomalies", dotColor: "bg-violet-400", activeDot: "bg-violet-500" },
+  { key: "deficit" as StatusFilter, label: "Heures moins", dotColor: "bg-rose-400", activeDot: "bg-rose-500" },
+  { key: "pending" as StatusFilter, label: "En attente", dotColor: "bg-blue-400", activeDot: "bg-blue-500" },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function formatTime(iso?: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
-}
-function formatMinutes(min: number): string {
-  if (!min || min <= 0) return "";
-  if (min < 60) return `${min} min`;
-  const h = Math.floor(min / 60), m = min % 60;
-  return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
-}
-function computeLateMinutes(iso: string | null, thH: number, thM: number): number {
-  if (!iso) return 0;
-  const d = new Date(iso); if (isNaN(d.getTime())) return 0;
-  const t = d.getHours() * 60 + d.getMinutes(), th = thH * 60 + thM;
-  return t > th ? t - th : 0;
-}
-function computeOvertimeMinutes(iso: string | null, thH: number, thM: number): number {
-  if (!iso) return 0;
-  const d = new Date(iso); if (isNaN(d.getTime())) return 0;
-  const t = d.getHours() * 60 + d.getMinutes(), th = thH * 60 + thM;
-  return t > th ? t - th : 0;
-}
-function computeWorkedMinutesFromTimes(inIso: string | null, outIso: string | null): number {
-  if (!inIso || !outIso) return 0;
-  const inD = new Date(inIso), outD = new Date(outIso);
-  if (isNaN(inD.getTime()) || isNaN(outD.getTime())) return 0;
-  const diff = (outD.getTime() - inD.getTime()) / 60000;
-  return diff > 0 ? Math.round(diff) : 0;
-}
-function computeCompensation(lateMin: number, overtimeMin: number): CompensationResult {
-  const compensated = Math.min(lateMin, overtimeMin), remaining = Math.max(0, lateMin - compensated);
-  return {
-    late_min: lateMin, overtime_min: overtimeMin, compensated_min: compensated,
-    remaining_min: remaining, is_compensated: lateMin > 0 && remaining === 0, has_overtime: overtimeMin > 0,
-  };
-}
-function computeDeficitMinutes(worked: number, expected: number): number {
-  const exp = expected > 0 ? expected : MAX_WORKDAY_MIN;
-  return worked > 0 ? Math.max(0, exp - worked) : 0;
+const DAYS_FR = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+const MONTHS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+const MONTHS_SHORT = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
+
+const SHIFT_KEYS: { key: ShiftTeamKey; label: string; bg: string; text: string; border: string; addBtn: string }[] = [
+  { key: "jour", label: "08H-16H", bg: "bg-teal-50", text: "text-teal-800", border: "border-teal-200", addBtn: "bg-teal-500 hover:bg-teal-600 text-white" },
+  { key: "soir1", label: "16H-22H", bg: "bg-yellow-50", text: "text-yellow-800", border: "border-yellow-200", addBtn: "bg-amber-400 hover:bg-amber-500 text-amber-950" },
+  { key: "soir2", label: "22H-08H", bg: "bg-orange-50", text: "text-orange-800", border: "border-orange-200", addBtn: "bg-orange-500 hover:bg-orange-600 text-white" },
+];
+
+const TEAM_PALETTE = [
+  { bg: "bg-yellow-100", text: "text-yellow-900", border: "border-yellow-400", header: "bg-yellow-400", dot: "bg-yellow-500", chipBg: "bg-yellow-200", label: "Équipe 1" },
+  { bg: "bg-green-100", text: "text-green-900", border: "border-green-400", header: "bg-green-500", dot: "bg-green-600", chipBg: "bg-green-200", label: "Équipe 2" },
+  { bg: "bg-sky-100", text: "text-sky-900", border: "border-sky-400", header: "bg-sky-500", dot: "bg-sky-600", chipBg: "bg-sky-200", label: "Équipe 3" },
+  { bg: "bg-pink-100", text: "text-pink-900", border: "border-pink-400", header: "bg-pink-500", dot: "bg-pink-600", chipBg: "bg-pink-200", label: "Équipe 4" },
+  { bg: "bg-orange-100", text: "text-orange-900", border: "border-orange-400", header: "bg-orange-500", dot: "bg-orange-600", chipBg: "bg-orange-200", label: "Équipe 5" },
+  { bg: "bg-purple-100", text: "text-purple-900", border: "border-purple-400", header: "bg-purple-500", dot: "bg-purple-600", chipBg: "bg-purple-200", label: "Équipe 6" },
+  { bg: "bg-teal-100", text: "text-teal-900", border: "border-teal-400", header: "bg-teal-500", dot: "bg-teal-600", chipBg: "bg-teal-200", label: "Équipe 7" },
+  { bg: "bg-red-100", text: "text-red-900", border: "border-red-400", header: "bg-red-500", dot: "bg-red-600", chipBg: "bg-red-200", label: "Équipe 8" },
+  { bg: "bg-indigo-100", text: "text-indigo-900", border: "border-indigo-400", header: "bg-indigo-500", dot: "bg-indigo-600", chipBg: "bg-indigo-200", label: "Équipe 9" },
+  { bg: "bg-lime-100", text: "text-lime-900", border: "border-lime-400", header: "bg-lime-500", dot: "bg-lime-600", chipBg: "bg-lime-200", label: "Équipe 10" },
+  { bg: "bg-amber-100", text: "text-amber-900", border: "border-amber-400", header: "bg-amber-500", dot: "bg-amber-600", chipBg: "bg-amber-200", label: "Équipe 11" },
+  { bg: "bg-cyan-100", text: "text-cyan-900", border: "border-cyan-400", header: "bg-cyan-500", dot: "bg-cyan-600", chipBg: "bg-cyan-200", label: "Équipe 12" },
+];
+
+const cycleConfig = {
+  M: { shift: "jour", label: "M", style: "bg-teal-200 text-teal-800 border-teal-300", full: "Matin 08H-16H" },
+  S: { shift: "soir1", label: "S", style: "bg-amber-200 text-amber-800 border-amber-300", full: "Soir 16H-22H" },
+  N: { shift: "soir2", label: "N", style: "bg-indigo-200 text-indigo-800 border-indigo-300", full: "Nuit 22H-08H" },
+  R: { shift: null, label: "R", style: "bg-slate-200 text-slate-600 border-slate-300", full: "Repos" },
+};
+
+// ============================================================================
+// FONCTIONS UTILITAIRES
+// ============================================================================
+
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// ─── ✅ Détection automatique du shift depuis l'heure d'entrée ────────────────
-function detectShiftTeamFromTime(inIso: string | null): ShiftTeamKey | null {
-  if (!inIso) return null;
-  const d = new Date(inIso);
-  if (isNaN(d.getTime())) return null;
-  const h = d.getHours();
-  // 08H-16H : entrée entre 5h et 14h
-  if (h >= 5 && h < 14) return "jour";
-  // 16H-22H : entrée entre 14h et 20h
-  if (h >= 14 && h < 20) return "soir1";
-  // 22H-08H : entrée entre 20h et 5h (nuit)
-  return "soir2";
+function yyyyMmToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-// ─── Statut actuel d'un shift (actif / à venir / terminé) ────────────────────
-function getShiftActiveStatus(shiftKey: ShiftTeamKey): "active" | "upcoming" | "ended" {
-  const now    = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  if (shiftKey === "jour") {
-    // Fenêtre d'entrée 05h–14h, fin shift 16h
-    if (nowMin >= 5 * 60 && nowMin < 16 * 60) return "active";
-    if (nowMin < 5 * 60) return "upcoming";
-    return "ended";
-  }
-  if (shiftKey === "soir1") {
-    // Fenêtre d'entrée 14h–20h, fin shift 22h
-    if (nowMin >= 14 * 60 && nowMin < 22 * 60) return "active";
-    if (nowMin < 14 * 60) return "upcoming";
-    return "ended";
-  }
-  // soir2 : fenêtre 20h–06h (passe minuit)
-  if (nowMin >= 20 * 60 || nowMin < 8 * 60) return "active";
-  return "upcoming";
+function isoWeekNow(): string {
+  const d = new Date();
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const ys = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const w = Math.ceil((((date.getTime() - ys.getTime()) / 86400000) + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(w).padStart(2, "0")}`;
 }
 
-// ─── Jours ISO d'une semaine ──────────────────────────────────────────────────
 function weekDaysFromISO(isoWeek: string): string[] {
   const [yearStr, weekStr] = isoWeek.split("-W");
   const year = parseInt(yearStr, 10);
   const week = parseInt(weekStr, 10);
-  // Lundi de la semaine ISO
   const jan4 = new Date(Date.UTC(year, 0, 4));
   const startOfWeek = new Date(jan4);
   startOfWeek.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() || 7) - 1) + (week - 1) * 7);
@@ -263,7 +220,160 @@ function weekDaysFromISO(isoWeek: string): string[] {
   });
 }
 
-// ─── Export XLSX ──────────────────────────────────────────────────────────────
+function daysInMonth(ym: string): string[] {
+  const [y, m] = ym.split("-").map(Number);
+  const days: string[] = [];
+  const last = new Date(y, m, 0).getDate();
+  for (let d = 1; d <= last; d++)
+    days.push(`${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
+  return days;
+}
+
+function prevMonth(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+}
+
+function nextMonth(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+}
+
+function formatTime(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+}
+
+function formatMinutes(min: number): string {
+  if (!min || min <= 0) return "";
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60), m = min % 60;
+  return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
+}
+
+function workDayMinutes(s: WorkSchedulePreset): number {
+  return Math.max(0, (s.endH * 60 + s.endM) - (s.startH * 60 + s.startM) - s.breakMin);
+}
+
+function isPeriodActive(s: ActiveSchedule): boolean {
+  const today = todayISO();
+  return today >= s.dateStart && today <= s.dateEnd;
+}
+
+function computeLateMinutes(iso: string | null, thH: number, thM: number): number {
+  if (!iso) return 0;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 0;
+  const t = d.getHours() * 60 + d.getMinutes(), th = thH * 60 + thM;
+  return t > th ? t - th : 0;
+}
+
+function computeOvertimeMinutes(iso: string | null, thH: number, thM: number): number {
+  if (!iso) return 0;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 0;
+  const t = d.getHours() * 60 + d.getMinutes(), th = thH * 60 + thM;
+  return t > th ? t - th : 0;
+}
+
+function computeWorkedMinutesFromTimes(inIso: string | null, outIso: string | null): number {
+  if (!inIso || !outIso) return 0;
+  const inD = new Date(inIso), outD = new Date(outIso);
+  if (isNaN(inD.getTime()) || isNaN(outD.getTime())) return 0;
+  const diff = (outD.getTime() - inD.getTime()) / 60000;
+  return diff > 0 ? Math.round(diff) : 0;
+}
+
+function computeCompensation(lateMin: number, overtimeMin: number): CompensationResult {
+  const compensated = Math.min(lateMin, overtimeMin), remaining = Math.max(0, lateMin - compensated);
+  return {
+    late_min: lateMin, overtime_min: overtimeMin, compensated_min: compensated,
+    remaining_min: remaining, is_compensated: lateMin > 0 && remaining === 0, has_overtime: overtimeMin > 0,
+  };
+}
+
+function computeDeficitMinutes(worked: number, expected: number): number {
+  const exp = expected > 0 ? expected : MAX_WORKDAY_MIN;
+  return worked > 0 ? Math.max(0, exp - worked) : 0;
+}
+
+function detectShiftTeamFromTime(inIso: string | null): ShiftTeamKey | null {
+  if (!inIso) return null;
+  const d = new Date(inIso);
+  if (isNaN(d.getTime())) return null;
+  const h = d.getHours();
+  if (h >= 5 && h < 14) return "jour";
+  if (h >= 14 && h < 20) return "soir1";
+  return "soir2";
+}
+
+function getShiftActiveStatus(shiftKey: ShiftTeamKey): "active" | "upcoming" | "ended" {
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  if (shiftKey === "jour") {
+    if (nowMin >= 5 * 60 && nowMin < 16 * 60) return "active";
+    if (nowMin < 5 * 60) return "upcoming";
+    return "ended";
+  }
+  if (shiftKey === "soir1") {
+    if (nowMin >= 14 * 60 && nowMin < 22 * 60) return "active";
+    if (nowMin < 14 * 60) return "upcoming";
+    return "ended";
+  }
+  if (nowMin >= 20 * 60 || nowMin < 8 * 60) return "active";
+  return "upcoming";
+}
+
+function getTeamPalette(teamId: string) {
+  const idx = parseInt(teamId.replace(/\D/g, "") || "0", 10) - 1;
+  return TEAM_PALETTE[Math.max(0, idx) % TEAM_PALETTE.length];
+}
+
+function getCycleForDate(baseDate: string, cycleStartDate: string, date: string): CycleType {
+  const start = new Date(cycleStartDate + "T00:00:00");
+  const target = new Date(date + "T00:00:00");
+
+  const daysSinceStart = Math.floor((target.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  const cyclePosition = ((daysSinceStart % 8) + 8) % 8;
+
+  if (cyclePosition < 2) return "M";
+  if (cyclePosition < 4) return "S";
+  if (cyclePosition < 6) return "N";
+  return "R";
+}
+
+function cycleTypeToShift(type: CycleType): ShiftTeamKey | null {
+  switch (type) {
+    case "M": return "jour";
+    case "S": return "soir1";
+    case "N": return "soir2";
+    default: return null;
+  }
+}
+
+function detectTeamCycles(planningEntries: PlanningEntry[]): Map<string, { startDate: string; employees: string[] }> {
+  const teamMap = new Map<string, { startDate: string; employees: Set<string> }>();
+
+  for (const entry of planningEntries) {
+    if (!entry.team_id || entry.team_id === "_no_team") continue;
+    if (!teamMap.has(entry.team_id)) {
+      teamMap.set(entry.team_id, { startDate: entry.date, employees: new Set() });
+    }
+    teamMap.get(entry.team_id)!.employees.add(entry.employee_name);
+  }
+
+  const result = new Map<string, { startDate: string; employees: string[] }>();
+  for (const [teamId, data] of teamMap) {
+    result.set(teamId, {
+      startDate: data.startDate,
+      employees: Array.from(data.employees)
+    });
+  }
+  return result;
+}
+
 function exportXLSX(filename: string, rows: Record<string, any>[]) {
   if (!rows.length) return;
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -283,7 +393,123 @@ async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ succ
   return { success: !!emp.email };
 }
 
-// ─── Badges ───────────────────────────────────────────────────────────────────
+function cellToDateStr(cell: unknown): string {
+  if (cell instanceof Date) {
+    return `${cell.getFullYear()}-${String(cell.getMonth() + 1).padStart(2, "0")}-${String(cell.getDate()).padStart(2, "0")}`;
+  }
+  if (typeof cell === "number" && cell > 40000) {
+    const d = new Date(Math.round((cell - 25569) * 86400 * 1000));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  }
+  if (typeof cell === "string" && cell.trim()) {
+    const s = cell.trim();
+    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  }
+  return "";
+}
+
+function detectShiftLabel(label: string): ShiftTeamKey | null {
+  const s = label.toUpperCase().replace(/\s/g, "");
+  if (s.includes("08") && s.includes("16")) return "jour";
+  if (s.includes("16") && s.includes("22")) return "soir1";
+  if (s.includes("22") && s.includes("08")) return "soir2";
+  return null;
+}
+
+function getCellBgHex(ws: XLSX.WorkSheet, r: number, c: number): string | null {
+  const addr = XLSX.utils.encode_cell({ r, c });
+  const cell = ws[addr] as any;
+  if (!cell?.s) return null;
+  const tryColor = (co: any): string | null => {
+    if (!co) return null;
+    if (co.rgb && typeof co.rgb === "string" && co.rgb.length >= 6) {
+      const rgb = co.rgb.toUpperCase().slice(-6);
+      if (rgb === "FFFFFF" || rgb === "000000" || rgb === "000001") return null;
+      return rgb;
+    }
+    return null;
+  };
+  return tryColor(cell.s.fgColor) ?? tryColor(cell.s.bgColor) ?? null;
+}
+
+function parseOneSheet(ws: XLSX.WorkSheet): PlanningEntry[] {
+  const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as unknown[][];
+  const entries: PlanningEntry[] = [];
+  const headerRow = (rawRows[0] ?? []) as unknown[];
+
+  const dates: string[] = [];
+  for (let c = 1; c < headerRow.length; c++) {
+    dates.push(cellToDateStr(headerRow[c]));
+  }
+
+  let currentShift: ShiftTeamKey | null = null;
+  const colorToTeam: Record<string, string> = {};
+  let teamCounter = 0;
+
+  for (let row = 1; row < rawRows.length; row++) {
+    const rowData = rawRows[row] as unknown[];
+    const shiftCell = String(rowData[0] ?? "").trim();
+
+    if (shiftCell) {
+      const detected = detectShiftLabel(shiftCell);
+      if (detected) currentShift = detected;
+    }
+    if (!currentShift) continue;
+
+    let rowColor: string | null = null;
+    for (let c = 1; c < Math.min(rowData.length, 5); c++) {
+      const col = getCellBgHex(ws, row, c);
+      if (col) { rowColor = col; break; }
+    }
+
+    let teamId = "";
+    if (rowColor) {
+      if (!(rowColor in colorToTeam)) {
+        teamCounter++;
+        colorToTeam[rowColor] = `equipe-${teamCounter}`;
+      }
+      teamId = colorToTeam[rowColor];
+    }
+
+    for (let c = 1; c < rowData.length; c++) {
+      const name = String(rowData[c] ?? "").trim();
+      const date = dates[c - 1];
+      if (name && date) {
+        entries.push({ date, shift_type: currentShift, employee_name: name, team_id: teamId });
+      }
+    }
+  }
+  return entries;
+}
+
+function parsePlanningExcel(buffer: ArrayBuffer): { entries: PlanningEntry[]; sheets: ParsedSheet[] } {
+  const wb = XLSX.read(buffer, { type: "array", cellDates: true, cellStyles: true });
+  const allEntries: PlanningEntry[] = [];
+  const sheets: ParsedSheet[] = [];
+
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    const entries = parseOneSheet(ws);
+    if (!entries.length) continue;
+    const dates = entries.map((e) => e.date).filter(Boolean).sort();
+    const teamSet = new Set(entries.map((e) => e.team_id).filter(Boolean));
+    sheets.push({
+      name: sheetName, count: entries.length,
+      dateMin: dates[0], dateMax: dates[dates.length - 1],
+      teams: teamSet.size,
+    });
+    allEntries.push(...entries);
+  }
+
+  return { entries: allEntries, sheets };
+}
+
+// ============================================================================
+// COMPOSANTS BADGES
+// ============================================================================
+
 function StatusPill({ status }: { status: keyof typeof STATUS_CFG | string }) {
   const c = STATUS_CFG[status as keyof typeof STATUS_CFG] ?? STATUS_CFG.anomaly;
   return (
@@ -292,6 +518,7 @@ function StatusPill({ status }: { status: keyof typeof STATUS_CFG | string }) {
     </span>
   );
 }
+
 function ShiftTeamPill({ teamKey }: { teamKey: ShiftTeamKey | null }) {
   if (!teamKey) return <span className="text-slate-300 text-xs">—</span>;
   const cfg = SHIFT_TEAMS.find((t) => t.key === teamKey);
@@ -302,6 +529,7 @@ function ShiftTeamPill({ teamKey }: { teamKey: ShiftTeamKey | null }) {
     </span>
   );
 }
+
 function LateBadge({ minutes }: { minutes: number }) {
   if (minutes <= 0) return <span className="text-slate-300 text-xs">—</span>;
   return (
@@ -310,6 +538,7 @@ function LateBadge({ minutes }: { minutes: number }) {
     </span>
   );
 }
+
 function OvertimeBadge({ minutes }: { minutes: number }) {
   if (minutes <= 0) return <span className="text-slate-300 text-xs">—</span>;
   return (
@@ -318,6 +547,7 @@ function OvertimeBadge({ minutes }: { minutes: number }) {
     </span>
   );
 }
+
 function WorkedTimeBadge({ minutes, expectedMin }: { minutes: number; expectedMin?: number }) {
   if (minutes <= 0) return <span className="text-slate-300 text-xs">—</span>;
   const threshold = expectedMin ?? MAX_WORKDAY_MIN;
@@ -328,12 +558,14 @@ function WorkedTimeBadge({ minutes, expectedMin }: { minutes: number; expectedMi
     </span>
   );
 }
+
 function CompensationCell({ c }: { c: CompensationResult }) {
   if (c.late_min === 0) return <span className="text-slate-300 text-xs">—</span>;
   return c.is_compensated
     ? <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 whitespace-nowrap">✓ Compensé</span>
     : <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 ring-1 ring-red-200 whitespace-nowrap">✗ Non compensé</span>;
 }
+
 function ReplacementBadge() {
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700 ring-1 ring-purple-300 whitespace-nowrap">
@@ -341,6 +573,7 @@ function ReplacementBadge() {
     </span>
   );
 }
+
 function RestDayBadge() {
   return (
     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 ring-1 ring-slate-200 whitespace-nowrap">
@@ -349,12 +582,15 @@ function RestDayBadge() {
   );
 }
 
-// ─── Planning Panel (vue parallèle) ──────────────────────────────────────────
+// ============================================================================
+// COMPOSANT: TodayPlanningPanel
+// ============================================================================
+
 function TodayPlanningPanel({
   todayPlanning, allRecords, loading,
 }: {
   todayPlanning: {
-    jour:  { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
+    jour: { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
     soir1: { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
     soir2: { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
     loaded: boolean;
@@ -365,7 +601,7 @@ function TodayPlanningPanel({
   const today = todayISO();
   const total = todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length;
 
-  const recByMat  = useMemo(() => new Map(allRecords.filter((r) => r.matricule).map((r) => [r.matricule, r])), [allRecords]);
+  const recByMat = useMemo(() => new Map(allRecords.filter((r) => r.matricule).map((r) => [r.matricule, r])), [allRecords]);
   const recByName = useMemo(() => new Map(allRecords.map((r) => [r.full_name.toLowerCase().trim(), r])), [allRecords]);
 
   const getRecord = (emp: { employee_name: string; employee_matricule?: string | null }) => {
@@ -389,7 +625,6 @@ function TodayPlanningPanel({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
       <div className="px-3 py-2 bg-camublue-900 text-white flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <CalendarRange className="h-3.5 w-3.5" />
@@ -398,7 +633,6 @@ function TodayPlanningPanel({
         <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-semibold">{total} planifiés</span>
       </div>
 
-      {/* Shifts */}
       <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
         {SHIFT_TEAMS.map((team) => {
           const emps = todayPlanning[team.key as ShiftTeamKey];
@@ -406,11 +640,10 @@ function TodayPlanningPanel({
 
           const shiftStatus = getShiftActiveStatus(team.key as ShiftTeamKey);
           const present = emps.filter((e) => { const r = getRecord(e); return r && r.status !== "absent"; }).length;
-          const absent  = shiftStatus === "upcoming" ? 0 : emps.length - present;
+          const absent = shiftStatus === "upcoming" ? 0 : emps.length - present;
 
           return (
             <div key={team.key}>
-              {/* Shift header */}
               <div className={`px-3 py-1.5 flex items-center justify-between ${team.activeBg} border-b ${team.activeBorder}`}>
                 <div className="flex items-center gap-1.5">
                   <span className={`h-2 w-2 rounded-full ${team.dot}`} />
@@ -422,31 +655,28 @@ function TodayPlanningPanel({
                   {absent > 0 && <span className="text-[9px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded-full">{absent}✗</span>}
                 </div>
               </div>
-              {/* Employee list */}
               {emps.map((emp) => {
-                const rec         = getRecord(emp);
-                // Si le shift n'a pas encore commencé, ne pas afficher "absent" mais "en attente"
+                const rec = getRecord(emp);
                 const effectiveStatus = rec?.status ?? (shiftStatus === "upcoming" ? "pending" : "absent");
-                const status      = effectiveStatus;
-                const isLate      = (rec?.computed_late_minutes ?? 0) > 0;
-                const pal         = (emp.team_id && emp.team_id !== "") ? getTeamPalette(emp.team_id) : null;
+                const status = effectiveStatus;
+                const isLate = (rec?.computed_late_minutes ?? 0) > 0;
+                const pal = (emp.team_id && emp.team_id !== "") ? getTeamPalette(emp.team_id) : null;
 
                 const statusDot =
-                  status === "ok"         ? "bg-emerald-500" :
-                  status === "absent"     ? "bg-red-500"     :
-                  status === "pending"    ? "bg-blue-400"    :
-                  status === "incomplete" ? "bg-amber-500"   :
-                                            "bg-violet-500";
+                  status === "ok" ? "bg-emerald-500" :
+                    status === "absent" ? "bg-red-500" :
+                      status === "pending" ? "bg-blue-400" :
+                        status === "incomplete" ? "bg-amber-500" :
+                          "bg-violet-500";
 
                 return (
                   <div key={emp.employee_name}
-                    className={`flex items-center gap-2 px-3 py-1.5 text-[10px] border-b border-slate-50 transition-colors ${
-                      status === "absent"     ? "bg-red-50/50"    :
-                      status === "pending"    ? "bg-blue-50/30"   :
-                      status === "ok"         ? ""                :
-                      status === "incomplete" ? "bg-amber-50/30"  :
-                                                "bg-violet-50/30"
-                    }`}>
+                    className={`flex items-center gap-2 px-3 py-1.5 text-[10px] border-b border-slate-50 transition-colors ${status === "absent" ? "bg-red-50/50" :
+                      status === "pending" ? "bg-blue-50/30" :
+                        status === "ok" ? "" :
+                          status === "incomplete" ? "bg-amber-50/30" :
+                            "bg-violet-50/30"
+                      }`}>
                     {pal && <span className={`h-2 w-2 rounded-full shrink-0 ${pal.dot}`} />}
                     <div className="flex-1 min-w-0">
                       {emp.employee_matricule && (
@@ -469,14 +699,13 @@ function TodayPlanningPanel({
         })}
       </div>
 
-      {/* Légende */}
       <div className="px-3 py-2 border-t border-slate-100 bg-slate-50 shrink-0">
         <div className="flex items-center gap-3 flex-wrap">
           {[
-            { dot: "bg-emerald-500", label: "Présent"   },
-            { dot: "bg-red-500",     label: "Absent"    },
-            { dot: "bg-blue-400",    label: "En attente"},
-            { dot: "bg-amber-500",   label: "Incomplet" },
+            { dot: "bg-emerald-500", label: "Présent" },
+            { dot: "bg-red-500", label: "Absent" },
+            { dot: "bg-blue-400", label: "En attente" },
+            { dot: "bg-amber-500", label: "Incomplet" },
           ].map((l) => (
             <span key={l.label} className="flex items-center gap-1 text-[9px] text-slate-500">
               <span className={`h-1.5 w-1.5 rounded-full ${l.dot}`} />{l.label}
@@ -488,12 +717,15 @@ function TodayPlanningPanel({
   );
 }
 
-// ─── Barre de progression ─────────────────────────────────────────────────────
+// ============================================================================
+// COMPOSANT: WeekProgressBar
+// ============================================================================
+
 function WeekProgressBar({ minutes, maxMinutes }: { minutes: number; maxMinutes: number }) {
-  const pct       = Math.min(100, Math.round((minutes / maxMinutes) * 100));
-  const over      = minutes > maxMinutes;
-  const color     = pct >= 100 ? "bg-emerald-500" : pct >= 75 ? "bg-blue-500" : pct >= 50 ? "bg-amber-400" : "bg-red-400";
-  const bgColor   = pct >= 100 ? "bg-emerald-100" : pct >= 75 ? "bg-blue-100" : pct >= 50 ? "bg-amber-100" : "bg-red-100";
+  const pct = Math.min(100, Math.round((minutes / maxMinutes) * 100));
+  const over = minutes > maxMinutes;
+  const color = pct >= 100 ? "bg-emerald-500" : pct >= 75 ? "bg-blue-500" : pct >= 50 ? "bg-amber-400" : "bg-red-400";
+  const bgColor = pct >= 100 ? "bg-emerald-100" : pct >= 75 ? "bg-blue-100" : pct >= 50 ? "bg-amber-100" : "bg-red-100";
   const textColor = pct >= 100 ? "text-emerald-700" : pct >= 75 ? "text-blue-700" : pct >= 50 ? "text-amber-700" : "text-red-600";
   return (
     <div className="flex items-center gap-2.5 min-w-[180px]">
@@ -507,17 +739,20 @@ function WeekProgressBar({ minutes, maxMinutes }: { minutes: number; maxMinutes:
   );
 }
 
-// ─── Tableau synthétique (Hebdo / Mensuel) ────────────────────────────────────
+// ============================================================================
+// COMPOSANT: SummaryTable
+// ============================================================================
+
 function SummaryTable({ rows, mode, isLoading }: {
   rows: SummaryRecord[]; mode: "weekly" | "monthly"; isLoading: boolean;
 }) {
-  const MAX_MIN  = mode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33);
+  const MAX_MIN = mode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33);
   const maxLabel = mode === "weekly" ? "40h/sem" : `${formatMinutes(MAX_MIN)}/mois`;
 
   const stats = useMemo(() => {
     if (!rows.length) return null;
-    const total   = rows.reduce((s, r) => s + r.worked_minutes, 0);
-    const avg     = Math.round(total / rows.length);
+    const total = rows.reduce((s, r) => s + r.worked_minutes, 0);
+    const avg = Math.round(total / rows.length);
     const complet = rows.filter((r) => r.worked_minutes >= MAX_MIN).length;
     return { avg, complet, total, effectif: rows.length };
   }, [rows, MAX_MIN]);
@@ -592,9 +827,9 @@ function SummaryTable({ rows, mode, isLoading }: {
       <div className="flex items-center gap-4 text-xs text-slate-400 px-1 shrink-0 flex-wrap">
         {[
           { color: "bg-emerald-500", label: "Quota atteint (≥ 100%)" },
-          { color: "bg-blue-500",    label: "Bon (≥ 75%)" },
-          { color: "bg-amber-400",   label: "Moyen (≥ 50%)" },
-          { color: "bg-red-400",     label: "Faible (< 50%)" },
+          { color: "bg-blue-500", label: "Bon (≥ 75%)" },
+          { color: "bg-amber-400", label: "Moyen (≥ 50%)" },
+          { color: "bg-red-400", label: "Faible (< 50%)" },
         ].map((l) => (
           <span key={l.label} className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-full ${l.color}`} />{l.label}</span>
         ))}
@@ -603,7 +838,10 @@ function SummaryTable({ rows, mode, isLoading }: {
   );
 }
 
-// ─── Modal : Gestion des horaires de travail ──────────────────────────────────
+// ============================================================================
+// COMPOSANT: WorkScheduleModal
+// ============================================================================
+
 function WorkScheduleModal({
   open, onClose, active, presets, onSave, onPresetsChange,
 }: {
@@ -614,23 +852,23 @@ function WorkScheduleModal({
   onSave: (s: ActiveSchedule) => void;
   onPresetsChange: (p: WorkSchedulePreset[]) => void;
 }) {
-  const [view,           setView]           = useState<"list" | "period" | "form">("list");
+  const [view, setView] = useState<"list" | "period" | "form">("list");
   const [selectedPreset, setSelectedPreset] = useState<WorkSchedulePreset | null>(null);
-  const [editingPreset,  setEditingPreset]  = useState<WorkSchedulePreset | null>(null);
-  const [deleteConfirm,  setDeleteConfirm]  = useState<string | null>(null);
-  const [dateStart,      setDateStart]      = useState(todayISO());
-  const [dateEnd,        setDateEnd]        = useState(() => {
+  const [editingPreset, setEditingPreset] = useState<WorkSchedulePreset | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [dateStart, setDateStart] = useState(todayISO());
+  const [dateEnd, setDateEnd] = useState(() => {
     const d = new Date(); d.setMonth(d.getMonth() + 1);
     return d.toISOString().slice(0, 10);
   });
-  const [saved,     setSaved]     = useState(false);
-  const [fContext,  setFContext]  = useState("");
-  const [fStartH,   setFStartH]  = useState(8);
-  const [fStartM,   setFStartM]  = useState(0);
-  const [fEndH,     setFEndH]    = useState(17);
-  const [fEndM,     setFEndM]    = useState(30);
-  const [fBreakMin, setFBreakMin]= useState(60);
-  const [fError,    setFError]   = useState("");
+  const [saved, setSaved] = useState(false);
+  const [fContext, setFContext] = useState("");
+  const [fStartH, setFStartH] = useState(8);
+  const [fStartM, setFStartM] = useState(0);
+  const [fEndH, setFEndH] = useState(17);
+  const [fEndM, setFEndM] = useState(30);
+  const [fBreakMin, setFBreakMin] = useState(60);
+  const [fError, setFError] = useState("");
 
   const isLocked = active ? isPeriodActive(active) : false;
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -645,7 +883,7 @@ function WorkScheduleModal({
         setSelectedPreset(presets[0] ?? null); setDateStart(todayISO());
       }
     }
-  }, [open]);
+  }, [open, active, presets]);
 
   const openForm = (preset?: WorkSchedulePreset) => {
     if (preset) {
@@ -703,7 +941,6 @@ function WorkScheduleModal({
             exit={{ y: 40, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
 
-            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 {(view === "form" || view === "period") && (
@@ -724,7 +961,6 @@ function WorkScheduleModal({
               <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-gray-100 transition"><X className="h-4 w-4 text-gray-500" /></button>
             </div>
 
-            {/* ── Vue : Liste des contextes ── */}
             {view === "list" && (
               <>
                 <div className="px-6 py-5 space-y-3 max-h-[65vh] overflow-y-auto">
@@ -790,7 +1026,6 @@ function WorkScheduleModal({
               </>
             )}
 
-            {/* ── Vue : Assigner une période ── */}
             {view === "period" && (
               <>
                 <div className="px-6 py-5 space-y-5 max-h-[65vh] overflow-y-auto">
@@ -851,10 +1086,10 @@ function WorkScheduleModal({
                         {exceedsMax
                           ? <p className="text-xs mt-0.5">⚠️ Dépasse le maximum légal de <strong>8h/jour</strong>.</p>
                           : <p className="text-xs mt-0.5">
-                              Retard après <strong>{pad(selectedPreset.startH)}h{pad(selectedPreset.startM)}</strong> —
-                              HS après <strong>{pad(selectedPreset.endH)}h{pad(selectedPreset.endM)}</strong>
-                              {selectedPreset.breakMin > 0 && <> — Pause <strong>{selectedPreset.breakMin}min</strong> déduite</>}
-                            </p>}
+                            Retard après <strong>{pad(selectedPreset.startH)}h{pad(selectedPreset.startM)}</strong> —
+                            HS après <strong>{pad(selectedPreset.endH)}h{pad(selectedPreset.endM)}</strong>
+                            {selectedPreset.breakMin > 0 && <> — Pause <strong>{selectedPreset.breakMin}min</strong> déduite</>}
+                          </p>}
                       </div>
                     </div>
                   )}
@@ -869,7 +1104,6 @@ function WorkScheduleModal({
               </>
             )}
 
-            {/* ── Vue : Formulaire preset ── */}
             {view === "form" && (
               <>
                 <div className="px-6 py-5 space-y-4 max-h-[65vh] overflow-y-auto">
@@ -883,7 +1117,7 @@ function WorkScheduleModal({
                     <div className="grid grid-cols-2 gap-3 mt-2">
                       {[
                         { label: "Heure d'entrée", H: fStartH, M: fStartM, setH: setFStartH, setM: setFStartM },
-                        { label: "Heure de sortie", H: fEndH,  M: fEndM,   setH: setFEndH,   setM: setFEndM   },
+                        { label: "Heure de sortie", H: fEndH, M: fEndM, setH: setFEndH, setM: setFEndM },
                       ].map((f) => (
                         <div key={f.label} className="space-y-1">
                           <label className="text-xs text-slate-400">{f.label}</label>
@@ -918,8 +1152,8 @@ function WorkScheduleModal({
                   </div>
                   <div className={`rounded-xl px-4 py-3 text-sm flex items-start gap-3 ${formEffMin <= 0 ? "bg-red-50 border border-red-200 text-red-700" : formEffMin > MAX_WORKDAY_MIN ? "bg-amber-50 border border-amber-200 text-amber-800" : "bg-blue-50 border border-blue-100 text-blue-700"}`}>
                     {formEffMin <= 0 ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
-                     : formEffMin > MAX_WORKDAY_MIN ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
-                     : <Clock className="h-4 w-4 shrink-0 mt-0.5 text-blue-500" />}
+                      : formEffMin > MAX_WORKDAY_MIN ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+                        : <Clock className="h-4 w-4 shrink-0 mt-0.5 text-blue-500" />}
                     <div>
                       <p className="font-semibold">{formEffMin <= 0 ? "Durée invalide" : `Durée effective : ${formatMinutes(formEffMin)}`}</p>
                       <p className="text-xs mt-0.5">
@@ -947,13 +1181,16 @@ function WorkScheduleModal({
   );
 }
 
-// ─── Modal : Détail hebdomadaire ──────────────────────────────────────────────
+// ============================================================================
+// COMPOSANT: DetailModal
+// ============================================================================
+
 function DetailModal({ open, onClose, employeeId, initialWeek }: {
   open: boolean; onClose: () => void; employeeId: number | null; initialWeek: string;
 }) {
   const [pointages, setPointages] = useState<Pointage[]>([]);
-  const [loading,   setLoading]   = useState(false);
-  const [selWeek,   setSelWeek]   = useState(initialWeek);
+  const [loading, setLoading] = useState(false);
+  const [selWeek, setSelWeek] = useState(initialWeek);
 
   const weekBounds = (ws: string) => {
     const [y, wn] = ws.split("-W").map(Number);
@@ -971,9 +1208,8 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
       const res: EmployeePeriodDetailResponse = await getEmployeePeriodDetail({ employee_id: employeeId, start, end });
       setPointages(["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"].map((day, i) => {
         const cur = new Date(start); cur.setDate(cur.getDate() + i);
-        const ds  = cur.toISOString().split("T")[0];
-        const dd  = res.days.find((d: DayDetail) => d.date === ds);
-        // Si le backend indique que l'employé n'était pas planifié (jour de repos), afficher "not_working"
+        const ds = cur.toISOString().split("T")[0];
+        const dd = res.days.find((d: DayDetail) => d.date === ds);
         const rawStatus = dd?.status ?? "absent";
         const status = rawStatus === "not_working" ? "not_working" : (rawStatus as "ok" | "absent" | "incomplete" | "anomaly");
         return { day, date: ds, in_time: dd?.in_time ?? null, out_time: dd?.out_time ?? null, status, is_planned: (dd as any)?.is_planned ?? true };
@@ -1007,20 +1243,19 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
                 ? <div className="flex justify-center py-12"><div className="h-10 w-10 border-4 border-camublue-900 border-t-transparent rounded-full animate-spin" /></div>
                 : pointages.length > 0
                   ? <div className="space-y-2">
-                      {pointages.map((p, i) => (
-                        <div key={i} className={`rounded-xl border p-3 grid grid-cols-5 gap-4 ${
-                          p.status === "ok"          ? "bg-white border-slate-100"   :
-                          p.status === "not_working" ? "bg-slate-50 border-slate-200 opacity-70" :
-                                                        "bg-rose-50 border-rose-100"
+                    {pointages.map((p, i) => (
+                      <div key={i} className={`rounded-xl border p-3 grid grid-cols-5 gap-4 ${p.status === "ok" ? "bg-white border-slate-100" :
+                        p.status === "not_working" ? "bg-slate-50 border-slate-200 opacity-70" :
+                          "bg-rose-50 border-rose-100"
                         }`}>
-                          <span className="font-medium text-slate-800 text-sm">{p.day}</span>
-                          <span className="text-sm text-slate-600">{new Date(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
-                          <span><StatusPill status={p.status} /></span>
-                          <span className={`text-sm ${p.in_time ? "text-slate-700" : "text-slate-400"}`}>{p.in_time ? formatTime(p.in_time) : "—"}</span>
-                          <span className={`text-sm ${p.out_time ? "text-slate-700" : "text-slate-400"}`}>{p.out_time ? formatTime(p.out_time) : "—"}</span>
-                        </div>
-                      ))}
-                    </div>
+                        <span className="font-medium text-slate-800 text-sm">{p.day}</span>
+                        <span className="text-sm text-slate-600">{new Date(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
+                        <span><StatusPill status={p.status} /></span>
+                        <span className={`text-sm ${p.in_time ? "text-slate-700" : "text-slate-400"}`}>{p.in_time ? formatTime(p.in_time) : "—"}</span>
+                        <span className={`text-sm ${p.out_time ? "text-slate-700" : "text-slate-400"}`}>{p.out_time ? formatTime(p.out_time) : "—"}</span>
+                      </div>
+                    ))}
+                  </div>
                   : <div className="flex flex-col items-center justify-center py-12 text-slate-400"><AlertTriangle className="h-10 w-10 mb-3 text-slate-300" /><p>Aucun pointage trouvé.</p></div>
               }
             </div>
@@ -1034,226 +1269,26 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
   );
 }
 
-// ─── Parsing Excel planning ───────────────────────────────────────────────────
-interface ParsedSheet {
-  name:    string;
-  count:   number;
-  dateMin: string;
-  dateMax: string;
-  teams:   number;  // nb équipes détectées
-}
-interface ParsedPlanning {
-  entries: PlanningEntry[];
-  sheets:  ParsedSheet[];
-}
+// ============================================================================
+// COMPOSANT: PlanningUploadModal
+// ============================================================================
 
-/** Convertit une valeur de cellule en ISO date string YYYY-MM-DD */
-function cellToDateStr(cell: unknown): string {
-  if (cell instanceof Date) {
-    return `${cell.getFullYear()}-${String(cell.getMonth()+1).padStart(2,"0")}-${String(cell.getDate()).padStart(2,"0")}`;
-  }
-  if (typeof cell === "number" && cell > 40000) {
-    const d = new Date(Math.round((cell - 25569) * 86400 * 1000));
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
-  }
-  if (typeof cell === "string" && cell.trim()) {
-    const s = cell.trim();
-    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-    if (m) return `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
-    // ISO format YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  }
-  return "";
-}
-
-/** Détecte le type de shift depuis un libellé (ex: "08H-16H") */
-function detectShiftLabel(label: string): ShiftTeamKey | null {
-  const s = label.toUpperCase().replace(/\s/g, "");
-  if (s.includes("08") && s.includes("16")) return "jour";
-  if (s.includes("16") && s.includes("22")) return "soir1";
-  if (s.includes("22") && s.includes("08")) return "soir2";
-  return null;
-}
-
-/**
- * Tente de lire la couleur de fond d'une cellule Excel.
- * Retourne une chaîne hex 6 chars (ex: "FFFF00") ou null.
- */
-function getCellBgHex(ws: XLSX.WorkSheet, r: number, c: number): string | null {
-  const addr = XLSX.utils.encode_cell({ r, c });
-  const cell  = ws[addr] as any;
-  if (!cell?.s) return null;
-  // SheetJS avec cellStyles:true expose cell.s.fgColor / cell.s.bgColor
-  const tryColor = (co: any): string | null => {
-    if (!co) return null;
-    if (co.rgb && typeof co.rgb === "string" && co.rgb.length >= 6) {
-      const rgb = co.rgb.toUpperCase().slice(-6);
-      // Ignorer blanc, noir, et couleurs génériques
-      if (rgb === "FFFFFF" || rgb === "000000" || rgb === "000001") return null;
-      return rgb;
-    }
-    return null;
-  };
-  return tryColor(cell.s.fgColor) ?? tryColor(cell.s.bgColor) ?? null;
-}
-
-/** Parse un seul onglet de planning — détecte les équipes par couleur de fond */
-function parseOneSheet(ws: XLSX.WorkSheet): PlanningEntry[] {
-  const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as unknown[][];
-  const entries: PlanningEntry[] = [];
-  const headerRow = (rawRows[0] ?? []) as unknown[];
-
-  // Colonnes → dates
-  const dates: string[] = [];
-  for (let c = 1; c < headerRow.length; c++) {
-    dates.push(cellToDateStr(headerRow[c]));
-  }
-
-  let currentShift: ShiftTeamKey | null = null;
-
-  // Mapping couleur hex → team_id séquentiel
-  const colorToTeam: Record<string, string> = {};
-  let teamCounter = 0;
-
-  for (let row = 1; row < rawRows.length; row++) {
-    const rowData = rawRows[row] as unknown[];
-    const shiftCell = String(rowData[0] ?? "").trim();
-
-    // Détection shift depuis la colonne A
-    if (shiftCell) {
-      const detected = detectShiftLabel(shiftCell);
-      if (detected) currentShift = detected;
-    }
-    if (!currentShift) continue;
-
-    // Détecter la couleur de fond de la ligne (colonne B ou première cellule non-vide)
-    let rowColor: string | null = null;
-    for (let c = 1; c < Math.min(rowData.length, 5); c++) {
-      const col = getCellBgHex(ws, row, c);
-      if (col) { rowColor = col; break; }
-    }
-
-    // Assigner un team_id basé sur la couleur
-    let teamId = "";
-    if (rowColor) {
-      if (!(rowColor in colorToTeam)) {
-        teamCounter++;
-        colorToTeam[rowColor] = `equipe-${teamCounter}`;
-      }
-      teamId = colorToTeam[rowColor];
-    }
-
-    for (let c = 1; c < rowData.length; c++) {
-      const name = String(rowData[c] ?? "").trim();
-      const date = dates[c - 1];
-      if (name && date) {
-        entries.push({ date, shift_type: currentShift, employee_name: name, team_id: teamId });
-      }
-    }
-  }
-  return entries;
-}
-
-/** Parse tous les onglets du fichier Excel. */
-function parsePlanningExcel(buffer: ArrayBuffer): ParsedPlanning {
-  const wb = XLSX.read(buffer, { type: "array", cellDates: true, cellStyles: true });
-  const allEntries: PlanningEntry[] = [];
-  const sheets: ParsedSheet[] = [];
-
-  for (const sheetName of wb.SheetNames) {
-    const ws = wb.Sheets[sheetName];
-    const entries = parseOneSheet(ws);
-    if (!entries.length) continue;
-    const dates   = entries.map((e) => e.date).filter(Boolean).sort();
-    const teamSet = new Set(entries.map((e) => e.team_id).filter(Boolean));
-    sheets.push({
-      name: sheetName, count: entries.length,
-      dateMin: dates[0], dateMax: dates[dates.length - 1],
-      teams: teamSet.size,
-    });
-    allEntries.push(...entries);
-  }
-
-  return { entries: allEntries, sheets };
-}
-
-// ─── Palettes d'équipes (correspondant aux couleurs Excel) ────────────────────
-const TEAM_PALETTE = [
-  { bg: "bg-yellow-100",  text: "text-yellow-900",  border: "border-yellow-400",  header: "bg-yellow-400",  dot: "bg-yellow-500",  chipBg: "bg-yellow-200",  label: "Équipe 1"  },
-  { bg: "bg-green-100",   text: "text-green-900",   border: "border-green-400",   header: "bg-green-500",   dot: "bg-green-600",   chipBg: "bg-green-200",   label: "Équipe 2"  },
-  { bg: "bg-sky-100",     text: "text-sky-900",     border: "border-sky-400",     header: "bg-sky-500",     dot: "bg-sky-600",     chipBg: "bg-sky-200",     label: "Équipe 3"  },
-  { bg: "bg-pink-100",    text: "text-pink-900",    border: "border-pink-400",    header: "bg-pink-500",    dot: "bg-pink-600",    chipBg: "bg-pink-200",    label: "Équipe 4"  },
-  { bg: "bg-orange-100",  text: "text-orange-900",  border: "border-orange-400",  header: "bg-orange-500",  dot: "bg-orange-600",  chipBg: "bg-orange-200",  label: "Équipe 5"  },
-  { bg: "bg-purple-100",  text: "text-purple-900",  border: "border-purple-400",  header: "bg-purple-500",  dot: "bg-purple-600",  chipBg: "bg-purple-200",  label: "Équipe 6"  },
-  { bg: "bg-teal-100",    text: "text-teal-900",    border: "border-teal-400",    header: "bg-teal-500",    dot: "bg-teal-600",    chipBg: "bg-teal-200",    label: "Équipe 7"  },
-  { bg: "bg-red-100",     text: "text-red-900",     border: "border-red-400",     header: "bg-red-500",     dot: "bg-red-600",     chipBg: "bg-red-200",     label: "Équipe 8"  },
-  { bg: "bg-indigo-100",  text: "text-indigo-900",  border: "border-indigo-400",  header: "bg-indigo-500",  dot: "bg-indigo-600",  chipBg: "bg-indigo-200",  label: "Équipe 9"  },
-  { bg: "bg-lime-100",    text: "text-lime-900",    border: "border-lime-400",    header: "bg-lime-500",    dot: "bg-lime-600",    chipBg: "bg-lime-200",    label: "Équipe 10" },
-  { bg: "bg-amber-100",   text: "text-amber-900",   border: "border-amber-400",   header: "bg-amber-500",   dot: "bg-amber-600",   chipBg: "bg-amber-200",   label: "Équipe 11" },
-  { bg: "bg-cyan-100",    text: "text-cyan-900",    border: "border-cyan-400",    header: "bg-cyan-500",    dot: "bg-cyan-600",    chipBg: "bg-cyan-200",    label: "Équipe 12" },
-];
-
-function getTeamPalette(teamId: string) {
-  const idx = parseInt(teamId.replace(/\D/g, "") || "0", 10) - 1;
-  return TEAM_PALETTE[Math.max(0, idx) % TEAM_PALETTE.length];
-}
-
-/** Shift label court pour affichage dans la grille planning */
-function shiftShortLabel(shiftType: string): { label: string; style: string } {
-  if (shiftType === "jour")  return { label: "M",  style: "bg-teal-200   text-teal-800   font-bold" };
-  if (shiftType === "soir1") return { label: "S",  style: "bg-amber-200  text-amber-800  font-bold" };
-  if (shiftType === "soir2") return { label: "N",  style: "bg-indigo-200 text-indigo-800 font-bold" };
-  return { label: "R", style: "bg-slate-200 text-slate-600 font-bold" };
-}
-
-// ─── Helpers date / planning ──────────────────────────────────────────────────
-const DAYS_FR = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
-const MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
-
-function daysInMonth(ym: string): string[] {
-  const [y, m] = ym.split("-").map(Number);
-  const days: string[] = [];
-  const last = new Date(y, m, 0).getDate();
-  for (let d = 1; d <= last; d++)
-    days.push(`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`);
-  return days;
-}
-
-function prevMonth(ym: string): string {
-  const [y, m] = ym.split("-").map(Number);
-  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2,"0")}`;
-}
-
-function nextMonth(ym: string): string {
-  const [y, m] = ym.split("-").map(Number);
-  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2,"0")}`;
-}
-
-function yyyyMmNow(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,"0")}`;
-}
-
-const SHIFT_KEYS: { key: ShiftTeamKey; label: string; bg: string; text: string; border: string; addBtn: string }[] = [
-  { key: "jour",  label: "08H-16H", bg: "bg-teal-50",   text: "text-teal-800",   border: "border-teal-200",   addBtn: "bg-teal-500 hover:bg-teal-600 text-white" },
-  { key: "soir1", label: "16H-22H", bg: "bg-yellow-50", text: "text-yellow-800", border: "border-yellow-200", addBtn: "bg-amber-400 hover:bg-amber-500 text-amber-950" },
-  { key: "soir2", label: "22H-08H", bg: "bg-orange-50", text: "text-orange-800", border: "border-orange-200", addBtn: "bg-orange-500 hover:bg-orange-600 text-white" },
-];
-
-// ─── Modal : Planning (Vue + Import) ─────────────────────────────────────────
 function PlanningUploadModal({ open, onClose, onSuccess }: {
   open: boolean; onClose: () => void; onSuccess: (count: number) => void;
 }) {
   const [tab, setTab] = useState<"view" | "import">("view");
-
-  // ── Vue planning ──────────────────────────────────────────────────────────
-  const [viewMonth,  setViewMonth]  = useState(yyyyMmNow());
-  const [entries,    setEntries]    = useState<PlanningEntry[]>([]);
+  const [viewMonth, setViewMonth] = useState(yyyyMmToday());
+  const [entries, setEntries] = useState<PlanningEntry[]>([]);
   const [loadingVue, setLoadingVue] = useState(false);
-  // Ajout inline : {date, shift} | null
   const [addingCell, setAddingCell] = useState<{ date: string; shift: ShiftTeamKey } | null>(null);
-  const [newName,    setNewName]    = useState("");
-  const [saving,     setSaving]     = useState(false);
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<PlanningEntry[]>([]);
+  const [parsedSheets, setParsedSheets] = useState<ParsedSheet[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [uploaded, setUploaded] = useState(false);
 
   const loadMonthPlanning = useCallback(async (ym: string) => {
     setLoadingVue(true);
@@ -1261,14 +1296,17 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
       const days = daysInMonth(ym);
       const data = await getShiftPlanning(days[0], days[days.length - 1]);
       setEntries(data);
-    } catch { /* silently ignore */ } finally { setLoadingVue(false); }
+    } catch { } finally { setLoadingVue(false); }
   }, []);
 
   useEffect(() => {
     if (open && tab === "view") loadMonthPlanning(viewMonth);
   }, [open, tab, viewMonth, loadMonthPlanning]);
 
-  // Groupé par date + shift (pour vue détail)
+  useEffect(() => {
+    if (open) { setFile(null); setPreview([]); setParsedSheets([]); setError(""); setUploaded(false); setAddingCell(null); setNewName(""); }
+  }, [open]);
+
   const grouped = useMemo(() => {
     const map: Record<string, Record<string, PlanningEntry[]>> = {};
     for (const e of entries) {
@@ -1278,12 +1316,7 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
     return map;
   }, [entries]);
 
-  /**
-   * Vue par équipe : team_id → { employees: {name, matricule}[], dateShifts: Record<date, shift_type> }
-   * Inspiré du planning Excel coloré
-   */
   const teamGroups = useMemo(() => {
-    // team_id → { employees (noms + matricules uniques), dateShifts }
     const map: Record<string, { employees: { name: string; matricule: string | null }[]; dateShifts: Record<string, string> }> = {};
     for (const e of entries) {
       const tid = e.team_id || "_no_team";
@@ -1297,13 +1330,11 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
   }, [entries]);
 
   const teamIds = useMemo(() => Object.keys(teamGroups).sort((a, b) => {
-    // Trier par numéro d'équipe si possible
     const na = parseInt(a.replace(/\D/g, "") || "999", 10);
     const nb = parseInt(b.replace(/\D/g, "") || "999", 10);
     return na - nb;
   }), [teamGroups]);
 
-  // Jours actifs du mois (seulement les jours avec données pour la grille équipe)
   const activeDays = useMemo(() => {
     const daysSet = new Set(entries.map((e) => e.date));
     return daysInMonth(viewMonth).filter((d) => daysSet.has(d));
@@ -1311,38 +1342,7 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
 
   const monthDays = useMemo(() => daysInMonth(viewMonth), [viewMonth]);
   const hasAnyData = entries.length > 0;
-  const hasTeams   = teamIds.length > 0 && !teamIds.every((t) => t === "_no_team");
-
-  const handleRemove = async (entry: PlanningEntry) => {
-    setEntries((prev) => prev.filter(
-      (e) => !(e.date === entry.date && e.shift_type === entry.shift_type && e.employee_name === entry.employee_name)
-    ));
-    try { await deleteSinglePlanningEntry(entry.date, entry.shift_type, entry.employee_name); }
-    catch { loadMonthPlanning(viewMonth); } // revert on error
-  };
-
-  const handleAdd = async () => {
-    if (!addingCell || !newName.trim() || saving) return;
-    setSaving(true);
-    const name = newName.trim();
-    const optimistic: PlanningEntry = { date: addingCell.date, shift_type: addingCell.shift, employee_name: name };
-    setEntries((prev) => [...prev, optimistic]);
-    setAddingCell(null); setNewName("");
-    try { await addSinglePlanningEntry({ date: addingCell.date, shift_type: addingCell.shift, employee_name: name }); }
-    catch { loadMonthPlanning(viewMonth); } finally { setSaving(false); }
-  };
-
-  // ── Import ────────────────────────────────────────────────────────────────
-  const [file,         setFile]         = useState<File | null>(null);
-  const [preview,      setPreview]      = useState<PlanningEntry[]>([]);
-  const [parsedSheets, setParsedSheets] = useState<ParsedSheet[]>([]);
-  const [loading,      setLoading]      = useState(false);
-  const [error,        setError]        = useState("");
-  const [uploaded,     setUploaded]     = useState(false);
-
-  useEffect(() => {
-    if (open) { setFile(null); setPreview([]); setParsedSheets([]); setError(""); setUploaded(false); setAddingCell(null); setNewName(""); }
-  }, [open]);
+  const hasTeams = teamIds.length > 0 && !teamIds.every((t) => t === "_no_team");
 
   const handleFile = (f: File | null) => {
     if (!f) { setFile(null); setPreview([]); setParsedSheets([]); return; }
@@ -1375,35 +1375,41 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
     } catch { setError("Erreur lors de l'envoi du planning. Réessayez."); } finally { setLoading(false); }
   };
 
-  const stats = useMemo(() => {
-    const c: Record<string, number> = { jour: 0, soir1: 0, soir2: 0 };
-    preview.forEach((e) => { if (e.shift_type in c) c[e.shift_type]++; });
-    const dates  = new Set(preview.map((e) => e.date));
-    const teams  = new Set(preview.map((e) => e.team_id).filter(Boolean));
-    return { jour: c.jour, soir1: c.soir1, soir2: c.soir2, dates: dates.size, total: preview.length, teams: teams.size };
-  }, [preview]);
+  const handleRemove = async (entry: PlanningEntry) => {
+    setEntries((prev) => prev.filter(
+      (e) => !(e.date === entry.date && e.shift_type === entry.shift_type && e.employee_name === entry.employee_name)
+    ));
+    try { await deleteSinglePlanningEntry(entry.date, entry.shift_type, entry.employee_name); }
+    catch { loadMonthPlanning(viewMonth); }
+  };
 
-  // Compteurs shift pour le mois affiché
+  const handleAdd = async () => {
+    if (!addingCell || !newName.trim() || saving) return;
+    setSaving(true);
+    const name = newName.trim();
+    const optimistic: PlanningEntry = { date: addingCell.date, shift_type: addingCell.shift, employee_name: name };
+    setEntries((prev) => [...prev, optimistic]);
+    setAddingCell(null); setNewName("");
+    try { await addSinglePlanningEntry({ date: addingCell.date, shift_type: addingCell.shift, employee_name: name }); }
+    catch { loadMonthPlanning(viewMonth); } finally { setSaving(false); }
+  };
+
   const monthShiftCounts = useMemo(() => {
     const c: Record<string, number> = { jour: 0, soir1: 0, soir2: 0 };
     entries.forEach((e) => { if (e.shift_type in c) c[e.shift_type]++; });
     return c;
   }, [entries]);
 
-  // Helper : initiales d'un nom
   const initials = (name: string) =>
     name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? "").slice(0, 2).join("");
 
-  // Helper : numéro de semaine ISO
-  const isoWeek = (dateStr: string): number => {
-    const d = new Date(dateStr + "T00:00:00");
-    const day = d.getDay() || 7;
-    d.setDate(d.getDate() + 4 - day);
-    const yearStart = new Date(d.getFullYear(), 0, 1);
-    return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  };
-
-  const MONTHS_SHORT = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
+  const stats = useMemo(() => {
+    const c: Record<string, number> = { jour: 0, soir1: 0, soir2: 0 };
+    preview.forEach((e) => { if (e.shift_type in c) c[e.shift_type]++; });
+    const dates = new Set(preview.map((e) => e.date));
+    const teams = new Set(preview.map((e) => e.team_id).filter(Boolean));
+    return { jour: c.jour, soir1: c.soir1, soir2: c.soir2, dates: dates.size, total: preview.length, teams: teams.size };
+  }, [preview]);
 
   const [y, m] = viewMonth.split("-").map(Number);
 
@@ -1420,7 +1426,6 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
             exit={{ y: 60, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
 
-            {/* ── Header ── */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-green-600 text-white"><CalendarRange className="h-4 w-4" /></div>
@@ -1431,11 +1436,10 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
               </button>
             </div>
 
-            {/* ── Tabs ── */}
             <div className="flex gap-1 px-5 pt-3 shrink-0">
               {([
-                { id: "view",   icon: Table2,  label: "Vue du planning" },
-                { id: "import", icon: Upload,  label: "Importer Excel" },
+                { id: "view", icon: Table2, label: "Vue du planning" },
+                { id: "import", icon: Upload, label: "Importer Excel" },
               ] as const).map(({ id, icon: Icon, label }) => (
                 <button key={id} onClick={() => setTab(id)}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${tab === id ? "bg-camublue-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"}`}>
@@ -1444,10 +1448,8 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
               ))}
             </div>
 
-            {/* ── Tab : Vue planning ── */}
             {tab === "view" && (
               <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Navigation mois */}
                 <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
                   <button onClick={() => setViewMonth(prevMonth(viewMonth))}
                     className="p-2 rounded-xl hover:bg-slate-100 transition text-slate-500 hover:text-slate-700">
@@ -1457,7 +1459,6 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                     <span className="font-bold text-slate-800 text-base">{MONTHS_FR[m - 1]} {y}</span>
                     {hasAnyData ? (
                       <div className="flex items-center gap-2 flex-wrap justify-center">
-                        {/* Indicateur équipes si détectées */}
                         {hasTeams && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
                             {teamIds.filter((t) => t !== "_no_team").length} équipes
@@ -1479,7 +1480,6 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                   </button>
                 </div>
 
-                {/* Grille planning */}
                 <div className="flex-1 overflow-auto">
                   {loadingVue ? (
                     <div className="flex items-center justify-center py-16 text-slate-400">
@@ -1491,20 +1491,18 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                       <p className="text-sm font-medium">Aucun planning importé pour ce mois</p>
                       <button onClick={() => setTab("import")}
                         className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
-                        <Upload className="h-3.5 w-3.5" />Importer un planning Excel
+                        <Upload className="h-4 w-4" />Importer un planning Excel
                       </button>
                     </div>
                   ) : hasTeams ? (
-                    /* ── Vue par équipes (style Excel coloré) ── */
                     <div className="min-w-max">
-                      {/* Légende shifts */}
                       <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 border-b border-slate-200 sticky top-0 z-20">
                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Cycle :</span>
                         {[
-                          { label: "M = Matin 08H-16H",    style: "bg-teal-200 text-teal-800"     },
-                          { label: "S = Soir 16H-22H",     style: "bg-amber-200 text-amber-800"   },
-                          { label: "N = Nuit 22H-08H",     style: "bg-indigo-200 text-indigo-800" },
-                          { label: "R = Repos",            style: "bg-slate-200 text-slate-600"   },
+                          { label: "M = Matin 08H-16H", style: "bg-teal-200 text-teal-800" },
+                          { label: "S = Soir 16H-22H", style: "bg-amber-200 text-amber-800" },
+                          { label: "N = Nuit 22H-08H", style: "bg-indigo-200 text-indigo-800" },
+                          { label: "R = Repos", style: "bg-slate-200 text-slate-600" },
                         ].map((item) => (
                           <span key={item.label} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${item.style}`}>
                             {item.label}
@@ -1515,11 +1513,9 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                       <table className="text-xs border-collapse w-full">
                         <thead className="sticky top-[33px] z-10">
                           <tr className="bg-camublue-900 text-white">
-                            {/* Colonne équipe */}
                             <th className="px-3 py-2.5 text-left font-bold min-w-[130px] border-r border-white/20 sticky left-0 bg-camublue-900 z-20">
                               Équipe / Employés
                             </th>
-                            {/* Colonnes dates */}
                             {activeDays.map((date) => {
                               const d = new Date(date + "T00:00:00");
                               const isToday = date === todayISO();
@@ -1538,17 +1534,15 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                         </thead>
                         <tbody>
                           {teamIds.map((tid, tIdx) => {
-                            const tg   = teamGroups[tid];
-                            const pal  = tid === "_no_team"
+                            const tg = teamGroups[tid];
+                            const pal = tid === "_no_team"
                               ? { bg: "bg-slate-50", text: "text-slate-700", border: "border-slate-300", header: "bg-slate-300", dot: "bg-slate-400", chipBg: "bg-slate-100", label: "Sans équipe" }
                               : getTeamPalette(tid);
                             const emps = tg.employees;
 
                             return (
                               <React.Fragment key={tid}>
-                                {/* ── En-tête équipe ── */}
                                 <tr className={`border-b-2 ${pal.border}`}>
-                                  {/* Cellule d'en-tête équipe */}
                                   <td className={`px-3 py-1.5 sticky left-0 z-10 ${pal.header} text-white`}>
                                     <div className="flex items-center gap-2">
                                       <span className="h-2 w-2 rounded-full bg-white/70 shrink-0" />
@@ -1558,10 +1552,9 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                                       <span className="text-[10px] opacity-80">· {emps.length} emp.</span>
                                     </div>
                                   </td>
-                                  {/* Cellules shift par date (1 seule par équipe) */}
                                   {activeDays.map((date) => {
                                     const shiftType = tg.dateShifts[date];
-                                    const sl = shiftType ? shiftShortLabel(shiftType) : null;
+                                    const sl = shiftType ? cycleConfig[shiftType === "jour" ? "M" : shiftType === "soir1" ? "S" : "N"] : null;
                                     const d = new Date(date + "T00:00:00");
                                     const isToday = date === todayISO();
                                     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
@@ -1580,16 +1573,13 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                                   })}
                                 </tr>
 
-                                {/* ── Lignes employés de cette équipe ── */}
                                 {emps.map((emp, eIdx) => (
                                   <tr key={emp.name}
                                     className={`border-b border-slate-100 ${eIdx % 2 === 0 ? pal.bg : "bg-white"}`}>
                                     <td className={`px-3 py-1 sticky left-0 z-10 ${eIdx % 2 === 0 ? pal.bg : "bg-white"} border-r ${pal.border}`}>
-                                      <div className="flex items-center gap-1.5">
-                                        <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-black shrink-0 ${pal.chipBg} ${pal.text}`}>
-                                          {initials(emp.name)}
-                                        </span>
-                                        <div className="flex flex-col min-w-0">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        {pal && <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${pal.dot}`} />}
+                                        <div className="min-w-0">
                                           {emp.matricule && (
                                             <span className="text-[8px] font-mono text-slate-400 leading-none">{emp.matricule}</span>
                                           )}
@@ -1599,10 +1589,8 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                                         </div>
                                       </div>
                                     </td>
-                                    {/* Pour chaque date : indiquer si cet employé est présent dans ce shift */}
                                     {activeDays.map((date) => {
                                       const shiftForTeam = tg.dateShifts[date];
-                                      // L'employé travaille si son équipe a un shift ce jour ET son nom est dans les entrées
                                       const hasEntry = shiftForTeam &&
                                         (grouped[date]?.[shiftForTeam] ?? []).some(
                                           (e) => e.employee_name === emp.name && e.team_id === tid
@@ -1630,7 +1618,6 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                       </table>
                     </div>
                   ) : (
-                    /* ── Vue classique par date (quand pas d'équipes détectées) ── */
                     <table className="min-w-full text-xs border-collapse">
                       <thead className="sticky top-0 z-10">
                         <tr className="bg-camublue-900 text-white">
@@ -1652,89 +1639,72 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                         </tr>
                       </thead>
                       <tbody>
-                        {(() => {
-                          let lastWeek = -1;
-                          return monthDays.map((date) => {
-                            const dayData  = grouped[date];
-                            const dateObj  = new Date(date + "T00:00:00");
-                            const isToday  = date === todayISO();
-                            const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-                            const hasEntries = dayData && SHIFT_KEYS.some((s) => (dayData[s.key]?.length ?? 0) > 0);
-                            if (!hasEntries && !isToday) return null;
-                            const week = isoWeek(date);
-                            const showWeekSep = week !== lastWeek;
-                            lastWeek = week;
-                            return (
-                              <React.Fragment key={date}>
-                                {showWeekSep && (
-                                  <tr key={`week-${week}`} className="bg-slate-100">
-                                    <td colSpan={4} className="px-4 py-1">
-                                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                        Semaine {week}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                )}
-                                <tr className={`border-b transition-colors ${isToday ? "border-blue-200 bg-blue-50/40" : isWeekend ? "border-slate-100 bg-slate-50/50" : "border-slate-100 hover:bg-slate-50/60"}`}>
-                                  <td className={`py-2 px-2 border-r border-slate-100 align-middle ${isToday ? "border-r-blue-200" : ""}`}>
-                                    <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl mx-auto ${isToday ? "bg-blue-600 text-white shadow-md shadow-blue-200" : isWeekend ? "bg-slate-200/70 text-slate-500" : "bg-slate-100 text-slate-600"}`}>
-                                      <span className="text-[9px] font-bold uppercase tracking-wider leading-none">{DAYS_FR[dateObj.getDay()]}</span>
-                                      <span className="text-xl font-black leading-tight">{dateObj.getDate()}</span>
-                                      <span className="text-[9px] font-semibold leading-none opacity-70">{MONTHS_SHORT[dateObj.getMonth()]}</span>
+                        {monthDays.map((date) => {
+                          const dayData = grouped[date];
+                          const dateObj = new Date(date + "T00:00:00");
+                          const isToday = date === todayISO();
+                          const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                          const hasEntries = dayData && SHIFT_KEYS.some((s) => (dayData[s.key]?.length ?? 0) > 0);
+                          if (!hasEntries && !isToday) return null;
+                          return (
+                            <tr key={date} className={`border-b transition-colors ${isToday ? "border-blue-200 bg-blue-50/40" : isWeekend ? "border-slate-100 bg-slate-50/50" : "border-slate-100 hover:bg-slate-50/60"}`}>
+                              <td className={`py-2 px-2 border-r border-slate-100 align-middle ${isToday ? "border-r-blue-200" : ""}`}>
+                                <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl mx-auto ${isToday ? "bg-blue-600 text-white shadow-md shadow-blue-200" : isWeekend ? "bg-slate-200/70 text-slate-500" : "bg-slate-100 text-slate-600"}`}>
+                                  <span className="text-[9px] font-bold uppercase tracking-wider leading-none">{DAYS_FR[dateObj.getDay()]}</span>
+                                  <span className="text-xl font-black leading-tight">{dateObj.getDate()}</span>
+                                  <span className="text-[9px] font-semibold leading-none opacity-70">{MONTHS_SHORT[dateObj.getMonth()]}</span>
+                                </div>
+                              </td>
+                              {SHIFT_KEYS.map((s) => {
+                                const cellEntries = dayData?.[s.key] ?? [];
+                                const isAdding = addingCell?.date === date && addingCell?.shift === s.key;
+                                return (
+                                  <td key={s.key} className={`px-3 py-2 align-top border-r border-slate-100 last:border-r-0 ${isAdding ? `${s.bg}/60` : ""}`}>
+                                    <div className="flex flex-wrap gap-1 min-h-[28px]">
+                                      {cellEntries.map((e) => (
+                                        <span key={e.employee_name}
+                                          title={`${e.employee_matricule ? e.employee_matricule + " · " : ""}${e.employee_name}`}
+                                          className={`group inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full text-xs font-semibold ${s.bg} ${s.text} border ${s.border} shadow-sm`}>
+                                          <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-[9px] font-black shrink-0 ${s.text}`}>
+                                            {initials(e.employee_name)}
+                                          </span>
+                                          <div className="flex flex-col min-w-0 max-w-[100px]">
+                                            {e.employee_matricule && (
+                                              <span className="text-[8px] font-mono opacity-70 leading-none truncate">{e.employee_matricule}</span>
+                                            )}
+                                            <span className="truncate text-xs leading-tight">{e.employee_name}</span>
+                                          </div>
+                                          <button onClick={() => handleRemove(e)} className="ml-0.5 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all shrink-0">
+                                            <X className="h-2.5 w-2.5" />
+                                          </button>
+                                        </span>
+                                      ))}
+                                      {cellEntries.length === 0 && !isAdding && (
+                                        <span className="text-[10px] text-slate-300 italic self-center">Aucun</span>
+                                      )}
+                                      {isAdding ? (
+                                        <div className="flex items-center gap-1 w-full mt-0.5">
+                                          <input autoFocus value={newName}
+                                            onChange={(e) => setNewName(e.target.value)}
+                                            onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAddingCell(null); setNewName(""); } }}
+                                            placeholder="Nom de l'employé…"
+                                            className={`flex-1 text-xs border-2 ${s.border} rounded-lg px-2 py-1 bg-white focus:ring-2 focus:ring-offset-1 focus:outline-none min-w-0`} />
+                                          <button onClick={handleAdd} disabled={saving || !newName.trim()} className="p-1 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-40 shrink-0"><Check className="h-3 w-3" /></button>
+                                          <button onClick={() => { setAddingCell(null); setNewName(""); }} className="p-1 rounded-lg bg-slate-200 text-slate-500 hover:bg-slate-300 shrink-0"><X className="h-3 w-3" /></button>
+                                        </div>
+                                      ) : (
+                                        <button onClick={() => { setAddingCell({ date, shift: s.key }); setNewName(""); }}
+                                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold shadow-sm active:scale-95 transition-all duration-150 ${s.addBtn}`}>
+                                          <span className="flex items-center justify-center w-4 h-4 rounded-full bg-white/30"><Plus className="h-2.5 w-2.5" /></span>Ajouter
+                                        </button>
+                                      )}
                                     </div>
                                   </td>
-                                  {SHIFT_KEYS.map((s) => {
-                                    const cellEntries = dayData?.[s.key] ?? [];
-                                    const isAdding = addingCell?.date === date && addingCell?.shift === s.key;
-                                    return (
-                                      <td key={s.key} className={`px-3 py-2 align-top border-r border-slate-100 last:border-r-0 ${isAdding ? `${s.bg}/60` : ""}`}>
-                                        <div className="flex flex-wrap gap-1 min-h-[28px]">
-                                          {cellEntries.map((e) => (
-                                            <span key={e.employee_name}
-                                              title={`${e.employee_matricule ? e.employee_matricule + " · " : ""}${e.employee_name}`}
-                                              className={`group inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full text-xs font-semibold ${s.bg} ${s.text} border ${s.border} shadow-sm`}>
-                                              <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-[9px] font-black shrink-0 ${s.text}`}>
-                                                {initials(e.employee_name)}
-                                              </span>
-                                              <div className="flex flex-col min-w-0 max-w-[100px]">
-                                                {e.employee_matricule && (
-                                                  <span className="text-[8px] font-mono opacity-70 leading-none truncate">{e.employee_matricule}</span>
-                                                )}
-                                                <span className="truncate text-xs leading-tight">{e.employee_name}</span>
-                                              </div>
-                                              <button onClick={() => handleRemove(e)} className="ml-0.5 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all shrink-0">
-                                                <X className="h-2.5 w-2.5" />
-                                              </button>
-                                            </span>
-                                          ))}
-                                          {cellEntries.length === 0 && !isAdding && (
-                                            <span className="text-[10px] text-slate-300 italic self-center">Aucun</span>
-                                          )}
-                                          {isAdding ? (
-                                            <div className="flex items-center gap-1 w-full mt-0.5">
-                                              <input autoFocus value={newName}
-                                                onChange={(e) => setNewName(e.target.value)}
-                                                onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAddingCell(null); setNewName(""); } }}
-                                                placeholder="Nom de l'employé…"
-                                                className={`flex-1 text-xs border-2 ${s.border} rounded-lg px-2 py-1 bg-white focus:ring-2 focus:ring-offset-1 focus:outline-none min-w-0`} />
-                                              <button onClick={handleAdd} disabled={saving || !newName.trim()} className="p-1 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-40 shrink-0"><Check className="h-3 w-3" /></button>
-                                              <button onClick={() => { setAddingCell(null); setNewName(""); }} className="p-1 rounded-lg bg-slate-200 text-slate-500 hover:bg-slate-300 shrink-0"><X className="h-3 w-3" /></button>
-                                            </div>
-                                          ) : (
-                                            <button onClick={() => { setAddingCell({ date, shift: s.key }); setNewName(""); }}
-                                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold shadow-sm active:scale-95 transition-all duration-150 ${s.addBtn}`}>
-                                              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-white/30"><Plus className="h-2.5 w-2.5" /></span>Ajouter
-                                            </button>
-                                          )}
-                                        </div>
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              </React.Fragment>
-                            );
-                          });
-                        })()}
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   )}
@@ -1742,10 +1712,8 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
               </div>
             )}
 
-            {/* ── Tab : Import ── */}
             {tab === "import" && (
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                {/* Drop zone */}
                 <label className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl p-8 cursor-pointer transition-all ${file ? "border-green-400 bg-green-50" : "border-slate-200 bg-slate-50 hover:border-camublue-900 hover:bg-camublue-900/5"}`}>
                   <Upload className={`h-8 w-8 ${file ? "text-green-600" : "text-slate-300"}`} />
                   {file ? (
@@ -1765,7 +1733,6 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                   <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
                 </label>
 
-                {/* Résumé par onglet Excel */}
                 {parsedSheets.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Onglets détectés</p>
@@ -1795,15 +1762,14 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                   </div>
                 )}
 
-                {/* Compteurs globaux */}
                 {preview.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     {[
-                      { label: "Jours couverts", value: stats.dates,  color: "bg-blue-50 text-blue-700 border-blue-200" },
-                      { label: "Équipes",         value: stats.teams,  color: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-                      { label: "08H-16H",         value: stats.jour,   color: "bg-teal-50 text-teal-700 border-teal-200" },
-                      { label: "16H-22H",         value: stats.soir1,  color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
-                      { label: "22H-08H",         value: stats.soir2,  color: "bg-orange-50 text-orange-700 border-orange-200" },
+                      { label: "Jours couverts", value: stats.dates, color: "bg-blue-50 text-blue-700 border-blue-200" },
+                      { label: "Équipes", value: stats.teams, color: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+                      { label: "08H-16H", value: stats.jour, color: "bg-teal-50 text-teal-700 border-teal-200" },
+                      { label: "16H-22H", value: stats.soir1, color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+                      { label: "22H-08H", value: stats.soir2, color: "bg-orange-50 text-orange-700 border-orange-200" },
                     ].map((s) => (
                       <div key={s.label} className={`rounded-xl px-3 py-2.5 text-center border ${s.color}`}>
                         <p className="text-xl font-black">{s.value}</p>
@@ -1819,9 +1785,9 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                   <button onClick={onClose} className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Annuler</button>
                   <button onClick={handleUpload} disabled={!preview.length || loading || uploaded}
                     className={`flex-1 py-2.5 rounded-2xl text-sm font-bold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${uploaded ? "bg-emerald-500 text-white" : "bg-camublue-900 hover:bg-camublue-800 text-white"}`}>
-                    {loading  ? <><Loader2 className="h-4 w-4 animate-spin" />Importation…</>
-                   : uploaded ? <><CheckCircle className="h-4 w-4" />Importé avec succès !</>
-                              : <><Upload className="h-4 w-4" />Importer {stats.total} assignations</>}
+                    {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Importation…</>
+                      : uploaded ? <><CheckCircle className="h-4 w-4" />Importé avec succès !</>
+                        : <><Upload className="h-4 w-4" />Importer {stats.total} assignations</>}
                   </button>
                 </div>
               </div>
@@ -1833,7 +1799,10 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
   );
 }
 
-// ─── Modal : Alerte ───────────────────────────────────────────────────────────
+// ============================================================================
+// COMPOSANT: AlertModal
+// ============================================================================
+
 function AlertModal({ open, onClose, employee, onConfirm, sending }: {
   open: boolean; onClose: () => void; employee: FlatRecord | null; onConfirm: (m: MotifType) => void; sending: boolean;
 }) {
@@ -1862,7 +1831,7 @@ function AlertModal({ open, onClose, employee, onConfirm, sending }: {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { id: "absent",       icon: <UserMinus className="h-4 w-4" />,   label: "Absence",       border: "border-red-400 bg-red-50 text-red-700" },
+                  { id: "absent", icon: <UserMinus className="h-4 w-4" />, label: "Absence", border: "border-red-400 bg-red-50 text-red-700" },
                   { id: "not_pointing", icon: <AlertTriangle className="h-4 w-4" />, label: "Non pointage", border: "border-amber-400 bg-amber-50 text-amber-700" },
                 ].map((btn) => (
                   <button key={btn.id} onClick={() => setMotif(btn.id as MotifType)}
@@ -1886,19 +1855,21 @@ function AlertModal({ open, onClose, employee, onConfirm, sending }: {
   );
 }
 
-// ─── TableRow ─────────────────────────────────────────────────────────────────
+// ============================================================================
+// COMPOSANT: TableRow
+// ============================================================================
+
 function TableRow({ r, isLate, onAlert, onDetail }: {
   r: FlatRecord; isLate: boolean; onAlert: () => void; onDetail: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const deficit = r.deficit_minutes > 0;
-  // Styling for replacement and rest-day rows
   const rowBg = r.is_replacement ? "bg-purple-50/40 hover:bg-purple-50/70"
     : r.not_scheduled_rest ? "bg-slate-50/60 opacity-70 hover:opacity-100"
-    : r.is_shift_pending   ? "bg-blue-50/40 hover:bg-blue-50/70"
-    : isLate ? "bg-orange-50/50 hover:bg-orange-50"
-    : deficit ? "bg-rose-50/30 hover:bg-rose-50/60"
-    : "hover:bg-slate-50";
+      : r.is_shift_pending ? "bg-blue-50/40 hover:bg-blue-50/70"
+        : isLate ? "bg-orange-50/50 hover:bg-orange-50"
+          : deficit ? "bg-rose-50/30 hover:bg-rose-50/60"
+            : "hover:bg-slate-50";
   return (
     <>
       <tr className={`hidden md:table-row border-b border-slate-100 transition-colors text-sm ${rowBg}`}>
@@ -1906,14 +1877,12 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
         <td className="px-4 py-3">
           <div className="flex flex-col items-center gap-0.5">
             <div className="flex items-center gap-1.5">
-              {/* Indicateur couleur équipe */}
               {r.team_id && r.team_id !== "_no_team" && (() => {
                 const pal = getTeamPalette(r.team_id);
                 return <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${pal.dot}`} title={`Équipe ${r.team_id.replace("equipe-", "")}`} />;
               })()}
               <span className="font-medium text-slate-800">{r.full_name}</span>
             </div>
-            {/* Ligne "remplacé par X" si cet employé est absent et a un remplaçant */}
             {r.replaced_by && (
               <span className="text-[10px] text-purple-600 font-semibold flex items-center gap-1">
                 <ArrowLeftRight className="h-2.5 w-2.5" />remplacé par {r.replaced_by}
@@ -1983,7 +1952,10 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
   );
 }
 
-// ─── KPI Cards ────────────────────────────────────────────────────────────────
+// ============================================================================
+// COMPOSANT: KPI Cards
+// ============================================================================
+
 function AbsentsCard({ total, absent, loading, delay }: { total: number; absent: number; loading: boolean; delay: number }) {
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, duration: 0.4 }}
@@ -1992,10 +1964,10 @@ function AbsentsCard({ total, absent, loading, delay }: { total: number; absent:
       {loading
         ? <div className="space-y-2 mt-1"><div className="h-4 w-28 bg-slate-100 rounded animate-pulse" /><div className="h-4 w-20 bg-slate-100 rounded animate-pulse" /></div>
         : <div className="space-y-1.5">
-            <div className="flex items-center justify-between"><span className="text-xs font-medium text-slate-500">Effectif total</span><span className="text-base font-bold text-slate-800 tabular-nums">{total}</span></div>
-            <div className="w-full h-px bg-slate-100" />
-            <div className="flex items-center justify-between"><span className="text-xs font-medium text-red-600">Absents</span><span className="text-base font-bold text-red-600 tabular-nums">{absent}</span></div>
-          </div>}
+          <div className="flex items-center justify-between"><span className="text-xs font-medium text-slate-500">Effectif total</span><span className="text-base font-bold text-slate-800 tabular-nums">{total}</span></div>
+          <div className="w-full h-px bg-slate-100" />
+          <div className="flex items-center justify-between"><span className="text-xs font-medium text-red-600">Absents</span><span className="text-base font-bold text-red-600 tabular-nums">{absent}</span></div>
+        </div>}
     </motion.div>
   );
 }
@@ -2006,13 +1978,13 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", delay = 0, lo
   delay?: number; loading?: boolean; active?: boolean; onClick?: () => void;
 }) {
   const palette = {
-    blue:   { icon: "bg-camublue-900 text-white", text: "text-camublue-900" },
-    green:  { icon: "bg-emerald-500 text-white",  text: "text-emerald-700"  },
-    amber:  { icon: "bg-amber-500 text-white",    text: "text-amber-700"    },
-    red:    { icon: "bg-red-500 text-white",       text: "text-red-700"      },
-    violet: { icon: "bg-violet-500 text-white",   text: "text-violet-700"   },
-    slate:  { icon: "bg-slate-400 text-white",    text: "text-slate-600"    },
-    orange: { icon: "bg-orange-500 text-white",   text: "text-orange-700"   },
+    blue: { icon: "bg-camublue-900 text-white", text: "text-camublue-900" },
+    green: { icon: "bg-emerald-500 text-white", text: "text-emerald-700" },
+    amber: { icon: "bg-amber-500 text-white", text: "text-amber-700" },
+    red: { icon: "bg-red-500 text-white", text: "text-red-700" },
+    violet: { icon: "bg-violet-500 text-white", text: "text-violet-700" },
+    slate: { icon: "bg-slate-400 text-white", text: "text-slate-600" },
+    orange: { icon: "bg-orange-500 text-white", text: "text-orange-700" },
   };
   const c = palette[color];
   return (
@@ -2029,49 +2001,64 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", delay = 0, lo
   );
 }
 
-// ─── Vue hebdomadaire du planning (style Excel) ────────────────────────────────
-function WeeklyPlanningGrid({
+// ============================================================================
+// COMPOSANT: EnhancedWeeklyPlanningGrid (gardé car utilisé pour le planning, mais plus accessible via vue)
+// Note: Ce composant n'est plus utilisé car on a retiré la vue planning, mais on le garde car il pourrait être réutilisé ailleurs.
+// ============================================================================
+
+function EnhancedWeeklyPlanningGrid({
   planningEntries,
   weekDays,
   weekAttendance,
+  teamCycles,
   loading,
 }: {
   planningEntries: PlanningEntry[];
   weekDays: string[];
   weekAttendance: Record<string, Record<string, string>>;
+  teamCycles: Map<string, { startDate: string; employees: string[] }>;
   loading: boolean;
 }) {
   const today = todayISO();
 
-  // Grouper les employés par shift pour toute la semaine
-  // Pour chaque shift : liste d'employés uniques + leurs jours
-  const shiftGroups = useMemo(() => {
-    const result: Record<ShiftTeamKey, {
-      employee: string;
-      matricule: string | null;
-      team_id: string;
-      days: Record<string, boolean>; // date → scheduled
-    }[]> = { jour: [], soir1: [], soir2: [] };
+  const teamGroups = useMemo(() => {
+    const teams = new Map<string, {
+      teamId: string;
+      employees: { name: string; matricule: string | null }[];
+      cycleStart: string;
+    }>();
 
     for (const entry of planningEntries) {
-      const shift = entry.shift_type as ShiftTeamKey;
-      if (!(shift in result)) continue;
-      const existing = result[shift].find((e) => e.employee === entry.employee_name);
-      if (existing) {
-        existing.days[entry.date] = true;
-      } else {
-        result[shift].push({
-          employee:  entry.employee_name,
-          matricule: entry.employee_matricule || null,
-          team_id:   entry.team_id || "",
-          days:      { [entry.date]: true },
+      if (!entry.team_id || entry.team_id === "_no_team") continue;
+
+      if (!teams.has(entry.team_id)) {
+        const cycle = teamCycles.get(entry.team_id);
+        teams.set(entry.team_id, {
+          teamId: entry.team_id,
+          employees: [],
+          cycleStart: cycle?.startDate || entry.date,
+        });
+      }
+
+      const team = teams.get(entry.team_id)!;
+      if (!team.employees.some(e => e.name === entry.employee_name)) {
+        team.employees.push({
+          name: entry.employee_name,
+          matricule: entry.employee_matricule || null
         });
       }
     }
-    return result;
-  }, [planningEntries]);
 
-  const hasAny = SHIFT_TEAMS.some((t) => shiftGroups[t.key]?.length > 0);
+    return Array.from(teams.values()).sort((a, b) =>
+      parseInt(a.teamId.replace(/\D/g, "")) - parseInt(b.teamId.replace(/\D/g, ""))
+    );
+  }, [planningEntries, teamCycles]);
+
+  const getCycleForTeamAndDate = (teamId: string, date: string): CycleType => {
+    const cycle = teamCycles.get(teamId);
+    if (!cycle) return "R";
+    return getCycleForDate(cycle.startDate, cycle.startDate, date);
+  };
 
   if (loading) {
     return (
@@ -2081,28 +2068,39 @@ function WeeklyPlanningGrid({
     );
   }
 
-  if (!hasAny) {
+  if (teamGroups.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400 py-16">
         <CalendarRange className="h-14 w-14 text-slate-200" />
-        <p className="text-sm font-medium">Aucun planning pour cette semaine</p>
-        <p className="text-xs text-slate-400">Importez un planning pour voir les assignations.</p>
+        <p className="text-sm font-medium">Aucune équipe détectée dans le planning</p>
+        <p className="text-xs text-slate-400">Importez un planning avec des couleurs d'équipe.</p>
       </div>
     );
   }
 
   return (
     <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm bg-white">
-      {/* Légende */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 border-b border-slate-200 sticky top-0 z-20 flex-wrap">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Légende :</span>
+      <div className="flex items-center gap-4 px-4 py-2 bg-slate-50 border-b border-slate-200 sticky top-0 z-20 flex-wrap">
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Cycle 2-2-2-4 :</span>
         {[
-          { label: "M = 08H-16H", style: "bg-teal-100 text-teal-800 border border-teal-300"     },
-          { label: "S = 16H-22H", style: "bg-amber-100 text-amber-800 border border-amber-300"  },
-          { label: "N = 22H-08H", style: "bg-indigo-100 text-indigo-800 border border-indigo-300"},
-          { label: "✓ Présent",   style: "bg-emerald-100 text-emerald-800 border border-emerald-300" },
-          { label: "✗ Absent",    style: "bg-red-100 text-red-700 border border-red-300"         },
-          { label: "? Incomplet", style: "bg-amber-100 text-amber-700 border border-amber-300"   },
+          { type: "M", label: "Matin (08H-16H)", style: "bg-teal-200 text-teal-800" },
+          { type: "S", label: "Soir (16H-22H)", style: "bg-amber-200 text-amber-800" },
+          { type: "N", label: "Nuit (22H-08H)", style: "bg-indigo-200 text-indigo-800" },
+          { type: "R", label: "Repos", style: "bg-slate-200 text-slate-600" },
+        ].map((item) => (
+          <span key={item.type} className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${item.style}`}>
+            {item.type} = {item.label}
+          </span>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-slate-200 sticky top-[33px] z-20 flex-wrap">
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Statuts :</span>
+        {[
+          { label: "✓ Présent (planifié)", style: "bg-emerald-100 text-emerald-800" },
+          { label: "🔄 Remplaçant", style: "bg-purple-100 text-purple-800" },
+          { label: "✗ Absent", style: "bg-red-100 text-red-700" },
+          { label: "— Pas de service", style: "bg-slate-100 text-slate-500" },
         ].map((item) => (
           <span key={item.label} className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${item.style}`}>
             {item.label}
@@ -2111,27 +2109,24 @@ function WeeklyPlanningGrid({
       </div>
 
       <table className="min-w-full text-xs border-collapse">
-        <thead className="sticky top-[41px] z-10">
+        <thead className="sticky top-[66px] z-10">
           <tr className="bg-camublue-900 text-white">
-            <th className="px-4 py-3 text-left font-bold min-w-[170px] sticky left-0 bg-camublue-900 z-20 border-r border-white/20">
-              SHIFT / Employés
+            <th className="px-4 py-3 text-left font-bold min-w-[180px] sticky left-0 bg-camublue-900 z-20 border-r border-white/20">
+              ÉQUIPE / Employés
             </th>
             {weekDays.map((date) => {
-              const d         = new Date(date + "T00:00:00");
-              const isToday   = date === today;
+              const d = new Date(date + "T00:00:00");
+              const isToday = date === today;
               const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-              const isFuture  = date > today;
               return (
                 <th key={date}
-                  className={`px-2 py-3 text-center font-semibold min-w-[100px] border-r border-white/10 last:border-r-0 ${
-                    isToday ? "bg-blue-600" : isWeekend ? "bg-camublue-800/70" : ""
-                  }`}>
+                  className={`px-2 py-3 text-center font-semibold min-w-[100px] border-r border-white/10 last:border-r-0 ${isToday ? "bg-blue-600" : isWeekend ? "bg-camublue-800/70" : ""
+                    }`}>
                   <div className="flex flex-col items-center leading-none gap-0.5">
                     <span className="text-[9px] font-bold uppercase">{DAYS_FR[d.getDay()]}</span>
                     <span className="text-base font-black">{d.getDate()}</span>
-                    <span className="text-[9px] opacity-70">{String(d.getMonth() + 1).padStart(2, "0")}/{d.getFullYear()}</span>
-                    {isFuture && <span className="text-[8px] bg-white/20 px-1 rounded mt-0.5">Futur</span>}
-                    {isToday  && <span className="text-[8px] bg-white/30 px-1 rounded mt-0.5 font-bold">Aujourd'hui</span>}
+                    <span className="text-[9px] opacity-70">{MONTHS_SHORT[d.getMonth()]}</span>
+                    {isToday && <span className="text-[8px] bg-white/30 px-1 rounded mt-0.5 font-bold">Aujourd'hui</span>}
                   </div>
                 </th>
               );
@@ -2139,97 +2134,115 @@ function WeeklyPlanningGrid({
           </tr>
         </thead>
         <tbody>
-          {SHIFT_TEAMS.map((team) => {
-            const employees = shiftGroups[team.key] ?? [];
-            if (employees.length === 0) return null;
-
-            const shiftLetter = team.key === "jour" ? "M" : team.key === "soir1" ? "S" : "N";
-            const cellStyle   = team.key === "jour"
-              ? "bg-teal-100 text-teal-800 border border-teal-300"
-              : team.key === "soir1"
-              ? "bg-amber-100 text-amber-800 border border-amber-300"
-              : "bg-indigo-100 text-indigo-800 border border-indigo-300";
+          {teamGroups.map((team) => {
+            const pal = getTeamPalette(team.teamId);
 
             return (
-              <React.Fragment key={team.key}>
-                {/* En-tête section shift */}
+              <React.Fragment key={team.teamId}>
                 <tr>
                   <td colSpan={weekDays.length + 1}
-                    className={`px-4 py-2 font-bold text-sm border-b-2 ${team.activeBorder} ${team.activeBg} sticky left-0`}>
-                    <div className="flex items-center gap-2">
-                      <span className={`h-3 w-3 rounded-full ${team.dot}`} />
-                      <span className={team.activeText}>{team.label}</span>
-                      <span className={`text-xs font-normal opacity-70 ${team.activeText}`}>{team.horaire}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${team.pillBg}`}>{employees.length} agents</span>
+                    className={`px-4 py-2 font-bold text-sm border-b-2 ${pal.border} ${pal.bg} sticky left-0`}>
+                    <div className="flex items-center gap-3">
+                      <span className={`h-3 w-3 rounded-full ${pal.dot}`} />
+                      <span className={pal.text}>{pal.label}</span>
+                      <span className="text-xs font-normal opacity-70">Cycle début {new Date(team.cycleStart).toLocaleDateString("fr-FR")}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${pal.chipBg}`}>
+                        {team.employees.length} agents
+                      </span>
                     </div>
                   </td>
                 </tr>
 
-                {/* Lignes employés */}
-                {employees.map((emp, idx) => {
-                  const pal = emp.team_id && emp.team_id !== "" ? getTeamPalette(emp.team_id) : null;
+                <tr className="bg-slate-50">
+                  <td className="px-4 py-1 text-[9px] font-semibold text-slate-500 sticky left-0 bg-slate-50 border-r border-slate-200">
+                    Cycle prévu
+                  </td>
+                  {weekDays.map((date) => {
+                    const cycleType = getCycleForTeamAndDate(team.teamId, date);
+                    const cfg = cycleConfig[cycleType];
+                    return (
+                      <td key={date} className="px-2 py-1 text-center border-r border-slate-200">
+                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-bold ${cfg.style}`}>
+                          {cfg.label}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {team.employees.map((emp, idx) => {
+                  const dayStatuses = weekDays.map(date => {
+                    const cycleType = getCycleForTeamAndDate(team.teamId, date);
+                    const isScheduled = cycleType !== "R";
+
+                    if (!isScheduled) {
+                      return { status: "not_working", cycleType };
+                    }
+
+                    const dayMap = weekAttendance[date] ?? {};
+                    const attStatus = dayMap[emp.matricule || emp.name.toLowerCase()];
+
+                    if (attStatus === "ok" || attStatus === "present") {
+                      return { status: "present", cycleType };
+                    } else if (attStatus === "absent") {
+                      return { status: "absent", cycleType };
+                    } else if (attStatus === "incomplete") {
+                      return { status: "incomplete", cycleType };
+                    } else {
+                      return { status: "absent", cycleType };
+                    }
+                  });
+
                   return (
-                    <tr key={emp.employee}
+                    <tr key={emp.name}
                       className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
-                      {/* Cellule nom employé */}
                       <td className={`px-3 py-2 sticky left-0 z-10 border-r border-slate-200 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
                         <div className="flex items-center gap-2 min-w-0">
-                          {pal && <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${pal.dot}`} />}
+                          <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${pal.dot}`} />
                           <div className="min-w-0">
                             {emp.matricule && (
                               <div className="text-[8px] font-mono text-slate-400 leading-none">{emp.matricule}</div>
                             )}
-                            <div className="text-[11px] font-semibold text-slate-700 truncate max-w-[130px]" title={emp.employee}>
-                              {emp.employee}
+                            <div className="text-[11px] font-semibold text-slate-700 truncate max-w-[130px]" title={emp.name}>
+                              {emp.name}
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* Cellule par date */}
-                      {weekDays.map((date) => {
-                        const isScheduled = !!emp.days[date];
-                        const isToday     = date === today;
-                        const isPast      = date < today;
-                        const isFuture    = date > today;
-                        const d           = new Date(date + "T00:00:00");
-                        const isWeekend   = d.getDay() === 0 || d.getDay() === 6;
+                      {dayStatuses.map((dayStatus, i) => {
+                        const date = weekDays[i];
+                        const cfg = cycleConfig[dayStatus.cycleType];
+                        const isToday = date === today;
 
-                        // Statut de présence (pour les jours passés et aujourd'hui)
-                        let attStatus: string | null = null;
-                        if (isScheduled && (isPast || isToday)) {
-                          const dayMap = weekAttendance[date] ?? {};
-                          const key    = emp.matricule || emp.employee.toLowerCase();
-                          attStatus    = dayMap[key] ?? null;
+                        let statusColor = "";
+                        let statusIcon = "";
+
+                        if (dayStatus.status === "present") {
+                          statusColor = "bg-emerald-100 text-emerald-800";
+                          statusIcon = "✓";
+                        } else if (dayStatus.status === "absent" && dayStatus.cycleType !== "R") {
+                          statusColor = "bg-red-100 text-red-700";
+                          statusIcon = "✗";
+                        } else if (dayStatus.cycleType === "R") {
+                          statusColor = "bg-slate-100 text-slate-500";
+                          statusIcon = "—";
                         }
 
                         return (
                           <td key={date}
-                            className={`px-1 py-2 text-center border-r border-slate-100 last:border-r-0 ${
-                              isToday ? "bg-blue-50/40" : isWeekend ? "bg-slate-50" : ""
-                            }`}>
-                            {isScheduled ? (
-                              <div className="flex flex-col items-center gap-1">
-                                <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold ${cellStyle}`}>
-                                  {shiftLetter}
+                            className={`px-1 py-2 text-center border-r border-slate-100 last:border-r-0 ${isToday ? "bg-blue-50/40" : ""
+                              }`}>
+                            <div className="flex flex-col items-center gap-1">
+                              <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold ${cfg.style}`}>
+                                {cfg.label}
+                              </span>
+                              {dayStatus.cycleType !== "R" && (
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${statusColor}`}>
+                                  {statusIcon}
                                 </span>
-                                {attStatus && (
-                                  <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${
-                                    attStatus === "ok"         ? "bg-emerald-100 text-emerald-700" :
-                                    attStatus === "absent"     ? "bg-red-100 text-red-600"         :
-                                    attStatus === "incomplete" ? "bg-amber-100 text-amber-700"     :
-                                                                 "bg-violet-100 text-violet-700"
-                                  }`}>
-                                    {attStatus === "ok" ? "✓" : attStatus === "absent" ? "✗" : attStatus === "incomplete" ? "?" : "!"}
-                                  </span>
-                                )}
-                                {isScheduled && (isPast || isToday) && !attStatus && !isFuture && (
-                                  <span className="text-[9px] text-slate-300">—</span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-slate-200 text-sm">—</span>
-                            )}
+                              )}
+                            </div>
                           </td>
                         );
                       })}
@@ -2245,41 +2258,42 @@ function WeeklyPlanningGrid({
   );
 }
 
-// ─── Page principale ──────────────────────────────────────────────────────────
+// ============================================================================
+// COMPOSANT PRINCIPAL: AttendanceShiftsPage
+// ============================================================================
+
 export default function AttendanceShiftsPage() {
-  const [loading,      setLoading]      = useState(false);
-  const [viewMode,     setViewMode]     = useState<ViewMode>("daily");
+  const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("daily");
   const [selectedTeam, setSelectedTeam] = useState<ShiftTeamKey | null>(null);
-  const [shiftData,    setShiftData]    = useState<ShiftDailyStatsResponse | null>(null);
-  const [weeklyData,   setWeeklyData]   = useState<WeeklyStatsResponse | null>(null);
-  const [monthlyData,  setMonthlyData]  = useState<MonthlyStatsResponse | null>(null);
+  const [shiftData, setShiftData] = useState<ShiftDailyStatsResponse | null>(null);
+  const [weeklyData, setWeeklyData] = useState<WeeklyStatsResponse | null>(null);
+  const [monthlyData, setMonthlyData] = useState<MonthlyStatsResponse | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [searchQ,      setSearchQ]      = useState("");
-  const [page,         setPage]         = useState(1);
-  const [pageSize,     setPageSize]     = useState(10);
-  const [emailMap,      setEmailMap]      = useState<Map<string, string>>(new Map());
+  const [searchQ, setSearchQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [emailMap, setEmailMap] = useState<Map<string, string>>(new Map());
   const [departmentMap, setDepartmentMap] = useState<Map<string, string>>(new Map());
-  const [projectMap,    setProjectMap]    = useState<Map<string, string>>(new Map());
-  const [alertModalOpen,     setAlertModalOpen]     = useState(false);
-  const [detailModalOpen,    setDetailModalOpen]    = useState(false);
-  const [selectedEmployee,   setSelectedEmployee]   = useState<FlatRecord | null>(null);
+  const [projectMap, setProjectMap] = useState<Map<string, string>>(new Map());
+  const [alertModalOpen, setAlertModalOpen] = useState(false);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<FlatRecord | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [sendingAlert, setSendingAlert] = useState(false);
-  const [scheduleOpen,       setScheduleOpen]       = useState(false);
-  const [planningOpen,       setPlanningOpen]       = useState(false);
-  const [showNotScheduled,   setShowNotScheduled]   = useState(false);
-  const [week,  setWeek]  = useState(isoWeekNow());
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [planningOpen, setPlanningOpen] = useState(false);
+  const [showNotScheduled, setShowNotScheduled] = useState(false);
+  const [week, setWeek] = useState(isoWeekNow());
   const [month, setMonth] = useState(yyyyMmToday());
   const currentWeek = isoWeekNow();
 
-  // ── Planning vue hebdomadaire ───────────────────────────────────────────────
-  const [planningWeek,       setPlanningWeek]       = useState(isoWeekNow());
-  const [planningEntries,    setPlanningEntries]    = useState<PlanningEntry[]>([]);
-  const [loadingPlanning,    setLoadingPlanning]    = useState(false);
-  const [weekAttendance,     setWeekAttendance]     = useState<Record<string, Record<string, string>>>({});
+  // États pour le planning (conservés pour l'import et l'affichage latéral)
+  const [planningEntries, setPlanningEntries] = useState<PlanningEntry[]>([]);
+  const [loadingPlanning, setLoadingPlanning] = useState(false);
+  const [weekAttendance, setWeekAttendance] = useState<Record<string, Record<string, string>>>({});
+  const [teamCycles, setTeamCycles] = useState<Map<string, { startDate: string; employees: string[] }>>(new Map());
 
-  // ── Planning du jour ───────────────────────────────────────────────────────
-  // assignments par shift pour today : { jour: Set<name|mat>, soir1: ..., soir2: ... }
   const [todayPlanning, setTodayPlanning] = useState<{
     jour: { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
     soir1: { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
@@ -2287,17 +2301,46 @@ export default function AttendanceShiftsPage() {
     loaded: boolean;
   }>({ jour: [], soir1: [], soir2: [], loaded: false });
 
-  // ── Horaires actifs (stockés sur le serveur + fallback localStorage) ─────
   const [activeSchedule, setActiveSchedule] = useState<ActiveSchedule | null>(() => {
     try {
       const stored = localStorage.getItem(LS_SHIFT_ACTIVE_SCHEDULE_KEY);
       if (stored) return JSON.parse(stored) as ActiveSchedule;
-    } catch {}
+    } catch { }
     const d = new Date(), end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
     return { ...DEFAULT_PRESETS[0], dateStart: todayISO(), dateEnd: end.toISOString().slice(0, 10), locked: true };
   });
 
-  // Charger le planning du serveur au montage (remplace le localStorage si plus récent)
+  const [presets, setPresets] = useState<WorkSchedulePreset[]>(() => {
+    try {
+      const stored = localStorage.getItem(LS_SHIFT_PRESETS_KEY);
+      if (stored) return JSON.parse(stored) as WorkSchedulePreset[];
+    } catch { }
+    return DEFAULT_PRESETS;
+  });
+
+  const [assignments, setAssignments] = useState<AssignmentMap>(() => {
+    try {
+      const stored = localStorage.getItem(LS_SHIFT_ASSIGNMENTS_KEY);
+      if (stored) return JSON.parse(stored) as AssignmentMap;
+    } catch { }
+    return {};
+  });
+
+  useEffect(() => {
+    try {
+      if (activeSchedule) localStorage.setItem(LS_SHIFT_ACTIVE_SCHEDULE_KEY, JSON.stringify(activeSchedule));
+      else localStorage.removeItem(LS_SHIFT_ACTIVE_SCHEDULE_KEY);
+    } catch { }
+  }, [activeSchedule]);
+
+  useEffect(() => {
+    try { localStorage.setItem(LS_SHIFT_PRESETS_KEY, JSON.stringify(presets)); } catch { }
+  }, [presets]);
+
+  useEffect(() => {
+    try { localStorage.setItem(LS_SHIFT_ASSIGNMENTS_KEY, JSON.stringify(assignments)); } catch { }
+  }, [assignments]);
+
   useEffect(() => {
     getShiftSchedule().then((remote) => {
       if (!remote) return;
@@ -2308,14 +2351,12 @@ export default function AttendanceShiftsPage() {
         locked: todayISO() >= remote.dateStart && todayISO() <= remote.dateEnd,
       };
       setActiveSchedule(sched);
-      // Mettre aussi à jour les presets si ce contexte n'existe pas encore
       setPresets((prev) => {
         if (prev.some((p) => p.context === remote.context)) return prev;
         return [...prev, { context: remote.context, startH: remote.startH, startM: remote.startM, endH: remote.endH, endM: remote.endM, breakMin: remote.breakMin }];
       });
-    }).catch(() => { /* silencieux – on garde le localStorage */ });
+    }).catch(() => { });
 
-    // Charger le planning du jour
     getShiftPlanningForDate(todayISO()).then((res) => {
       setTodayPlanning({ ...res.assignments, loaded: true });
     }).catch(() => {
@@ -2323,50 +2364,9 @@ export default function AttendanceShiftsPage() {
     });
   }, []);
 
-  const [presets, setPresets] = useState<WorkSchedulePreset[]>(() => {
-    try {
-      const stored = localStorage.getItem(LS_SHIFT_PRESETS_KEY);
-      if (stored) return JSON.parse(stored) as WorkSchedulePreset[];
-    } catch {}
-    return DEFAULT_PRESETS;
-  });
-
-  const [assignments, setAssignments] = useState<AssignmentMap>(() => {
-    try {
-      const stored = localStorage.getItem(LS_SHIFT_ASSIGNMENTS_KEY);
-      if (stored) return JSON.parse(stored) as AssignmentMap;
-    } catch {}
-    return {};
-  });
-
-  // ── Persistance automatique ────────────────────────────────────────────────
-  useEffect(() => {
-    try {
-      if (activeSchedule) localStorage.setItem(LS_SHIFT_ACTIVE_SCHEDULE_KEY, JSON.stringify(activeSchedule));
-      else localStorage.removeItem(LS_SHIFT_ACTIVE_SCHEDULE_KEY);
-    } catch {}
-  }, [activeSchedule]);
-
-  useEffect(() => {
-    try { localStorage.setItem(LS_SHIFT_PRESETS_KEY, JSON.stringify(presets)); } catch {}
-  }, [presets]);
-
-  useEffect(() => {
-    try { localStorage.setItem(LS_SHIFT_ASSIGNMENTS_KEY, JSON.stringify(assignments)); } catch {}
-  }, [assignments]);
-
-  const effectiveSchedule: WorkSchedulePreset = useMemo(() => {
-    if (activeSchedule && isPeriodActive(activeSchedule)) return activeSchedule;
-    return presets[0] ?? DEFAULT_PRESETS[0];
-  }, [activeSchedule, presets]);
-
-  const pad2 = (n: number) => String(n).padStart(2, "0");
-  const isActiveLocked = activeSchedule ? isPeriodActive(activeSchedule) : false;
-
-  // ── Chargement employés ────────────────────────────────────────────────────
   useEffect(() => {
     getEmployees().then((list: Employee[]) => {
-      const m  = new Map<string, string>();
+      const m = new Map<string, string>();
       const dm = new Map<string, string>();
       const pm = new Map<string, string>();
       const apiAssignments: AssignmentMap = {};
@@ -2379,166 +2379,156 @@ export default function AttendanceShiftsPage() {
         if (e.matricule && (e as any).shift_team) apiAssignments[e.matricule] = (e as any).shift_team;
       });
       setEmailMap(m); setDepartmentMap(dm); setProjectMap(pm);
-      // localStorage prime sur l'API pour les entrées déjà stockées
       setAssignments((prev) => ({ ...apiAssignments, ...prev }));
     }).catch(console.error);
   }, []);
+
+  const effectiveSchedule: WorkSchedulePreset = useMemo(() => {
+    if (activeSchedule && isPeriodActive(activeSchedule)) return activeSchedule;
+    return presets[0] ?? DEFAULT_PRESETS[0];
+  }, [activeSchedule, presets]);
+
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const isActiveLocked = activeSchedule ? isPeriodActive(activeSchedule) : false;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       if (viewMode === "daily") {
-        // On charge TOUS les employés sans filtre d'équipe.
-        // Le filtrage par shift se fait côté frontend en s'appuyant sur le planning.
         setShiftData(await getShiftDailyStats({ date: todayISO() }));
       }
-      if (viewMode === "weekly")  setWeeklyData(await getWeeklyStats(week));
+      if (viewMode === "weekly") setWeeklyData(await getWeeklyStats(week));
       if (viewMode === "monthly") setMonthlyData(await getMonthlyStats(month));
     } finally { setLoading(false); }
   }, [viewMode, week, month]);
 
-  // ── Charger le planning hebdomadaire ────────────────────────────────────────
-  const fetchWeekPlanning = useCallback(async (isoWeek: string) => {
-    setLoadingPlanning(true);
-    try {
-      const days = weekDaysFromISO(isoWeek);
-      const [entries] = await Promise.all([
-        getShiftPlanning(days[0], days[days.length - 1]),
-      ]);
-      setPlanningEntries(entries);
-
-      // Charger les données de présence pour les jours passés + aujourd'hui
-      const today = todayISO();
-      const daysToFetch = days.filter((d) => d <= today);
-      const attResults: Record<string, Record<string, string>> = {};
-      await Promise.all(daysToFetch.map(async (date) => {
-        try {
-          const stats = await getShiftDailyStats({ date });
-          const dayMap: Record<string, string> = {};
-          for (const rec of stats.records ?? []) {
-            if (rec.matricule) dayMap[rec.matricule] = rec.status;
-            dayMap[rec.full_name.toLowerCase()] = rec.status;
-          }
-          attResults[date] = dayMap;
-        } catch { /* ignore */ }
-      }));
-      setWeekAttendance(attResults);
-    } catch { /* ignore */ } finally { setLoadingPlanning(false); }
-  }, []);
-
-  useEffect(() => {
-    if (viewMode === "planning") fetchWeekPlanning(planningWeek);
-  }, [viewMode, planningWeek, fetchWeekPlanning]);
-
   useEffect(() => { fetchData(); }, [viewMode]);
   useEffect(() => { setPage(1); }, [statusFilter, searchQ, shiftData, weeklyData, monthlyData, pageSize]);
 
-  // ── FlatRecords — vue journalière ─────────────────────────────────────────
   const allRecords = useMemo((): FlatRecord[] => {
     if (!shiftData || viewMode !== "daily") return [];
-    const sched            = effectiveSchedule;
+
+    const sched = effectiveSchedule;
     const effectiveWorkMin = workDayMinutes(sched);
-    const planningLoaded   = todayPlanning.loaded;
+    const planningLoaded = todayPlanning.loaded;
 
-    // Helpers pour le matching planning
-    const normName = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
+    const teamEmployees = new Map<string, Set<string>>();
+    const employeeToTeam = new Map<string, string>();
 
-    /** Cherche l'employé dans TOUS les shifts du planning du jour.
-     *  Retourne { shift, team_id } ou null si non trouvé. */
-    const findPlannedEntry = (mat: string, name: string): { shift: ShiftTeamKey; team_id: string } | null => {
+    if (planningLoaded) {
       for (const key of (["jour", "soir1", "soir2"] as ShiftTeamKey[])) {
-        const entries = todayPlanning[key];
-        const found = entries?.find((e) =>
-          (e.employee_matricule && mat && e.employee_matricule === mat) ||
-          normName(e.employee_name) === normName(name)
-        );
-        if (found) return { shift: key, team_id: found.team_id || "" };
+        for (const emp of todayPlanning[key]) {
+          if (emp.team_id && emp.team_id !== "_no_team") {
+            if (!teamEmployees.has(emp.team_id)) {
+              teamEmployees.set(emp.team_id, new Set());
+            }
+            teamEmployees.get(emp.team_id)!.add(emp.employee_name);
+            employeeToTeam.set(emp.employee_name, emp.team_id);
+          }
+        }
       }
-      return null;
-    };
+    }
 
-    const hasPlanningData = planningLoaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length > 0);
+    const presentEmployees = new Map<string, ShiftRecord>();
+    for (const r of shiftData.records) {
+      if (r.status !== "absent") {
+        presentEmployees.set(r.full_name, r);
+      }
+    }
 
-    // Pour chaque employé absent ET planifié : trouver si quelqu'un le remplace
-    // (présent, dans le même shift, mais NON planifié)
-    const replacementByShift: Record<string, string[]> = { jour: [], soir1: [], soir2: [] };
+    const replacements = new Map<string, { absent: string; replacement: string }>();
 
-    if (hasPlanningData) {
-      // Présents non planifiés (remplaçants) → indexés par shift détecté
-      for (const r of shiftData.records) {
-        if (r.status === "absent") continue;
-        const entry = findPlannedEntry(r.matricule, r.full_name);
-        if (!entry) {
-          const sh = detectShiftTeamFromTime(r.in_time) ?? "jour";
-          replacementByShift[sh].push(r.full_name);
+    for (const [teamId, employees] of teamEmployees) {
+      const teamEmployeesList = Array.from(employees);
+      const presentInTeam = teamEmployeesList.filter(name => presentEmployees.has(name));
+      const absentInTeam = teamEmployeesList.filter(name => !presentEmployees.has(name));
+
+      for (const absent of absentInTeam) {
+        const replacement = Array.from(presentEmployees.keys()).find(name =>
+          !employeeToTeam.has(name)
+        );
+
+        if (replacement) {
+          replacements.set(absent, { absent, replacement });
         }
       }
     }
 
     return shiftData.records.map((r: ShiftRecord): FlatRecord => {
-      const workedRaw    = computeWorkedMinutesFromTimes(r.in_time, r.out_time) || (r.worked_minutes ?? 0);
+      const workedRaw = computeWorkedMinutesFromTimes(r.in_time, r.out_time) || (r.worked_minutes ?? 0);
       const workedNetMin = Math.max(0, workedRaw - sched.breakMin);
-      const lateMin      = computeLateMinutes(r.in_time, sched.startH, sched.startM);
-      const overtimeMin  = computeOvertimeMinutes(r.out_time, sched.endH, sched.endM);
+      const lateMin = computeLateMinutes(r.in_time, sched.startH, sched.startM);
+      const overtimeMin = computeOvertimeMinutes(r.out_time, sched.endH, sched.endM);
 
-      const plannedEntry  = hasPlanningData ? findPlannedEntry(r.matricule, r.full_name) : null;
-      const plannedShift  = plannedEntry?.shift ?? null;
-      const resolvedTeam: ShiftTeamKey | null =
-        plannedShift ?? assignments[r.matricule] ?? r.shift_team ?? detectShiftTeamFromTime(r.in_time);
-      const resolvedLabel =
-        r.shift_team_label ?? SHIFT_TEAMS.find((t) => t.key === resolvedTeam)?.label ?? "";
+      const employeeTeam = employeeToTeam.get(r.full_name);
+      const isScheduled = employeeTeam !== undefined;
+      const isPresent = r.status !== "absent";
+      const replacement = replacements.get(r.full_name);
 
-      const isScheduled      = !hasPlanningData || plannedEntry !== null;
-      const isReplacement    = hasPlanningData && !isScheduled && r.status !== "absent";
-      const notScheduledRest = hasPlanningData && !isScheduled && r.status === "absent";
+      let status = r.status;
+      let isReplacement = false;
+      let notScheduledRest = false;
+      let replacedBy = null;
 
-      // Shift non commencé : l'employé est planifié mais son shift n'a pas encore débuté
-      const effectiveShiftKey = plannedShift ?? resolvedTeam;
-      const isShiftPending = (
-        isScheduled && r.status === "absent" && (
-          // Cas 1 : shift identifié → vérifier s'il a commencé
-          (effectiveShiftKey !== null && getShiftActiveStatus(effectiveShiftKey) === "upcoming") ||
-          // Cas 2 : shift non identifiable (pas de planning, pas de pointage) → mettre en attente
-          (effectiveShiftKey === null && !r.in_time)
-        )
-      );
+      if (!isScheduled && isPresent) {
+        isReplacement = true;
+        status = "ok";
+      } else if (isScheduled && !isPresent) {
+        status = "absent";
+        if (replacement) {
+          replacedBy = replacement.replacement;
+        }
+      } else if (!isScheduled && !isPresent) {
+        notScheduledRest = true;
+        status = "not_working";
+      }
 
-      // Récupérer le team_id depuis le planning
-      const teamId = plannedEntry?.team_id ?? "";
-
-      // Si cet employé est absent ET planifié : chercher son remplaçant dans le même shift
-      let replacedBy: string | null = null;
-      if (r.status === "absent" && isScheduled && plannedShift) {
-        const replacements = replacementByShift[plannedShift];
-        if (replacements.length > 0) replacedBy = replacements[0]; // premier remplaçant trouvé
+      let shiftTeam: ShiftTeamKey | null = null;
+      if (isScheduled) {
+        for (const key of (["jour", "soir1", "soir2"] as ShiftTeamKey[])) {
+          const found = todayPlanning[key]?.find(e => e.employee_name === r.full_name);
+          if (found) {
+            shiftTeam = key;
+            break;
+          }
+        }
+      } else {
+        shiftTeam = detectShiftTeamFromTime(r.in_time);
       }
 
       return {
-        employee_id: r.employee_id, matricule: r.matricule, full_name: r.full_name,
+        employee_id: r.employee_id,
+        matricule: r.matricule,
+        full_name: r.full_name,
         department: (r.department ?? "—").toUpperCase(),
         project: (() => {
           const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
           return p ? String(p).toUpperCase() : (projectMap.get(r.matricule) ?? "—");
         })(),
-        status: r.status, is_late_api: r.is_late, late_label_api: r.late_label,
-        computed_late_minutes: lateMin, overtime_minutes: overtimeMin,
+        status: status as any,
+        is_late_api: r.is_late,
+        late_label_api: r.late_label,
+        computed_late_minutes: lateMin,
+        overtime_minutes: overtimeMin,
         compensation: computeCompensation(lateMin, overtimeMin),
         deficit_minutes: computeDeficitMinutes(workedNetMin, effectiveWorkMin),
-        in_time: r.in_time, out_time: r.out_time, worked_minutes: workedNetMin,
-        expected_minutes: effectiveWorkMin, email: emailMap.get(r.matricule) ?? null,
-        shift_team: resolvedTeam,
-        shift_team_label: resolvedLabel,
-        is_scheduled:       isScheduled,
-        is_replacement:     isReplacement,
+        in_time: r.in_time,
+        out_time: r.out_time,
+        worked_minutes: workedNetMin,
+        expected_minutes: effectiveWorkMin,
+        email: emailMap.get(r.matricule) ?? null,
+        shift_team: shiftTeam,
+        shift_team_label: SHIFT_TEAMS.find((t) => t.key === shiftTeam)?.label ?? "",
+        is_scheduled: isScheduled,
+        is_replacement: isReplacement,
         not_scheduled_rest: notScheduledRest,
-        is_shift_pending:   isShiftPending,
-        team_id:            teamId,
-        replaced_by:        replacedBy,
+        is_shift_pending: false,
+        team_id: employeeTeam || "",
+        replaced_by: replacedBy,
       };
     });
-  }, [shiftData, emailMap, effectiveSchedule, viewMode, projectMap, assignments, todayPlanning]);
+  }, [shiftData, emailMap, effectiveSchedule, viewMode, projectMap, todayPlanning]);
 
-  // ── SummaryRecords — hebdo/mensuel ────────────────────────────────────────
   const summaryRecords = useMemo((): SummaryRecord[] => {
     const resolveDept = (r: any) =>
       (r.department ?? r.service ?? departmentMap.get(r.matricule ?? "") ?? "—").toUpperCase();
@@ -2547,22 +2537,20 @@ export default function AttendanceShiftsPage() {
       return p ? String(p).toUpperCase() : (projectMap.get(r.matricule ?? "") ?? "—");
     };
     const mapEmp = (r: any): SummaryRecord => ({
-      employee_id:    r.employee_id,
-      matricule:      r.matricule ?? "",
-      full_name:      r.full_name ?? "",
-      department:     resolveDept(r),
-      project:        resolveProject(r),
-      // ✅ Résolution du shift en hebdo/mensuel : même priorité
-      shift_team:     assignments[r.matricule ?? ""] ?? r.shift_team ?? null,
-      nb_jours:       r.present_days ?? r.worked_days ?? 0,
+      employee_id: r.employee_id,
+      matricule: r.matricule ?? "",
+      full_name: r.full_name ?? "",
+      department: resolveDept(r),
+      project: resolveProject(r),
+      shift_team: assignments[r.matricule ?? ""] ?? r.shift_team ?? null,
+      nb_jours: r.present_days ?? r.worked_days ?? 0,
       worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
     });
-    if (viewMode === "weekly"  && weeklyData)  return weeklyData.by_employee.map(mapEmp);
+    if (viewMode === "weekly" && weeklyData) return weeklyData.by_employee.map(mapEmp);
     if (viewMode === "monthly" && monthlyData) return monthlyData.by_employee.map(mapEmp);
     return [];
   }, [viewMode, weeklyData, monthlyData, assignments, departmentMap, projectMap]);
 
-  // ── filteredSummaryRecords ────────────────────────────────────────────────
   const filteredSummaryRecords = useMemo((): SummaryRecord[] => {
     let rows = summaryRecords;
     if (selectedTeam) rows = rows.filter((r) => r.shift_team === selectedTeam);
@@ -2584,77 +2572,113 @@ export default function AttendanceShiftsPage() {
     r.department.toLowerCase().includes(q) || (r.shift_team_label ?? "").toLowerCase().includes(q) ||
     r.project.toLowerCase().includes(q);
 
-  // ── Tableau principal ─────────────────────────────────────────────────────────
+  // ── FILTRE PRINCIPAL (adapté à la demande) ─────────────────────────
   const filtered = useMemo(() => {
     const q = searchQ.toLowerCase();
 
-    // ── Vue SHIFT SPÉCIFIQUE (08H-16H / 16H-22H / 22H-08H) ─────────────────
+    // Cas où un shift spécifique est sélectionné
     if (selectedTeam) {
-      const planEmps  = todayPlanning.loaded ? (todayPlanning[selectedTeam] ?? []) : [];
-      const hasPlan   = planEmps.length > 0;
+      // Récupérer la liste des employés planifiés pour ce shift aujourd'hui
+      const planEmps = todayPlanning.loaded ? (todayPlanning[selectedTeam] ?? []) : [];
+
+      // Si le planning n'est pas chargé ou vide, on affiche un tableau vide
+      if (!todayPlanning.loaded || planEmps.length === 0) {
+        return [];
+      }
+
       const shiftStat = getShiftActiveStatus(selectedTeam);
 
-      // Source de vérité : planning si dispo, sinon allRecords filtrés par shift_team détecté
-      const base: FlatRecord[] = hasPlan
-        ? planEmps.map((e) => {
-            // Chercher le record de pointage existant
-            const rec = allRecords.find((r) =>
-              (e.employee_matricule && r.matricule && r.matricule === e.employee_matricule) ||
-              r.full_name.toLowerCase().trim() === e.employee_name.toLowerCase().trim()
-            );
-            if (rec) return rec;
-            // Employé planifié sans record API → enregistrement virtuel
-            return {
-              employee_id: -1,
-              matricule: e.employee_matricule ?? "",
-              full_name: e.employee_name,
-              department: "—", project: "—",
-              status: "absent" as const,
-              is_late_api: false, late_label_api: null,
-              computed_late_minutes: 0, overtime_minutes: 0,
-              compensation: { late_min:0, overtime_min:0, compensated_min:0, remaining_min:0, is_compensated:false, has_overtime:false },
-              deficit_minutes: 0, in_time: null, out_time: null,
-              worked_minutes: 0, expected_minutes: workDayMinutes(effectiveSchedule),
-              email: null,
-              shift_team: selectedTeam,
-              shift_team_label: SHIFT_TEAMS.find((t) => t.key === selectedTeam)?.label ?? "",
-              is_scheduled: true, is_replacement: false,
-              not_scheduled_rest: false,
-              is_shift_pending: shiftStat === "upcoming",
-              team_id: e.team_id ?? "", replaced_by: null,
-            } satisfies FlatRecord;
-          })
-        : allRecords.filter((r) => r.shift_team === selectedTeam && !r.not_scheduled_rest);
+      // Pour chaque employé planifié, on cherche ses données de pointage
+      const base = planEmps.map((e) => {
+        const rec = allRecords.find((r) =>
+          (e.employee_matricule && r.matricule && r.matricule === e.employee_matricule) ||
+          r.full_name.toLowerCase().trim() === e.employee_name.toLowerCase().trim()
+        );
 
-      // Appliquer les filtres de statut
+        if (rec) {
+          // Employé trouvé : on garde ses vraies données, mais on s'assure que le shift_team est celui du planning
+          return {
+            ...rec,
+            shift_team: selectedTeam,
+            is_scheduled: true,
+            is_replacement: false,
+            not_scheduled_rest: false,
+            is_shift_pending: shiftStat === "upcoming" && rec.status === "absent"
+          };
+        }
+
+        // Employé planifié mais sans pointage → création d'un enregistrement virtuel
+        return {
+          employee_id: -1,
+          matricule: e.employee_matricule ?? "",
+          full_name: e.employee_name,
+          department: "—",
+          project: "—",
+          status: shiftStat === "upcoming" ? "pending" : "absent",
+          is_late_api: false,
+          late_label_api: null,
+          computed_late_minutes: 0,
+          overtime_minutes: 0,
+          compensation: {
+            late_min: 0,
+            overtime_min: 0,
+            compensated_min: 0,
+            remaining_min: 0,
+            is_compensated: false,
+            has_overtime: false
+          },
+          deficit_minutes: 0,
+          in_time: null,
+          out_time: null,
+          worked_minutes: 0,
+          expected_minutes: workDayMinutes(effectiveSchedule),
+          email: null,
+          shift_team: selectedTeam,
+          shift_team_label: SHIFT_TEAMS.find((t) => t.key === selectedTeam)?.label ?? "",
+          is_scheduled: true,
+          is_replacement: false,
+          not_scheduled_rest: false,
+          is_shift_pending: shiftStat === "upcoming",
+          team_id: e.team_id ?? "",
+          replaced_by: null,
+        } satisfies FlatRecord;
+      });
+
+      // Appliquer les filtres de statut (late, deficit, absent, etc.) sur cette base
       return base.filter((r) => {
-        if (statusFilter === "late")   return isLateRecord(r) && matchSearch(r, q);
-        if (statusFilter === "deficit")return r.deficit_minutes > 0 && matchSearch(r, q);
-        if (statusFilter === "absent") return r.status === "absent" && matchSearch(r, q);
-        if (statusFilter !== "all")    return r.status === statusFilter && matchSearch(r, q);
-        return matchSearch(r, q);
+        if (!matchSearch(r, q)) return false;
+        if (statusFilter === "late") return isLateRecord(r);
+        if (statusFilter === "deficit") return r.deficit_minutes > 0;
+        if (statusFilter === "absent") return r.status === "absent";
+        if (statusFilter !== "all") return r.status === statusFilter;
+        return true;
       });
     }
 
-    // ── Vue TOUS ─────────────────────────────────────────────────────────────
+    // Vue "Tous" : afficher uniquement les employés dont le shift est actif ou déjà passé
     return allRecords.filter((r) => {
       if (r.not_scheduled_rest) return false;
-      if (r.is_shift_pending)   return false; // section séparée "En attente"
+      if (r.is_shift_pending) return false;
 
       if (statusFilter === "all") {
-        // Période en cours uniquement : exclure les shifts à venir
+        // En mode "Tous", on exclut les shifts à venir et les employés sans pointage ni shift détecté
         if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
         if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
-      } else if (statusFilter === "late")  { if (!isLateRecord(r)) return false; }
-      else if (statusFilter === "deficit") { if (r.deficit_minutes <= 0) return false; }
-      else if (statusFilter === "absent")  { if (r.status !== "absent") return false; }
-      else                                 { if (r.status !== statusFilter) return false; }
+      } else if (statusFilter === "late") {
+        if (!isLateRecord(r)) return false;
+      } else if (statusFilter === "deficit") {
+        if (r.deficit_minutes <= 0) return false;
+      } else if (statusFilter === "absent") {
+        if (r.status !== "absent") return false;
+      } else {
+        if (r.status !== statusFilter) return false;
+      }
 
       return matchSearch(r, q);
     });
   }, [allRecords, statusFilter, searchQ, selectedTeam, todayPlanning, effectiveSchedule]);
 
-  // ── KPIs des boutons shift — calculés depuis le planning ──────────────────
+  // ── KPIs des boutons shift ──────────────────────────────────────────
   const planningKpis = useMemo((): Record<ShiftTeamKey, { total: number; present: number; absent: number }> => {
     const empty = { total: 0, present: 0, absent: 0 };
     if (!todayPlanning.loaded) return { jour: empty, soir1: empty, soir2: empty };
@@ -2674,19 +2698,17 @@ export default function AttendanceShiftsPage() {
     return result;
   }, [todayPlanning, allRecords]);
 
-  // ── KPI Cards ─────────────────────────────────────────────────────────────
+  // ── KPI Cards ───────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     if (viewMode === "daily" && shiftData) {
       if (selectedTeam) {
-        // Vue shift spécifique : KPIs depuis le tableau planifié (filtered)
         return {
-          total:   filtered.length,
-          absent:  filtered.filter((r) => r.status === "absent" && !r.is_shift_pending).length,
-          late:    filtered.filter(isLateRecord).length,
+          total: filtered.length,
+          absent: filtered.filter((r) => r.status === "absent" && !r.is_shift_pending).length,
+          late: filtered.filter(isLateRecord).length,
           anomaly: filtered.filter((r) => r.status === "anomaly").length,
         };
       }
-      // Vue "Tous" : période en cours seulement
       return {
         total: allRecords.filter((r) => {
           if (r.not_scheduled_rest || r.is_shift_pending) return false;
@@ -2701,33 +2723,29 @@ export default function AttendanceShiftsPage() {
           if (!r.in_time && !r.shift_team) return false;
           return true;
         }).length,
-        late:    allRecords.filter((r) => r.computed_late_minutes > 0 && !r.is_shift_pending).length,
-        anomaly: allRecords.filter((r) => r.status === "anomaly"    && !r.is_shift_pending).length,
+        late: allRecords.filter((r) => r.computed_late_minutes > 0 && !r.is_shift_pending).length,
+        anomaly: allRecords.filter((r) => r.status === "anomaly" && !r.is_shift_pending).length,
       };
     }
     const teamRows = selectedTeam ? summaryRecords.filter((r) => r.shift_team === selectedTeam) : summaryRecords;
     return { total: teamRows.length, absent: 0, late: 0, anomaly: 0 };
   }, [viewMode, shiftData, allRecords, summaryRecords, selectedTeam, filtered]);
 
-  // Pas de planning importé pour la date du jour
   const noPlanningToday =
     viewMode === "daily" &&
     todayPlanning.loaded &&
     todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length === 0;
 
-  // Section séparée : non planifiés ce jour (Pas de service)
   const notScheduledRows = useMemo(() => {
     const q = searchQ.toLowerCase();
     return allRecords.filter((r) => r.not_scheduled_rest && matchSearch(r, q));
   }, [allRecords, searchQ]);
 
-  // Section séparée : planifiés mais shift pas encore commencé (ou indéterminable)
   const [showPendingShifts, setShowPendingShifts] = useState(true);
   const pendingShiftRows = useMemo(() => {
     const q = searchQ.toLowerCase();
     return allRecords.filter((r) => {
       if (r.not_scheduled_rest) return false;
-      // Inclure les is_shift_pending ET les cas où le shift est "upcoming" par shift_team
       if (r.is_shift_pending) return matchSearch(r, q);
       if (!r.in_time && r.status === "absent" && r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming")
         return matchSearch(r, q);
@@ -2736,20 +2754,20 @@ export default function AttendanceShiftsPage() {
   }, [allRecords, searchQ]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageData   = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const pageData = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const filterCount = (key: StatusFilter) => {
-    // Utilise `filtered` avec statusFilter="all" comme base pour éviter les doublons
     const base = selectedTeam ? filtered : allRecords.filter((r) => {
       if (r.not_scheduled_rest || r.is_shift_pending) return false;
       if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
       if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
       return true;
     });
-    if (key === "all")    return base.length;
-    if (key === "late")   return base.filter(isLateRecord).length;
-    if (key === "deficit")return base.filter((r) => r.deficit_minutes > 0).length;
+    if (key === "all") return base.length;
+    if (key === "late") return base.filter(isLateRecord).length;
+    if (key === "deficit") return base.filter((r) => r.deficit_minutes > 0).length;
     if (key === "absent") return base.filter((r) => r.status === "absent").length;
+    if (key === "pending") return pendingShiftRows.length;
     return base.filter((r) => r.status === key).length;
   };
 
@@ -2803,8 +2821,8 @@ export default function AttendanceShiftsPage() {
     }
   };
 
-  const activeTeamCfg  = SHIFT_TEAMS.find((t) => t.key === selectedTeam);
-  const tableHeaders   = ["Matricule", "Nom", "Projet/Département", "Service", "Équipe", "Statut", "Retard", "Entrée", "Sortie", "Heure travaillée", "HS (>départ)", "Compensation", "Actions"];
+  const activeTeamCfg = SHIFT_TEAMS.find((t) => t.key === selectedTeam);
+  const tableHeaders = ["Matricule", "Nom", "Projet/Département", "Service", "Équipe", "Statut", "Retard", "Entrée", "Sortie", "Heure travaillée", "HS (>départ)", "Compensation", "Actions"];
 
   return (
     <AppLayout>
@@ -2822,14 +2840,12 @@ export default function AttendanceShiftsPage() {
                 {effectiveSchedule.breakMin > 0 && ` · Pause ${effectiveSchedule.breakMin}min`}
               </span>
               {activeTeamCfg && <span className="text-indigo-500 font-semibold text-xs">{activeTeamCfg.label} · {activeTeamCfg.horaire}</span>}
-              {/* Planning du jour */}
               {todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full ring-1 ring-green-200">
                   <CalendarRange className="h-3 w-3" />
                   Planning actif · {todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length} assignés
                 </span>
               )}
-              {/* ✅ Légende des plages de détection automatique */}
               <span className="inline-flex items-center gap-2 text-[10px] text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full ring-1 ring-slate-200">
                 <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />07h–16h</span>
                 <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />17h–21h</span>
@@ -2847,7 +2863,6 @@ export default function AttendanceShiftsPage() {
             <select value={viewMode} onChange={(e) => setViewMode(e.target.value as ViewMode)}
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none flex-1 sm:flex-none">
               <option value="daily">Journalier</option>
-              <option value="planning">Planning Semaine</option>
               <option value="weekly">Hebdomadaire</option>
               <option value="monthly">Mensuel</option>
             </select>
@@ -2866,125 +2881,62 @@ export default function AttendanceShiftsPage() {
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
             </button>
-            <button onClick={() => viewMode === "planning" ? fetchWeekPlanning(planningWeek) : fetchData()}
+            <button onClick={() => fetchData()}
               className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
-              <RefreshCw className={`h-4 w-4 ${(loading || loadingPlanning) ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
             </button>
           </div>
         </div>
 
         {/* ── Sélecteur équipe ── */}
-        {viewMode !== "planning" && (
-          <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
-            <button onClick={() => setSelectedTeam(null)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${selectedTeam === null ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
-              <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" /><span className="truncate text-xs sm:text-sm">Toutes</span>
-            </button>
-            {SHIFT_TEAMS.map((team) => {
-              const isActive    = selectedTeam === team.key;
-              const pkpi         = planningKpis[team.key];
-              const hasPlanning  = todayPlanning.loaded && pkpi && pkpi.total > 0;
-              return (
-                <button key={team.key} onClick={() => setSelectedTeam(isActive ? null : team.key)}
-                  className={`flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${isActive ? `${team.activeBg} ${team.activeText} ${team.activeBorder}` : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
-                  <div className="flex flex-col items-start min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`h-2 w-2 rounded-full shrink-0 ${team.dot}`} />
-                      <span className="truncate text-xs sm:text-sm">{team.short}</span>
-                    </div>
-                    <span className="text-[10px] text-slate-400 pl-3.5 leading-tight">{team.horaire}</span>
+        <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+          <button onClick={() => setSelectedTeam(null)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${selectedTeam === null ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
+            <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" /><span className="truncate text-xs sm:text-sm">Toutes</span>
+          </button>
+          {SHIFT_TEAMS.map((team) => {
+            const isActive = selectedTeam === team.key;
+            const pkpi = planningKpis[team.key];
+            const hasPlanning = todayPlanning.loaded && pkpi && pkpi.total > 0;
+            return (
+              <button key={team.key} onClick={() => setSelectedTeam(isActive ? null : team.key)}
+                className={`flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${isActive ? `${team.activeBg} ${team.activeText} ${team.activeBorder}` : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
+                <div className="flex flex-col items-start min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${team.dot}`} />
+                    <span className="truncate text-xs sm:text-sm">{team.short}</span>
                   </div>
-                  {hasPlanning ? (
-                    <div className="flex flex-col items-end shrink-0 gap-0.5">
-                      <span className={`text-xs font-bold tabular-nums ${isActive ? team.activeText : "text-slate-600"}`}>
-                        {pkpi.present}/{pkpi.total}
+                  <span className="text-[10px] text-slate-400 pl-3.5 leading-tight">{team.horaire}</span>
+                </div>
+                {hasPlanning ? (
+                  <div className="flex flex-col items-end shrink-0 gap-0.5">
+                    <span className={`text-xs font-bold tabular-nums ${isActive ? team.activeText : "text-slate-600"}`}>
+                      {pkpi.present}/{pkpi.total}
+                    </span>
+                    {pkpi.absent > 0 && (
+                      <span className="text-[9px] font-bold text-red-500 tabular-nums leading-none">
+                        {pkpi.absent} abs
                       </span>
-                      {pkpi.absent > 0 && (
-                        <span className="text-[9px] font-bold text-red-500 tabular-nums leading-none">
-                          {pkpi.absent} abs
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-slate-300 shrink-0">0/0</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-xs text-slate-300 shrink-0">0/0</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
         {/* ── KPI Cards ── */}
-        {viewMode !== "planning" && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
-            <AbsentsCard total={kpis.total} absent={kpis.absent} loading={loading} delay={0.05} />
-            <StatCard icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
-              active={statusFilter === "late"} sub="Cliquer pour filtrer"
-              onClick={() => setStatusFilter((f) => f === "late" ? "all" : "late")} />
-            <StatCard icon={AlertTriangle} label="Anomalies" value={kpis.anomaly} color="violet" delay={0.15} loading={loading} />
-          </div>
-        )}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+          <AbsentsCard total={kpis.total} absent={kpis.absent} loading={loading} delay={0.05} />
+          <StatCard icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
+            active={statusFilter === "late"} sub="Cliquer pour filtrer"
+            onClick={() => setStatusFilter((f) => f === "late" ? "all" : "late")} />
+          <StatCard icon={AlertTriangle} label="Anomalies" value={kpis.anomaly} color="violet" delay={0.15} loading={loading} />
+        </div>
 
-        {/* ── Vue Planning Semaine ── */}
-        {viewMode === "planning" && (() => {
-          const planDays = weekDaysFromISO(planningWeek);
-          const [py, pw] = planningWeek.split("-W").map(Number);
-          const [cy, cw] = isoWeekNow().split("-W").map(Number);
-          const isCurrentWeek = py === cy && pw === cw;
-
-          const prevWeekISO = (w: string) => {
-            const [y2, wn] = w.split("-W").map(Number);
-            if (wn === 1) { const yw = new Date(y2 - 1, 11, 28); const wk2 = Math.ceil(((yw.getTime() - new Date(y2-1,0,1).getTime()) / 86400000 + 1) / 7); return `${y2-1}-W${String(wk2).padStart(2, "0")}`; }
-            return `${y2}-W${String(wn - 1).padStart(2, "0")}`;
-          };
-          const nextWeekISO = (w: string) => {
-            const [y2, wn] = w.split("-W").map(Number);
-            const maxW = new Date(y2, 11, 28).getDay() === 4 ? 53 : 52;
-            if (wn >= maxW) return `${y2+1}-W01`;
-            return `${y2}-W${String(wn + 1).padStart(2, "0")}`;
-          };
-
-          return (
-            <div className="flex-1 min-h-0 flex flex-col gap-2">
-              {/* Navigation semaine */}
-              <div className="shrink-0 flex items-center justify-between px-1">
-                <button onClick={() => setPlanningWeek(prevWeekISO(planningWeek))}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-sm hover:bg-slate-50 transition">
-                  <ChevronLeft className="h-4 w-4" />Semaine préc.
-                </button>
-                <div className="flex flex-col items-center">
-                  <span className="font-bold text-slate-800">
-                    Semaine {pw} — {planDays[0].split("-").reverse().slice(0,2).join("/")} au {planDays[6].split("-").reverse().slice(0,2).join("/")} {py}
-                  </span>
-                  {isCurrentWeek && (
-                    <span className="text-xs text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-full">Semaine courante</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {!isCurrentWeek && (
-                    <button onClick={() => setPlanningWeek(isoWeekNow())}
-                      className="px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700 text-sm bg-blue-50 hover:bg-blue-100 transition font-semibold">
-                      Aujourd'hui
-                    </button>
-                  )}
-                  <button onClick={() => setPlanningWeek(nextWeekISO(planningWeek))}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-sm hover:bg-slate-50 transition">
-                    Semaine suiv.<ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-
-              <WeeklyPlanningGrid
-                planningEntries={planningEntries}
-                weekDays={planDays}
-                weekAttendance={weekAttendance}
-                loading={loadingPlanning}
-              />
-            </div>
-          );
-        })()}
-
-        {/* ── Contenu principal ── */}
+        {/* ── Contenu principal (Journalier uniquement ici, mais on garde la structure pour weekly/monthly) ── */}
         {viewMode === "daily" ? (
           <>
             {/* Filtres rapides */}
@@ -3006,183 +2958,178 @@ export default function AttendanceShiftsPage() {
                 })}
                 {statusFilter !== "all" && (
                   <><div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
-                  <button onClick={() => setStatusFilter("all")} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500 hover:bg-white/60 transition-all shrink-0"><X className="h-3 w-3" /></button></>
+                    <button onClick={() => setStatusFilter("all")} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500 hover:bg-white/60 transition-all shrink-0"><X className="h-3 w-3" /></button></>
                 )}
               </div>
             </div>
 
-            {/* Layout splitté : Planning du jour | Tableau journalier */}
+            {/* Layout splitté : Planning du jour (gauche) | Tableau (droite) */}
             <div className="flex-1 min-h-0 flex gap-3">
+              {todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 && (
+                <div className="w-60 xl:w-72 shrink-0 rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col hidden lg:flex">
+                  <TodayPlanningPanel todayPlanning={todayPlanning} allRecords={allRecords} loading={loading} />
+                </div>
+              )}
 
-            {/* ── Panneau Planning du jour (gauche) ── */}
-            {todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 && (
-              <div className="w-60 xl:w-72 shrink-0 rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col hidden lg:flex">
-                <TodayPlanningPanel todayPlanning={todayPlanning} allRecords={allRecords} loading={loading} />
-              </div>
-            )}
-
-            {/* ── Tableau journalier (droite) ── */}
-            <div className="flex-1 min-h-0 flex flex-col gap-2">
-              <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
-                <table className="min-w-full bg-white">
-                  <thead className={`sticky top-0 z-10 text-white hidden md:table-header-group ${activeTeamCfg?.headerBg ?? "bg-camublue-900"}`}>
-                    <tr>{tableHeaders.map((h) => <th key={h} className="px-4 py-3 text-center border-b border-white/20 text-sm font-semibold whitespace-nowrap">{h}</th>)}</tr>
-                  </thead>
-                  <thead className={`sticky top-0 z-10 text-white md:hidden ${activeTeamCfg?.headerBg ?? "bg-camublue-900"}`}>
-                    <tr><th className="px-3 py-3 text-left text-sm font-semibold" colSpan={12}>{activeTeamCfg ? activeTeamCfg.short : "Toutes les équipes"} — {filtered.length} employé{filtered.length > 1 ? "s" : ""}</th></tr>
-                  </thead>
-                  <tbody>
-                    {loading
-                      ? [...Array(5)].map((_, i) => (
+              <div className="flex-1 min-h-0 flex flex-col gap-2">
+                <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
+                  <table className="min-w-full bg-white">
+                    <thead className={`sticky top-0 z-10 text-white hidden md:table-header-group ${activeTeamCfg?.headerBg ?? "bg-camublue-900"}`}>
+                      <tr>{tableHeaders.map((h) => <th key={h} className="px-4 py-3 text-center border-b border-white/20 text-sm font-semibold whitespace-nowrap">{h}</th>)}</tr>
+                    </thead>
+                    <thead className={`sticky top-0 z-10 text-white md:hidden ${activeTeamCfg?.headerBg ?? "bg-camublue-900"}`}>
+                      <tr><th className="px-3 py-3 text-left text-sm font-semibold" colSpan={12}>{activeTeamCfg ? activeTeamCfg.short : "Toutes les équipes"} — {filtered.length} employé{filtered.length > 1 ? "s" : ""}</th></tr>
+                    </thead>
+                    <tbody>
+                      {loading
+                        ? [...Array(5)].map((_, i) => (
                           <tr key={i} className="border-b border-slate-100">
                             {[...Array(tableHeaders.length)].map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>)}
                           </tr>
                         ))
-                      : pageData.length
-                        ? pageData.map((r) => (
+                        : pageData.length
+                          ? pageData.map((r) => (
                             <TableRow key={r.employee_id} r={r} isLate={isLateRecord(r)}
                               onAlert={() => { setSelectedEmployee(r); setAlertModalOpen(true); }}
                               onDetail={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }} />
                           ))
-                        : <tr><td colSpan={tableHeaders.length} className="text-center py-16 text-slate-400 text-sm">
+                          : <tr><td colSpan={tableHeaders.length} className="text-center py-16 text-slate-400 text-sm">
                             {noPlanningToday && statusFilter === "all"
                               ? <div className="flex flex-col items-center gap-3">
-                                  <CalendarRange className="h-12 w-12 text-slate-200" />
-                                  <p className="font-medium text-slate-500">Pas de planning disponible pour aujourd'hui</p>
-                                  <p className="text-xs text-slate-400">Importez un planning pour voir les assignations de l'équipe.</p>
-                                  <button onClick={() => setPlanningOpen(true)}
-                                    className="mt-1 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
-                                    <Upload className="h-4 w-4" /> Importer un planning
-                                  </button>
-                                </div>
+                                <CalendarRange className="h-12 w-12 text-slate-200" />
+                                <p className="font-medium text-slate-500">Pas de planning disponible pour aujourd'hui</p>
+                                <p className="text-xs text-slate-400">Importez un planning pour voir les assignations de l'équipe.</p>
+                                <button onClick={() => setPlanningOpen(true)}
+                                  className="mt-1 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
+                                  <Upload className="h-4 w-4" /> Importer un planning
+                                </button>
+                              </div>
                               : statusFilter === "late" ? "Aucun retard." : statusFilter === "deficit" ? "Aucune heure manquante." : "Aucun enregistrement trouvé."}
                           </td></tr>
-                    }
-                  </tbody>
-                </table>
-              </div>
+                      }
+                    </tbody>
+                  </table>
+                </div>
 
-              {/* Pagination */}
-              {filtered.length > 0 && (
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-1 shrink-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs sm:text-sm text-slate-500">
-                      {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} / <strong className="text-slate-700">{filtered.length}</strong>
-                    </span>
-                    <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
-                      <span className="text-xs text-slate-400">Lignes :</span>
-                      <div className="flex items-center gap-0.5">
-                        {PAGE_SIZE_OPTIONS.map((size) => (
-                          <button key={size} onClick={() => { setPageSize(size); setPage(1); }}
-                            className={`min-w-[28px] h-6 rounded text-xs font-semibold transition-all ${pageSize === size ? "bg-camublue-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}>{size}</button>
-                        ))}
+                {filtered.length > 0 && (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-1 shrink-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs sm:text-sm text-slate-500">
+                        {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} / <strong className="text-slate-700">{filtered.length}</strong>
+                      </span>
+                      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
+                        <span className="text-xs text-slate-400">Lignes :</span>
+                        <div className="flex items-center gap-0.5">
+                          {PAGE_SIZE_OPTIONS.map((size) => (
+                            <button key={size} onClick={() => { setPageSize(size); setPage(1); }}
+                              className={`min-w-[28px] h-6 rounded text-xs font-semibold transition-all ${pageSize === size ? "bg-camublue-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}>{size}</button>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => setPage(1)} disabled={page === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleLeft size={12} /></button>
-                    <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-4 w-4" /></button>
-                    <div className="flex items-center gap-0.5 mx-1">
-                      {getPageNumbers().map((p, i) =>
-                        p === "..."
-                          ? <span key={`e-${i}`} className="px-1 text-slate-400 text-sm">…</span>
-                          : <button key={p} onClick={() => setPage(p as number)}
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => setPage(1)} disabled={page === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleLeft size={12} /></button>
+                      <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-4 w-4" /></button>
+                      <div className="flex items-center gap-0.5 mx-1">
+                        {getPageNumbers().map((p, i) =>
+                          p === "..."
+                            ? <span key={`e-${i}`} className="px-1 text-slate-400 text-sm">…</span>
+                            : <button key={p} onClick={() => setPage(p as number)}
                               className={`min-w-[28px] sm:min-w-[32px] h-7 sm:h-8 rounded-md text-xs sm:text-sm font-medium transition-colors ${page === p ? "bg-camublue-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}>{p}</button>
-                      )}
+                        )}
+                      </div>
+                      <button onClick={() => setPage((p) => Math.min(p + 1, totalPages))} disabled={page === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-4 w-4" /></button>
+                      <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleRight size={12} /></button>
                     </div>
-                    <button onClick={() => setPage((p) => Math.min(p + 1, totalPages))} disabled={page === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-4 w-4" /></button>
-                    <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleRight size={12} /></button>
-                  </div>
-                </div>
-              )}
-            {/* ── Section : Shifts à venir (uniquement en vue "Tous") ── */}
-            {!selectedTeam && pendingShiftRows.length > 0 && (
-              <div className="shrink-0 rounded-xl border border-blue-200 overflow-hidden shadow-sm">
-                <button
-                  onClick={() => setShowPendingShifts((v) => !v)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors text-sm text-blue-700">
-                  <div className="flex items-center gap-2">
-                    <ChevronDown className={`h-4 w-4 text-blue-400 transition-transform ${showPendingShifts ? "rotate-180" : ""}`} />
-                    <Clock className="h-4 w-4 text-blue-400" />
-                    <span className="font-semibold text-blue-800">Shifts à venir — En attente de pointage</span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-200 text-blue-700">
-                      {pendingShiftRows.length}
-                    </span>
-                    <span className="text-xs text-blue-500">— Non comptés dans les absences</span>
-                  </div>
-                </button>
-                {showPendingShifts && (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full bg-white">
-                      <tbody className="divide-y divide-blue-50">
-                        {pendingShiftRows.map((r) => (
-                          <tr key={r.employee_id} className="bg-blue-50/30 text-sm">
-                            <td className="px-4 py-2.5 font-mono text-xs text-slate-400 w-24">{r.matricule || "—"}</td>
-                            <td className="px-4 py-2.5 font-medium text-slate-700">{r.full_name}</td>
-                            <td className="px-4 py-2.5 text-xs text-slate-500">{r.department !== "—" ? r.department : "—"}</td>
-                            <td className="px-4 py-2.5"><ShiftTeamPill teamKey={r.shift_team} /></td>
-                            <td className="px-4 py-2.5">
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 ring-1 ring-blue-200 whitespace-nowrap">
-                                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />En attente
-                              </span>
-                            </td>
-                            <td className="px-4 py-2.5">
-                              <button onClick={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
-                                Détail
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* ── Section : Non planifiés ce jour ── */}
-            {notScheduledRows.length > 0 && (
-              <div className="shrink-0 rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                <button
-                  onClick={() => setShowNotScheduled((v) => !v)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-sm text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showNotScheduled ? "rotate-180" : ""}`} />
-                    <span className="font-semibold text-slate-700">Non planifiés ce jour</span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-600">
-                      {notScheduledRows.length}
-                    </span>
-                    <span className="text-xs text-slate-400">— Pas de service · non comptés dans les absences</span>
+                {!selectedTeam && pendingShiftRows.length > 0 && (
+                  <div className="shrink-0 rounded-xl border border-blue-200 overflow-hidden shadow-sm">
+                    <button
+                      onClick={() => setShowPendingShifts((v) => !v)}
+                      className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors text-sm text-blue-700">
+                      <div className="flex items-center gap-2">
+                        <ChevronDown className={`h-4 w-4 text-blue-400 transition-transform ${showPendingShifts ? "rotate-180" : ""}`} />
+                        <Clock className="h-4 w-4 text-blue-400" />
+                        <span className="font-semibold text-blue-800">Shifts à venir — En attente de pointage</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-200 text-blue-700">
+                          {pendingShiftRows.length}
+                        </span>
+                        <span className="text-xs text-blue-500">— Non comptés dans les absences</span>
+                      </div>
+                    </button>
+                    {showPendingShifts && (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full bg-white">
+                          <tbody className="divide-y divide-blue-50">
+                            {pendingShiftRows.map((r) => (
+                              <tr key={r.employee_id} className="bg-blue-50/30 text-sm">
+                                <td className="px-4 py-2.5 font-mono text-xs text-slate-400 w-24">{r.matricule || "—"}</td>
+                                <td className="px-4 py-2.5 font-medium text-slate-700">{r.full_name}</td>
+                                <td className="px-4 py-2.5 text-xs text-slate-500">{r.department !== "—" ? r.department : "—"}</td>
+                                <td className="px-4 py-2.5"><ShiftTeamPill teamKey={r.shift_team} /></td>
+                                <td className="px-4 py-2.5">
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 ring-1 ring-blue-200 whitespace-nowrap">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />En attente
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  <button onClick={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
+                                    Détail
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
-                </button>
-                {showNotScheduled && (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full bg-white">
-                      <tbody className="divide-y divide-slate-100">
-                        {notScheduledRows.map((r) => (
-                          <tr key={r.employee_id} className="bg-slate-50/60 text-sm">
-                            <td className="px-4 py-2.5 font-mono text-xs text-slate-400 w-24">{r.matricule || "—"}</td>
-                            <td className="px-4 py-2.5 font-medium text-slate-700">{r.full_name}</td>
-                            <td className="px-4 py-2.5 text-xs text-slate-500">{r.department !== "—" ? r.department : "—"}</td>
-                            <td className="px-4 py-2.5"><ShiftTeamPill teamKey={r.shift_team} /></td>
-                            <td className="px-4 py-2.5"><RestDayBadge /></td>
-                            <td className="px-4 py-2.5">
-                              <button onClick={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
-                                Détail
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                )}
+
+                {notScheduledRows.length > 0 && (
+                  <div className="shrink-0 rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                    <button
+                      onClick={() => setShowNotScheduled((v) => !v)}
+                      className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-sm text-slate-600">
+                      <div className="flex items-center gap-2">
+                        <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showNotScheduled ? "rotate-180" : ""}`} />
+                        <span className="font-semibold text-slate-700">Non planifiés ce jour</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-600">
+                          {notScheduledRows.length}
+                        </span>
+                        <span className="text-xs text-slate-400">— Pas de service · non comptés dans les absences</span>
+                      </div>
+                    </button>
+                    {showNotScheduled && (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full bg-white">
+                          <tbody className="divide-y divide-slate-100">
+                            {notScheduledRows.map((r) => (
+                              <tr key={r.employee_id} className="bg-slate-50/60 text-sm">
+                                <td className="px-4 py-2.5 font-mono text-xs text-slate-400 w-24">{r.matricule || "—"}</td>
+                                <td className="px-4 py-2.5 font-medium text-slate-700">{r.full_name}</td>
+                                <td className="px-4 py-2.5 text-xs text-slate-500">{r.department !== "—" ? r.department : "—"}</td>
+                                <td className="px-4 py-2.5"><ShiftTeamPill teamKey={r.shift_team} /></td>
+                                <td className="px-4 py-2.5"><RestDayBadge /></td>
+                                <td className="px-4 py-2.5">
+                                  <button onClick={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
+                                    Détail
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-            </div>{/* fin tableau journalier */}
-            </div>{/* fin layout splitté */}
+            </div>
           </>
         ) : (
           <SummaryTable rows={filteredSummaryRecords} mode={viewMode as "weekly" | "monthly"} isLoading={loading} />
@@ -3194,7 +3141,6 @@ export default function AttendanceShiftsPage() {
           active={activeSchedule} presets={presets}
           onSave={(s) => {
             setActiveSchedule(s);
-            // Persiste sur le serveur (partagé entre tous les RH)
             saveShiftSchedule({
               context: s.context, startH: s.startH, startM: s.startM,
               endH: s.endH, endM: s.endM, breakMin: s.breakMin,
@@ -3202,16 +3148,18 @@ export default function AttendanceShiftsPage() {
             }).catch(console.error);
           }}
           onPresetsChange={(p) => setPresets(p)} />
+
         <DetailModal
           open={detailModalOpen} onClose={() => setDetailModalOpen(false)}
           employeeId={selectedEmployeeId} initialWeek={currentWeek} />
+
         <AlertModal
           open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
           employee={selectedEmployee} onConfirm={handleSendAlert} sending={sendingAlert} />
+
         <PlanningUploadModal
           open={planningOpen} onClose={() => setPlanningOpen(false)}
           onSuccess={(count) => {
-            // Recharger le planning du jour après l'upload
             getShiftPlanningForDate(todayISO()).then((res) => {
               setTodayPlanning({ ...res.assignments, loaded: true });
             }).catch(console.error);
