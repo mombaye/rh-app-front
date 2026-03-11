@@ -2577,47 +2577,12 @@ export default function AttendanceShiftsPage() {
     return rows;
   }, [summaryRecords, selectedTeam, searchQ]);
 
-  // ── KPIs ──────────────────────────────────────────────────────────────────
-  const kpis = useMemo(() => {
-    if (viewMode === "daily" && shiftData) return {
-      // Total = seulement les employés du shift actuel (actif ou terminé)
-      total: allRecords.filter((r) => {
-        if (r.not_scheduled_rest || r.is_shift_pending) return false;
-        if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
-        if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
-        return true;
-      }).length,
-      // Absents = parmi les employés de la période en cours
-      absent: allRecords.filter((r) => {
-        if (r.status !== "absent") return false;
-        if (r.not_scheduled_rest || r.is_shift_pending) return false;
-        if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
-        if (!r.in_time && !r.shift_team) return false;
-        return true;
-      }).length,
-      late:    allRecords.filter((r) => r.computed_late_minutes > 0).length,
-      anomaly: allRecords.filter((r) => r.status === "anomaly").length,
-    };
-    const teamRows = selectedTeam ? summaryRecords.filter((r) => r.shift_team === selectedTeam) : summaryRecords;
-    return { total: teamRows.length, absent: 0, late: 0, anomaly: 0 };
-  }, [viewMode, shiftData, allRecords, summaryRecords, selectedTeam]);
-
   const isLateRecord = (r: FlatRecord) => r.computed_late_minutes > 0;
 
   const matchSearch = (r: FlatRecord, q: string) =>
     !q || r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q) ||
     r.department.toLowerCase().includes(q) || (r.shift_team_label ?? "").toLowerCase().includes(q) ||
     r.project.toLowerCase().includes(q);
-
-  // ── Helper : cherche un record dans allRecords par matricule ou nom ──────────
-  const findRecord = useCallback(
-    (name: string, mat?: string | null): FlatRecord | undefined =>
-      allRecords.find((r) =>
-        (mat && r.matricule && r.matricule === mat) ||
-        r.full_name.toLowerCase().trim() === name.toLowerCase().trim()
-      ),
-    [allRecords]
-  );
 
   // ── Tableau principal ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -2688,6 +2653,61 @@ export default function AttendanceShiftsPage() {
       return matchSearch(r, q);
     });
   }, [allRecords, statusFilter, searchQ, selectedTeam, todayPlanning, effectiveSchedule]);
+
+  // ── KPIs des boutons shift — calculés depuis le planning ──────────────────
+  const planningKpis = useMemo((): Record<ShiftTeamKey, { total: number; present: number; absent: number }> => {
+    const empty = { total: 0, present: 0, absent: 0 };
+    if (!todayPlanning.loaded) return { jour: empty, soir1: empty, soir2: empty };
+    const result = {} as Record<ShiftTeamKey, { total: number; present: number; absent: number }>;
+    for (const key of (["jour", "soir1", "soir2"] as ShiftTeamKey[])) {
+      const emps = todayPlanning[key] ?? [];
+      let present = 0;
+      for (const e of emps) {
+        const rec = allRecords.find((r) =>
+          (e.employee_matricule && r.matricule && r.matricule === e.employee_matricule) ||
+          r.full_name.toLowerCase().trim() === e.employee_name.toLowerCase().trim()
+        );
+        if (rec && rec.status !== "absent") present++;
+      }
+      result[key] = { total: emps.length, present, absent: emps.length - present };
+    }
+    return result;
+  }, [todayPlanning, allRecords]);
+
+  // ── KPI Cards ─────────────────────────────────────────────────────────────
+  const kpis = useMemo(() => {
+    if (viewMode === "daily" && shiftData) {
+      if (selectedTeam) {
+        // Vue shift spécifique : KPIs depuis le tableau planifié (filtered)
+        return {
+          total:   filtered.length,
+          absent:  filtered.filter((r) => r.status === "absent" && !r.is_shift_pending).length,
+          late:    filtered.filter(isLateRecord).length,
+          anomaly: filtered.filter((r) => r.status === "anomaly").length,
+        };
+      }
+      // Vue "Tous" : période en cours seulement
+      return {
+        total: allRecords.filter((r) => {
+          if (r.not_scheduled_rest || r.is_shift_pending) return false;
+          if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
+          if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
+          return true;
+        }).length,
+        absent: allRecords.filter((r) => {
+          if (r.status !== "absent") return false;
+          if (r.not_scheduled_rest || r.is_shift_pending) return false;
+          if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
+          if (!r.in_time && !r.shift_team) return false;
+          return true;
+        }).length,
+        late:    allRecords.filter((r) => r.computed_late_minutes > 0 && !r.is_shift_pending).length,
+        anomaly: allRecords.filter((r) => r.status === "anomaly"    && !r.is_shift_pending).length,
+      };
+    }
+    const teamRows = selectedTeam ? summaryRecords.filter((r) => r.shift_team === selectedTeam) : summaryRecords;
+    return { total: teamRows.length, absent: 0, late: 0, anomaly: 0 };
+  }, [viewMode, shiftData, allRecords, summaryRecords, selectedTeam, filtered]);
 
   // Pas de planning importé pour la date du jour
   const noPlanningToday =
@@ -2861,8 +2881,9 @@ export default function AttendanceShiftsPage() {
               <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" /><span className="truncate text-xs sm:text-sm">Toutes</span>
             </button>
             {SHIFT_TEAMS.map((team) => {
-              const isActive  = selectedTeam === team.key;
-              const kpiTeam   = shiftData?.kpis.by_team?.[team.key];
+              const isActive    = selectedTeam === team.key;
+              const pkpi         = planningKpis[team.key];
+              const hasPlanning  = todayPlanning.loaded && pkpi && pkpi.total > 0;
               return (
                 <button key={team.key} onClick={() => setSelectedTeam(isActive ? null : team.key)}
                   className={`flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${isActive ? `${team.activeBg} ${team.activeText} ${team.activeBorder}` : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
@@ -2873,7 +2894,20 @@ export default function AttendanceShiftsPage() {
                     </div>
                     <span className="text-[10px] text-slate-400 pl-3.5 leading-tight">{team.horaire}</span>
                   </div>
-                  {kpiTeam && <span className={`text-xs font-bold tabular-nums shrink-0 ${isActive ? team.activeText : "text-slate-500"}`}>{kpiTeam.present}/{kpiTeam.total}</span>}
+                  {hasPlanning ? (
+                    <div className="flex flex-col items-end shrink-0 gap-0.5">
+                      <span className={`text-xs font-bold tabular-nums ${isActive ? team.activeText : "text-slate-600"}`}>
+                        {pkpi.present}/{pkpi.total}
+                      </span>
+                      {pkpi.absent > 0 && (
+                        <span className="text-[9px] font-bold text-red-500 tabular-nums leading-none">
+                          {pkpi.absent} abs
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-300 shrink-0">0/0</span>
+                  )}
                 </button>
               );
             })}
