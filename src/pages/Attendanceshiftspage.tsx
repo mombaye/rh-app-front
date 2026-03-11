@@ -2490,8 +2490,12 @@ export default function AttendanceShiftsPage() {
       // Shift non commencé : l'employé est planifié mais son shift n'a pas encore débuté
       const effectiveShiftKey = plannedShift ?? resolvedTeam;
       const isShiftPending = (
-        isScheduled && r.status === "absent" && effectiveShiftKey !== null &&
-        getShiftActiveStatus(effectiveShiftKey) === "upcoming"
+        isScheduled && r.status === "absent" && (
+          // Cas 1 : shift identifié → vérifier s'il a commencé
+          (effectiveShiftKey !== null && getShiftActiveStatus(effectiveShiftKey) === "upcoming") ||
+          // Cas 2 : shift non identifiable (pas de planning, pas de pointage) → mettre en attente
+          (effectiveShiftKey === null && !r.in_time)
+        )
       );
 
       // Récupérer le team_id depuis le planning
@@ -2571,9 +2575,21 @@ export default function AttendanceShiftsPage() {
   // ── KPIs ──────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     if (viewMode === "daily" && shiftData) return {
-      total:   allRecords.length,
-      // N'inclut pas les non-planifiés (repos) ni les shifts pas encore commencés
-      absent:  allRecords.filter((r) => r.status === "absent" && !r.not_scheduled_rest && !r.is_shift_pending).length,
+      // Total = seulement les employés du shift actuel (actif ou terminé)
+      total: allRecords.filter((r) => {
+        if (r.not_scheduled_rest || r.is_shift_pending) return false;
+        if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
+        if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
+        return true;
+      }).length,
+      // Absents = parmi les employés de la période en cours
+      absent: allRecords.filter((r) => {
+        if (r.status !== "absent") return false;
+        if (r.not_scheduled_rest || r.is_shift_pending) return false;
+        if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
+        if (!r.in_time && !r.shift_team) return false;
+        return true;
+      }).length,
       late:    allRecords.filter((r) => r.computed_late_minutes > 0).length,
       anomaly: allRecords.filter((r) => r.status === "anomaly").length,
     };
@@ -2593,11 +2609,23 @@ export default function AttendanceShiftsPage() {
     const q = searchQ.toLowerCase();
     return allRecords.filter((r) => {
       if (r.not_scheduled_rest) return false; // toujours dans la section séparée
-      if (r.is_shift_pending && statusFilter === "all") return false; // dans une section séparée
-      if (statusFilter === "late")    { if (!isLateRecord(r)) return false; }
-      else if (statusFilter === "deficit") { if (r.deficit_minutes <= 0) return false; }
-      else if (statusFilter === "absent")  { if (r.status !== "absent" || r.is_shift_pending) return false; }
-      else if (statusFilter !== "all")     { if (r.status !== statusFilter) return false; }
+      if (r.is_shift_pending)   return false; // toujours dans la section "En attente"
+
+      if (statusFilter === "all") {
+        // Vue "Tous" : n'afficher que les données de la période en cours.
+        // On exclut les employés dont le shift n'a pas encore commencé
+        // pour éviter d'afficher de fausses absences.
+        if (r.shift_team) {
+          if (getShiftActiveStatus(r.shift_team) === "upcoming") return false;
+        } else if (r.status === "absent" && !r.in_time) {
+          // Shift indéterminable + aucun pointage → en attente, ne pas afficher
+          return false;
+        }
+      } else if (statusFilter === "late")    { if (!isLateRecord(r)) return false; }
+      else if (statusFilter === "deficit")   { if (r.deficit_minutes <= 0) return false; }
+      else if (statusFilter === "absent")    { if (r.status !== "absent") return false; }
+      else                                   { if (r.status !== statusFilter) return false; }
+
       return matchSearch(r, q);
     });
   }, [allRecords, statusFilter, searchQ]);
@@ -2614,22 +2642,36 @@ export default function AttendanceShiftsPage() {
     return allRecords.filter((r) => r.not_scheduled_rest && matchSearch(r, q));
   }, [allRecords, searchQ]);
 
-  // Section séparée : planifiés mais shift pas encore commencé
+  // Section séparée : planifiés mais shift pas encore commencé (ou indéterminable)
   const [showPendingShifts, setShowPendingShifts] = useState(true);
   const pendingShiftRows = useMemo(() => {
     const q = searchQ.toLowerCase();
-    return allRecords.filter((r) => r.is_shift_pending && matchSearch(r, q));
+    return allRecords.filter((r) => {
+      if (r.not_scheduled_rest) return false;
+      // Inclure les is_shift_pending ET les cas où le shift est "upcoming" par shift_team
+      if (r.is_shift_pending) return matchSearch(r, q);
+      if (!r.in_time && r.status === "absent" && r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming")
+        return matchSearch(r, q);
+      return false;
+    });
   }, [allRecords, searchQ]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageData   = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const filterCount = (key: StatusFilter) => {
-    const scheduled = allRecords.filter((r) => !r.not_scheduled_rest);
-    if (key === "all")    return scheduled.filter((r) => !r.is_shift_pending).length;
+    const scheduled = allRecords.filter((r) => !r.not_scheduled_rest && !r.is_shift_pending);
+    if (key === "all") {
+      // Seulement la période en cours : exclure les shifts à venir
+      return scheduled.filter((r) => {
+        if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
+        if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
+        return true;
+      }).length;
+    }
     if (key === "late")   return scheduled.filter(isLateRecord).length;
     if (key === "deficit")return scheduled.filter((r) => r.deficit_minutes > 0).length;
-    if (key === "absent") return scheduled.filter((r) => r.status === "absent" && !r.is_shift_pending).length;
+    if (key === "absent") return scheduled.filter((r) => r.status === "absent").length;
     return scheduled.filter((r) => r.status === key).length;
   };
 
