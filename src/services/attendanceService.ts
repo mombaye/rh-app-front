@@ -78,6 +78,7 @@ export interface PlanningEntry {
   shift_type:         string;
   employee_name:      string;
   employee_matricule?: string | null;
+  team_id?:           string;   // identifiant de l'équipe (groupe coloré du planning)
 }
 
 export interface ShiftPlanningUpload {
@@ -97,9 +98,15 @@ export async function uploadShiftPlanning(payload: ShiftPlanningUpload): Promise
   return data;
 }
 
+export interface TeamPlanningGroup {
+  shift_type: string;
+  employees: { employee_name: string; employee_matricule: string | null }[];
+}
+
 export async function getShiftPlanningForDate(date: string): Promise<{
   date: string;
   assignments: { jour: PlanningEntry[]; soir1: PlanningEntry[]; soir2: PlanningEntry[] };
+  teams: Record<string, TeamPlanningGroup>;
 }> {
   const { data } = await api.get("/api/attendance/shift-planning/date/", { params: { date } });
   return data;
