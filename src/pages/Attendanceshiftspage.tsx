@@ -1895,6 +1895,7 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
   // Styling for replacement and rest-day rows
   const rowBg = r.is_replacement ? "bg-purple-50/40 hover:bg-purple-50/70"
     : r.not_scheduled_rest ? "bg-slate-50/60 opacity-70 hover:opacity-100"
+    : r.is_shift_pending   ? "bg-blue-50/40 hover:bg-blue-50/70"
     : isLate ? "bg-orange-50/50 hover:bg-orange-50"
     : deficit ? "bg-rose-50/30 hover:bg-rose-50/60"
     : "hover:bg-slate-50";
@@ -1935,9 +1936,11 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
           <div className="flex justify-center">
             {r.not_scheduled_rest
               ? <RestDayBadge />
-              : r.is_replacement
-                ? <ReplacementBadge />
-                : <StatusPill status={r.status} />}
+              : r.is_shift_pending
+                ? <StatusPill status="pending" />
+                : r.is_replacement
+                  ? <ReplacementBadge />
+                  : <StatusPill status={r.status} />}
           </div>
         </td>
         <td className="px-4 py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
@@ -1956,7 +1959,7 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
           </div>
         </td>
       </tr>
-      <tr className={`md:hidden border-b border-slate-100 ${r.is_replacement ? "bg-purple-50/40" : r.not_scheduled_rest ? "bg-slate-50/60 opacity-70" : isLate ? "bg-orange-50/40" : deficit ? "bg-rose-50/30" : ""}`}>
+      <tr className={`md:hidden border-b border-slate-100 ${r.is_replacement ? "bg-purple-50/40" : r.not_scheduled_rest ? "bg-slate-50/60 opacity-70" : r.is_shift_pending ? "bg-blue-50/40" : isLate ? "bg-orange-50/40" : deficit ? "bg-rose-50/30" : ""}`}>
         <td colSpan={12} className="px-3 py-2">
           <div className="flex items-center justify-between gap-2 cursor-pointer" onClick={() => setExpanded((v) => !v)}>
             <div className="min-w-0">
@@ -1966,9 +1969,11 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
             <div className="flex items-center gap-2 shrink-0">
               {r.not_scheduled_rest
                 ? <RestDayBadge />
-                : r.is_replacement
-                  ? <ReplacementBadge />
-                  : <StatusPill status={r.status} />}
+                : r.is_shift_pending
+                  ? <StatusPill status="pending" />
+                  : r.is_replacement
+                    ? <ReplacementBadge />
+                    : <StatusPill status={r.status} />}
               <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
             </div>
           </div>
@@ -2383,14 +2388,14 @@ export default function AttendanceShiftsPage() {
     setLoading(true);
     try {
       if (viewMode === "daily") {
-        const params: { date: string; team?: ShiftTeamKey } = { date: todayISO() };
-        if (selectedTeam) params.team = selectedTeam;
-        setShiftData(await getShiftDailyStats(params));
+        // On charge TOUS les employés sans filtre d'équipe.
+        // Le filtrage par shift se fait côté frontend en s'appuyant sur le planning.
+        setShiftData(await getShiftDailyStats({ date: todayISO() }));
       }
       if (viewMode === "weekly")  setWeeklyData(await getWeeklyStats(week));
       if (viewMode === "monthly") setMonthlyData(await getMonthlyStats(month));
     } finally { setLoading(false); }
-  }, [viewMode, selectedTeam, week, month]);
+  }, [viewMode, week, month]);
 
   // ── Charger le planning hebdomadaire ────────────────────────────────────────
   const fetchWeekPlanning = useCallback(async (isoWeek: string) => {
@@ -2425,7 +2430,7 @@ export default function AttendanceShiftsPage() {
     if (viewMode === "planning") fetchWeekPlanning(planningWeek);
   }, [viewMode, planningWeek, fetchWeekPlanning]);
 
-  useEffect(() => { fetchData(); }, [viewMode, selectedTeam]);
+  useEffect(() => { fetchData(); }, [viewMode]);
   useEffect(() => { setPage(1); }, [statusFilter, searchQ, shiftData, weeklyData, monthlyData, pageSize]);
 
   // ── FlatRecords — vue journalière ─────────────────────────────────────────
@@ -2604,31 +2609,85 @@ export default function AttendanceShiftsPage() {
     r.department.toLowerCase().includes(q) || (r.shift_team_label ?? "").toLowerCase().includes(q) ||
     r.project.toLowerCase().includes(q);
 
-  // Tableau principal : employés planifiés uniquement
+  // ── Helper : cherche un record dans allRecords par matricule ou nom ──────────
+  const findRecord = useCallback(
+    (name: string, mat?: string | null): FlatRecord | undefined =>
+      allRecords.find((r) =>
+        (mat && r.matricule && r.matricule === mat) ||
+        r.full_name.toLowerCase().trim() === name.toLowerCase().trim()
+      ),
+    [allRecords]
+  );
+
+  // ── Tableau principal ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = searchQ.toLowerCase();
+
+    // ── Vue SHIFT SPÉCIFIQUE (08H-16H / 16H-22H / 22H-08H) ─────────────────
+    if (selectedTeam) {
+      const planEmps  = todayPlanning.loaded ? (todayPlanning[selectedTeam] ?? []) : [];
+      const hasPlan   = planEmps.length > 0;
+      const shiftStat = getShiftActiveStatus(selectedTeam);
+
+      // Source de vérité : planning si dispo, sinon allRecords filtrés par shift_team détecté
+      const base: FlatRecord[] = hasPlan
+        ? planEmps.map((e) => {
+            // Chercher le record de pointage existant
+            const rec = allRecords.find((r) =>
+              (e.employee_matricule && r.matricule && r.matricule === e.employee_matricule) ||
+              r.full_name.toLowerCase().trim() === e.employee_name.toLowerCase().trim()
+            );
+            if (rec) return rec;
+            // Employé planifié sans record API → enregistrement virtuel
+            return {
+              employee_id: -1,
+              matricule: e.employee_matricule ?? "",
+              full_name: e.employee_name,
+              department: "—", project: "—",
+              status: "absent" as const,
+              is_late_api: false, late_label_api: null,
+              computed_late_minutes: 0, overtime_minutes: 0,
+              compensation: { late_min:0, overtime_min:0, compensated_min:0, remaining_min:0, is_compensated:false, has_overtime:false },
+              deficit_minutes: 0, in_time: null, out_time: null,
+              worked_minutes: 0, expected_minutes: workDayMinutes(effectiveSchedule),
+              email: null,
+              shift_team: selectedTeam,
+              shift_team_label: SHIFT_TEAMS.find((t) => t.key === selectedTeam)?.label ?? "",
+              is_scheduled: true, is_replacement: false,
+              not_scheduled_rest: false,
+              is_shift_pending: shiftStat === "upcoming",
+              team_id: e.team_id ?? "", replaced_by: null,
+            } satisfies FlatRecord;
+          })
+        : allRecords.filter((r) => r.shift_team === selectedTeam && !r.not_scheduled_rest);
+
+      // Appliquer les filtres de statut
+      return base.filter((r) => {
+        if (statusFilter === "late")   return isLateRecord(r) && matchSearch(r, q);
+        if (statusFilter === "deficit")return r.deficit_minutes > 0 && matchSearch(r, q);
+        if (statusFilter === "absent") return r.status === "absent" && matchSearch(r, q);
+        if (statusFilter !== "all")    return r.status === statusFilter && matchSearch(r, q);
+        return matchSearch(r, q);
+      });
+    }
+
+    // ── Vue TOUS ─────────────────────────────────────────────────────────────
     return allRecords.filter((r) => {
-      if (r.not_scheduled_rest) return false; // toujours dans la section séparée
-      if (r.is_shift_pending)   return false; // toujours dans la section "En attente"
+      if (r.not_scheduled_rest) return false;
+      if (r.is_shift_pending)   return false; // section séparée "En attente"
 
       if (statusFilter === "all") {
-        // Vue "Tous" : n'afficher que les données de la période en cours.
-        // On exclut les employés dont le shift n'a pas encore commencé
-        // pour éviter d'afficher de fausses absences.
-        if (r.shift_team) {
-          if (getShiftActiveStatus(r.shift_team) === "upcoming") return false;
-        } else if (r.status === "absent" && !r.in_time) {
-          // Shift indéterminable + aucun pointage → en attente, ne pas afficher
-          return false;
-        }
-      } else if (statusFilter === "late")    { if (!isLateRecord(r)) return false; }
-      else if (statusFilter === "deficit")   { if (r.deficit_minutes <= 0) return false; }
-      else if (statusFilter === "absent")    { if (r.status !== "absent") return false; }
-      else                                   { if (r.status !== statusFilter) return false; }
+        // Période en cours uniquement : exclure les shifts à venir
+        if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
+        if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
+      } else if (statusFilter === "late")  { if (!isLateRecord(r)) return false; }
+      else if (statusFilter === "deficit") { if (r.deficit_minutes <= 0) return false; }
+      else if (statusFilter === "absent")  { if (r.status !== "absent") return false; }
+      else                                 { if (r.status !== statusFilter) return false; }
 
       return matchSearch(r, q);
     });
-  }, [allRecords, statusFilter, searchQ]);
+  }, [allRecords, statusFilter, searchQ, selectedTeam, todayPlanning, effectiveSchedule]);
 
   // Pas de planning importé pour la date du jour
   const noPlanningToday =
@@ -2660,19 +2719,18 @@ export default function AttendanceShiftsPage() {
   const pageData   = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const filterCount = (key: StatusFilter) => {
-    const scheduled = allRecords.filter((r) => !r.not_scheduled_rest && !r.is_shift_pending);
-    if (key === "all") {
-      // Seulement la période en cours : exclure les shifts à venir
-      return scheduled.filter((r) => {
-        if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
-        if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
-        return true;
-      }).length;
-    }
-    if (key === "late")   return scheduled.filter(isLateRecord).length;
-    if (key === "deficit")return scheduled.filter((r) => r.deficit_minutes > 0).length;
-    if (key === "absent") return scheduled.filter((r) => r.status === "absent").length;
-    return scheduled.filter((r) => r.status === key).length;
+    // Utilise `filtered` avec statusFilter="all" comme base pour éviter les doublons
+    const base = selectedTeam ? filtered : allRecords.filter((r) => {
+      if (r.not_scheduled_rest || r.is_shift_pending) return false;
+      if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
+      if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
+      return true;
+    });
+    if (key === "all")    return base.length;
+    if (key === "late")   return base.filter(isLateRecord).length;
+    if (key === "deficit")return base.filter((r) => r.deficit_minutes > 0).length;
+    if (key === "absent") return base.filter((r) => r.status === "absent").length;
+    return base.filter((r) => r.status === key).length;
   };
 
   const getPageNumbers = (): (number | "...")[] => {
@@ -3003,8 +3061,8 @@ export default function AttendanceShiftsPage() {
                   </div>
                 </div>
               )}
-            {/* ── Section : Shifts à venir (pas encore commencés) ── */}
-            {pendingShiftRows.length > 0 && (
+            {/* ── Section : Shifts à venir (uniquement en vue "Tous") ── */}
+            {!selectedTeam && pendingShiftRows.length > 0 && (
               <div className="shrink-0 rounded-xl border border-blue-200 overflow-hidden shadow-sm">
                 <button
                   onClick={() => setShowPendingShifts((v) => !v)}
