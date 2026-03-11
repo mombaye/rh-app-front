@@ -1618,14 +1618,17 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                                       const d = new Date(date + "T00:00:00");
                                       const isToday = date === todayISO();
                                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                                      // Lettre de cycle : M/S/N si planifié, R sinon
+                                      const cycleKey = hasEntry
+                                        ? (shiftForTeam === "jour" ? "M" : shiftForTeam === "soir1" ? "S" : "N")
+                                        : "R";
+                                      const sl = cycleConfig[cycleKey as CycleType];
                                       return (
                                         <td key={date}
-                                          className={`px-0.5 py-1 text-center border-r border-slate-100 last:border-r-0 text-[9px] ${isToday ? "bg-blue-50/40" : isWeekend ? "bg-slate-50/50" : ""}`}>
-                                          {hasEntry ? (
-                                            <span className={`inline-block w-4 h-4 rounded-sm ${pal.chipBg}`} title={emp.name} />
-                                          ) : shiftForTeam ? (
-                                            <span className="text-slate-200">·</span>
-                                          ) : null}
+                                          className={`px-0.5 py-1 text-center border-r border-slate-100 last:border-r-0 ${isToday ? "bg-blue-50/40" : isWeekend ? "bg-slate-50/50" : ""}`}>
+                                          <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-[11px] font-bold ${sl.style}`}>
+                                            {sl.label}
+                                          </span>
                                         </td>
                                       );
                                     })}
@@ -1800,15 +1803,25 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                   </div>
                 )}
 
+                {preview.length > 0 && !uploaded && (
+                  <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+                    <span>
+                      <strong>Attention :</strong> l'import va <strong>supprimer et remplacer intégralement</strong> le planning existant.
+                      Toutes les assignations précédentes seront effacées.
+                    </span>
+                  </div>
+                )}
+
                 {error && <p className="text-sm text-red-500 font-medium bg-red-50 rounded-xl px-4 py-3 border border-red-100">⚠️ {error}</p>}
 
                 <div className="flex gap-3 pt-1">
                   <button onClick={onClose} className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Annuler</button>
                   <button onClick={handleUpload} disabled={!preview.length || loading || uploaded}
                     className={`flex-1 py-2.5 rounded-2xl text-sm font-bold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${uploaded ? "bg-emerald-500 text-white" : "bg-camublue-900 hover:bg-camublue-800 text-white"}`}>
-                    {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Importation…</>
-                      : uploaded ? <><CheckCircle className="h-4 w-4" />Importé avec succès !</>
-                        : <><Upload className="h-4 w-4" />Importer {stats.total} assignations</>}
+                    {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Remplacement en cours…</>
+                      : uploaded ? <><CheckCircle className="h-4 w-4" />Planning remplacé avec succès !</>
+                        : <><Upload className="h-4 w-4" />Remplacer le planning ({stats.total} assignations)</>}
                   </button>
                 </div>
               </div>
