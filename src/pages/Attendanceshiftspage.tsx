@@ -434,14 +434,77 @@ function getCellBgHex(ws: XLSX.WorkSheet, r: number, c: number): string | null {
   return tryColor(cell.s.fgColor) ?? tryColor(cell.s.bgColor) ?? null;
 }
 
-function parseOneSheet(ws: XLSX.WorkSheet): PlanningEntry[] {
+// Noms de mois français → numéro (1-12)
+const FRENCH_MONTHS_MAP: Record<string, number> = {
+  jan: 1, janv: 1, janvier: 1,
+  fev: 2, févr: 2, fevr: 2, février: 2, fevrier: 2,
+  mar: 3, mars: 3,
+  avr: 4, avril: 4,
+  mai: 5,
+  juin: 6,
+  juil: 7, juillet: 7,
+  aou: 8, aoû: 8, aout: 8, août: 8,
+  sep: 9, sept: 9, septembre: 9,
+  oct: 10, octobre: 10,
+  nov: 11, novembre: 11,
+  dec: 12, déc: 12, decembre: 12, décembre: 12,
+};
+
+function extractMonthYearFromSheetName(name: string): { month: number; year: number } {
+  let month = 0, year = 0;
+  const lower = name.toLowerCase().replace(/[_\-]/g, " ");
+  for (const [k, v] of Object.entries(FRENCH_MONTHS_MAP)) {
+    if (new RegExp(`\\b${k}\\b`).test(lower)) { month = v; break; }
+  }
+  const ym = name.match(/\b(20\d{2})\b/);
+  if (ym) year = parseInt(ym[1]);
+  // Format "MM/YYYY" ou "MM-YYYY"
+  if (!month) {
+    const mmy = name.match(/\b(\d{1,2})[\/\-](20\d{2})\b/);
+    if (mmy) { month = parseInt(mmy[1]); year = parseInt(mmy[2]); }
+  }
+  if (!year) year = new Date().getFullYear();
+  return { month, year };
+}
+
+function parseOneSheet(ws: XLSX.WorkSheet, sheetName: string = ""): PlanningEntry[] {
   const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as unknown[][];
   const entries: PlanningEntry[] = [];
   const headerRow = (rawRows[0] ?? []) as unknown[];
 
+  // Contexte mois/année déduit du nom de l'onglet
+  const { month: ctxMonth, year: ctxYear } = extractMonthYearFromSheetName(sheetName);
+
+  // Résolution d'une cellule d'en-tête en date YYYY-MM-DD
+  const resolveDate = (cell: unknown): string => {
+    const basic = cellToDateStr(cell);
+    if (basic) return basic;
+    if (typeof cell === "string") {
+      const s = cell.trim();
+      // Format jj/mm ou jj-mm (sans année)
+      const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+      if (m2) {
+        const d = parseInt(m2[1]), mo = parseInt(m2[2]);
+        if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12)
+          return `${ctxYear}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      }
+      // Jour seul sous forme de texte "11", " 11 "
+      const dayStr = s.match(/^\s*(\d{1,2})\s*$/);
+      if (dayStr && ctxMonth > 0) {
+        const d = parseInt(dayStr[1]);
+        if (d >= 1 && d <= 31)
+          return `${ctxYear}-${String(ctxMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      }
+    }
+    // Nombre entre 1 et 31 → considéré comme jour du mois (pas un serial Excel)
+    if (typeof cell === "number" && cell >= 1 && cell < 100 && ctxMonth > 0)
+      return `${ctxYear}-${String(ctxMonth).padStart(2, "0")}-${String(cell).padStart(2, "0")}`;
+    return "";
+  };
+
   const dates: string[] = [];
   for (let c = 1; c < headerRow.length; c++) {
-    dates.push(cellToDateStr(headerRow[c]));
+    dates.push(resolveDate(headerRow[c]));
   }
 
   let currentShift: ShiftTeamKey | null = null;
@@ -491,7 +554,7 @@ function parsePlanningExcel(buffer: ArrayBuffer): { entries: PlanningEntry[]; sh
 
   for (const sheetName of wb.SheetNames) {
     const ws = wb.Sheets[sheetName];
-    const entries = parseOneSheet(ws);
+    const entries = parseOneSheet(ws, sheetName);
     if (!entries.length) continue;
     const dates = entries.map((e) => e.date).filter(Boolean).sort();
     const teamSet = new Set(entries.map((e) => e.team_id).filter(Boolean));
@@ -2444,7 +2507,12 @@ export default function AttendanceShiftsPage() {
     setLoading(true);
     try {
       if (viewMode === "daily") {
-        setShiftData(await getShiftDailyStats({ date: todayISO() }));
+        const [stats, plan] = await Promise.all([
+          getShiftDailyStats({ date: todayISO() }),
+          getShiftPlanningForDate(todayISO()).catch(() => null),
+        ]);
+        setShiftData(stats);
+        if (plan) setTodayPlanning({ ...plan.assignments, loaded: true });
       }
       if (viewMode === "weekly") setWeeklyData(await getWeeklyStats(week));
       if (viewMode === "monthly") setMonthlyData(await getMonthlyStats(month));
@@ -2628,8 +2696,20 @@ export default function AttendanceShiftsPage() {
     if (selectedTeam) {
       const planEmps = todayPlanning.loaded ? (todayPlanning[selectedTeam] ?? []) : [];
 
-      if (!todayPlanning.loaded || planEmps.length === 0) {
-        return [];
+      if (!todayPlanning.loaded) return [];
+
+      // Pas de planning pour ce shift aujourd'hui → fallback sur les pointages
+      if (planEmps.length === 0) {
+        return allRecords.filter((r) => {
+          if (r.shift_team !== selectedTeam) return false;
+          if (r.not_scheduled_rest) return false;
+          if (!matchSearch(r, q)) return false;
+          if (statusFilter === "late") return isLateRecord(r);
+          if (statusFilter === "deficit") return r.deficit_minutes > 0;
+          if (statusFilter === "absent") return r.status === "absent";
+          if (statusFilter !== "all") return r.status === statusFilter;
+          return true;
+        });
       }
 
       const shiftStat = getShiftActiveStatus(selectedTeam);
@@ -3032,7 +3112,7 @@ export default function AttendanceShiftsPage() {
                               onDetail={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }} />
                           ))
                           : <tr><td colSpan={tableHeaders.length} className="text-center py-16 text-slate-400 text-sm">
-                            {noPlanningToday && statusFilter === "all"
+                            {noPlanningToday && statusFilter === "all" && !selectedTeam
                               ? <div className="flex flex-col items-center gap-3">
                                 <CalendarRange className="h-12 w-12 text-slate-200" />
                                 <p className="font-medium text-slate-500">Pas de planning disponible pour aujourd'hui</p>
@@ -3042,6 +3122,18 @@ export default function AttendanceShiftsPage() {
                                   <Upload className="h-4 w-4" /> Importer un planning
                                 </button>
                               </div>
+                              : noPlanningToday && statusFilter === "all" && selectedTeam
+                                ? <div className="flex flex-col items-center gap-3">
+                                    <CalendarRange className="h-12 w-12 text-slate-200" />
+                                    <p className="font-medium text-slate-500">
+                                      Aucun employé planifié pour le shift {SHIFT_TEAMS.find(t => t.key === selectedTeam)?.short} aujourd'hui
+                                    </p>
+                                    <p className="text-xs text-slate-400">Importez un planning incluant la date d'aujourd'hui.</p>
+                                    <button onClick={() => setPlanningOpen(true)}
+                                      className="mt-1 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
+                                      <Upload className="h-4 w-4" /> Importer un planning
+                                    </button>
+                                  </div>
                               : statusFilter === "late" ? "Aucun retard." : statusFilter === "deficit" ? "Aucune heure manquante." : "Aucun enregistrement trouvé."}
                           </td></tr>
                       }
