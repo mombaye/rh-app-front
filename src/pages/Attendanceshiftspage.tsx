@@ -1576,30 +1576,20 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                     </div>
                   ) : hasTeams ? (
                     <div className="min-w-max">
-                      {/* Légende shifts */}
-                      <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 border-b border-slate-200 sticky top-0 z-20 flex-wrap">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Shifts :</span>
-                        {[
-                          { label: "08H–16H", style: "bg-teal-100 text-teal-800 border border-teal-300" },
-                          { label: "16H–22H", style: "bg-amber-100 text-amber-800 border border-amber-300" },
-                          { label: "22H–08H", style: "bg-indigo-100 text-indigo-800 border border-indigo-300" },
-                        ].map((item) => (
-                          <span key={item.label} className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${item.style}`}>
-                            {item.label}
-                          </span>
-                        ))}
-                      </div>
-
                       <table className="text-xs border-collapse w-full">
-                        <thead className="sticky top-[37px] z-10">
+                        <thead className="sticky top-0 z-10">
                           <tr className="bg-camublue-900 text-white">
                             {/* Col fixe Nom */}
-                            <th className="px-2 py-2 text-left font-bold min-w-[140px] border-r border-white/20 sticky left-0 bg-camublue-900 z-20">
-                              Employé
+                            <th className="px-1 py-1 text-left font-bold min-w-[130px] w-[130px] border-r border-white/20 sticky left-0 bg-camublue-900 z-20 text-[10px]">
+                              Nom
                             </th>
                             {/* Col fixe Matricule */}
-                            <th className="px-2 py-2 text-left font-bold min-w-[70px] border-r border-white/20 sticky left-[140px] bg-camublue-900 z-20">
-                              Matricule
+                            <th className="px-1 py-1 text-left font-bold min-w-[58px] w-[58px] border-r border-white/20 sticky left-[130px] bg-camublue-900 z-20 text-[10px]">
+                              Matr.
+                            </th>
+                            {/* Col Shift */}
+                            <th className="px-1 py-1 text-center font-bold min-w-[52px] w-[52px] border-r border-white/20 text-[10px]">
+                              Shift
                             </th>
                             {/* Colonnes dates */}
                             {activeDays.map((date) => {
@@ -1608,10 +1598,9 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                               const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                               return (
                                 <th key={date}
-                                  className={`px-0 py-1.5 text-center font-semibold min-w-[80px] w-[80px] border-r border-white/10 last:border-r-0 ${isToday ? "bg-blue-600" : isWeekend ? "bg-camublue-800/70" : ""}`}>
-                                  <div className="flex flex-col items-center leading-none gap-0.5">
-                                    <span className="text-[9px] font-bold uppercase">{DAYS_FR[d.getDay()]}</span>
-                                    <span className="text-sm font-black">{d.getDate()}</span>
+                                  className={`px-0 py-1 text-center font-semibold min-w-[22px] w-[22px] border-r border-white/10 last:border-r-0 ${isToday ? "bg-blue-600" : isWeekend ? "bg-camublue-800/70" : ""}`}>
+                                  <div className="flex flex-col items-center leading-none">
+                                    <span className="text-[8px] font-bold">{d.getDate()}</span>
                                   </div>
                                 </th>
                               );
@@ -1622,110 +1611,101 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                           {teamIds.map((tid, tIdx) => {
                             const tg = teamGroups[tid];
                             const pal = tid === "_no_team"
-                              ? { bg: "bg-slate-100", bgSolid: "bg-slate-200", text: "text-slate-700", border: "border-slate-300", header: "bg-slate-400", dot: "bg-slate-400", chipBg: "bg-slate-100", label: "Sans équipe" }
+                              ? { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-300", header: "bg-slate-400", dot: "bg-slate-400", chipBg: "bg-slate-100", label: "Sans équipe" }
                               : getTeamPalette(tid);
 
                             // Détecter le shift principal de cette équipe
                             const shiftCounts: Record<string, number> = {};
                             Object.values(tg.dateShifts).forEach((s) => { shiftCounts[s] = (shiftCounts[s] ?? 0) + 1; });
                             const dominantShift = Object.entries(shiftCounts).sort((a, b) => b[1] - a[1])[0]?.[0] as ShiftTeamKey | undefined;
-                            const shiftBadge = dominantShift === "jour"
-                              ? { label: "08H–16H", cls: "bg-teal-100 text-teal-800 border border-teal-300" }
-                              : dominantShift === "soir1"
-                                ? { label: "16H–22H", cls: "bg-amber-100 text-amber-800 border border-amber-300" }
-                                : dominantShift === "soir2"
-                                  ? { label: "22H–08H", cls: "bg-indigo-100 text-indigo-800 border border-indigo-300" }
-                                  : null;
+                            const shiftLabel = dominantShift === "jour" ? "08-16H"
+                              : dominantShift === "soir1" ? "16-22H"
+                              : dominantShift === "soir2" ? "22-08H"
+                              : "—";
 
                             const emps = tg.employees;
 
                             return (
                               <React.Fragment key={tid}>
-                                {/* ── En-tête équipe ── */}
-                                <tr className={`border-b border-t-2 ${pal.border}`}>
-                                  <td className={`px-2 py-1 sticky left-0 z-10 ${pal.header} text-white`} colSpan={2}>
-                                    <div className="flex items-center gap-2">
-                                      <span className="h-2 w-2 rounded-full bg-white/70 shrink-0" />
-                                      <span className="font-bold text-[11px] uppercase tracking-wide">
-                                        {tid === "_no_team" ? "Sans équipe" : `Équipe ${tIdx + 1}`}
-                                      </span>
-                                      <span className="text-[10px] opacity-80">· {emps.length} emp.</span>
-                                      {shiftBadge && (
-                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${shiftBadge.cls}`}>
-                                          {shiftBadge.label}
-                                        </span>
-                                      )}
-                                    </div>
+                                {/* ── En-tête équipe : ligne séparatrice colorée ── */}
+                                <tr className={`${pal.header}`}>
+                                  <td className={`px-2 py-0.5 sticky left-0 z-10 ${pal.header} text-white`} colSpan={2}>
+                                    <span className="font-bold text-[10px] uppercase tracking-wide">
+                                      {tid === "_no_team" ? "Sans équipe" : `Équipe ${tIdx + 1}`}
+                                    </span>
+                                    <span className="text-[9px] opacity-80 ml-1">({emps.length})</span>
                                   </td>
-                                  {/* Cellules vides pour les colonnes de dates */}
+                                  <td className={`px-1 py-0.5 text-center ${pal.header} text-white`}>
+                                    <span className="text-[9px] font-bold opacity-90">{shiftLabel}</span>
+                                  </td>
                                   {activeDays.map((date) => {
-                                    const shiftType = tg.dateShifts[date];
                                     const d = new Date(date + "T00:00:00");
                                     const isToday = date === todayISO();
                                     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                                    const shiftCls = shiftType === "jour"
-                                      ? "bg-teal-200/60 text-teal-900"
-                                      : shiftType === "soir1"
-                                        ? "bg-amber-200/60 text-amber-900"
-                                        : shiftType === "soir2"
-                                          ? "bg-indigo-200/60 text-indigo-900"
-                                          : "bg-slate-100 text-slate-400";
                                     return (
                                       <td key={date}
-                                        className={`px-0 py-1 text-center border-r border-slate-200 last:border-r-0 ${isToday ? "bg-blue-50" : isWeekend ? "bg-slate-50" : ""}`}>
-                                        {shiftType ? (
-                                          <span className={`inline-block text-[8px] font-bold px-1 py-0.5 rounded ${shiftCls}`}>
-                                            {shiftType === "jour" ? "08-16" : shiftType === "soir1" ? "16-22" : "22-08"}
-                                          </span>
-                                        ) : (
-                                          <span className="text-[9px] text-slate-200">—</span>
-                                        )}
-                                      </td>
+                                        className={`border-r border-white/10 last:border-r-0 ${isToday ? "bg-blue-500" : isWeekend ? `${pal.header} opacity-80` : pal.header}`} />
                                     );
                                   })}
                                 </tr>
 
-                                {/* ── Lignes employés : nom dans chaque cellule date (style Excel) ── */}
-                                {emps.map((emp) => (
-                                  <tr key={emp.name} className="border-b border-slate-100 hover:brightness-95 transition-all">
-                                    {/* Nom (sticky) */}
-                                    <td className={`px-2 py-0.5 sticky left-0 z-10 ${pal.bg} border-r ${pal.border} min-w-[140px]`}>
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className={`h-2 w-2 rounded-full shrink-0 ${pal.dot}`} />
-                                        <span className={`text-[10px] font-semibold ${pal.text} truncate`} title={emp.name}>
+                                {/* ── Lignes employés ── */}
+                                {emps.map((emp) => {
+                                  // Déterminer le shift de cet employé (peut varier par date)
+                                  // On prend le dominant pour la colonne "Shift"
+                                  const empShiftCounts: Record<string, number> = {};
+                                  activeDays.forEach((date) => {
+                                    const shiftForTeam = tg.dateShifts[date];
+                                    if (shiftForTeam) {
+                                      const hasEmp = (grouped[date]?.[shiftForTeam] ?? []).some(
+                                        (e) => e.employee_name === emp.name && e.team_id === tid
+                                      );
+                                      if (hasEmp) empShiftCounts[shiftForTeam] = (empShiftCounts[shiftForTeam] ?? 0) + 1;
+                                    }
+                                  });
+                                  const empDominant = Object.entries(empShiftCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+                                  const empShiftLabel = empDominant === "jour" ? "08-16H"
+                                    : empDominant === "soir1" ? "16-22H"
+                                    : empDominant === "soir2" ? "22-08H"
+                                    : "";
+
+                                  return (
+                                    <tr key={emp.name} className={`border-b border-white/30 hover:brightness-95 transition-all ${pal.bg}`}>
+                                      {/* Nom (sticky) */}
+                                      <td className={`px-1.5 py-0 sticky left-0 z-10 ${pal.bg} border-r border-white/40 min-w-[130px] w-[130px]`}>
+                                        <span className={`text-[9px] font-semibold ${pal.text} truncate block leading-5`} title={emp.name}>
                                           {emp.name}
                                         </span>
-                                      </div>
-                                    </td>
-                                    {/* Matricule (sticky) */}
-                                    <td className={`px-2 py-0.5 sticky left-[140px] z-10 ${pal.bg} border-r ${pal.border} min-w-[70px]`}>
-                                      <span className="text-[9px] font-mono text-slate-500">{emp.matricule || "—"}</span>
-                                    </td>
-                                    {/* Cellules dates : nom si planifié, vide sinon */}
-                                    {activeDays.map((date) => {
-                                      const shiftForTeam = tg.dateShifts[date];
-                                      const hasEntry = shiftForTeam &&
-                                        (grouped[date]?.[shiftForTeam] ?? []).some(
-                                          (e) => e.employee_name === emp.name && e.team_id === tid
+                                      </td>
+                                      {/* Matricule (sticky) */}
+                                      <td className={`px-1 py-0 sticky left-[130px] z-10 ${pal.bg} border-r border-white/40 min-w-[58px] w-[58px]`}>
+                                        <span className={`text-[9px] font-mono ${pal.text} opacity-70 leading-5 block`}>{emp.matricule || "—"}</span>
+                                      </td>
+                                      {/* Shift indicator */}
+                                      <td className={`px-0 py-0 border-r border-white/40 min-w-[52px] w-[52px] text-center`}>
+                                        {empShiftLabel ? (
+                                          <span className={`text-[8px] font-bold ${pal.text} opacity-80`}>{empShiftLabel}</span>
+                                        ) : null}
+                                      </td>
+                                      {/* Cellules dates : fond équipe si planifié, blanc sinon */}
+                                      {activeDays.map((date) => {
+                                        const shiftForTeam = tg.dateShifts[date];
+                                        const hasEntry = shiftForTeam &&
+                                          (grouped[date]?.[shiftForTeam] ?? []).some(
+                                            (e) => e.employee_name === emp.name && e.team_id === tid
+                                          );
+                                        const d = new Date(date + "T00:00:00");
+                                        const isToday = date === todayISO();
+                                        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                                        return (
+                                          <td key={date}
+                                            className={`border-r border-white/30 last:border-r-0 min-w-[22px] w-[22px] h-5 ${hasEntry ? pal.bg : isToday ? "bg-blue-50" : isWeekend ? "bg-slate-100" : "bg-white"}`}
+                                          />
                                         );
-                                      const d = new Date(date + "T00:00:00");
-                                      const isToday = date === todayISO();
-                                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                                      return (
-                                        <td key={date}
-                                          className={`px-0.5 py-0.5 border-r border-slate-100 last:border-r-0 min-w-[80px] w-[80px] ${hasEntry ? pal.bg : isToday ? "bg-blue-50/20" : isWeekend ? "bg-slate-50/30" : "bg-white"}`}>
-                                          {hasEntry ? (
-                                            <span
-                                              className={`block text-[9px] font-medium leading-snug ${pal.text} truncate px-0.5`}
-                                              title={emp.name}>
-                                              {emp.name}
-                                            </span>
-                                          ) : null}
-                                        </td>
-                                      );
-                                    })}
-                                  </tr>
-                                ))}
+                                      })}
+                                    </tr>
+                                  );
+                                })}
                               </React.Fragment>
                             );
                           })}
