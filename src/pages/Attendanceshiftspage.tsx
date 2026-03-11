@@ -122,7 +122,8 @@ interface SummaryRecord {
 interface Pointage {
   day: string; date: string;
   in_time: string | null; out_time: string | null;
-  status: "ok" | "absent" | "incomplete" | "anomaly";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working";
+  is_planned?: boolean;
 }
 
 // ─── Shift teams config ───────────────────────────────────────────────────────
@@ -148,10 +149,11 @@ const SHIFT_TEAMS: {
 ];
 
 const STATUS_CFG = {
-  ok:         { label: "OK",         dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-  absent:     { label: "Absent",     dot: "bg-red-500",     badge: "bg-red-50 text-red-700 ring-red-200"             },
-  incomplete: { label: "Incomplet",  dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200"       },
-  anomaly:    { label: "Anomalie",   dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200"    },
+  ok:          { label: "OK",          dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+  absent:      { label: "Absent",      dot: "bg-red-500",     badge: "bg-red-50 text-red-700 ring-red-200"             },
+  incomplete:  { label: "Incomplet",   dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200"       },
+  anomaly:     { label: "Anomalie",    dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200"    },
+  not_working: { label: "Repos",       dot: "bg-slate-400",   badge: "bg-slate-50 text-slate-500 ring-slate-200"       },
 };
 
 const QUICK_FILTERS = [
@@ -243,8 +245,8 @@ async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ succ
 }
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
-function StatusPill({ status }: { status: keyof typeof STATUS_CFG }) {
-  const c = STATUS_CFG[status] ?? STATUS_CFG.anomaly;
+function StatusPill({ status }: { status: keyof typeof STATUS_CFG | string }) {
+  const c = STATUS_CFG[status as keyof typeof STATUS_CFG] ?? STATUS_CFG.anomaly;
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${c.badge}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />{c.label}
@@ -305,6 +307,139 @@ function RestDayBadge() {
     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 ring-1 ring-slate-200 whitespace-nowrap">
       Pas de service
     </span>
+  );
+}
+
+// ─── Planning Panel (vue parallèle) ──────────────────────────────────────────
+function TodayPlanningPanel({
+  todayPlanning, allRecords, loading,
+}: {
+  todayPlanning: {
+    jour:  { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
+    soir1: { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
+    soir2: { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
+    loaded: boolean;
+  };
+  allRecords: FlatRecord[];
+  loading: boolean;
+}) {
+  const today = todayISO();
+  const total = todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length;
+
+  const recByMat  = useMemo(() => new Map(allRecords.filter((r) => r.matricule).map((r) => [r.matricule, r])), [allRecords]);
+  const recByName = useMemo(() => new Map(allRecords.map((r) => [r.full_name.toLowerCase().trim(), r])), [allRecords]);
+
+  const getRecord = (emp: { employee_name: string; employee_matricule?: string | null }) => {
+    if (emp.employee_matricule) {
+      const r = recByMat.get(emp.employee_matricule);
+      if (r) return r;
+    }
+    return recByName.get(emp.employee_name.toLowerCase().trim()) ?? null;
+  };
+
+  if (!todayPlanning.loaded || total === 0) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2 p-4">
+        <CalendarRange className="h-10 w-10 text-slate-200" />
+        <p className="text-xs text-center font-medium">Pas de planning<br />pour aujourd'hui</p>
+      </div>
+    );
+  }
+
+  const dateLabel = new Date(today + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" });
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="px-3 py-2 bg-camublue-900 text-white flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <CalendarRange className="h-3.5 w-3.5" />
+          <span className="text-xs font-bold capitalize">{dateLabel}</span>
+        </div>
+        <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-semibold">{total} planifiés</span>
+      </div>
+
+      {/* Shifts */}
+      <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+        {SHIFT_TEAMS.map((team) => {
+          const emps = todayPlanning[team.key as ShiftTeamKey];
+          if (!emps || emps.length === 0) return null;
+
+          const present = emps.filter((e) => { const r = getRecord(e); return r && r.status !== "absent"; }).length;
+          const absent  = emps.length - present;
+
+          return (
+            <div key={team.key}>
+              {/* Shift header */}
+              <div className={`px-3 py-1.5 flex items-center justify-between ${team.activeBg} border-b ${team.activeBorder}`}>
+                <div className="flex items-center gap-1.5">
+                  <span className={`h-2 w-2 rounded-full ${team.dot}`} />
+                  <span className={`text-[10px] font-bold ${team.activeText}`}>{team.short}</span>
+                  <span className={`text-[9px] ${team.activeText} opacity-70`}>{team.horaire}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">{present}✓</span>
+                  {absent > 0 && <span className="text-[9px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded-full">{absent}✗</span>}
+                </div>
+              </div>
+              {/* Employee list */}
+              {emps.map((emp) => {
+                const rec    = getRecord(emp);
+                const status = rec?.status ?? "absent";
+                const isLate = (rec?.computed_late_minutes ?? 0) > 0;
+                const pal    = (emp.team_id && emp.team_id !== "") ? getTeamPalette(emp.team_id) : null;
+
+                const statusDot =
+                  status === "ok"         ? "bg-emerald-500" :
+                  status === "absent"     ? "bg-red-500"     :
+                  status === "incomplete" ? "bg-amber-500"   :
+                                            "bg-violet-500";
+
+                return (
+                  <div key={emp.employee_name}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-[10px] border-b border-slate-50 transition-colors ${
+                      status === "absent"     ? "bg-red-50/50"    :
+                      status === "ok"         ? ""                :
+                      status === "incomplete" ? "bg-amber-50/30"  :
+                                                "bg-violet-50/30"
+                    }`}>
+                    {pal && <span className={`h-2 w-2 rounded-full shrink-0 ${pal.dot}`} />}
+                    <div className="flex-1 min-w-0">
+                      {emp.employee_matricule && (
+                        <div className="font-mono text-[8px] text-slate-400 leading-none">{emp.employee_matricule}</div>
+                      )}
+                      <div className={`font-medium truncate leading-tight ${status === "absent" ? "text-red-700" : "text-slate-700"}`}
+                        title={emp.employee_name}>
+                        {emp.employee_name}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {isLate && <Clock className="h-2.5 w-2.5 text-orange-500" />}
+                      <span className={`h-2 w-2 rounded-full ${statusDot}`} title={STATUS_CFG[status as keyof typeof STATUS_CFG]?.label} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Légende */}
+      <div className="px-3 py-2 border-t border-slate-100 bg-slate-50 shrink-0">
+        <div className="flex items-center gap-3 flex-wrap">
+          {[
+            { dot: "bg-emerald-500", label: "Présent"  },
+            { dot: "bg-red-500",     label: "Absent"   },
+            { dot: "bg-amber-500",   label: "Incomplet"},
+          ].map((l) => (
+            <span key={l.label} className="flex items-center gap-1 text-[9px] text-slate-500">
+              <span className={`h-1.5 w-1.5 rounded-full ${l.dot}`} />{l.label}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -793,7 +928,10 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
         const cur = new Date(start); cur.setDate(cur.getDate() + i);
         const ds  = cur.toISOString().split("T")[0];
         const dd  = res.days.find((d: DayDetail) => d.date === ds);
-        return { day, date: ds, in_time: dd?.in_time ?? null, out_time: dd?.out_time ?? null, status: dd?.status ?? "absent" };
+        // Si le backend indique que l'employé n'était pas planifié (jour de repos), afficher "not_working"
+        const rawStatus = dd?.status ?? "absent";
+        const status = rawStatus === "not_working" ? "not_working" : (rawStatus as "ok" | "absent" | "incomplete" | "anomaly");
+        return { day, date: ds, in_time: dd?.in_time ?? null, out_time: dd?.out_time ?? null, status, is_planned: (dd as any)?.is_planned ?? true };
       }));
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }, [employeeId, selWeek, open]);
@@ -825,7 +963,11 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
                 : pointages.length > 0
                   ? <div className="space-y-2">
                       {pointages.map((p, i) => (
-                        <div key={i} className={`rounded-xl border p-3 grid grid-cols-5 gap-4 ${p.status === "ok" ? "bg-white border-slate-100" : "bg-rose-50 border-rose-100"}`}>
+                        <div key={i} className={`rounded-xl border p-3 grid grid-cols-5 gap-4 ${
+                          p.status === "ok"          ? "bg-white border-slate-100"   :
+                          p.status === "not_working" ? "bg-slate-50 border-slate-200 opacity-70" :
+                                                        "bg-rose-50 border-rose-100"
+                        }`}>
                           <span className="font-medium text-slate-800 text-sm">{p.day}</span>
                           <span className="text-sm text-slate-600">{new Date(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
                           <span><StatusPill status={p.status} /></span>
@@ -1092,16 +1234,18 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
   }, [entries]);
 
   /**
-   * Vue par équipe : team_id → { employees: string[], dateShifts: Record<date, shift_type> }
+   * Vue par équipe : team_id → { employees: {name, matricule}[], dateShifts: Record<date, shift_type> }
    * Inspiré du planning Excel coloré
    */
   const teamGroups = useMemo(() => {
-    // team_id → { employees (noms uniques), dateShifts }
-    const map: Record<string, { employees: string[]; dateShifts: Record<string, string> }> = {};
+    // team_id → { employees (noms + matricules uniques), dateShifts }
+    const map: Record<string, { employees: { name: string; matricule: string | null }[]; dateShifts: Record<string, string> }> = {};
     for (const e of entries) {
       const tid = e.team_id || "_no_team";
       if (!map[tid]) map[tid] = { employees: [], dateShifts: {} };
-      if (!map[tid].employees.includes(e.employee_name)) map[tid].employees.push(e.employee_name);
+      if (!map[tid].employees.some((emp) => emp.name === e.employee_name)) {
+        map[tid].employees.push({ name: e.employee_name, matricule: e.employee_matricule || null });
+      }
       map[tid].dateShifts[e.date] = e.shift_type;
     }
     return map;
@@ -1392,17 +1536,22 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                                 </tr>
 
                                 {/* ── Lignes employés de cette équipe ── */}
-                                {emps.map((empName, eIdx) => (
-                                  <tr key={empName}
+                                {emps.map((emp, eIdx) => (
+                                  <tr key={emp.name}
                                     className={`border-b border-slate-100 ${eIdx % 2 === 0 ? pal.bg : "bg-white"}`}>
                                     <td className={`px-3 py-1 sticky left-0 z-10 ${eIdx % 2 === 0 ? pal.bg : "bg-white"} border-r ${pal.border}`}>
                                       <div className="flex items-center gap-1.5">
                                         <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-black shrink-0 ${pal.chipBg} ${pal.text}`}>
-                                          {initials(empName)}
+                                          {initials(emp.name)}
                                         </span>
-                                        <span className={`text-[11px] font-medium ${pal.text} truncate max-w-[90px]`} title={empName}>
-                                          {empName}
-                                        </span>
+                                        <div className="flex flex-col min-w-0">
+                                          {emp.matricule && (
+                                            <span className="text-[8px] font-mono text-slate-400 leading-none">{emp.matricule}</span>
+                                          )}
+                                          <span className={`text-[11px] font-medium ${pal.text} truncate max-w-[90px]`} title={emp.name}>
+                                            {emp.name}
+                                          </span>
+                                        </div>
                                       </div>
                                     </td>
                                     {/* Pour chaque date : indiquer si cet employé est présent dans ce shift */}
@@ -1411,7 +1560,7 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                                       // L'employé travaille si son équipe a un shift ce jour ET son nom est dans les entrées
                                       const hasEntry = shiftForTeam &&
                                         (grouped[date]?.[shiftForTeam] ?? []).some(
-                                          (e) => e.employee_name === empName && e.team_id === tid
+                                          (e) => e.employee_name === emp.name && e.team_id === tid
                                         );
                                       const d = new Date(date + "T00:00:00");
                                       const isToday = date === todayISO();
@@ -1420,7 +1569,7 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                                         <td key={date}
                                           className={`px-0.5 py-1 text-center border-r border-slate-100 last:border-r-0 text-[9px] ${isToday ? "bg-blue-50/40" : isWeekend ? "bg-slate-50/50" : ""}`}>
                                           {hasEntry ? (
-                                            <span className={`inline-block w-4 h-4 rounded-sm ${pal.chipBg}`} title={empName} />
+                                            <span className={`inline-block w-4 h-4 rounded-sm ${pal.chipBg}`} title={emp.name} />
                                           ) : shiftForTeam ? (
                                             <span className="text-slate-200">·</span>
                                           ) : null}
@@ -1496,12 +1645,18 @@ function PlanningUploadModal({ open, onClose, onSuccess }: {
                                       <td key={s.key} className={`px-3 py-2 align-top border-r border-slate-100 last:border-r-0 ${isAdding ? `${s.bg}/60` : ""}`}>
                                         <div className="flex flex-wrap gap-1 min-h-[28px]">
                                           {cellEntries.map((e) => (
-                                            <span key={e.employee_name} title={e.employee_name}
+                                            <span key={e.employee_name}
+                                              title={`${e.employee_matricule ? e.employee_matricule + " · " : ""}${e.employee_name}`}
                                               className={`group inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full text-xs font-semibold ${s.bg} ${s.text} border ${s.border} shadow-sm`}>
                                               <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-[9px] font-black shrink-0 ${s.text}`}>
                                                 {initials(e.employee_name)}
                                               </span>
-                                              <span className="max-w-[90px] truncate">{e.employee_name}</span>
+                                              <div className="flex flex-col min-w-0 max-w-[100px]">
+                                                {e.employee_matricule && (
+                                                  <span className="text-[8px] font-mono opacity-70 leading-none truncate">{e.employee_matricule}</span>
+                                                )}
+                                                <span className="truncate text-xs leading-tight">{e.employee_name}</span>
+                                              </div>
                                               <button onClick={() => handleRemove(e)} className="ml-0.5 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all shrink-0">
                                                 <X className="h-2.5 w-2.5" />
                                               </button>
@@ -2342,7 +2497,17 @@ export default function AttendanceShiftsPage() {
               </div>
             </div>
 
-            {/* Tableau journalier */}
+            {/* Layout splitté : Planning du jour | Tableau journalier */}
+            <div className="flex-1 min-h-0 flex gap-3">
+
+            {/* ── Panneau Planning du jour (gauche) ── */}
+            {todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 && (
+              <div className="w-60 xl:w-72 shrink-0 rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col hidden lg:flex">
+                <TodayPlanningPanel todayPlanning={todayPlanning} allRecords={allRecords} loading={loading} />
+              </div>
+            )}
+
+            {/* ── Tableau journalier (droite) ── */}
             <div className="flex-1 min-h-0 flex flex-col gap-2">
               <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
                 <table className="min-w-full bg-white">
@@ -2456,7 +2621,8 @@ export default function AttendanceShiftsPage() {
                 )}
               </div>
             )}
-            </div>
+            </div>{/* fin tableau journalier */}
+            </div>{/* fin layout splitté */}
           </>
         ) : (
           <SummaryTable rows={filteredSummaryRecords} mode={viewMode as "weekly" | "monthly"} isLoading={loading} />
