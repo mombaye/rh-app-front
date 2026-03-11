@@ -2689,114 +2689,74 @@ export default function AttendanceShiftsPage() {
     r.department.toLowerCase().includes(q) || (r.shift_team_label ?? "").toLowerCase().includes(q) ||
     r.project.toLowerCase().includes(q);
 
-  // ── FILTRE PRINCIPAL ─────────────────────────
-  const filtered = useMemo(() => {
-    const q = searchQ.toLowerCase();
+  // ── BASE PLANNING : employés du shift sélectionné (planning uniquement) ────
+  const shiftPlanningBase = useMemo((): FlatRecord[] => {
+    if (!selectedTeam || !todayPlanning.loaded) return [];
+    const planEmps = todayPlanning[selectedTeam] ?? [];
+    if (planEmps.length === 0) return [];
+    const shiftStat = getShiftActiveStatus(selectedTeam);
 
-    if (selectedTeam) {
-      const planEmps = todayPlanning.loaded ? (todayPlanning[selectedTeam] ?? []) : [];
-
-      if (!todayPlanning.loaded) return [];
-
-      // Pas de planning pour ce shift aujourd'hui → fallback sur les pointages
-      if (planEmps.length === 0) {
-        return allRecords.filter((r) => {
-          if (r.shift_team !== selectedTeam) return false;
-          if (r.not_scheduled_rest) return false;
-          if (!matchSearch(r, q)) return false;
-          if (statusFilter === "late") return isLateRecord(r);
-          if (statusFilter === "deficit") return r.deficit_minutes > 0;
-          if (statusFilter === "absent") return r.status === "absent";
-          if (statusFilter !== "all") return r.status === statusFilter;
-          return true;
-        });
-      }
-
-      const shiftStat = getShiftActiveStatus(selectedTeam);
-
-      const base = planEmps.map((e) => {
-        const rec = allRecords.find((r) =>
-          (e.employee_matricule && r.matricule && r.matricule === e.employee_matricule) ||
-          r.full_name.toLowerCase().trim() === e.employee_name.toLowerCase().trim()
-        );
-
-        if (rec) {
-          return {
-            ...rec,
-            shift_team: selectedTeam,
-            is_scheduled: true,
-            is_replacement: false,
-            not_scheduled_rest: false,
-            is_shift_pending: shiftStat === "upcoming" && rec.status === "absent"
-          };
-        }
-
+    return planEmps.map((e) => {
+      const rec = allRecords.find((r) =>
+        (e.employee_matricule && r.matricule && r.matricule === e.employee_matricule) ||
+        r.full_name.toLowerCase().trim() === e.employee_name.toLowerCase().trim()
+      );
+      if (rec) {
         return {
-          employee_id: -1,
-          matricule: e.employee_matricule ?? "",
-          full_name: e.employee_name,
-          department: "—",
-          project: "—",
-          status: shiftStat === "upcoming" ? "pending" : "absent",
-          is_late_api: false,
-          late_label_api: null,
-          computed_late_minutes: 0,
-          overtime_minutes: 0,
-          compensation: {
-            late_min: 0,
-            overtime_min: 0,
-            compensated_min: 0,
-            remaining_min: 0,
-            is_compensated: false,
-            has_overtime: false
-          },
-          deficit_minutes: 0,
-          in_time: null,
-          out_time: null,
-          worked_minutes: 0,
-          expected_minutes: workDayMinutes(effectiveSchedule),
-          email: null,
+          ...rec,
           shift_team: selectedTeam,
-          shift_team_label: SHIFT_TEAMS.find((t) => t.key === selectedTeam)?.label ?? "",
           is_scheduled: true,
           is_replacement: false,
           not_scheduled_rest: false,
-          is_shift_pending: shiftStat === "upcoming",
-          team_id: e.team_id ?? "",
-          replaced_by: null,
-        } satisfies FlatRecord;
-      });
-
-      return base.filter((r) => {
-        if (!matchSearch(r, q)) return false;
-        if (statusFilter === "late") return isLateRecord(r);
-        if (statusFilter === "deficit") return r.deficit_minutes > 0;
-        if (statusFilter === "absent") return r.status === "absent";
-        if (statusFilter !== "all") return r.status === statusFilter;
-        return true;
-      });
-    }
-
-    return allRecords.filter((r) => {
-      if (r.not_scheduled_rest) return false;
-      if (r.is_shift_pending) return false;
-
-      if (statusFilter === "all") {
-        if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
-        if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
-      } else if (statusFilter === "late") {
-        if (!isLateRecord(r)) return false;
-      } else if (statusFilter === "deficit") {
-        if (r.deficit_minutes <= 0) return false;
-      } else if (statusFilter === "absent") {
-        if (r.status !== "absent") return false;
-      } else {
-        if (r.status !== statusFilter) return false;
+          is_shift_pending: shiftStat === "upcoming" && rec.status === "absent",
+        };
       }
-
-      return matchSearch(r, q);
+      return {
+        employee_id: -1,
+        matricule: e.employee_matricule ?? "",
+        full_name: e.employee_name,
+        department: departmentMap.get(e.employee_matricule ?? "") ?? "—",
+        project: projectMap.get(e.employee_matricule ?? "") ?? "—",
+        status: (shiftStat === "upcoming" ? "pending" : "absent") as any,
+        is_late_api: false,
+        late_label_api: null,
+        computed_late_minutes: 0,
+        overtime_minutes: 0,
+        compensation: { late_min: 0, overtime_min: 0, compensated_min: 0, remaining_min: 0, is_compensated: false, has_overtime: false },
+        deficit_minutes: 0,
+        in_time: null,
+        out_time: null,
+        worked_minutes: 0,
+        expected_minutes: workDayMinutes(effectiveSchedule),
+        email: emailMap.get(e.employee_matricule ?? "") ?? null,
+        shift_team: selectedTeam,
+        shift_team_label: SHIFT_TEAMS.find((t) => t.key === selectedTeam)?.label ?? "",
+        is_scheduled: true,
+        is_replacement: false,
+        not_scheduled_rest: false,
+        is_shift_pending: shiftStat === "upcoming",
+        team_id: e.team_id ?? "",
+        replaced_by: null,
+      } satisfies FlatRecord;
     });
-  }, [allRecords, statusFilter, searchQ, selectedTeam, todayPlanning, effectiveSchedule]);
+  }, [selectedTeam, todayPlanning, allRecords, effectiveSchedule, emailMap, departmentMap, projectMap]);
+
+  // ── FILTRE PRINCIPAL ─────────────────────────
+  // "Toutes"   → uniquement les pointages temps réel (allRecords)
+  // Shift tab  → uniquement les employés du planning pour ce shift/date
+  const filtered = useMemo(() => {
+    const q = searchQ.toLowerCase();
+    const base: FlatRecord[] = selectedTeam ? shiftPlanningBase : allRecords;
+
+    return base.filter((r) => {
+      if (!matchSearch(r, q)) return false;
+      if (statusFilter === "late") return isLateRecord(r);
+      if (statusFilter === "deficit") return r.deficit_minutes > 0;
+      if (statusFilter === "absent") return r.status === "absent";
+      if (statusFilter !== "all") return r.status === statusFilter;
+      return true;
+    });
+  }, [shiftPlanningBase, allRecords, statusFilter, searchQ, selectedTeam]);
 
   // ── KPIs des boutons shift ──────────────────────────────────────────
   const planningKpis = useMemo((): Record<ShiftTeamKey, { total: number; present: number; absent: number }> => {
@@ -2821,40 +2781,24 @@ export default function AttendanceShiftsPage() {
   // ── KPI Cards ───────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     if (viewMode === "daily" && shiftData) {
-      if (selectedTeam) {
-        return {
-          total: filtered.length,
-          absent: filtered.filter((r) => r.status === "absent" && !r.is_shift_pending).length,
-          late: filtered.filter(isLateRecord).length,
-          anomaly: filtered.filter((r) => r.status === "anomaly").length,
-        };
-      }
+      // Base : planning du shift ou pointages temps réel selon le contexte
+      const base = selectedTeam ? shiftPlanningBase : allRecords;
       return {
-        total: allRecords.filter((r) => {
-          if (r.not_scheduled_rest || r.is_shift_pending) return false;
-          if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
-          if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
-          return true;
-        }).length,
-        absent: allRecords.filter((r) => {
-          if (r.status !== "absent") return false;
-          if (r.not_scheduled_rest || r.is_shift_pending) return false;
-          if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
-          if (!r.in_time && !r.shift_team) return false;
-          return true;
-        }).length,
-        late: allRecords.filter((r) => r.computed_late_minutes > 0 && !r.is_shift_pending).length,
-        anomaly: allRecords.filter((r) => r.status === "anomaly" && !r.is_shift_pending).length,
+        total: base.length,
+        absent: base.filter((r) => r.status === "absent" && !r.is_shift_pending).length,
+        late: base.filter(isLateRecord).length,
+        anomaly: base.filter((r) => r.status === "anomaly").length,
       };
     }
     const teamRows = selectedTeam ? summaryRecords.filter((r) => r.shift_team === selectedTeam) : summaryRecords;
     return { total: teamRows.length, absent: 0, late: 0, anomaly: 0 };
-  }, [viewMode, shiftData, allRecords, summaryRecords, selectedTeam, filtered]);
+  }, [viewMode, shiftData, allRecords, shiftPlanningBase, summaryRecords, selectedTeam]);
 
-  const noPlanningToday =
-    viewMode === "daily" &&
-    todayPlanning.loaded &&
-    todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length === 0;
+  const noPlanningToday = viewMode === "daily" && todayPlanning.loaded && (
+    selectedTeam
+      ? shiftPlanningBase.length === 0
+      : todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length === 0
+  );
 
   const notScheduledRows = useMemo(() => {
     const q = searchQ.toLowerCase();
@@ -2877,17 +2821,13 @@ export default function AttendanceShiftsPage() {
   const pageData = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const filterCount = (key: StatusFilter) => {
-    const base = selectedTeam ? filtered : allRecords.filter((r) => {
-      if (r.not_scheduled_rest || r.is_shift_pending) return false;
-      if (r.shift_team && getShiftActiveStatus(r.shift_team) === "upcoming") return false;
-      if (!r.in_time && r.status === "absent" && !r.shift_team) return false;
-      return true;
-    });
+    // Même base que filtered, mais sans le filtre de statut (pour les compteurs)
+    const base: FlatRecord[] = selectedTeam ? shiftPlanningBase : allRecords;
     if (key === "all") return base.length;
     if (key === "late") return base.filter(isLateRecord).length;
     if (key === "deficit") return base.filter((r) => r.deficit_minutes > 0).length;
     if (key === "absent") return base.filter((r) => r.status === "absent").length;
-    if (key === "pending") return pendingShiftRows.length;
+    if (key === "pending") return base.filter((r) => r.status === "pending").length;
     return base.filter((r) => r.status === key).length;
   };
 
