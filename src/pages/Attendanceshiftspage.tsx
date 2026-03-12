@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/AppLayout";
+import { useAuth } from "@/contexts/useAuth";
 import {
   Clock, AlertTriangle, UserMinus, FileSpreadsheet, X, ChevronLeft, ChevronRight,
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
@@ -1598,6 +1600,132 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
 }
 
 // ============================================================================
+// COMPOSANT: PlanningLoginModal
+// Affiche un formulaire de connexion pour accéder à la gestion du planning.
+// Seuls les comptes avec is_planning_manager=true sont acceptés.
+// ============================================================================
+
+function PlanningLoginModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
+  const { setUser } = useAuth();
+
+  useEffect(() => {
+    if (open) { setUsername(""); setPassword(""); setError(""); }
+  }, [open]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const baseURL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8030";
+      const loginRes = await fetch(`${baseURL}/api/auth/login/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!loginRes.ok) {
+        const data = await loginRes.json().catch(() => ({}));
+        setError(data?.detail || "Identifiants incorrects.");
+        return;
+      }
+      const { access, refresh } = await loginRes.json();
+      const profileRes = await fetch(`${baseURL}/api/auth/profile/`, {
+        headers: { Authorization: `Bearer ${access}` },
+      });
+      if (!profileRes.ok) {
+        setError("Impossible de récupérer le profil utilisateur.");
+        return;
+      }
+      const profile = await profileRes.json();
+      if (!profile.is_planning_manager) {
+        setError("Accès refusé. Ce compte n'a pas le rôle gestionnaire de planning.");
+        return;
+      }
+      localStorage.setItem("access_token", access);
+      localStorage.setItem("refresh_token", refresh);
+      setUser(profile);
+      navigate("/planning");
+    } catch {
+      setError("Erreur de connexion. Vérifiez votre réseau.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <motion.div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm z-10 overflow-hidden"
+            initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 20 }} transition={{ type: "spring", stiffness: 300, damping: 28 }}>
+            {/* Header */}
+            <div className="bg-camublue-900 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white">
+                <CalendarRange className="h-5 w-5" />
+                <span className="font-bold text-base">Gestion du Planning</span>
+              </div>
+              <button onClick={onClose} className="text-white/70 hover:text-white transition">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="px-6 py-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Lock className="h-4 w-4 text-slate-400" />
+                <p className="text-sm text-slate-500">
+                  Connectez-vous avec votre compte <span className="font-semibold text-slate-700">gestionnaire de planning</span> pour accéder à la gestion des shifts.
+                </p>
+              </div>
+              <form onSubmit={handleSubmit} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Nom d'utilisateur"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  required
+                  autoFocus
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900 bg-slate-50"
+                />
+                <input
+                  type="password"
+                  placeholder="Mot de passe"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900 bg-slate-50"
+                />
+                {error && (
+                  <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-camublue-900 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-camublue-900/90 transition disabled:opacity-60 flex items-center justify-center gap-2 mt-1"
+                >
+                  {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Connexion...</> : "Accéder au planning"}
+                </button>
+              </form>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ============================================================================
 // COMPOSANT: AlertModal
 // ============================================================================
 
@@ -1887,6 +2015,7 @@ export default function AttendanceShiftsPage() {
   const [sendingAlert, setSendingAlert] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [planningOpen, setPlanningOpen] = useState(false);
+  const [planningLoginOpen, setPlanningLoginOpen] = useState(false);
   const [showNotScheduled, setShowNotScheduled] = useState(false);
   const [week, setWeek] = useState(isoWeekNow());
   const [month, setMonth] = useState(yyyyMmToday());
@@ -2454,7 +2583,7 @@ export default function AttendanceShiftsPage() {
               className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 font-medium ${isActiveLocked ? "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100" : "bg-white border-slate-300 text-camublue-900 hover:bg-slate-50"}`}>
               <Settings className="h-4 w-4" /><span className="hidden sm:inline">Heures de travail</span>{isActiveLocked && <Lock className="h-3 w-3" />}
             </button>
-            <button onClick={() => setPlanningOpen(true)}
+            <button onClick={() => setPlanningLoginOpen(true)}
               className={`border px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 ? "bg-green-50 border-green-400 text-green-700 hover:bg-green-100" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
               <CalendarRange className="h-4 w-4" /><span className="hidden sm:inline">Planning</span>
               {todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 && (
@@ -2571,9 +2700,9 @@ export default function AttendanceShiftsPage() {
                               <div className="flex flex-col items-center gap-3">
                                 <CalendarRange className="h-12 w-12 text-slate-200" />
                                 <p className="font-medium text-slate-500">Pas de planning disponible pour aujourd'hui</p>
-                                <button onClick={() => setPlanningOpen(true)}
+                                <button onClick={() => setPlanningLoginOpen(true)}
                                   className="mt-1 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
-                                  <Upload className="h-4 w-4" /> Importer un planning
+                                  <CalendarRange className="h-4 w-4" /> Gérer le planning
                                 </button>
                               </div>
                             ) : statusFilter === "late" ? "Aucun retard." : statusFilter === "deficit" ? "Aucune heure manquante." : "Aucun enregistrement trouvé."}
@@ -2722,14 +2851,9 @@ export default function AttendanceShiftsPage() {
           open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
           employee={selectedEmployee} onConfirm={handleSendAlert} sending={sendingAlert} />
 
-        <PlanningUploadModal
-          open={planningOpen} onClose={() => setPlanningOpen(false)}
-          onSuccess={(count) => {
-            getShiftPlanningForDate(todayISO()).then((res) => {
-              setTodayPlanning({ ...res.assignments, loaded: true });
-            }).catch(console.error);
-          }}
-          employeeNameToMatricule={employeeNameToMatricule}
+        <PlanningLoginModal
+          open={planningLoginOpen}
+          onClose={() => setPlanningLoginOpen(false)}
         />
       </motion.div>
     </AppLayout>
