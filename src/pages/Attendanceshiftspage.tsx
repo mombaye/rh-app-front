@@ -32,7 +32,7 @@ type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" 
 type MotifType = "absent" | "not_pointing";
 type AssignmentMap = Record<string, ShiftTeamKey | null>;
 type ViewMode = "daily" | "weekly" | "monthly";
-type CycleType = "M" | "S" | "N" | "R"; // Matin, Soir, Nuit, Repos
+type CycleType = "M" | "S" | "N" | "R";
 
 interface CompensationResult {
   late_min: number; overtime_min: number; compensated_min: number;
@@ -48,13 +48,12 @@ interface FlatRecord {
   in_time: string | null; out_time: string | null;
   worked_minutes: number; expected_minutes: number; email: string | null;
   shift_team: ShiftTeamKey | null; shift_team_label: string;
-  // Planning
-  is_scheduled: boolean;         // true if employee is in today's planning
-  is_replacement: boolean;       // true if present but NOT in planning (replacement)
-  not_scheduled_rest: boolean;   // true if not scheduled (rest day)
-  is_shift_pending: boolean;     // true if scheduled but shift hasn't started yet
-  team_id: string;               // identifiant d'équipe (ex: "equipe-1")
-  replaced_by: string | null;    // nom du remplaçant
+  is_scheduled: boolean;
+  is_replacement: boolean;
+  not_scheduled_rest: boolean;
+  is_shift_pending: boolean;
+  team_id: string;
+  replaced_by: string | null;
 }
 
 interface SummaryRecord {
@@ -334,44 +333,12 @@ function getTeamPalette(teamId: string) {
 function getCycleForDate(baseDate: string, cycleStartDate: string, date: string): CycleType {
   const start = new Date(cycleStartDate + "T00:00:00");
   const target = new Date(date + "T00:00:00");
-
   const daysSinceStart = Math.floor((target.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
   const cyclePosition = ((daysSinceStart % 8) + 8) % 8;
-
   if (cyclePosition < 2) return "M";
   if (cyclePosition < 4) return "S";
   if (cyclePosition < 6) return "N";
   return "R";
-}
-
-function cycleTypeToShift(type: CycleType): ShiftTeamKey | null {
-  switch (type) {
-    case "M": return "jour";
-    case "S": return "soir1";
-    case "N": return "soir2";
-    default: return null;
-  }
-}
-
-function detectTeamCycles(planningEntries: PlanningEntry[]): Map<string, { startDate: string; employees: string[] }> {
-  const teamMap = new Map<string, { startDate: string; employees: Set<string> }>();
-
-  for (const entry of planningEntries) {
-    if (!entry.team_id || entry.team_id === "_no_team") continue;
-    if (!teamMap.has(entry.team_id)) {
-      teamMap.set(entry.team_id, { startDate: entry.date, employees: new Set() });
-    }
-    teamMap.get(entry.team_id)!.employees.add(entry.employee_name);
-  }
-
-  const result = new Map<string, { startDate: string; employees: string[] }>();
-  for (const [teamId, data] of teamMap) {
-    result.set(teamId, {
-      startDate: data.startDate,
-      employees: Array.from(data.employees)
-    });
-  }
-  return result;
 }
 
 function exportXLSX(filename: string, rows: Record<string, any>[]) {
@@ -427,14 +394,13 @@ function getCellBgHex(ws: XLSX.WorkSheet, r: number, c: number): string | null {
     if (co.rgb && typeof co.rgb === "string" && co.rgb.length >= 6) {
       const rgb = co.rgb.toUpperCase().slice(-6);
       if (rgb === "FFFFFF" || rgb === "000000" || rgb === "000001") return null;
-      return rgb;
+      return "#" + rgb;
     }
     return null;
   };
   return tryColor(cell.s.fgColor) ?? tryColor(cell.s.bgColor) ?? null;
 }
 
-// Noms de mois français → numéro (1-12)
 const FRENCH_MONTHS_MAP: Record<string, number> = {
   jan: 1, janv: 1, janvier: 1,
   fev: 2, févr: 2, fevr: 2, février: 2, fevrier: 2,
@@ -458,7 +424,6 @@ function extractMonthYearFromSheetName(name: string): { month: number; year: num
   }
   const ym = name.match(/\b(20\d{2})\b/);
   if (ym) year = parseInt(ym[1]);
-  // Format "MM/YYYY" ou "MM-YYYY"
   if (!month) {
     const mmy = name.match(/\b(\d{1,2})[\/\-](20\d{2})\b/);
     if (mmy) { month = parseInt(mmy[1]); year = parseInt(mmy[2]); }
@@ -468,27 +433,26 @@ function extractMonthYearFromSheetName(name: string): { month: number; year: num
 }
 
 function parseOneSheet(ws: XLSX.WorkSheet, sheetName: string = ""): PlanningEntry[] {
+  // L'Excel est structuré en BLOCS de 7 jours.
+  // Chaque bloc commence par une ligne "SHIFT | date1 | ... | date7",
+  // suivie de 3 sections (08H-16H, 16H-22H, 22H-08H) avec N lignes d'employés.
+  // On parcourt toutes les lignes et on détecte dynamiquement chaque bloc.
+
   const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as unknown[][];
   const entries: PlanningEntry[] = [];
-  const headerRow = (rawRows[0] ?? []) as unknown[];
-
-  // Contexte mois/année déduit du nom de l'onglet
   const { month: ctxMonth, year: ctxYear } = extractMonthYearFromSheetName(sheetName);
 
-  // Résolution d'une cellule d'en-tête en date YYYY-MM-DD
   const resolveDate = (cell: unknown): string => {
     const basic = cellToDateStr(cell);
     if (basic) return basic;
     if (typeof cell === "string") {
       const s = cell.trim();
-      // Format jj/mm ou jj-mm (sans année)
       const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
       if (m2) {
         const d = parseInt(m2[1]), mo = parseInt(m2[2]);
         if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12)
           return `${ctxYear}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       }
-      // Jour seul sous forme de texte "11", " 11 "
       const dayStr = s.match(/^\s*(\d{1,2})\s*$/);
       if (dayStr && ctxMonth > 0) {
         const d = parseInt(dayStr[1]);
@@ -496,53 +460,59 @@ function parseOneSheet(ws: XLSX.WorkSheet, sheetName: string = ""): PlanningEntr
           return `${ctxYear}-${String(ctxMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       }
     }
-    // Nombre entre 1 et 31 → considéré comme jour du mois (pas un serial Excel)
     if (typeof cell === "number" && cell >= 1 && cell < 100 && ctxMonth > 0)
       return `${ctxYear}-${String(ctxMonth).padStart(2, "0")}-${String(cell).padStart(2, "0")}`;
     return "";
   };
 
-  const dates: string[] = [];
-  for (let c = 1; c < headerRow.length; c++) {
-    dates.push(resolveDate(headerRow[c]));
-  }
-
+  let blockDates: string[] = [];
   let currentShift: ShiftTeamKey | null = null;
-  // row_slot counter per (shift_type, team_id) — préserve l'ordre des lignes Excel
-  const rowSlotCounters: Record<string, number> = {};
+  let shiftRowCounter = 0;
 
-  for (let row = 1; row < rawRows.length; row++) {
+  for (let row = 0; row < rawRows.length; row++) {
     const rowData = rawRows[row] as unknown[];
-    const shiftCell = String(rowData[0] ?? "").trim();
+    const col0 = String(rowData[0] ?? "").trim();
 
-    if (shiftCell) {
-      const detected = detectShiftLabel(shiftCell);
-      if (detected) currentShift = detected;
+    // ── Ligne d'en-tête de bloc : col A == "SHIFT" ──
+    if (col0.toUpperCase() === "SHIFT") {
+      blockDates = [];
+      for (let c = 1; c < rowData.length; c++) {
+        blockDates.push(resolveDate(rowData[c]));
+      }
+      currentShift = null;
+      shiftRowCounter = 0;
+      continue;
     }
-    if (!currentShift) continue;
 
-    let rowColor: string | null = null;
-    for (let c = 1; c < Math.min(rowData.length, 5); c++) {
-      const col = getCellBgHex(ws, row, c);
-      if (col) { rowColor = col; break; }
-    }
+    if (blockDates.length === 0) continue;
 
-    // Stocker la couleur hex directement comme team_id (ex: "#FFFF00")
-    const teamId = rowColor ?? "";
-
-    // Calculer le row_slot : compteur de lignes dans ce groupe (shift + couleur)
-    const slotKey = `${currentShift}|${teamId}`;
-    if (!(slotKey in rowSlotCounters)) rowSlotCounters[slotKey] = 0;
-    const rowSlot = rowSlotCounters[slotKey]++;
-
-    for (let c = 1; c < rowData.length; c++) {
-      const name = String(rowData[c] ?? "").trim();
-      const date = dates[c - 1];
-      if (name && date) {
-        entries.push({ date, shift_type: currentShift, employee_name: name, team_id: teamId, row_slot: rowSlot });
+    // ── Ligne de label de shift (col A contient "08H-16H", "16H-22H", "22H-08H") ──
+    if (col0) {
+      const detected = detectShiftLabel(col0);
+      if (detected) {
+        currentShift = detected;
+        shiftRowCounter = 0;
+        // Traiter aussi les cellules de données sur cette même ligne
       }
     }
+
+    if (!currentShift) continue;
+
+    // ── Ligne de données employé : enregistrer chaque cellule ──
+    const rowSlot = shiftRowCounter;
+    shiftRowCounter++;
+
+    for (let c = 1; c <= blockDates.length; c++) {
+      const name = String(rowData[c] ?? "").trim();
+      const date = blockDates[c - 1];
+      if (!name || !date) continue;
+      // Couleur de la cellule individuelle (peut varier dans une même ligne)
+      const cellColor = getCellBgHex(ws, row, c);
+      const teamId = cellColor ?? "";
+      entries.push({ date, shift_type: currentShift, employee_name: name, team_id: teamId, row_slot: rowSlot });
+    }
   }
+
   return entries;
 }
 
@@ -645,6 +615,192 @@ function RestDayBadge() {
 }
 
 // ============================================================================
+// COMPOSANT: ExcelPlanningTable
+// Reproduit EXACTEMENT le design du fichier Excel Planning_NOC_2026.xlsx :
+//   - En-tête vert foncé avec dates DD/MM/YYYY
+//   - Colonne SHIFT verticale avec rowspan
+//   - Fond jaune #FFFF00 pour équipe jaune, blanc pour équipe blanche
+//   - Police Calibri 11px, bordures grises
+//   - Blocs de 7 jours séparés
+// ============================================================================
+
+function ExcelPlanningTable({ entries }: { entries: PlanningEntry[] }) {
+  const EXCEL_GREEN = "#1a5c2a";
+  const EXCEL_BORDER = "#bdbdbd";
+
+  // Construire les blocs de semaine à partir des entrées.
+  // On regroupe par blocs de 7 dates consécutives (ordre trié),
+  // puis pour chaque bloc, on reconstitue les 3 sections de shifts
+  // avec les row_slot pour préserver l'ordre exact de l'Excel.
+  const weekBlocks = useMemo(() => {
+    // Collecter toutes les dates distinctes triées
+    const dateSet = new Set(entries.map(e => e.date));
+    const allDates = Array.from(dateSet).sort();
+    const chunks: string[][] = [];
+    for (let i = 0; i < allDates.length; i += 7) chunks.push(allDates.slice(i, i + 7));
+
+    const SHIFT_ORDER: ShiftTeamKey[] = ["jour", "soir1", "soir2"];
+    const SHIFT_LABELS: Record<string, string> = {
+      jour: "08H-16H",
+      soir1: "16H-22H",
+      soir2: "22H-08H",
+    };
+
+    return chunks.map(dates => ({
+      dates,
+      shifts: SHIFT_ORDER.map(shiftKey => {
+        // Toutes les entrées de ce shift pour ces dates
+        const shiftEntries = entries.filter(e => e.shift_type === shiftKey && dates.includes(e.date));
+
+        // Grouper par row_slot pour reconstruire les lignes
+        const slotMap = new Map<number, Map<string, { name: string; bg: string | null }>>();
+        for (const e of shiftEntries) {
+          const slot = e.row_slot ?? 0;
+          if (!slotMap.has(slot)) slotMap.set(slot, new Map());
+          const bg = (e.team_id && e.team_id.startsWith("#")) ? e.team_id : null;
+          slotMap.get(slot)!.set(e.date, { name: e.employee_name, bg });
+        }
+
+        const rows = Array.from(slotMap.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([, cellMap]) => {
+            const cells: Record<string, { name: string; bg: string | null }> = {};
+            cellMap.forEach((v, k) => { cells[k] = v; });
+            return cells;
+          });
+
+        return { shiftKey, label: SHIFT_LABELS[shiftKey] ?? shiftKey, rows };
+      }).filter(s => s.rows.length > 0),
+    }));
+  }, [entries]);
+
+  if (weekBlocks.length === 0) {
+    return (
+      <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
+        Aucune donnée à afficher
+      </div>
+    );
+  }
+
+  // ── Styles inline fidèles à Excel ──
+  const base: React.CSSProperties = {
+    fontFamily: "Calibri, 'Segoe UI', Arial, sans-serif",
+    fontSize: "11px",
+    border: `1px solid ${EXCEL_BORDER}`,
+    padding: "3px 8px",
+    verticalAlign: "middle",
+    whiteSpace: "nowrap",
+    height: "22px",
+  };
+
+  const hdrStyle: React.CSSProperties = {
+    ...base,
+    backgroundColor: EXCEL_GREEN,
+    color: "#ffffff",
+    fontWeight: 700,
+    textAlign: "center",
+    minWidth: "130px",
+    padding: "5px 8px",
+  };
+
+  const cornerStyle: React.CSSProperties = {
+    ...base,
+    backgroundColor: EXCEL_GREEN,
+    color: "#ffffff",
+    fontWeight: 700,
+    textAlign: "center",
+    width: "36px",
+    minWidth: "36px",
+    padding: "5px 4px",
+  };
+
+  const shiftCellStyle: React.CSSProperties = {
+    ...base,
+    backgroundColor: EXCEL_GREEN,
+    color: "#ffffff",
+    fontWeight: 700,
+    textAlign: "center",
+    verticalAlign: "middle",
+    width: "36px",
+    minWidth: "36px",
+    padding: "2px",
+    writingMode: "vertical-lr",
+    transform: "rotate(180deg)",
+    letterSpacing: "0.05em",
+    fontSize: "10px",
+  };
+
+  const dataStyle = (bg: string | null): React.CSSProperties => ({
+    ...base,
+    backgroundColor: bg ?? "#ffffff",
+    color: "#000000",
+    minWidth: "130px",
+  });
+
+  const emptyStyle: React.CSSProperties = {
+    ...base,
+    backgroundColor: "#ffffff",
+    minWidth: "130px",
+  };
+
+  const fmtDate = (dateStr: string) => {
+    const d = new Date(dateStr + "T00:00:00");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  return (
+    <div style={{ padding: "16px 20px", overflowX: "auto" }}>
+      <table style={{ borderCollapse: "collapse", tableLayout: "auto" }}>
+        <tbody>
+          {weekBlocks.map((block, bi) => (
+            <React.Fragment key={bi}>
+              {/* ── En-tête de bloc : SHIFT | DD/MM/YYYY × 7 ── */}
+              <tr>
+                <td style={cornerStyle}>SHIFT</td>
+                {block.dates.map(date => (
+                  <td key={date} style={hdrStyle}>{fmtDate(date)}</td>
+                ))}
+              </tr>
+
+              {/* ── Lignes par shift ── */}
+              {block.shifts.map(({ shiftKey, label, rows }) =>
+                rows.map((cells, rowIdx) => (
+                  <tr key={`${shiftKey}-${rowIdx}`}>
+                    {/* Cellule shift verticale avec rowSpan sur toute la section */}
+                    {rowIdx === 0 && (
+                      <td rowSpan={rows.length} style={shiftCellStyle}>
+                        {label}
+                      </td>
+                    )}
+                    {/* Cellules employés */}
+                    {block.dates.map(date => {
+                      const cell = cells[date];
+                      if (!cell) return <td key={date} style={emptyStyle} />;
+                      return <td key={date} style={dataStyle(cell.bg)}>{cell.name}</td>;
+                    })}
+                  </tr>
+                ))
+              )}
+
+              {/* Séparateur visuel entre blocs */}
+              <tr>
+                <td
+                  colSpan={block.dates.length + 1}
+                  style={{ height: "8px", border: "none", backgroundColor: "#f0f0f0" }}
+                />
+              </tr>
+            </React.Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ============================================================================
 // COMPOSANT: TodayPlanningPanel
 // ============================================================================
 
@@ -722,7 +878,6 @@ function TodayPlanningPanel({
                 const effectiveStatus = rec?.status ?? (shiftStatus === "upcoming" ? "pending" : "absent");
                 const status = effectiveStatus;
                 const isLate = (rec?.computed_late_minutes ?? 0) > 0;
-                const pal = (emp.team_id && emp.team_id !== "") ? getTeamPalette(emp.team_id) : null;
 
                 const statusDot =
                   status === "ok" ? "bg-emerald-500" :
@@ -739,7 +894,6 @@ function TodayPlanningPanel({
                           status === "incomplete" ? "bg-amber-50/30" :
                             "bg-violet-50/30"
                       }`}>
-                    {pal && <span className={`h-2 w-2 rounded-full shrink-0 ${pal.dot}`} />}
                     <div className="flex-1 min-w-0">
                       {emp.employee_matricule && (
                         <div className="font-mono text-[8px] text-slate-400 leading-none">{emp.employee_matricule}</div>
@@ -864,16 +1018,8 @@ function SummaryTable({ rows, mode, isLoading }: {
                   <motion.tr key={row.employee_id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.015 }} className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{row.matricule}</td>
                     <td className="px-4 py-2.5 font-medium text-slate-800">{row.full_name}</td>
-                    <td className="px-4 py-2.5 text-xs">
-                      <span className="font-semibold text-camublue-900 text-xs leading-tight tracking-wide">
-                        {row.project !== "—" ? row.project : "—"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs">
-                      <span className="font-semibold text-camublue-900 text-xs leading-tight tracking-wide">
-                        {row.department !== "—" ? row.department : "—"}
-                      </span>
-                    </td>
+                    <td className="px-4 py-2.5 text-xs"><span className="font-semibold text-camublue-900 text-xs">{row.project !== "—" ? row.project : "—"}</span></td>
+                    <td className="px-4 py-2.5 text-xs"><span className="font-semibold text-camublue-900 text-xs">{row.department !== "—" ? row.department : "—"}</span></td>
                     <td className="px-4 py-2.5"><ShiftTeamPill teamKey={row.shift_team} /></td>
                     <td className="px-4 py-2.5"><span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-xs font-bold text-slate-600">{row.nb_jours}</span></td>
                     <td className="px-4 py-2.5"><span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold tabular-nums ${cls}`}>{formatMinutes(row.worked_minutes) || "0h"}</span></td>
@@ -1079,6 +1225,9 @@ function WorkScheduleModal({
                   </div>
                 </div>
                 <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                  <button onClick={() => openForm()} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">
+                    <Plus className="h-4 w-4" />Nouveau
+                  </button>
                   <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Fermer</button>
                   <button onClick={() => setView("period")} disabled={presets.length === 0}
                     className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
@@ -1273,7 +1422,7 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
         const ds = cur.toISOString().split("T")[0];
         const dd = res.days.find((d: DayDetail) => d.date === ds);
         const rawStatus = dd?.status ?? "absent";
-        const status = rawStatus === "not_working" ? "not_working" : (rawStatus as "ok" | "absent" | "incomplete" | "anomaly");
+        const status: Pointage["status"] = rawStatus === "not_working" ? "not_working" : (rawStatus as "ok" | "absent" | "incomplete" | "anomaly");
         return { day, date: ds, in_time: dd?.in_time ?? null, out_time: dd?.out_time ?? null, status, is_planned: (dd as any)?.is_planned ?? true };
       }));
     } catch (e) { console.error(e); } finally { setLoading(false); }
@@ -1332,49 +1481,14 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
 }
 
 // ============================================================================
-// HELPERS COULEUR — pour reproduire exactement les couleurs Excel
-// ============================================================================
-
-/** Calcule la luminance relative d'une couleur hex (#RRGGBB ou #RGB) */
-function hexLuminance(hex: string): number {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.length === 3 ? h[0] + h[0] : h.slice(0, 2), 16) / 255;
-  const g = parseInt(h.length === 3 ? h[1] + h[1] : h.slice(2, 4), 16) / 255;
-  const b = parseInt(h.length === 3 ? h[2] + h[2] : h.slice(4, 6), 16) / 255;
-  const toLinear = (c: number) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
-}
-
-/**
- * Retourne les styles inline pour une ligne de la grille planning.
- * Si team_id est une couleur hex ("#RRGGBB"), l'utilise directement.
- * Sinon, utilise la TEAM_PALETTE (ancien format equipe-N).
- */
-function planningRowStyle(teamId: string): { backgroundColor: string; color: string } {
-  if (teamId.startsWith("#") && teamId.length >= 4) {
-    const lum = hexLuminance(teamId);
-    return {
-      backgroundColor: teamId,
-      color: lum > 0.4 ? "#1a1a1a" : "#ffffff",
-    };
-  }
-  // Fallback: ancien format equipe-N → TEAM_PALETTE
-  const idx = parseInt(teamId.replace(/\D/g, "") || "0", 10) - 1;
-  const pal = TEAM_PALETTE[Math.max(0, idx) % TEAM_PALETTE.length];
-  // On retourne une couleur approximative depuis la classe Tailwind
-  const BG_FALLBACKS = ["#fef08a","#bbf7d0","#bae6fd","#fbcfe8","#fed7aa","#e9d5ff","#99f6e4","#fecaca","#c7d2fe","#d9f99d","#fde68a","#a5f3fc"];
-  return { backgroundColor: BG_FALLBACKS[Math.max(0, idx) % BG_FALLBACKS.length], color: "#1a1a1a" };
-}
-
-// ============================================================================
-// COMPOSANT: PlanningUploadModal (modifié pour ajouter colonne matricule)
+// COMPOSANT: PlanningUploadModal
 // ============================================================================
 
 interface PlanningUploadModalProps {
   open: boolean;
   onClose: () => void;
   onSuccess: (count: number) => void;
-  employeeNameToMatricule: Map<string, string>; // nom normalisé -> matricule
+  employeeNameToMatricule: Map<string, string>;
 }
 
 function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule }: PlanningUploadModalProps) {
@@ -1382,9 +1496,6 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
   const [viewMonth, setViewMonth] = useState(yyyyMmToday());
   const [entries, setEntries] = useState<PlanningEntry[]>([]);
   const [loadingVue, setLoadingVue] = useState(false);
-  const [addingCell, setAddingCell] = useState<{ date: string; shift: ShiftTeamKey } | null>(null);
-  const [newName, setNewName] = useState("");
-  const [saving, setSaving] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PlanningEntry[]>([]);
   const [parsedSheets, setParsedSheets] = useState<ParsedSheet[]>([]);
@@ -1406,44 +1517,11 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
   }, [open, tab, viewMonth, loadMonthPlanning]);
 
   useEffect(() => {
-    if (open) { setFile(null); setPreview([]); setParsedSheets([]); setError(""); setUploaded(false); setAddingCell(null); setNewName(""); }
+    if (open) { setFile(null); setPreview([]); setParsedSheets([]); setError(""); setUploaded(false); }
   }, [open]);
 
-  // Grille Excel : shift_type → équipes (dans l'ordre d'apparition) → lignes (row_slot) → date → employé
-  const excelGrid = useMemo(() => {
-    const SHIFT_ORDER = ["jour", "soir1", "soir2"];
-    const shiftTeamOrder: Record<string, string[]> = {};
-    const grid: Record<string, Record<string, Record<number, Record<string, string>>>> = {};
-
-    for (const e of entries) {
-      const shift = e.shift_type;
-      const team  = e.team_id ?? "";
-      const slot  = e.row_slot ?? 0;
-      const date  = e.date;
-      if (!grid[shift]) { grid[shift] = {}; shiftTeamOrder[shift] = []; }
-      if (!grid[shift][team]) { grid[shift][team] = {}; shiftTeamOrder[shift].push(team); }
-      if (!grid[shift][team][slot]) grid[shift][team][slot] = {};
-      // Ne pas écraser : premier employé trouvé gagne (ordre du backend)
-      if (!grid[shift][team][slot][date]) grid[shift][team][slot][date] = e.employee_name;
-    }
-
-    return SHIFT_ORDER.filter(s => s in grid).map(shift => ({
-      shift_type: shift,
-      teams: (shiftTeamOrder[shift] ?? []).map(team_id => ({
-        team_id,
-        rows: Object.entries(grid[shift][team_id])
-          .sort(([a], [b]) => parseInt(a) - parseInt(b))
-          .map(([slot, cells]) => ({ row_slot: parseInt(slot), cells })),
-      })),
-    }));
-  }, [entries]);
-
-  const activeDays = useMemo(() => {
-    const daysSet = new Set(entries.map((e) => e.date));
-    return daysInMonth(viewMonth).filter((d) => daysSet.has(d));
-  }, [entries, viewMonth]);
-
   const hasAnyData = entries.length > 0;
+  const [y, m] = viewMonth.split("-").map(Number);
 
   const handleFile = (f: File | null) => {
     if (!f) { setFile(null); setPreview([]); setParsedSheets([]); return; }
@@ -1451,15 +1529,14 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const { entries, sheets } = parsePlanningExcel(ev.target!.result as ArrayBuffer);
-        // Enrichir avec les matricules
-        const enrichedEntries = entries.map(entry => ({
+        const { entries: parsed, sheets } = parsePlanningExcel(ev.target!.result as ArrayBuffer);
+        const enriched = parsed.map(entry => ({
           ...entry,
           employee_matricule: employeeNameToMatricule.get(
             entry.employee_name.trim().toLowerCase().replace(/\s+/g, ' ')
           ) ?? null
         }));
-        setPreview(enrichedEntries);
+        setPreview(enriched);
         setParsedSheets(sheets);
       } catch { setError("Erreur lors de la lecture du fichier Excel."); setPreview([]); setParsedSheets([]); }
     };
@@ -1482,34 +1559,6 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
     } catch { setError("Erreur lors de l'envoi du planning. Réessayez."); } finally { setLoading(false); }
   };
 
-  const handleRemove = async (entry: PlanningEntry) => {
-    setEntries((prev) => prev.filter(
-      (e) => !(e.date === entry.date && e.shift_type === entry.shift_type && e.employee_name === entry.employee_name)
-    ));
-    try { await deleteSinglePlanningEntry(entry.date, entry.shift_type, entry.employee_name); }
-    catch { loadMonthPlanning(viewMonth); }
-  };
-
-  const handleAdd = async () => {
-    if (!addingCell || !newName.trim() || saving) return;
-    setSaving(true);
-    const name = newName.trim();
-    const matricule = employeeNameToMatricule.get(name.trim().toLowerCase().replace(/\s+/g, ' ')) ?? null;
-    const optimistic: PlanningEntry = {
-      date: addingCell.date,
-      shift_type: addingCell.shift,
-      employee_name: name,
-      employee_matricule: matricule
-    };
-    setEntries((prev) => [...prev, optimistic]);
-    setAddingCell(null); setNewName("");
-    try { await addSinglePlanningEntry({ date: addingCell.date, shift_type: addingCell.shift, employee_name: name, employee_matricule: matricule }); }
-    catch { loadMonthPlanning(viewMonth); } finally { setSaving(false); }
-  };
-
-  const initials = (name: string) =>
-    name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? "").slice(0, 2).join("");
-
   const stats = useMemo(() => {
     const c: Record<string, number> = { jour: 0, soir1: 0, soir2: 0 };
     preview.forEach((e) => { if (e.shift_type in c) c[e.shift_type]++; });
@@ -1517,8 +1566,6 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
     const teams = new Set(preview.map((e) => e.team_id).filter(Boolean));
     return { jour: c.jour, soir1: c.soir1, soir2: c.soir2, dates: dates.size, total: preview.length, teams: teams.size };
   }, [preview]);
-
-  const [y, m] = viewMonth.split("-").map(Number);
 
   return (
     <AnimatePresence>
@@ -1533,6 +1580,7 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
             exit={{ y: 60, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
 
+            {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-green-600 text-white"><CalendarRange className="h-4 w-4" /></div>
@@ -1543,6 +1591,7 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
               </button>
             </div>
 
+            {/* Tabs */}
             <div className="flex gap-1 px-5 pt-3 shrink-0">
               {([
                 { id: "view", icon: Table2, label: "Vue du planning" },
@@ -1555,8 +1604,10 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
               ))}
             </div>
 
+            {/* ── TAB VUE PLANNING — Design Excel identique ── */}
             {tab === "view" && (
               <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Navigation mois */}
                 <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
                   <button onClick={() => setViewMonth(prevMonth(viewMonth))}
                     className="p-2 rounded-xl hover:bg-slate-100 transition text-slate-500 hover:text-slate-700">
@@ -1564,28 +1615,10 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                   </button>
                   <div className="flex flex-col items-center gap-0.5">
                     <span className="font-bold text-slate-800 text-base">{MONTHS_FR[m - 1]} {y}</span>
-                    {hasAnyData ? (
-                      <div className="flex items-center gap-2 flex-wrap justify-center">
-                        {excelGrid.length > 0 && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            {new Set(excelGrid.flatMap(g => g.teams.map(t => t.team_id))).size} équipes
-                          </span>
-                        )}
-                        {excelGrid.map((g) => {
-                          const s = SHIFT_KEYS.find(k => k.key === g.shift_type);
-                          if (!s) return null;
-                          const count = g.teams.reduce((sum, t) => sum + t.rows.reduce((rs, r) => rs + Object.keys(r.cells).length, 0), 0);
-                          if (!count) return null;
-                          return (
-                            <span key={g.shift_type} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.bg} ${s.text} border ${s.border}`}>
-                              {s.label} · {count}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-400">Aucun planning ce mois</span>
-                    )}
+                    {hasAnyData
+                      ? <span className="text-xs text-slate-400">{new Set(entries.map(e => e.date)).size} jours · {entries.length} assignations</span>
+                      : <span className="text-xs text-slate-400">Aucun planning ce mois</span>
+                    }
                   </div>
                   <button onClick={() => setViewMonth(nextMonth(viewMonth))}
                     className="p-2 rounded-xl hover:bg-slate-100 transition text-slate-500 hover:text-slate-700">
@@ -1593,13 +1626,14 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-auto">
+                {/* Corps : tableau Excel */}
+                <div className="flex-1 overflow-auto bg-white">
                   {loadingVue ? (
-                    <div className="flex items-center justify-center py-16 text-slate-400">
+                    <div className="flex items-center justify-center py-20 text-slate-400">
                       <Loader2 className="h-6 w-6 animate-spin mr-2" />Chargement…
                     </div>
                   ) : !hasAnyData ? (
-                    <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
                       <CalendarRange className="h-14 w-14 text-slate-200" />
                       <p className="text-sm font-medium">Aucun planning importé pour ce mois</p>
                       <button onClick={() => setTab("import")}
@@ -1608,136 +1642,14 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                       </button>
                     </div>
                   ) : (
-                    /* ── Vue Planning : design EXACT image (vert, 7j/semaine, sans bannières) ── */
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ borderCollapse: "collapse", fontSize: "11px", tableLayout: "auto" }}>
-                        <tbody>
-                          {(() => {
-                            const tableRows: React.ReactNode[] = [];
-                            const SHIFT_LABELS: Record<string, string> = { jour: "08H-16H", soir1: "16H-22H", soir2: "22H-08H" };
-                            const HEADER_BG = "#2e7d32";
-                            const HEADER_TEXT = "#ffffff";
-                            const SHIFT_COL: React.CSSProperties = {
-                              position: "sticky", left: 0, zIndex: 10,
-                              backgroundColor: HEADER_BG,
-                              color: HEADER_TEXT,
-                              fontWeight: "bold",
-                              fontSize: "11px",
-                              padding: "4px 6px",
-                              borderRight: "2px solid rgba(255,255,255,0.25)",
-                              borderBottom: "1px solid rgba(255,255,255,0.15)",
-                              textAlign: "center",
-                              verticalAlign: "middle",
-                              whiteSpace: "nowrap",
-                              writingMode: "vertical-lr",
-                              transform: "rotate(180deg)",
-                              letterSpacing: "0.05em",
-                              minWidth: "52px",
-                              maxWidth: "52px",
-                              boxShadow: "2px 0 4px rgba(0,0,0,0.15)",
-                            };
-
-                            // Découpage en blocs de 7 jours
-                            const weekChunks: string[][] = [];
-                            for (let i = 0; i < activeDays.length; i += 7) {
-                              weekChunks.push(activeDays.slice(i, i + 7));
-                            }
-
-                            for (const weekDays of weekChunks) {
-                              // ── En-tête de semaine : vert foncé, DD/MM/YYYY ──
-                              tableRows.push(
-                                <tr key={`hdr-${weekDays[0]}`}>
-                                  <th style={{
-                                    position: "sticky", left: 0, zIndex: 30,
-                                    backgroundColor: HEADER_BG, color: HEADER_TEXT,
-                                    fontWeight: "bold", fontSize: "11px",
-                                    padding: "7px 10px",
-                                    borderRight: "2px solid rgba(255,255,255,0.25)",
-                                    borderBottom: "1px solid rgba(255,255,255,0.15)",
-                                    minWidth: "52px", textAlign: "center",
-                                    whiteSpace: "nowrap",
-                                  }}>SHIFT</th>
-                                  {weekDays.map((date) => {
-                                    const d = new Date(date + "T00:00:00");
-                                    const dd = String(d.getDate()).padStart(2, "0");
-                                    const mm = String(d.getMonth() + 1).padStart(2, "0");
-                                    const yyyy = d.getFullYear();
-                                    return (
-                                      <th key={date} style={{
-                                        backgroundColor: HEADER_BG,
-                                        color: HEADER_TEXT,
-                                        fontWeight: 700,
-                                        padding: "7px 6px",
-                                        borderRight: "1px solid rgba(255,255,255,0.20)",
-                                        borderBottom: "1px solid rgba(255,255,255,0.15)",
-                                        minWidth: "130px",
-                                        textAlign: "center",
-                                        whiteSpace: "nowrap",
-                                        fontSize: "11px",
-                                      }}>
-                                        {`${dd}/${mm}/${yyyy}`}
-                                      </th>
-                                    );
-                                  })}
-                                </tr>
-                              );
-
-                              // ── Lignes employés, 3 shifts sans bannières ──
-                              for (const { shift_type, teams } of excelGrid) {
-                                const shiftLabel = SHIFT_LABELS[shift_type] ?? shift_type;
-                                const totalRows = teams.reduce((sum, t) => sum + t.rows.length, 0);
-                                let isFirstShiftRow = true;
-
-                                for (const { team_id, rows: teamRows } of teams) {
-                                  const rowStyle = planningRowStyle(team_id);
-
-                                  for (const { row_slot, cells } of teamRows) {
-                                    const showShiftCell = isFirstShiftRow;
-                                    isFirstShiftRow = false;
-
-                                    tableRows.push(
-                                      <tr key={`${weekDays[0]}-${shift_type}-${team_id}-${row_slot}`}>
-                                        {showShiftCell && (
-                                          <td rowSpan={totalRows} style={SHIFT_COL}>
-                                            {shiftLabel}
-                                          </td>
-                                        )}
-                                        {weekDays.map((date) => {
-                                          const empName = cells[date] ?? "";
-                                          const cellBg = empName ? rowStyle.backgroundColor : "#ffffff";
-                                          const cellColor = empName ? rowStyle.color : "#000000";
-                                          return (
-                                            <td key={date} style={{
-                                              backgroundColor: cellBg,
-                                              color: cellColor,
-                                              padding: "5px 8px",
-                                              borderRight: "1px solid rgba(0,0,0,0.12)",
-                                              borderBottom: "1px solid rgba(0,0,0,0.10)",
-                                              fontSize: "11px",
-                                              fontWeight: empName ? 600 : 400,
-                                              minWidth: "130px",
-                                              whiteSpace: "nowrap",
-                                            }}>
-                                              {empName}
-                                            </td>
-                                          );
-                                        })}
-                                      </tr>
-                                    );
-                                  }
-                                }
-                              }
-                            }
-                            return tableRows;
-                          })()}
-                        </tbody>
-                      </table>
-                    </div>
+                    // ── Rendu EXACT du design Excel ──
+                    <ExcelPlanningTable entries={entries} />
                   )}
                 </div>
               </div>
             )}
 
+            {/* ── TAB IMPORT ── */}
             {tab === "import" && (
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
                 <label className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl p-8 cursor-pointer transition-all ${file ? "border-green-400 bg-green-50" : "border-slate-200 bg-slate-50 hover:border-camublue-900 hover:bg-camublue-900/5"}`}>
@@ -1913,10 +1825,6 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
         <td className="px-4 py-3">
           <div className="flex flex-col items-center gap-0.5">
             <div className="flex items-center gap-1.5">
-              {r.team_id && r.team_id !== "_no_team" && (() => {
-                const pal = getTeamPalette(r.team_id);
-                return <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${pal.dot}`} title={`Équipe ${r.team_id.replace("equipe-", "")}`} />;
-              })()}
               <span className="font-medium text-slate-800">{r.full_name}</span>
             </div>
             {r.replaced_by && (
@@ -1926,25 +1834,14 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
             )}
           </div>
         </td>
-        <td className="px-4 py-3 text-xs">
-          <span className="font-semibold text-camublue-900 text-xs leading-tight tracking-wide">
-            {r.project !== "—" ? r.project : "—"}
-          </span>
-        </td>
-        <td className="px-4 py-3 text-xs">
-          <span className="font-semibold text-camublue-900 text-xs leading-tight tracking-wide">
-            {r.department !== "—" ? r.department : "—"}
-          </span>
-        </td>
+        <td className="px-4 py-3 text-xs"><span className="font-semibold text-camublue-900 text-xs">{r.project !== "—" ? r.project : "—"}</span></td>
+        <td className="px-4 py-3 text-xs"><span className="font-semibold text-camublue-900 text-xs">{r.department !== "—" ? r.department : "—"}</span></td>
         <td className="px-4 py-3"><div className="flex justify-center"><ShiftTeamPill teamKey={r.shift_team} /></div></td>
         <td className="px-4 py-3">
           <div className="flex justify-center">
-            {r.not_scheduled_rest
-              ? <RestDayBadge />
-              : r.is_shift_pending
-                ? <StatusPill status="pending" />
-                : r.is_replacement
-                  ? <ReplacementBadge />
+            {r.not_scheduled_rest ? <RestDayBadge />
+              : r.is_shift_pending ? <StatusPill status="pending" />
+                : r.is_replacement ? <ReplacementBadge />
                   : <StatusPill status={r.status} />}
           </div>
         </td>
@@ -1972,12 +1869,9 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
               <p className="text-xs text-slate-400 font-mono">{r.matricule || "—"} · {r.project !== "—" ? `${r.project} / ` : ""}{r.department}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {r.not_scheduled_rest
-                ? <RestDayBadge />
-                : r.is_shift_pending
-                  ? <StatusPill status="pending" />
-                  : r.is_replacement
-                    ? <ReplacementBadge />
+              {r.not_scheduled_rest ? <RestDayBadge />
+                : r.is_shift_pending ? <StatusPill status="pending" />
+                  : r.is_replacement ? <ReplacementBadge />
                     : <StatusPill status={r.status} />}
               <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
             </div>
@@ -2038,262 +1932,6 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", delay = 0, lo
 }
 
 // ============================================================================
-// COMPOSANT: EnhancedWeeklyPlanningGrid (gardé mais plus utilisé)
-// ============================================================================
-
-function EnhancedWeeklyPlanningGrid({
-  planningEntries,
-  weekDays,
-  weekAttendance,
-  teamCycles,
-  loading,
-}: {
-  planningEntries: PlanningEntry[];
-  weekDays: string[];
-  weekAttendance: Record<string, Record<string, string>>;
-  teamCycles: Map<string, { startDate: string; employees: string[] }>;
-  loading: boolean;
-}) {
-  const today = todayISO();
-
-  const teamGroups = useMemo(() => {
-    const teams = new Map<string, {
-      teamId: string;
-      employees: { name: string; matricule: string | null }[];
-      cycleStart: string;
-    }>();
-
-    for (const entry of planningEntries) {
-      if (!entry.team_id || entry.team_id === "_no_team") continue;
-
-      if (!teams.has(entry.team_id)) {
-        const cycle = teamCycles.get(entry.team_id);
-        teams.set(entry.team_id, {
-          teamId: entry.team_id,
-          employees: [],
-          cycleStart: cycle?.startDate || entry.date,
-        });
-      }
-
-      const team = teams.get(entry.team_id)!;
-      if (!team.employees.some(e => e.name === entry.employee_name)) {
-        team.employees.push({
-          name: entry.employee_name,
-          matricule: entry.employee_matricule || null
-        });
-      }
-    }
-
-    return Array.from(teams.values()).sort((a, b) =>
-      parseInt(a.teamId.replace(/\D/g, "")) - parseInt(b.teamId.replace(/\D/g, ""))
-    );
-  }, [planningEntries, teamCycles]);
-
-  const getCycleForTeamAndDate = (teamId: string, date: string): CycleType => {
-    const cycle = teamCycles.get(teamId);
-    if (!cycle) return "R";
-    return getCycleForDate(cycle.startDate, cycle.startDate, date);
-  };
-
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center gap-3 text-slate-400">
-        <Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Chargement du planning…</span>
-      </div>
-    );
-  }
-
-  if (teamGroups.length === 0) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400 py-16">
-        <CalendarRange className="h-14 w-14 text-slate-200" />
-        <p className="text-sm font-medium">Aucune équipe détectée dans le planning</p>
-        <p className="text-xs text-slate-400">Importez un planning avec des couleurs d'équipe.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm bg-white">
-      <div className="flex items-center gap-4 px-4 py-2 bg-slate-50 border-b border-slate-200 sticky top-0 z-20 flex-wrap">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Cycle 2-2-2-4 :</span>
-        {[
-          { type: "M", label: "Matin (08H-16H)", style: "bg-teal-200 text-teal-800" },
-          { type: "S", label: "Soir (16H-22H)", style: "bg-amber-200 text-amber-800" },
-          { type: "N", label: "Nuit (22H-08H)", style: "bg-indigo-200 text-indigo-800" },
-          { type: "R", label: "Repos", style: "bg-slate-200 text-slate-600" },
-        ].map((item) => (
-          <span key={item.type} className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${item.style}`}>
-            {item.type} = {item.label}
-          </span>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-slate-200 sticky top-[33px] z-20 flex-wrap">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Statuts :</span>
-        {[
-          { label: "✓ Présent (planifié)", style: "bg-emerald-100 text-emerald-800" },
-          { label: "🔄 Remplaçant", style: "bg-purple-100 text-purple-800" },
-          { label: "✗ Absent", style: "bg-red-100 text-red-700" },
-          { label: "— Pas de service", style: "bg-slate-100 text-slate-500" },
-        ].map((item) => (
-          <span key={item.label} className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${item.style}`}>
-            {item.label}
-          </span>
-        ))}
-      </div>
-
-      <table className="min-w-full text-xs border-collapse">
-        <thead className="sticky top-[66px] z-10">
-          <tr className="bg-camublue-900 text-white">
-            <th className="px-4 py-3 text-left font-bold min-w-[180px] sticky left-0 bg-camublue-900 z-20 border-r border-white/20">
-              ÉQUIPE / Employés
-            </th>
-            {weekDays.map((date) => {
-              const d = new Date(date + "T00:00:00");
-              const isToday = date === today;
-              const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-              return (
-                <th key={date}
-                  className={`px-2 py-3 text-center font-semibold min-w-[100px] border-r border-white/10 last:border-r-0 ${isToday ? "bg-blue-600" : isWeekend ? "bg-camublue-800/70" : ""
-                    }`}>
-                  <div className="flex flex-col items-center leading-none gap-0.5">
-                    <span className="text-[9px] font-bold uppercase">{DAYS_FR[d.getDay()]}</span>
-                    <span className="text-base font-black">{d.getDate()}</span>
-                    <span className="text-[9px] opacity-70">{MONTHS_SHORT[d.getMonth()]}</span>
-                    {isToday && <span className="text-[8px] bg-white/30 px-1 rounded mt-0.5 font-bold">Aujourd'hui</span>}
-                  </div>
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          {teamGroups.map((team) => {
-            const pal = getTeamPalette(team.teamId);
-
-            return (
-              <React.Fragment key={team.teamId}>
-                <tr>
-                  <td colSpan={weekDays.length + 1}
-                    className={`px-4 py-2 font-bold text-sm border-b-2 ${pal.border} ${pal.bg} sticky left-0`}>
-                    <div className="flex items-center gap-3">
-                      <span className={`h-3 w-3 rounded-full ${pal.dot}`} />
-                      <span className={pal.text}>{pal.label}</span>
-                      <span className="text-xs font-normal opacity-70">Cycle début {new Date(team.cycleStart).toLocaleDateString("fr-FR")}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${pal.chipBg}`}>
-                        {team.employees.length} agents
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-
-                <tr className="bg-slate-50">
-                  <td className="px-4 py-1 text-[9px] font-semibold text-slate-500 sticky left-0 bg-slate-50 border-r border-slate-200">
-                    Cycle prévu
-                  </td>
-                  {weekDays.map((date) => {
-                    const cycleType = getCycleForTeamAndDate(team.teamId, date);
-                    const cfg = cycleConfig[cycleType];
-                    return (
-                      <td key={date} className="px-2 py-1 text-center border-r border-slate-200">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-bold ${cfg.style}`}>
-                          {cfg.label}
-                        </span>
-                      </td>
-                    );
-                  })}
-                </tr>
-
-                {team.employees.map((emp, idx) => {
-                  const dayStatuses = weekDays.map(date => {
-                    const cycleType = getCycleForTeamAndDate(team.teamId, date);
-                    const isScheduled = cycleType !== "R";
-
-                    if (!isScheduled) {
-                      return { status: "not_working", cycleType };
-                    }
-
-                    const dayMap = weekAttendance[date] ?? {};
-                    const attStatus = dayMap[emp.matricule || emp.name.toLowerCase()];
-
-                    if (attStatus === "ok" || attStatus === "present") {
-                      return { status: "present", cycleType };
-                    } else if (attStatus === "absent") {
-                      return { status: "absent", cycleType };
-                    } else if (attStatus === "incomplete") {
-                      return { status: "incomplete", cycleType };
-                    } else {
-                      return { status: "absent", cycleType };
-                    }
-                  });
-
-                  return (
-                    <tr key={emp.name}
-                      className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
-                      <td className={`px-3 py-2 sticky left-0 z-10 border-r border-slate-200 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${pal.dot}`} />
-                          <div className="min-w-0">
-                            {emp.matricule && (
-                              <div className="text-[8px] font-mono text-slate-400 leading-none">{emp.matricule}</div>
-                            )}
-                            <div className="text-[11px] font-semibold text-slate-700 truncate max-w-[130px]" title={emp.name}>
-                              {emp.name}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      {dayStatuses.map((dayStatus, i) => {
-                        const date = weekDays[i];
-                        const cfg = cycleConfig[dayStatus.cycleType];
-                        const isToday = date === today;
-
-                        let statusColor = "";
-                        let statusIcon = "";
-
-                        if (dayStatus.status === "present") {
-                          statusColor = "bg-emerald-100 text-emerald-800";
-                          statusIcon = "✓";
-                        } else if (dayStatus.status === "absent" && dayStatus.cycleType !== "R") {
-                          statusColor = "bg-red-100 text-red-700";
-                          statusIcon = "✗";
-                        } else if (dayStatus.cycleType === "R") {
-                          statusColor = "bg-slate-100 text-slate-500";
-                          statusIcon = "—";
-                        }
-
-                        return (
-                          <td key={date}
-                            className={`px-1 py-2 text-center border-r border-slate-100 last:border-r-0 ${isToday ? "bg-blue-50/40" : ""
-                              }`}>
-                            <div className="flex flex-col items-center gap-1">
-                              <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold ${cfg.style}`}>
-                                {cfg.label}
-                              </span>
-                              {dayStatus.cycleType !== "R" && (
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${statusColor}`}>
-                                  {statusIcon}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </React.Fragment>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ============================================================================
 // COMPOSANT PRINCIPAL: AttendanceShiftsPage
 // ============================================================================
 
@@ -2322,15 +1960,7 @@ export default function AttendanceShiftsPage() {
   const [week, setWeek] = useState(isoWeekNow());
   const [month, setMonth] = useState(yyyyMmToday());
   const currentWeek = isoWeekNow();
-
-  // Liste des employés pour la correspondance nom -> matricule
   const [employeesList, setEmployeesList] = useState<Employee[]>([]);
-
-  // États pour le planning (conservés pour l'import et l'affichage latéral)
-  const [planningEntries, setPlanningEntries] = useState<PlanningEntry[]>([]);
-  const [loadingPlanning, setLoadingPlanning] = useState(false);
-  const [weekAttendance, setWeekAttendance] = useState<Record<string, Record<string, string>>>({});
-  const [teamCycles, setTeamCycles] = useState<Map<string, { startDate: string; employees: string[] }>>(new Map());
 
   const [todayPlanning, setTodayPlanning] = useState<{
     jour: { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
@@ -2364,7 +1994,6 @@ export default function AttendanceShiftsPage() {
     return {};
   });
 
-  // Map nom normalisé -> matricule
   const employeeNameToMatricule = useMemo(() => {
     const map = new Map<string, string>();
     employeesList.forEach(emp => {
@@ -2475,9 +2104,7 @@ export default function AttendanceShiftsPage() {
       for (const key of (["jour", "soir1", "soir2"] as ShiftTeamKey[])) {
         for (const emp of todayPlanning[key]) {
           if (emp.team_id && emp.team_id !== "_no_team") {
-            if (!teamEmployees.has(emp.team_id)) {
-              teamEmployees.set(emp.team_id, new Set());
-            }
+            if (!teamEmployees.has(emp.team_id)) teamEmployees.set(emp.team_id, new Set());
             teamEmployees.get(emp.team_id)!.add(emp.employee_name);
             employeeToTeam.set(emp.employee_name, emp.team_id);
           }
@@ -2487,26 +2114,16 @@ export default function AttendanceShiftsPage() {
 
     const presentEmployees = new Map<string, ShiftRecord>();
     for (const r of shiftData.records) {
-      if (r.status !== "absent") {
-        presentEmployees.set(r.full_name, r);
-      }
+      if (r.status !== "absent") presentEmployees.set(r.full_name, r);
     }
 
     const replacements = new Map<string, { absent: string; replacement: string }>();
-
     for (const [teamId, employees] of teamEmployees) {
       const teamEmployeesList = Array.from(employees);
-      const presentInTeam = teamEmployeesList.filter(name => presentEmployees.has(name));
       const absentInTeam = teamEmployeesList.filter(name => !presentEmployees.has(name));
-
       for (const absent of absentInTeam) {
-        const replacement = Array.from(presentEmployees.keys()).find(name =>
-          !employeeToTeam.has(name)
-        );
-
-        if (replacement) {
-          replacements.set(absent, { absent, replacement });
-        }
+        const replacement = Array.from(presentEmployees.keys()).find(name => !employeeToTeam.has(name));
+        if (replacement) replacements.set(absent, { absent, replacement });
       }
     }
 
@@ -2526,27 +2143,15 @@ export default function AttendanceShiftsPage() {
       let notScheduledRest = false;
       let replacedBy = null;
 
-      if (!isScheduled && isPresent) {
-        isReplacement = true;
-        status = "ok";
-      } else if (isScheduled && !isPresent) {
-        status = "absent";
-        if (replacement) {
-          replacedBy = replacement.replacement;
-        }
-      } else if (!isScheduled && !isPresent) {
-        notScheduledRest = true;
-        status = "not_working";
-      }
+      if (!isScheduled && isPresent) { isReplacement = true; status = "ok"; }
+      else if (isScheduled && !isPresent) { status = "absent"; if (replacement) replacedBy = replacement.replacement; }
+      else if (!isScheduled && !isPresent) { notScheduledRest = true; status = "not_working"; }
 
       let shiftTeam: ShiftTeamKey | null = null;
       if (isScheduled) {
         for (const key of (["jour", "soir1", "soir2"] as ShiftTeamKey[])) {
           const found = todayPlanning[key]?.find(e => e.employee_name === r.full_name);
-          if (found) {
-            shiftTeam = key;
-            break;
-          }
+          if (found) { shiftTeam = key; break; }
         }
       } else {
         shiftTeam = detectShiftTeamFromTime(r.in_time);
@@ -2586,18 +2191,14 @@ export default function AttendanceShiftsPage() {
   }, [shiftData, emailMap, effectiveSchedule, viewMode, projectMap, todayPlanning]);
 
   const summaryRecords = useMemo((): SummaryRecord[] => {
-    const resolveDept = (r: any) =>
-      (r.department ?? r.service ?? departmentMap.get(r.matricule ?? "") ?? "—").toUpperCase();
+    const resolveDept = (r: any) => (r.department ?? r.service ?? departmentMap.get(r.matricule ?? "") ?? "—").toUpperCase();
     const resolveProject = (r: any) => {
       const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
       return p ? String(p).toUpperCase() : (projectMap.get(r.matricule ?? "") ?? "—");
     };
     const mapEmp = (r: any): SummaryRecord => ({
-      employee_id: r.employee_id,
-      matricule: r.matricule ?? "",
-      full_name: r.full_name ?? "",
-      department: resolveDept(r),
-      project: resolveProject(r),
+      employee_id: r.employee_id, matricule: r.matricule ?? "", full_name: r.full_name ?? "",
+      department: resolveDept(r), project: resolveProject(r),
       shift_team: assignments[r.matricule ?? ""] ?? r.shift_team ?? null,
       nb_jours: r.present_days ?? r.worked_days ?? 0,
       worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
@@ -2628,7 +2229,6 @@ export default function AttendanceShiftsPage() {
     r.department.toLowerCase().includes(q) || (r.shift_team_label ?? "").toLowerCase().includes(q) ||
     r.project.toLowerCase().includes(q);
 
-  // ── BASE PLANNING : employés du shift sélectionné (planning uniquement) ────
   const shiftPlanningBase = useMemo((): FlatRecord[] => {
     if (!selectedTeam || !todayPlanning.loaded) return [];
     const planEmps = todayPlanning[selectedTeam] ?? [];
@@ -2642,51 +2242,31 @@ export default function AttendanceShiftsPage() {
       );
       if (rec) {
         return {
-          ...rec,
-          shift_team: selectedTeam,
-          is_scheduled: true,
-          is_replacement: false,
-          not_scheduled_rest: false,
+          ...rec, shift_team: selectedTeam, is_scheduled: true,
+          is_replacement: false, not_scheduled_rest: false,
           is_shift_pending: shiftStat === "upcoming" && rec.status === "absent",
         };
       }
       return {
-        employee_id: -1,
-        matricule: e.employee_matricule ?? "",
-        full_name: e.employee_name,
+        employee_id: -1, matricule: e.employee_matricule ?? "", full_name: e.employee_name,
         department: departmentMap.get(e.employee_matricule ?? "") ?? "—",
         project: projectMap.get(e.employee_matricule ?? "") ?? "—",
         status: (shiftStat === "upcoming" ? "pending" : "absent") as any,
-        is_late_api: false,
-        late_label_api: null,
-        computed_late_minutes: 0,
-        overtime_minutes: 0,
+        is_late_api: false, late_label_api: null, computed_late_minutes: 0, overtime_minutes: 0,
         compensation: { late_min: 0, overtime_min: 0, compensated_min: 0, remaining_min: 0, is_compensated: false, has_overtime: false },
-        deficit_minutes: 0,
-        in_time: null,
-        out_time: null,
-        worked_minutes: 0,
+        deficit_minutes: 0, in_time: null, out_time: null, worked_minutes: 0,
         expected_minutes: workDayMinutes(effectiveSchedule),
         email: emailMap.get(e.employee_matricule ?? "") ?? null,
-        shift_team: selectedTeam,
-        shift_team_label: SHIFT_TEAMS.find((t) => t.key === selectedTeam)?.label ?? "",
-        is_scheduled: true,
-        is_replacement: false,
-        not_scheduled_rest: false,
-        is_shift_pending: shiftStat === "upcoming",
-        team_id: e.team_id ?? "",
-        replaced_by: null,
+        shift_team: selectedTeam, shift_team_label: SHIFT_TEAMS.find((t) => t.key === selectedTeam)?.label ?? "",
+        is_scheduled: true, is_replacement: false, not_scheduled_rest: false,
+        is_shift_pending: shiftStat === "upcoming", team_id: e.team_id ?? "", replaced_by: null,
       } satisfies FlatRecord;
     });
   }, [selectedTeam, todayPlanning, allRecords, effectiveSchedule, emailMap, departmentMap, projectMap]);
 
-  // ── FILTRE PRINCIPAL ─────────────────────────
-  // "Toutes"   → uniquement les pointages temps réel (allRecords)
-  // Shift tab  → uniquement les employés du planning pour ce shift/date
   const filtered = useMemo(() => {
     const q = searchQ.toLowerCase();
     const base: FlatRecord[] = selectedTeam ? shiftPlanningBase : allRecords;
-
     return base.filter((r) => {
       if (!matchSearch(r, q)) return false;
       if (statusFilter === "late") return isLateRecord(r);
@@ -2697,7 +2277,6 @@ export default function AttendanceShiftsPage() {
     });
   }, [shiftPlanningBase, allRecords, statusFilter, searchQ, selectedTeam]);
 
-  // ── KPIs des boutons shift ──────────────────────────────────────────
   const planningKpis = useMemo((): Record<ShiftTeamKey, { total: number; present: number; absent: number }> => {
     const empty = { total: 0, present: 0, absent: 0 };
     if (!todayPlanning.loaded) return { jour: empty, soir1: empty, soir2: empty };
@@ -2717,10 +2296,8 @@ export default function AttendanceShiftsPage() {
     return result;
   }, [todayPlanning, allRecords]);
 
-  // ── KPI Cards ───────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     if (viewMode === "daily" && shiftData) {
-      // Base : planning du shift ou pointages temps réel selon le contexte
       const base = selectedTeam ? shiftPlanningBase : allRecords;
       return {
         total: base.length,
@@ -2760,7 +2337,6 @@ export default function AttendanceShiftsPage() {
   const pageData = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const filterCount = (key: StatusFilter) => {
-    // Même base que filtered, mais sans le filtre de statut (pour les compteurs)
     const base: FlatRecord[] = selectedTeam ? shiftPlanningBase : allRecords;
     if (key === "all") return base.length;
     if (key === "late") return base.filter(isLateRecord).length;
@@ -2845,11 +2421,6 @@ export default function AttendanceShiftsPage() {
                   Planning actif · {todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length} assignés
                 </span>
               )}
-              <span className="inline-flex items-center gap-2 text-[10px] text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full ring-1 ring-slate-200">
-                <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />07h–16h</span>
-                <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />17h–21h</span>
-                <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-slate-600" />22h–06h</span>
-              </span>
             </div>
           </div>
 
@@ -2912,11 +2483,7 @@ export default function AttendanceShiftsPage() {
                     <span className={`text-xs font-bold tabular-nums ${isActive ? team.activeText : "text-slate-600"}`}>
                       {pkpi.present}/{pkpi.total}
                     </span>
-                    {pkpi.absent > 0 && (
-                      <span className="text-[9px] font-bold text-red-500 tabular-nums leading-none">
-                        {pkpi.absent} abs
-                      </span>
-                    )}
+                    {pkpi.absent > 0 && <span className="text-[9px] font-bold text-red-500 tabular-nums leading-none">{pkpi.absent} abs</span>}
                   </div>
                 ) : (
                   <span className="text-xs text-slate-300 shrink-0">0/0</span>
@@ -2991,29 +2558,16 @@ export default function AttendanceShiftsPage() {
                               onDetail={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }} />
                           ))
                           : <tr><td colSpan={tableHeaders.length} className="text-center py-16 text-slate-400 text-sm">
-                            {noPlanningToday && statusFilter === "all" && !selectedTeam
-                              ? <div className="flex flex-col items-center gap-3">
+                            {noPlanningToday && statusFilter === "all" && !selectedTeam ? (
+                              <div className="flex flex-col items-center gap-3">
                                 <CalendarRange className="h-12 w-12 text-slate-200" />
                                 <p className="font-medium text-slate-500">Pas de planning disponible pour aujourd'hui</p>
-                                <p className="text-xs text-slate-400">Importez un planning pour voir les assignations de l'équipe.</p>
                                 <button onClick={() => setPlanningOpen(true)}
                                   className="mt-1 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
                                   <Upload className="h-4 w-4" /> Importer un planning
                                 </button>
                               </div>
-                              : noPlanningToday && statusFilter === "all" && selectedTeam
-                                ? <div className="flex flex-col items-center gap-3">
-                                    <CalendarRange className="h-12 w-12 text-slate-200" />
-                                    <p className="font-medium text-slate-500">
-                                      Aucun employé planifié pour le shift {SHIFT_TEAMS.find(t => t.key === selectedTeam)?.short} aujourd'hui
-                                    </p>
-                                    <p className="text-xs text-slate-400">Importez un planning incluant la date d'aujourd'hui.</p>
-                                    <button onClick={() => setPlanningOpen(true)}
-                                      className="mt-1 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
-                                      <Upload className="h-4 w-4" /> Importer un planning
-                                    </button>
-                                  </div>
-                              : statusFilter === "late" ? "Aucun retard." : statusFilter === "deficit" ? "Aucune heure manquante." : "Aucun enregistrement trouvé."}
+                            ) : statusFilter === "late" ? "Aucun retard." : statusFilter === "deficit" ? "Aucune heure manquante." : "Aucun enregistrement trouvé."}
                           </td></tr>
                       }
                     </tbody>
@@ -3055,17 +2609,13 @@ export default function AttendanceShiftsPage() {
 
                 {!selectedTeam && pendingShiftRows.length > 0 && (
                   <div className="shrink-0 rounded-xl border border-blue-200 overflow-hidden shadow-sm">
-                    <button
-                      onClick={() => setShowPendingShifts((v) => !v)}
+                    <button onClick={() => setShowPendingShifts((v) => !v)}
                       className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors text-sm text-blue-700">
                       <div className="flex items-center gap-2">
                         <ChevronDown className={`h-4 w-4 text-blue-400 transition-transform ${showPendingShifts ? "rotate-180" : ""}`} />
                         <Clock className="h-4 w-4 text-blue-400" />
                         <span className="font-semibold text-blue-800">Shifts à venir — En attente de pointage</span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-200 text-blue-700">
-                          {pendingShiftRows.length}
-                        </span>
-                        <span className="text-xs text-blue-500">— Non comptés dans les absences</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-200 text-blue-700">{pendingShiftRows.length}</span>
                       </div>
                     </button>
                     {showPendingShifts && (
@@ -3100,15 +2650,12 @@ export default function AttendanceShiftsPage() {
 
                 {notScheduledRows.length > 0 && (
                   <div className="shrink-0 rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                    <button
-                      onClick={() => setShowNotScheduled((v) => !v)}
+                    <button onClick={() => setShowNotScheduled((v) => !v)}
                       className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-sm text-slate-600">
                       <div className="flex items-center gap-2">
                         <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showNotScheduled ? "rotate-180" : ""}`} />
                         <span className="font-semibold text-slate-700">Non planifiés ce jour</span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-600">
-                          {notScheduledRows.length}
-                        </span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-600">{notScheduledRows.length}</span>
                         <span className="text-xs text-slate-400">— Pas de service · non comptés dans les absences</span>
                       </div>
                     </button>
