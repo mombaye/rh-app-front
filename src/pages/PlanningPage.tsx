@@ -23,8 +23,8 @@ import {
 import type { PlanningEntry, ShiftPlanningUpload } from "@/services/attendanceService";
 import { getEmployees } from "@/services/employeeService";
 import type { Employee } from "@/types/employee";
-import * as XLSX from "xlsx";
 import toast from "react-hot-toast";
+import { parseNOCPlanningExcel } from "@/utils/planningParser";
 import {
   ChevronLeft, ChevronRight, Upload, Plus, Trash2, RefreshCw,
   Calendar, Users, Download, GripVertical, AlertTriangle,
@@ -263,32 +263,7 @@ export default function PlanningPage() {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       try {
-        const wb = XLSX.read(ev.target?.result, { type: "array" });
-        const allEntries: PlanningEntry[] = [];
-        for (const sheetName of wb.SheetNames) {
-          const ws = wb.Sheets[sheetName];
-          const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
-          // Parsing simplifié: chercher colonnes Date, Shift, Nom
-          for (const row of rows.slice(1)) {
-            if (!row[0] || !row[1] || !row[2]) continue;
-            const dateRaw = row[0];
-            const shiftRaw = String(row[1]).toLowerCase().trim();
-            const name = String(row[2]).trim();
-            let dateStr = "";
-            if (typeof dateRaw === "number") {
-              const d = XLSX.SSF.parse_date_code(dateRaw);
-              dateStr = `${d.y}-${String(d.m).padStart(2,"0")}-${String(d.d).padStart(2,"0")}`;
-            } else {
-              dateStr = String(dateRaw).trim();
-            }
-            const shift = shiftRaw.includes("soir2") || shiftRaw.includes("22") ? "soir2"
-              : shiftRaw.includes("soir1") || shiftRaw.includes("16") ? "soir1"
-              : "jour";
-            if (dateStr && name) {
-              allEntries.push({ date: dateStr, shift_type: shift, employee_name: name });
-            }
-          }
-        }
+        const { entries: allEntries } = parseNOCPlanningExcel(ev.target!.result as ArrayBuffer);
         if (!allEntries.length) { toast.error("Aucune entrée valide trouvée dans le fichier"); return; }
         const batchId = `import_${Date.now()}`;
         const payload: ShiftPlanningUpload = { batch_id: batchId, entries: allEntries };
