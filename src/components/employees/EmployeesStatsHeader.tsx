@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { FaUsers, FaUserPlus, FaUserTie, FaUserCheck, FaUserTimes, FaFileContract, FaFileSignature, FaUserGraduate } from "react-icons/fa";
+import { FaUsers, FaUserPlus, FaUserTie, FaUserCheck, FaUserTimes } from "react-icons/fa";
 import { motion } from "framer-motion";
 
 type ProfileFilter = "ALL" | "ACTIVE" | "EXITED";
@@ -10,12 +10,14 @@ const StatCard = ({
   label,
   active = false,
   onClick,
+  children,
 }: {
   icon: React.ReactNode;
   value: React.ReactNode;
   label: string;
   active?: boolean;
   onClick?: () => void;
+  children?: React.ReactNode;
 }) => (
   <Card
     onClick={onClick}
@@ -30,6 +32,7 @@ const StatCard = ({
     <div className="flex items-center gap-3">
       <div className="flex items-center justify-center shrink-0">{icon}</div>
       <span className="text-xl font-bold leading-none">{value}</span>
+      {children}
     </div>
     <div className="text-gray-600 text-sm flex items-center justify-between">
       <span>{label}</span>
@@ -63,13 +66,6 @@ export default function EmployeesStatsHeader({
             <div key={i} className="h-24 animate-pulse bg-gray-100 rounded-2xl" />
           ))}
         </div>
-        {showExitsByContract && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-24 animate-pulse bg-gray-100 rounded-2xl" />
-            ))}
-          </div>
-        )}
       </div>
     );
 
@@ -101,10 +97,29 @@ export default function EmployeesStatsHeader({
     STAGE: data.filter((e) => e.status === "EXITED" && e.type_contrat === "STAGE").length,
   };
 
+  const exitedTotal = exitedCount || 1;
+  const pctCDI   = Math.round((exitedByContractType.CDI   / exitedTotal) * 100);
+  const pctCDD   = Math.round((exitedByContractType.CDD   / exitedTotal) * 100);
+  const pctStage = Math.round((exitedByContractType.STAGE / exitedTotal) * 100);
+
   const handleClick = (filter: ProfileFilter) => {
     if (!onProfileFilterChange) return;
     onProfileFilterChange(profileFilter === filter ? "ALL" : filter);
   };
+
+  const exitBadges = (
+    <div className="ml-auto flex flex-col gap-0.5 text-right shrink-0">
+      <span className="text-[11px] font-semibold text-slate-600">
+        CDI <span className="text-slate-800">{pctCDI}%</span>
+      </span>
+      <span className="text-[11px] font-semibold text-orange-600">
+        CDD <span className="text-orange-800">{pctCDD}%</span>
+      </span>
+      <span className="text-[11px] font-semibold text-purple-600">
+        Stage <span className="text-purple-800">{pctStage}%</span>
+      </span>
+    </div>
+  );
 
   return (
     <motion.div
@@ -113,7 +128,6 @@ export default function EmployeesStatsHeader({
       transition={{ duration: 0.6 }}
       className="space-y-4 mb-6"
     >
-      {/* Ligne 1 : stats générales */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard
           icon={<FaUsers size={28} className="text-camublue-900" />}
@@ -133,7 +147,9 @@ export default function EmployeesStatsHeader({
           label="Sortis"
           active={profileFilter === "EXITED"}
           onClick={() => handleClick("EXITED")}
-        />
+        >
+          {exitBadges}
+        </StatCard>
         <StatCard
           icon={<FaUserPlus size={28} className="text-green-500" />}
           value={newThisMonth}
@@ -145,27 +161,6 @@ export default function EmployeesStatsHeader({
           label="Managers"
         />
       </div>
-
-      {/* Ligne 2 : sorties par type de contrat (employés internes uniquement) */}
-      {showExitsByContract && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <StatCard
-            icon={<FaFileContract size={26} className="text-slate-600" />}
-            value={exitedByContractType.CDI}
-            label="Sorties CDI"
-          />
-          <StatCard
-            icon={<FaFileSignature size={26} className="text-orange-500" />}
-            value={exitedByContractType.CDD}
-            label="Sorties CDD"
-          />
-          <StatCard
-            icon={<FaUserGraduate size={26} className="text-purple-500" />}
-            value={exitedByContractType.STAGE}
-            label="Sorties Stage"
-          />
-        </div>
-      )}
     </motion.div>
   );
 }
