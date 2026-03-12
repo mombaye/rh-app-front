@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";
 import {
@@ -96,7 +96,7 @@ interface ParsedSheet {
 
 const MAX_WORKDAY_MIN = 8 * 60;
 const MAX_WEEKLY_MIN = 40 * 60;
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const PAGE_SIZE_OPTIONS = [10, 20, 30];
 
 const LS_SHIFT_ACTIVE_SCHEDULE_KEY = "camu_shift_active_schedule";
 const LS_SHIFT_ASSIGNMENTS_KEY = "camu_shift_assignments";
@@ -624,7 +624,7 @@ function RestDayBadge() {
 //   - Blocs de 7 jours séparés
 // ============================================================================
 
-function ExcelPlanningTable({ entries }: { entries: PlanningEntry[] }) {
+function ExcelPlanningTable({ entries, nameToMatricule }: { entries: PlanningEntry[]; nameToMatricule?: Map<string, string> }) {
   const EXCEL_GREEN = "#1a5c2a";
   const EXCEL_BORDER = "#bdbdbd";
 
@@ -690,7 +690,8 @@ function ExcelPlanningTable({ entries }: { entries: PlanningEntry[] }) {
     padding: "3px 8px",
     verticalAlign: "middle",
     whiteSpace: "nowrap",
-    height: "22px",
+    height: "auto",
+    minHeight: "22px",
   };
 
   const hdrStyle: React.CSSProperties = {
@@ -699,7 +700,7 @@ function ExcelPlanningTable({ entries }: { entries: PlanningEntry[] }) {
     color: "#ffffff",
     fontWeight: 700,
     textAlign: "center",
-    minWidth: "130px",
+    minWidth: "140px",
     padding: "5px 8px",
   };
 
@@ -734,13 +735,17 @@ function ExcelPlanningTable({ entries }: { entries: PlanningEntry[] }) {
     ...base,
     backgroundColor: bg ?? "#ffffff",
     color: "#000000",
-    minWidth: "130px",
+    minWidth: "140px",
+    height: "auto",
+    verticalAlign: "middle",
+    padding: "3px 8px",
   });
 
   const emptyStyle: React.CSSProperties = {
     ...base,
     backgroundColor: "#ffffff",
-    minWidth: "130px",
+    minWidth: "140px",
+    height: "auto",
   };
 
   const fmtDate = (dateStr: string) => {
@@ -752,7 +757,7 @@ function ExcelPlanningTable({ entries }: { entries: PlanningEntry[] }) {
   };
 
   return (
-    <div style={{ padding: "16px 20px", overflowX: "auto" }}>
+    <div style={{ padding: "12px 16px", overflowX: "auto", minHeight: "100%" }}>
       <table style={{ borderCollapse: "collapse", tableLayout: "auto" }}>
         <tbody>
           {weekBlocks.map((block, bi) => (
@@ -779,7 +784,19 @@ function ExcelPlanningTable({ entries }: { entries: PlanningEntry[] }) {
                     {block.dates.map(date => {
                       const cell = cells[date];
                       if (!cell) return <td key={date} style={emptyStyle} />;
-                      return <td key={date} style={dataStyle(cell.bg)}>{cell.name}</td>;
+                      const mat = nameToMatricule?.get(cell.name.trim().toLowerCase().replace(/\s+/g, ' '));
+                      return (
+                        <td key={date} style={dataStyle(cell.bg)}>
+                          <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+                            <span style={{ fontWeight: 600, fontSize: "11px" }}>{cell.name}</span>
+                            {mat && (
+                              <span style={{ fontSize: "9px", color: "#64748b", fontFamily: "monospace", marginTop: "1px" }}>
+                                {mat}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      );
                     })}
                   </tr>
                 ))
@@ -796,252 +813,6 @@ function ExcelPlanningTable({ entries }: { entries: PlanningEntry[] }) {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-// ============================================================================
-// COMPOSANT: TodayPlanningPanel
-// ============================================================================
-
-function TodayPlanningPanel({
-  todayPlanning, allRecords, loading,
-}: {
-  todayPlanning: {
-    jour: { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
-    soir1: { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
-    soir2: { employee_name: string; employee_matricule?: string | null; team_id?: string }[];
-    loaded: boolean;
-  };
-  allRecords: FlatRecord[];
-  loading: boolean;
-}) {
-  const today = todayISO();
-  const total = todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length;
-
-  const recByMat = useMemo(() => new Map(allRecords.filter((r) => r.matricule).map((r) => [r.matricule, r])), [allRecords]);
-  const recByName = useMemo(() => new Map(allRecords.map((r) => [r.full_name.toLowerCase().trim(), r])), [allRecords]);
-
-  const getRecord = (emp: { employee_name: string; employee_matricule?: string | null }) => {
-    if (emp.employee_matricule) {
-      const r = recByMat.get(emp.employee_matricule);
-      if (r) return r;
-    }
-    return recByName.get(emp.employee_name.toLowerCase().trim()) ?? null;
-  };
-
-  if (!todayPlanning.loaded || total === 0) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2 p-4">
-        <CalendarRange className="h-10 w-10 text-slate-200" />
-        <p className="text-xs text-center font-medium">Pas de planning<br />pour aujourd'hui</p>
-      </div>
-    );
-  }
-
-  const dateLabel = new Date(today + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" });
-
-  return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="px-3 py-2 bg-camublue-900 text-white flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <CalendarRange className="h-3.5 w-3.5" />
-          <span className="text-xs font-bold capitalize">{dateLabel}</span>
-        </div>
-        <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-semibold">{total} planifiés</span>
-      </div>
-
-      <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-        {SHIFT_TEAMS.map((team) => {
-          const emps = todayPlanning[team.key as ShiftTeamKey];
-          if (!emps || emps.length === 0) return null;
-
-          const shiftStatus = getShiftActiveStatus(team.key as ShiftTeamKey);
-          const present = emps.filter((e) => { const r = getRecord(e); return r && r.status !== "absent"; }).length;
-          const absent = shiftStatus === "upcoming" ? 0 : emps.length - present;
-
-          return (
-            <div key={team.key}>
-              <div className={`px-3 py-1.5 flex items-center justify-between ${team.activeBg} border-b ${team.activeBorder}`}>
-                <div className="flex items-center gap-1.5">
-                  <span className={`h-2 w-2 rounded-full ${team.dot}`} />
-                  <span className={`text-[10px] font-bold ${team.activeText}`}>{team.short}</span>
-                  <span className={`text-[9px] ${team.activeText} opacity-70`}>{team.horaire}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">{present}✓</span>
-                  {absent > 0 && <span className="text-[9px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded-full">{absent}✗</span>}
-                </div>
-              </div>
-              {emps.map((emp) => {
-                const rec = getRecord(emp);
-                const effectiveStatus = rec?.status ?? (shiftStatus === "upcoming" ? "pending" : "absent");
-                const status = effectiveStatus;
-                const isLate = (rec?.computed_late_minutes ?? 0) > 0;
-
-                const statusDot =
-                  status === "ok" ? "bg-emerald-500" :
-                    status === "absent" ? "bg-red-500" :
-                      status === "pending" ? "bg-blue-400" :
-                        status === "incomplete" ? "bg-amber-500" :
-                          "bg-violet-500";
-
-                return (
-                  <div key={emp.employee_name}
-                    className={`flex items-center gap-2 px-3 py-1.5 text-[10px] border-b border-slate-50 transition-colors ${status === "absent" ? "bg-red-50/50" :
-                      status === "pending" ? "bg-blue-50/30" :
-                        status === "ok" ? "" :
-                          status === "incomplete" ? "bg-amber-50/30" :
-                            "bg-violet-50/30"
-                      }`}>
-                    <div className="flex-1 min-w-0">
-                      {emp.employee_matricule && (
-                        <div className="font-mono text-[8px] text-slate-400 leading-none">{emp.employee_matricule}</div>
-                      )}
-                      <div className={`font-medium truncate leading-tight ${status === "absent" ? "text-red-700" : status === "pending" ? "text-blue-600" : "text-slate-700"}`}
-                        title={emp.employee_name}>
-                        {emp.employee_name}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {isLate && <Clock className="h-2.5 w-2.5 text-orange-500" />}
-                      <span className={`h-2 w-2 rounded-full ${statusDot}`} title={STATUS_CFG[status as keyof typeof STATUS_CFG]?.label} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="px-3 py-2 border-t border-slate-100 bg-slate-50 shrink-0">
-        <div className="flex items-center gap-3 flex-wrap">
-          {[
-            { dot: "bg-emerald-500", label: "Présent" },
-            { dot: "bg-red-500", label: "Absent" },
-            { dot: "bg-blue-400", label: "En attente" },
-            { dot: "bg-amber-500", label: "Incomplet" },
-          ].map((l) => (
-            <span key={l.label} className="flex items-center gap-1 text-[9px] text-slate-500">
-              <span className={`h-1.5 w-1.5 rounded-full ${l.dot}`} />{l.label}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// COMPOSANT: WeekProgressBar
-// ============================================================================
-
-function WeekProgressBar({ minutes, maxMinutes }: { minutes: number; maxMinutes: number }) {
-  const pct = Math.min(100, Math.round((minutes / maxMinutes) * 100));
-  const over = minutes > maxMinutes;
-  const color = pct >= 100 ? "bg-emerald-500" : pct >= 75 ? "bg-blue-500" : pct >= 50 ? "bg-amber-400" : "bg-red-400";
-  const bgColor = pct >= 100 ? "bg-emerald-100" : pct >= 75 ? "bg-blue-100" : pct >= 50 ? "bg-amber-100" : "bg-red-100";
-  const textColor = pct >= 100 ? "text-emerald-700" : pct >= 75 ? "text-blue-700" : pct >= 50 ? "text-amber-700" : "text-red-600";
-  return (
-    <div className="flex items-center gap-2.5 min-w-[180px]">
-      <div className={`relative flex-1 h-2 rounded-full overflow-hidden ${bgColor}`}>
-        <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.5, ease: "easeOut" }}
-          className={`absolute inset-y-0 left-0 rounded-full ${color}`} />
-      </div>
-      <span className={`text-xs font-bold tabular-nums w-9 text-right shrink-0 ${textColor}`}>{pct}%</span>
-      {over && <span className="shrink-0 text-[10px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">+{formatMinutes(minutes - maxMinutes)}</span>}
-    </div>
-  );
-}
-
-// ============================================================================
-// COMPOSANT: SummaryTable
-// ============================================================================
-
-function SummaryTable({ rows, mode, isLoading }: {
-  rows: SummaryRecord[]; mode: "weekly" | "monthly"; isLoading: boolean;
-}) {
-  const MAX_MIN = mode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33);
-  const maxLabel = mode === "weekly" ? "40h/sem" : `${formatMinutes(MAX_MIN)}/mois`;
-
-  const stats = useMemo(() => {
-    if (!rows.length) return null;
-    const total = rows.reduce((s, r) => s + r.worked_minutes, 0);
-    const avg = Math.round(total / rows.length);
-    const complet = rows.filter((r) => r.worked_minutes >= MAX_MIN).length;
-    return { avg, complet, total, effectif: rows.length };
-  }, [rows, MAX_MIN]);
-
-  if (isLoading) return (
-    <div className="flex-1 flex items-center justify-center gap-3 text-slate-400">
-      <Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Chargement…</span>
-    </div>
-  );
-
-  return (
-    <div className="flex flex-col gap-3 flex-1 min-h-0">
-      {stats && (
-        <div className="grid grid-cols-3 gap-3 shrink-0">
-          {[
-            { icon: <Clock className="h-4 w-4" />, label: "Moy. heures/employé", value: formatMinutes(stats.avg) || "—", color: "text-blue-600 bg-blue-50" },
-            { icon: <CheckCircle className="h-4 w-4" />, label: "Quota atteint", value: `${stats.complet}/${stats.effectif}`, color: "text-emerald-600 bg-emerald-50" },
-            { icon: <TrendingUp className="h-4 w-4" />, label: "Total heures", value: formatMinutes(stats.total) || "—", color: "text-purple-600 bg-purple-50" },
-          ].map((k) => (
-            <div key={k.label} className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 shadow-sm">
-              <span className={`p-2 rounded-lg ${k.color}`}>{k.icon}</span>
-              <div><p className="text-xs text-gray-400 leading-none mb-0.5">{k.label}</p><p className="text-base font-bold text-gray-800">{k.value}</p></div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0 bg-white">
-        <table className="min-w-full text-sm">
-          <thead className="bg-camublue-900 text-white sticky top-0 z-10">
-            <tr>
-              {["Matricule", "Nom complet", "Projet/Département", "Service", "Équipe", "Nb jours", "Heures trav."].map((h) => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800">{h}</th>
-              ))}
-              <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800 min-w-[220px]">
-                <span className="flex items-center gap-1.5">Progression <span className="text-[10px] font-normal opacity-70 bg-white/20 px-1.5 py-0.5 rounded-full">max {maxLabel}</span></span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.length === 0
-              ? <tr><td colSpan={8} className="text-center py-12 text-slate-400 text-sm">Aucune donnée pour cette période.</td></tr>
-              : rows.map((row, idx) => {
-                const pct = Math.min(100, Math.round((row.worked_minutes / MAX_MIN) * 100));
-                const cls = pct >= 100 ? "bg-emerald-50 text-emerald-700" : pct >= 75 ? "bg-blue-50 text-blue-700" : pct >= 50 ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-600";
-                return (
-                  <motion.tr key={row.employee_id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.015 }} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{row.matricule}</td>
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{row.full_name}</td>
-                    <td className="px-4 py-2.5 text-xs"><span className="font-semibold text-camublue-900 text-xs">{row.project !== "—" ? row.project : "—"}</span></td>
-                    <td className="px-4 py-2.5 text-xs"><span className="font-semibold text-camublue-900 text-xs">{row.department !== "—" ? row.department : "—"}</span></td>
-                    <td className="px-4 py-2.5"><ShiftTeamPill teamKey={row.shift_team} /></td>
-                    <td className="px-4 py-2.5"><span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-xs font-bold text-slate-600">{row.nb_jours}</span></td>
-                    <td className="px-4 py-2.5"><span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold tabular-nums ${cls}`}>{formatMinutes(row.worked_minutes) || "0h"}</span></td>
-                    <td className="px-4 py-2.5"><WeekProgressBar minutes={row.worked_minutes} maxMinutes={MAX_MIN} /></td>
-                  </motion.tr>
-                );
-              })
-            }
-          </tbody>
-        </table>
-      </div>
-
-      <div className="flex items-center gap-4 text-xs text-slate-400 px-1 shrink-0 flex-wrap">
-        {[
-          { color: "bg-emerald-500", label: "Quota atteint (≥ 100%)" },
-          { color: "bg-blue-500", label: "Bon (≥ 75%)" },
-          { color: "bg-amber-400", label: "Moyen (≥ 50%)" },
-          { color: "bg-red-400", label: "Faible (< 50%)" },
-        ].map((l) => (
-          <span key={l.label} className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-full ${l.color}`} />{l.label}</span>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1574,8 +1345,8 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <motion.div
-            className="relative w-full sm:max-w-6xl bg-white sm:rounded-3xl shadow-2xl overflow-hidden z-10 flex flex-col"
-            style={{ maxHeight: "calc(100dvh - 2rem)" }}
+            className="relative w-full sm:max-w-[98vw] bg-white sm:rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col"
+            style={{ maxHeight: "calc(100dvh - 1rem)", height: "calc(100dvh - 1rem)" }}
             initial={{ y: 60, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 60, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
@@ -1643,7 +1414,7 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                     </div>
                   ) : (
                     // ── Rendu EXACT du design Excel ──
-                    <ExcelPlanningTable entries={entries} />
+                    <ExcelPlanningTable entries={entries} nameToMatricule={employeeNameToMatricule} />
                   )}
                 </div>
               </div>
@@ -1883,6 +1654,29 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
 }
 
 // ============================================================================
+// COMPOSANT: LiveClock — Heure temps réel
+// ============================================================================
+
+function LiveClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  const dateStr = now.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  return (
+    <div className="flex items-center gap-2 text-slate-500 text-xs">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+      <span className="font-mono font-semibold text-slate-700 tabular-nums">{hh}:{mm}:{ss}</span>
+      <span className="hidden sm:inline text-slate-400 capitalize">{dateStr}</span>
+    </div>
+  );
+}
+
+// ============================================================================
 // COMPOSANT: KPI Cards
 // ============================================================================
 
@@ -2071,8 +1865,8 @@ export default function AttendanceShiftsPage() {
   const pad2 = (n: number) => String(n).padStart(2, "0");
   const isActiveLocked = activeSchedule ? isPeriodActive(activeSchedule) : false;
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       if (viewMode === "daily") {
         const [stats, plan] = await Promise.all([
@@ -2081,114 +1875,206 @@ export default function AttendanceShiftsPage() {
         ]);
         setShiftData(stats);
         if (plan) setTodayPlanning({ ...plan.assignments, loaded: true });
+        else setTodayPlanning(prev => ({ ...prev, loaded: true }));
       }
       if (viewMode === "weekly") setWeeklyData(await getWeeklyStats(week));
       if (viewMode === "monthly") setMonthlyData(await getMonthlyStats(month));
-    } finally { setLoading(false); }
+    } catch (e) {
+      console.error("fetchData error:", e);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, [viewMode, week, month]);
 
-  useEffect(() => { fetchData(); }, [viewMode]);
+  // Fetch on mount + view change
+  useEffect(() => { fetchData(); }, [viewMode, week, month]);
+
+  // Auto-refresh every 60s in daily mode (silent = no spinner)
+  useEffect(() => {
+    if (viewMode !== "daily") return;
+    const id = setInterval(() => { fetchData(true); }, 60_000);
+    return () => clearInterval(id);
+  }, [viewMode, fetchData]);
   useEffect(() => { setPage(1); }, [statusFilter, searchQ, shiftData, weeklyData, monthlyData, pageSize]);
 
   const allRecords = useMemo((): FlatRecord[] => {
-    if (!shiftData || viewMode !== "daily") return [];
+    if (viewMode !== "daily") return [];
 
     const sched = effectiveSchedule;
     const effectiveWorkMin = workDayMinutes(sched);
     const planningLoaded = todayPlanning.loaded;
 
-    const teamEmployees = new Map<string, Set<string>>();
-    const employeeToTeam = new Map<string, string>();
+    // ── Normalisation nom pour lookup robuste ──
+    const normName = (n: string) => n.trim().toLowerCase().replace(/\s+/g, " ");
 
-    if (planningLoaded) {
-      for (const key of (["jour", "soir1", "soir2"] as ShiftTeamKey[])) {
-        for (const emp of todayPlanning[key]) {
-          if (emp.team_id && emp.team_id !== "_no_team") {
-            if (!teamEmployees.has(emp.team_id)) teamEmployees.set(emp.team_id, new Set());
-            teamEmployees.get(emp.team_id)!.add(emp.employee_name);
-            employeeToTeam.set(emp.employee_name, emp.team_id);
-          }
-        }
+    // ── Index API records par matricule ET par nom normalisé ──
+    const recordByMatricule = new Map<string, ShiftRecord>();
+    const recordByName = new Map<string, ShiftRecord>();
+    if (shiftData) {
+      for (const r of shiftData.records) {
+        if (r.matricule) recordByMatricule.set(r.matricule, r);
+        recordByName.set(normName(r.full_name), r);
       }
     }
 
-    const presentEmployees = new Map<string, ShiftRecord>();
-    for (const r of shiftData.records) {
-      if (r.status !== "absent") presentEmployees.set(r.full_name, r);
-    }
+    const findRecord = (name: string, mat?: string | null): ShiftRecord | null => {
+      if (mat) { const r = recordByMatricule.get(mat); if (r) return r; }
+      return recordByName.get(normName(name)) ?? null;
+    };
 
-    const replacements = new Map<string, { absent: string; replacement: string }>();
-    for (const [teamId, employees] of teamEmployees) {
-      const teamEmployeesList = Array.from(employees);
-      const absentInTeam = teamEmployeesList.filter(name => !presentEmployees.has(name));
-      for (const absent of absentInTeam) {
-        const replacement = Array.from(presentEmployees.keys()).find(name => !employeeToTeam.has(name));
-        if (replacement) replacements.set(absent, { absent, replacement });
+    // ── Construire un FlatRecord depuis un ShiftRecord ──
+    const buildFromShiftRecord = (
+      r: ShiftRecord,
+      shiftTeam: ShiftTeamKey | null,
+      isScheduled: boolean,
+      isReplacement: boolean,
+      notScheduledRest: boolean,
+      isPending: boolean,
+      teamId: string,
+      replacedBy: string | null,
+      forceStatus?: FlatRecord["status"],
+    ): FlatRecord => {
+      // Choisir le bon schedule selon le shift
+      let schedForShift = sched;
+      if (shiftTeam) {
+        const preset = presets.find(p => detectShiftLabel(p.context) === shiftTeam);
+        if (preset) schedForShift = preset;
       }
-    }
-
-    return shiftData.records.map((r: ShiftRecord): FlatRecord => {
       const workedRaw = computeWorkedMinutesFromTimes(r.in_time, r.out_time) || (r.worked_minutes ?? 0);
-      const workedNetMin = Math.max(0, workedRaw - sched.breakMin);
-      const lateMin = computeLateMinutes(r.in_time, sched.startH, sched.startM);
-      const overtimeMin = computeOvertimeMinutes(r.out_time, sched.endH, sched.endM);
+      const workedNetMin = Math.max(0, workedRaw - schedForShift.breakMin);
+      const lateMin = r.in_time ? computeLateMinutes(r.in_time, schedForShift.startH, schedForShift.startM) : 0;
+      const overtimeMin = r.out_time ? computeOvertimeMinutes(r.out_time, schedForShift.endH, schedForShift.endM) : 0;
+      const effMin = workDayMinutes(schedForShift);
 
-      const employeeTeam = employeeToTeam.get(r.full_name);
-      const isScheduled = employeeTeam !== undefined;
-      const isPresent = r.status !== "absent";
-      const replacement = replacements.get(r.full_name);
-
-      let status = r.status;
-      let isReplacement = false;
-      let notScheduledRest = false;
-      let replacedBy = null;
-
-      if (!isScheduled && isPresent) { isReplacement = true; status = "ok"; }
-      else if (isScheduled && !isPresent) { status = "absent"; if (replacement) replacedBy = replacement.replacement; }
-      else if (!isScheduled && !isPresent) { notScheduledRest = true; status = "not_working"; }
-
-      let shiftTeam: ShiftTeamKey | null = null;
-      if (isScheduled) {
-        for (const key of (["jour", "soir1", "soir2"] as ShiftTeamKey[])) {
-          const found = todayPlanning[key]?.find(e => e.employee_name === r.full_name);
-          if (found) { shiftTeam = key; break; }
-        }
-      } else {
-        shiftTeam = detectShiftTeamFromTime(r.in_time);
-      }
+      let status: FlatRecord["status"] = forceStatus ?? (r.status as any);
+      if (!isScheduled && r.status !== "absent") { isReplacement = true; status = "ok"; }
+      else if (!isScheduled && r.status === "absent") { notScheduledRest = true; status = "not_working"; }
 
       return {
         employee_id: r.employee_id,
         matricule: r.matricule,
         full_name: r.full_name,
-        department: (r.department ?? "—").toUpperCase(),
+        department: (r.department ?? departmentMap.get(r.matricule) ?? "—").toUpperCase(),
         project: (() => {
           const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
           return p ? String(p).toUpperCase() : (projectMap.get(r.matricule) ?? "—");
         })(),
-        status: status as any,
+        status,
         is_late_api: r.is_late,
         late_label_api: r.late_label,
         computed_late_minutes: lateMin,
         overtime_minutes: overtimeMin,
         compensation: computeCompensation(lateMin, overtimeMin),
-        deficit_minutes: computeDeficitMinutes(workedNetMin, effectiveWorkMin),
+        deficit_minutes: computeDeficitMinutes(workedNetMin, effMin),
         in_time: r.in_time,
         out_time: r.out_time,
         worked_minutes: workedNetMin,
-        expected_minutes: effectiveWorkMin,
-        email: emailMap.get(r.matricule) ?? null,
+        expected_minutes: effMin,
+        email: emailMap.get(r.matricule) ?? (r as any).email ?? null,
         shift_team: shiftTeam,
         shift_team_label: SHIFT_TEAMS.find((t) => t.key === shiftTeam)?.label ?? "",
         is_scheduled: isScheduled,
         is_replacement: isReplacement,
         not_scheduled_rest: notScheduledRest,
-        is_shift_pending: false,
-        team_id: employeeTeam || "",
+        is_shift_pending: isPending,
+        team_id: teamId,
         replaced_by: replacedBy,
       };
-    });
-  }, [shiftData, emailMap, effectiveSchedule, viewMode, projectMap, todayPlanning]);
+    };
+
+    // ── Construire un FlatRecord "vide" pour un employé planifié sans pointage ──
+    const buildPendingRecord = (
+      empName: string,
+      empMat: string | null | undefined,
+      shiftTeam: ShiftTeamKey,
+      teamId: string,
+    ): FlatRecord => {
+      const shiftStatus = getShiftActiveStatus(shiftTeam);
+      const isPending = shiftStatus === "upcoming";
+      const status: FlatRecord["status"] = isPending ? "pending" : "absent";
+      let schedForShift = sched;
+      const preset = presets.find(p => detectShiftLabel(p.context) === shiftTeam);
+      if (preset) schedForShift = preset;
+      const mat = empMat ?? "";
+      return {
+        employee_id: -1,
+        matricule: mat,
+        full_name: empName,
+        department: departmentMap.get(mat) ?? "—",
+        project: projectMap.get(mat) ?? "—",
+        status,
+        is_late_api: false, late_label_api: null,
+        computed_late_minutes: 0, overtime_minutes: 0,
+        compensation: { late_min: 0, overtime_min: 0, compensated_min: 0, remaining_min: 0, is_compensated: false, has_overtime: false },
+        deficit_minutes: 0,
+        in_time: null, out_time: null,
+        worked_minutes: 0,
+        expected_minutes: workDayMinutes(schedForShift),
+        email: emailMap.get(mat) ?? null,
+        shift_team: shiftTeam,
+        shift_team_label: SHIFT_TEAMS.find((t) => t.key === shiftTeam)?.label ?? "",
+        is_scheduled: true,
+        is_replacement: false,
+        not_scheduled_rest: false,
+        is_shift_pending: isPending,
+        team_id: teamId,
+        replaced_by: null,
+      };
+    };
+
+    const result: FlatRecord[] = [];
+    const seenEmployees = new Set<string>(); // éviter doublons par nom normalisé
+
+    // ── ÉTAPE 1 : Parcourir TOUS les employés planifiés aujourd'hui ──
+    if (planningLoaded) {
+      for (const shiftKey of (["jour", "soir1", "soir2"] as ShiftTeamKey[])) {
+        for (const emp of todayPlanning[shiftKey]) {
+          const key = normName(emp.employee_name);
+          if (seenEmployees.has(key)) continue;
+          seenEmployees.add(key);
+
+          const apiRec = findRecord(emp.employee_name, emp.employee_matricule);
+          if (apiRec) {
+            // L'employé a un pointage → construire depuis l'API
+            const r = buildFromShiftRecord(
+              apiRec, shiftKey,
+              true, false, false,
+              false,
+              emp.team_id ?? "",
+              null,
+            );
+            // Corriger le matricule si l'API ne l'a pas mais le planning oui
+            result.push({ ...r, matricule: r.matricule || emp.employee_matricule || "" });
+          } else {
+            // Pas de pointage → créer un record pending/absent
+            result.push(buildPendingRecord(emp.employee_name, emp.employee_matricule, shiftKey, emp.team_id ?? ""));
+          }
+        }
+      }
+    }
+
+    // ── ÉTAPE 2 : Ajouter les employés qui ont pointé SANS être dans le planning ──
+    if (shiftData) {
+      for (const r of shiftData.records) {
+        const key = normName(r.full_name);
+        if (seenEmployees.has(key)) continue; // déjà traité via planning
+        seenEmployees.add(key);
+
+        // Non planifié : déterminer si c'est un jour de repos ou un remplacement
+        const shiftTeam = detectShiftTeamFromTime(r.in_time);
+        const notScheduledRest = r.status === "absent";
+        const isReplacement = !notScheduledRest;
+
+        result.push(buildFromShiftRecord(
+          r, shiftTeam,
+          false, isReplacement, notScheduledRest,
+          false, "", null,
+        ));
+      }
+    }
+
+    return result;
+  }, [shiftData, emailMap, effectiveSchedule, viewMode, projectMap, departmentMap, todayPlanning, presets]);
 
   const summaryRecords = useMemo((): SummaryRecord[] => {
     const resolveDept = (r: any) => (r.department ?? r.service ?? departmentMap.get(r.matricule ?? "") ?? "—").toUpperCase();
@@ -2244,7 +2130,7 @@ export default function AttendanceShiftsPage() {
         return {
           ...rec, shift_team: selectedTeam, is_scheduled: true,
           is_replacement: false, not_scheduled_rest: false,
-          is_shift_pending: shiftStat === "upcoming" && rec.status === "absent",
+          is_shift_pending: (shiftStat === "upcoming" && (rec.status === "absent" || rec.status === "pending")),
         };
       }
       return {
@@ -2269,9 +2155,12 @@ export default function AttendanceShiftsPage() {
     const base: FlatRecord[] = selectedTeam ? shiftPlanningBase : allRecords;
     return base.filter((r) => {
       if (!matchSearch(r, q)) return false;
+      // Masquer les repos non planifiés dans la vue "Tous" sauf si filtre explicite
+      if (!selectedTeam && r.not_scheduled_rest && statusFilter === "all") return false;
       if (statusFilter === "late") return isLateRecord(r);
       if (statusFilter === "deficit") return r.deficit_minutes > 0;
-      if (statusFilter === "absent") return r.status === "absent";
+      if (statusFilter === "absent") return r.status === "absent" && !r.not_scheduled_rest;
+      if (statusFilter === "pending") return r.status === "pending" || r.is_shift_pending;
       if (statusFilter !== "all") return r.status === statusFilter;
       return true;
     });
@@ -2313,7 +2202,8 @@ export default function AttendanceShiftsPage() {
   const noPlanningToday = viewMode === "daily" && todayPlanning.loaded && (
     selectedTeam
       ? shiftPlanningBase.length === 0
-      : todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length === 0
+      : (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length === 0
+         && (!shiftData || shiftData.records.length === 0))
   );
 
   const notScheduledRows = useMemo(() => {
@@ -2338,11 +2228,15 @@ export default function AttendanceShiftsPage() {
 
   const filterCount = (key: StatusFilter) => {
     const base: FlatRecord[] = selectedTeam ? shiftPlanningBase : allRecords;
-    if (key === "all") return base.length;
+    // Pour "Tous" on exclut les repos non planifiés du comptage par défaut
+    const visibleBase = (!selectedTeam && key === "all")
+      ? base.filter(r => !r.not_scheduled_rest)
+      : base;
+    if (key === "all") return visibleBase.length;
     if (key === "late") return base.filter(isLateRecord).length;
     if (key === "deficit") return base.filter((r) => r.deficit_minutes > 0).length;
-    if (key === "absent") return base.filter((r) => r.status === "absent").length;
-    if (key === "pending") return base.filter((r) => r.status === "pending").length;
+    if (key === "absent") return base.filter((r) => r.status === "absent" && !r.not_scheduled_rest).length;
+    if (key === "pending") return base.filter((r) => r.status === "pending" || r.is_shift_pending).length;
     return base.filter((r) => r.status === key).length;
   };
 
@@ -2451,11 +2345,12 @@ export default function AttendanceShiftsPage() {
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
             </button>
-            <button onClick={() => fetchData()}
+            <button onClick={() => fetchData(false)}
               className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
             </button>
           </div>
+          {viewMode === "daily" && <LiveClock />}
         </div>
 
         {/* ── Sélecteur équipe ── */}
@@ -2528,13 +2423,7 @@ export default function AttendanceShiftsPage() {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 flex gap-3">
-              {todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 && (
-                <div className="w-60 xl:w-72 shrink-0 rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col hidden lg:flex">
-                  <TodayPlanningPanel todayPlanning={todayPlanning} allRecords={allRecords} loading={loading} />
-                </div>
-              )}
-
+            <div className="flex-1 min-h-0 flex flex-col gap-2">
               <div className="flex-1 min-h-0 flex flex-col gap-2">
                 <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
                   <table className="min-w-full bg-white">
