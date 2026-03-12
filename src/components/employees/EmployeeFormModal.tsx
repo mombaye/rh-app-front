@@ -144,19 +144,37 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
   const chEnfant = (i: number, f: keyof Enfant, v: string) =>
     setForm(p => { const a = [...(p.enfants ?? [])]; a[i] = { ...a[i], [f]: v }; return { ...p, enfants: a }; });
 
+  // Convertit "" → null pour les DateFields Django (qui rejettent les chaînes vides)
+  const nullDate = (v: string) => v || null;
+
   const submit = async () => {
     setLoading(true);
     const payload: Partial<Employee> = {
       ...form,
+      // Champs choice : chaîne vide → undefined (omis de la requête)
       type_contrat:           (form.type_contrat || undefined) as ContractType | undefined,
       situation_matrimoniale: (form.situation_matrimoniale || undefined) as SituationMatrimoniale | undefined,
       type_piece:             (form.type_piece || undefined) as TypePiece | undefined,
+      // DateFields : chaîne vide → null (Django rejette "")
+      date_naissance:         nullDate(form.date_naissance),
+      date_delivrance:        nullDate(form.date_delivrance),
+      date_expiration:        nullDate(form.date_expiration),
+      date_fin_cdd:           nullDate(form.date_fin_cdd),
+      date_fin_periode_essai: nullDate(form.date_fin_periode_essai),
     };
     try {
       if (isEdit && initialData) { await updateEmployee(initialData.id, payload); toast.success("Employé mis à jour !"); }
       else                       { await createEmployee(payload);                 toast.success("Employé ajouté !"); }
       onSuccess(); onClose();
-    } catch { toast.error("Erreur lors de l'enregistrement"); }
+    } catch (err: any) {
+      const detail = err?.response?.data;
+      const msg = typeof detail === "string"
+        ? detail
+        : detail
+          ? Object.entries(detail).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join(" | ")
+          : "Erreur lors de l'enregistrement";
+      toast.error(msg);
+    }
     finally  { setLoading(false); }
   };
 
