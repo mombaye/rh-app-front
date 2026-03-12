@@ -1505,12 +1505,6 @@ function PlanningLoginModal({ open, onClose }: { open: boolean; onClose: () => v
             </div>
             {/* Body */}
             <div className="px-6 py-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Lock className="h-4 w-4 text-slate-400" />
-                <p className="text-sm text-slate-500">
-                  Connectez-vous avec votre compte <span className="font-semibold text-slate-700">gestionnaire de planning</span> pour accéder à la gestion des shifts.
-                </p>
-              </div>
               <form onSubmit={handleSubmit} className="space-y-3">
                 <input
                   type="text"
