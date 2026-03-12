@@ -1425,125 +1425,6 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
   );
 }
 
-// ============================================================================
-// COMPOSANT: PlanningLoginModal
-// Affiche un formulaire de connexion pour accéder à la gestion du planning.
-// Seuls les comptes avec is_planning_manager=true sont acceptés.
-// ============================================================================
-
-function PlanningLoginModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const navigate = useNavigate();
-  const { setUser } = useAuth();
-
-  useEffect(() => {
-    if (open) { setUsername(""); setPassword(""); setError(""); }
-  }, [open]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    try {
-      const baseURL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8030";
-      const loginRes = await fetch(`${baseURL}/api/auth/login/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      if (!loginRes.ok) {
-        const data = await loginRes.json().catch(() => ({}));
-        setError(data?.detail || "Identifiants incorrects.");
-        return;
-      }
-      const { access, refresh } = await loginRes.json();
-      const profileRes = await fetch(`${baseURL}/api/auth/profile/`, {
-        headers: { Authorization: `Bearer ${access}` },
-      });
-      if (!profileRes.ok) {
-        setError("Impossible de récupérer le profil utilisateur.");
-        return;
-      }
-      const profile = await profileRes.json();
-      if (!profile.is_planning_manager) {
-        setError("Accès refusé. Ce compte n'a pas le rôle gestionnaire de planning.");
-        return;
-      }
-      localStorage.setItem("access_token", access);
-      localStorage.setItem("refresh_token", refresh);
-      setUser(profile);
-      navigate("/planning");
-    } catch {
-      setError("Erreur de connexion. Vérifiez votre réseau.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <motion.div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm z-10 overflow-hidden"
-            initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 20 }} transition={{ type: "spring", stiffness: 300, damping: 28 }}>
-            {/* Header */}
-            <div className="bg-camublue-900 px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-white">
-                <CalendarRange className="h-5 w-5" />
-                <span className="font-bold text-base">Gestion du Planning</span>
-              </div>
-              <button onClick={onClose} className="text-white/70 hover:text-white transition">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            {/* Body */}
-            <div className="px-6 py-5">
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="Nom d'utilisateur"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  required
-                  autoFocus
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900 bg-slate-50"
-                />
-                <input
-                  type="password"
-                  placeholder="Mot de passe"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900 bg-slate-50"
-                />
-                {error && (
-                  <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                    <span>{error}</span>
-                  </div>
-                )}
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-camublue-900 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-camublue-900/90 transition disabled:opacity-60 flex items-center justify-center gap-2 mt-1"
-                >
-                  {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Connexion...</> : "Accéder au planning"}
-                </button>
-              </form>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
 
 // ============================================================================
 // COMPOSANT: AlertModal
@@ -1819,12 +1700,7 @@ export default function AttendanceShiftsPage() {
   const navigate = useNavigate();
 
   const handlePlanningClick = () => {
-    // Les admins RH ont accès direct sans reconnexion
-    if (user?.is_global_admin || user?.is_planning_manager) {
-      navigate("/planning");
-    } else {
-      setPlanningLoginOpen(true);
-    }
+    navigate("/planning");
   };
 
   const [loading, setLoading] = useState(false);
@@ -1846,8 +1722,6 @@ export default function AttendanceShiftsPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [sendingAlert, setSendingAlert] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [planningOpen, setPlanningOpen] = useState(false);
-  const [planningLoginOpen, setPlanningLoginOpen] = useState(false);
   const [showNotScheduled, setShowNotScheduled] = useState(false);
   const [week, setWeek] = useState(isoWeekNow());
   const [month, setMonth] = useState(yyyyMmToday());
@@ -2683,10 +2557,6 @@ export default function AttendanceShiftsPage() {
           open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
           employee={selectedEmployee} onConfirm={handleSendAlert} sending={sendingAlert} />
 
-        <PlanningLoginModal
-          open={planningLoginOpen}
-          onClose={() => setPlanningLoginOpen(false)}
-        />
       </motion.div>
     </AppLayout>
   );
