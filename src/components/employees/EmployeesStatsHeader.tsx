@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { FaUsers, FaUserPlus, FaUserTie, FaUserCheck, FaUserTimes, FaFileContract, FaFileSignature, FaUserGraduate } from "react-icons/fa";
+import { FaUsers, FaUserPlus, FaUserTie, FaUserCheck, FaUserTimes } from "react-icons/fa";
 import { motion } from "framer-motion";
 
 type ProfileFilter = "ALL" | "ACTIVE" | "EXITED";
@@ -10,12 +10,14 @@ const StatCard = ({
   label,
   active = false,
   onClick,
+  children,
 }: {
   icon: React.ReactNode;
   value: React.ReactNode;
   label: string;
   active?: boolean;
   onClick?: () => void;
+  children?: React.ReactNode;
 }) => (
   <Card
     onClick={onClick}
@@ -39,6 +41,7 @@ const StatCard = ({
         </span>
       )}
     </div>
+    {children}
   </Card>
 );
 
@@ -57,19 +60,10 @@ export default function EmployeesStatsHeader({
 }) {
   if (loading)
     return (
-      <div className="space-y-4 mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-24 animate-pulse bg-gray-100 rounded-2xl" />
-          ))}
-        </div>
-        {showExitsByContract && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-24 animate-pulse bg-gray-100 rounded-2xl" />
-            ))}
-          </div>
-        )}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="h-24 animate-pulse bg-gray-100 rounded-2xl" />
+        ))}
       </div>
     );
 
@@ -111,70 +105,60 @@ export default function EmployeesStatsHeader({
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="space-y-4 mb-6"
+      className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6"
     >
-      {/* Ligne 1 : stats générales */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {/* Total effectif */}
-        <StatCard
-          icon={<FaUsers size={28} className="text-camublue-900" />}
-          value={total}
-          label="Effectif total"
-        />
+      {/* Total effectif */}
+      <StatCard
+        icon={<FaUsers size={28} className="text-camublue-900" />}
+        value={total}
+        label="Effectif total"
+      />
 
-        {/* Actifs — cliquable pour filtrer */}
-        <StatCard
-          icon={<FaUserCheck size={28} className="text-emerald-500" />}
-          value={activeCount}
-          label="Actifs"
-          active={profileFilter === "ACTIVE"}
-          onClick={() => handleClick("ACTIVE")}
-        />
+      {/* Actifs — cliquable pour filtrer */}
+      <StatCard
+        icon={<FaUserCheck size={28} className="text-emerald-500" />}
+        value={activeCount}
+        label="Actifs"
+        active={profileFilter === "ACTIVE"}
+        onClick={() => handleClick("ACTIVE")}
+      />
 
-        {/* Sortis — cliquable pour filtrer */}
-        <StatCard
-          icon={<FaUserTimes size={28} className="text-red-400" />}
-          value={exitedCount}
-          label="Sortis"
-          active={profileFilter === "EXITED"}
-          onClick={() => handleClick("EXITED")}
-        />
+      {/* Sortis — cliquable pour filtrer, avec ventilation par contrat */}
+      <StatCard
+        icon={<FaUserTimes size={28} className="text-red-400" />}
+        value={exitedCount}
+        label="Sortis"
+        active={profileFilter === "EXITED"}
+        onClick={() => handleClick("EXITED")}
+      >
+        {showExitsByContract && exitedCount > 0 && (
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-full">
+              CDI&nbsp;{exitedByContractType.CDI}
+            </span>
+            <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full">
+              CDD&nbsp;{exitedByContractType.CDD}
+            </span>
+            <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">
+              Stage&nbsp;{exitedByContractType.STAGE}
+            </span>
+          </div>
+        )}
+      </StatCard>
 
-        {/* Nouveaux ce mois */}
-        <StatCard
-          icon={<FaUserPlus size={28} className="text-green-500" />}
-          value={newThisMonth}
-          label="Nouveaux ce mois"
-        />
+      {/* Nouveaux ce mois */}
+      <StatCard
+        icon={<FaUserPlus size={28} className="text-green-500" />}
+        value={newThisMonth}
+        label="Nouveaux ce mois"
+      />
 
-        {/* Managers */}
-        <StatCard
-          icon={<FaUserTie size={28} className="text-indigo-500" />}
-          value={managers}
-          label="Managers"
-        />
-      </div>
-
-      {/* Ligne 2 : sorties par type de contrat (employés internes uniquement) */}
-      {showExitsByContract && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <StatCard
-            icon={<FaFileContract size={26} className="text-slate-600" />}
-            value={exitedByContractType.CDI}
-            label="Sorties CDI"
-          />
-          <StatCard
-            icon={<FaFileSignature size={26} className="text-orange-500" />}
-            value={exitedByContractType.CDD}
-            label="Sorties CDD"
-          />
-          <StatCard
-            icon={<FaUserGraduate size={26} className="text-purple-500" />}
-            value={exitedByContractType.STAGE}
-            label="Sorties Stage"
-          />
-        </div>
-      )}
+      {/* Managers */}
+      <StatCard
+        icon={<FaUserTie size={28} className="text-indigo-500" />}
+        value={managers}
+        label="Managers"
+      />
     </motion.div>
   );
 }
