@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import AppLayout from "@/layouts/AppLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -6,7 +6,9 @@ import {
   UserCheck, UserX, AlertTriangle, CheckCircle,
   RefreshCw, Calendar, Award,
   ArrowUp, ArrowDown, Minus, LogIn, LogOut, Star,
+  ChevronDown, Download, X,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import {
   ResponsiveContainer, BarChart, Bar,
   PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
@@ -54,6 +56,7 @@ const firstDayOfYearMonth = (y: number, m: number) => `${y}-${String(m).padStart
 // ─── Types ───────────────────────────────────────────────────────────────────
 type EmpFilter  = ContractType | "ALL";
 type SectionKey = "employees" | "pointages" | "bulletins" | "conges";
+interface MonthYear { month: number; year: number }
 
 // ─── Helpers Top Présents ────────────────────────────────────────────────────
 const ARRIVAL_CUTOFF  = 8 * 60;
@@ -135,34 +138,271 @@ function SectionTabs({
   );
 }
 
+// ─── Month Picker ─────────────────────────────────────────────────────────────
+function MonthPicker({ value, onChange }: { value: MonthYear; onChange: (m: MonthYear) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const now = new Date();
+  const months: MonthYear[] = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    return { month: d.getMonth() + 1, year: d.getFullYear() };
+  });
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition shadow-sm"
+      >
+        <Calendar className="h-4 w-4 text-camublue-900" />
+        <span className="hidden sm:inline">{MONTH_FULL[value.month]}</span>
+        <span className="sm:hidden">{MONTH_NAMES[value.month]}</span>
+        <span>{value.year}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.97 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50 max-h-72 overflow-y-auto"
+          >
+            {months.map((m) => {
+              const active = m.month === value.month && m.year === value.year;
+              return (
+                <button
+                  key={`${m.year}-${m.month}`}
+                  onClick={() => { onChange(m); setOpen(false); }}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors
+                    ${active ? "bg-camublue-900 text-white font-semibold" : "text-slate-700 hover:bg-slate-50"}`}
+                >
+                  <span>{MONTH_FULL[m.month]}</span>
+                  <span className={active ? "text-blue-200" : "text-slate-400"}>{m.year}</span>
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ─── Date Range Picker ────────────────────────────────────────────────────────
 function DateRangePicker({
-  start, end, onStartChange, onEndChange,
+  draft, onDraftChange, onApply,
 }: {
-  start: string; end: string;
-  onStartChange: (v: string) => void;
-  onEndChange: (v: string) => void;
+  draft: { start: string; end: string };
+  onDraftChange: (v: { start: string; end: string }) => void;
+  onApply: () => void;
 }) {
   const maxDate = new Date().toISOString().split("T")[0];
   return (
     <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm">
-      <Calendar className="h-4 w-4 text-camublue-900 shrink-0" />
       <input
         type="date"
-        value={start}
-        max={end}
-        onChange={(e) => onStartChange(e.target.value)}
+        value={draft.start}
+        max={draft.end}
+        onChange={(e) => onDraftChange({ ...draft, start: e.target.value })}
         className="text-sm font-medium text-slate-700 bg-transparent outline-none cursor-pointer w-32"
       />
       <span className="text-slate-400 text-xs font-medium">→</span>
       <input
         type="date"
-        value={end}
-        min={start}
+        value={draft.end}
+        min={draft.start}
         max={maxDate}
-        onChange={(e) => onEndChange(e.target.value)}
+        onChange={(e) => onDraftChange({ ...draft, end: e.target.value })}
         className="text-sm font-medium text-slate-700 bg-transparent outline-none cursor-pointer w-32"
       />
+      <button
+        onClick={onApply}
+        className="ml-1 px-3 py-1 rounded-lg bg-camublue-900 text-white text-xs font-semibold hover:bg-camublue-800 transition shadow-sm whitespace-nowrap"
+      >
+        Appliquer
+      </button>
+    </div>
+  );
+}
+
+// ─── Export Modal ─────────────────────────────────────────────────────────────
+type ExportSection = "employes" | "pointages_jour" | "pointages_semaine" | "pointages_mois" | "bulletins";
+
+function ExportModal({
+  open, onClose, rangeLabel,
+  employees, daily, weekly, monthly, bulletins,
+}: {
+  open: boolean; onClose: () => void; rangeLabel: string;
+  employees: Employee[];
+  daily: DailyStatsResponse | null;
+  weekly: WeeklyStatsResponse | null;
+  monthly: MonthlyStatsResponse | null;
+  bulletins: BulletinMonthSummary[];
+}) {
+  const [selected, setSelected] = useState<Set<ExportSection>>(
+    new Set(["employes", "pointages_jour", "pointages_semaine", "pointages_mois", "bulletins"])
+  );
+
+  const toggleSection = (s: ExportSection) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(s) ? next.delete(s) : next.add(s);
+      return next;
+    });
+  };
+
+  const handleExport = () => {
+    const wb = XLSX.utils.book_new();
+
+    if (selected.has("employes")) {
+      const rows = employees.map((e) => ({
+        Matricule:       e.matricule ?? "",
+        "Nom complet":   `${e.prenom ?? ""} ${e.nom ?? ""}`.trim(),
+        Statut:          e.status ?? "",
+        "Type contrat":  e.type_contrat ?? "",
+        Département:     (e as any).departement ?? (e as any).service ?? "",
+        Genre:           e.sexe === "H" ? "Homme" : e.sexe === "F" ? "Femme" : "",
+        "Date embauche": e.date_embauche ?? "",
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Employés");
+    }
+
+    if (selected.has("pointages_jour") && daily) {
+      const rows = (daily.records ?? []).map((r) => ({
+        "Nom complet":  r.full_name,
+        Département:    r.department ?? "",
+        Date:           r.work_date,
+        Statut:         r.status,
+        Entrée:         r.in_time ?? "",
+        Sortie:         r.out_time ?? "",
+        "Min travaillés":  r.worked_minutes,
+        "Min attendus":    r.expected_minutes,
+        "Retard (min)":    r.late_minutes,
+        "En retard":       r.is_late ? "Oui" : "Non",
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pointages Jour");
+    }
+
+    if (selected.has("pointages_semaine") && weekly) {
+      const rows = (weekly.by_day ?? []).map((d) => ({
+        Date:           d.date,
+        Jour:           d.weekday_label,
+        Présents:       d.ok_count,
+        Absents:        d.absent_count,
+        Incomplets:     d.incomplete_count,
+        "En retard":    d.late_count,
+        "Min travaillés": d.worked_minutes,
+        "Min attendus":   d.expected_minutes,
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pointages Semaine");
+    }
+
+    if (selected.has("pointages_mois") && monthly) {
+      const rows = (monthly.by_week ?? []).map((w) => ({
+        Semaine:          w.week,
+        "Min travaillés": w.worked_minutes,
+        "Min attendus":   w.expected_minutes,
+        "H travaillées":  Math.round(w.worked_minutes / 60),
+        "H attendues":    Math.round(w.expected_minutes / 60),
+        "Nb retards":     w.late_count,
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pointages Mois");
+    }
+
+    if (selected.has("bulletins") && bulletins.length > 0) {
+      const rows = bulletins.map((b) => ({
+        Année:     b.year,
+        Mois:      MONTH_FULL[b.month],
+        Générés:   b.total,
+        Envoyés:   b.sent,
+        "Non envoyés": Math.max(0, (b.total ?? 0) - (b.sent ?? 0)),
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Bulletins");
+    }
+
+    if (wb.SheetNames.length === 0) return;
+    XLSX.writeFile(wb, `dashboard_rh_${rangeLabel.replace(/\//g, "-").replace(/ /g, "_")}.xlsx`);
+    onClose();
+  };
+
+  const SECTIONS: { key: ExportSection; label: string; available: boolean }[] = [
+    { key: "employes",          label: "Employés",                available: employees.length > 0   },
+    { key: "pointages_jour",    label: "Pointages du jour",       available: !!daily                },
+    { key: "pointages_semaine", label: "Présence — Semaine",      available: !!weekly               },
+    { key: "pointages_mois",    label: "Heures — Mois (par sem.)", available: !!monthly             },
+    { key: "bulletins",         label: "Bulletins de salaire",    available: bulletins.length > 0   },
+  ];
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.15 }}
+        className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-sm p-5"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">Exporter les données</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Période : {rangeLabel}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
+            <X className="h-4 w-4 text-slate-500" />
+          </button>
+        </div>
+        <p className="text-xs text-slate-500 mb-3 font-medium">Sélectionnez les données à inclure :</p>
+        <div className="space-y-2">
+          {SECTIONS.map(({ key, label, available }) => (
+            <label
+              key={key}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all
+                ${!available ? "opacity-40 cursor-not-allowed" : ""}
+                ${selected.has(key) && available
+                  ? "border-camublue-900 bg-camublue-900/5"
+                  : "border-slate-100 hover:border-slate-200 bg-slate-50"
+                }`}
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(key) && available}
+                disabled={!available}
+                onChange={() => available && toggleSection(key)}
+                className="accent-camublue-900 w-4 h-4 shrink-0"
+              />
+              <span className="text-xs font-medium text-slate-700">{label}</span>
+              {!available && <span className="ml-auto text-[10px] text-slate-400">Aucune donnée</span>}
+            </label>
+          ))}
+        </div>
+        <div className="flex gap-2 mt-5">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={selected.size === 0}
+            className="flex-1 py-2 rounded-xl bg-camublue-900 text-white text-xs font-semibold hover:bg-camublue-800 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Exporter XLSX
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -533,11 +773,14 @@ export default function DashboardPage() {
   const defaultStart = firstDayOfYearMonth(now.getFullYear(), now.getMonth() + 1);
   const defaultEnd   = todayStr();
 
-  const [activeSection, setActiveSection] = useState<SectionKey>("employees");
-  const [empFilter,     setEmpFilter]     = useState<EmpFilter>("ALL");
-  const [dateStart,     setDateStart]     = useState(defaultStart);
-  const [dateEnd,       setDateEnd]       = useState(defaultEnd);
-  const [refreshing,    setRefreshing]    = useState(false);
+  const [activeSection,  setActiveSection]  = useState<SectionKey>("employees");
+  const [empFilter,      setEmpFilter]      = useState<EmpFilter>("ALL");
+  const [selectedMonth,  setSelectedMonth]  = useState<MonthYear>({ month: now.getMonth() + 1, year: now.getFullYear() });
+  const [dateStart,      setDateStart]      = useState(defaultStart);
+  const [dateEnd,        setDateEnd]        = useState(defaultEnd);
+  const [draft,          setDraft]          = useState({ start: defaultStart, end: defaultEnd });
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [showExport,     setShowExport]     = useState(false);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [daily,     setDaily]     = useState<DailyStatsResponse | null>(null);
@@ -579,6 +822,24 @@ export default function DashboardPage() {
   useEffect(() => { fetchEmployees(empFilter); fetchAttendance(dateStart, dateEnd); }, []);
   useEffect(() => { fetchAttendance(dateStart, dateEnd); }, [dateStart, dateEnd]);
   useEffect(() => { fetchEmployees(empFilter); }, [empFilter]);
+
+  const handleMonthChange = (m: MonthYear) => {
+    setSelectedMonth(m);
+    const firstDay = firstDayOfYearMonth(m.year, m.month);
+    const lastDay  = `${m.year}-${String(m.month).padStart(2, "0")}-${new Date(m.year, m.month, 0).getDate()}`;
+    const isCurrent = m.month === now.getMonth() + 1 && m.year === now.getFullYear();
+    const end = isCurrent ? todayStr() : lastDay;
+    setDraft({ start: firstDay, end });
+    setDateStart(firstDay);
+    setDateEnd(end);
+  };
+
+  const handleApplyRange = () => {
+    if (draft.start && draft.end) {
+      setDateStart(draft.start);
+      setDateEnd(draft.end);
+    }
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -687,12 +948,19 @@ export default function DashboardPage() {
               <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">Vue d'ensemble · {monthLabel}</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              <MonthPicker value={selectedMonth} onChange={handleMonthChange} />
               <DateRangePicker
-                start={dateStart}
-                end={dateEnd}
-                onStartChange={setDateStart}
-                onEndChange={setDateEnd}
+                draft={draft}
+                onDraftChange={setDraft}
+                onApply={handleApplyRange}
               />
+              <button
+                onClick={() => setShowExport(true)}
+                className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition shadow-sm"
+              >
+                <Download className="h-3.5 w-3.5 text-camublue-900" />
+                <span className="hidden sm:inline">Exporter</span>
+              </button>
               <button
                 onClick={handleRefresh} disabled={refreshing}
                 className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition shadow-sm disabled:opacity-50"
@@ -980,6 +1248,21 @@ export default function DashboardPage() {
         </div>
 
       </div>
+
+      <AnimatePresence>
+        {showExport && (
+          <ExportModal
+            open={showExport}
+            onClose={() => setShowExport(false)}
+            rangeLabel={rangeLabel}
+            employees={employees}
+            daily={daily}
+            weekly={weekly}
+            monthly={monthly}
+            bulletins={bulletins}
+          />
+        )}
+      </AnimatePresence>
     </AppLayout>
   );
 }
