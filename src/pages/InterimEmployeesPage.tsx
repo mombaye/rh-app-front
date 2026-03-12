@@ -594,6 +594,7 @@ export default function InterimEmployeesPage() {
             onExit={handleExitClick}
             onReinstate={openReinstate}
             onImport={handleImport}
+            onEmployeeUpdated={fetchInterimEmployees}
             showContractType={false}
           />
         </div>

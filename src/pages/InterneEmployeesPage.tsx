@@ -1178,6 +1178,7 @@ export default function InterneEmployeesPage() {
             onExit={handleExitClick}
             onReinstate={openReinstate}
             onImport={handleImport}
+            onEmployeeUpdated={fetchInternalEmployees}
             showContractType={true}
           />
         </div>

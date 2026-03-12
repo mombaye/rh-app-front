@@ -92,6 +92,38 @@ export const addCareerHistoryEntry = async (
 ): Promise<CareerHistoryEntry> =>
   (await api.post(`/api/employees/${employeeId}/career-history/`, entry)).data;
 
+// ══════════════════════════════════════════════════════
+//  MUTATION CONTRACTUELLE
+// ══════════════════════════════════════════════════════
+export type ContractChangePayload = {
+  event_type: CareerEventType;
+  event_date: string;
+  description?: string;
+  // Champs contractuels à mettre à jour (tous optionnels)
+  type_contrat?: string | null;
+  date_embauche?: string | null;
+  date_fin_cdd?: string | null;
+  date_fin_periode_essai?: string | null;
+  fonction?: string | null;
+  categorie?: string | null;
+  service?: string | null;
+  manager?: string | null;
+  projet?: string | null;
+  business_line?: string | null;
+  localisation?: string | null;
+};
+
+export type ContractChangeResult = {
+  employee: Employee;
+  career_event: CareerHistoryEntry;
+};
+
+export const applyContractChange = async (
+  employeeId: number,
+  payload: ContractChangePayload
+): Promise<ContractChangeResult> =>
+  (await api.post(`/api/employees/${employeeId}/contract-change/`, payload)).data;
+
 export const deleteEmployee = async (id: number) =>
   await api.delete(`/api/employees/${id}/`);
 

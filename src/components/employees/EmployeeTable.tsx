@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import {
   FaEdit, FaFileExcel, FaUserPlus, FaPaperPlane,
-  FaSort, FaSortUp, FaSortDown, FaFilePdf, FaHistory, FaBriefcase,
+  FaSort, FaSortUp, FaSortDown, FaFilePdf, FaHistory, FaBriefcase, FaExchangeAlt,
   FaSearch, FaTimes, FaChevronRight, FaArrowLeft, FaCheck,
   FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight
 } from "react-icons/fa";
@@ -17,6 +17,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import EmployeePayslipResendModal from "@/components/employees/EmployeePayslipResendModal";
 import EmployeeHistoryModal from "@/components/employees/EmployeeHistoryModal";
 import CareerHistoryModal from "@/components/employees/CareerHistoryModal";
+import ContractChangeModal from "@/components/employees/ContractChangeModal";
 
 interface Props {
   employees: Employee[];
@@ -25,6 +26,7 @@ interface Props {
   onExit: (employee: Employee) => void;
   onReinstate: (employee: Employee) => void;
   onImport: (file: File) => void;
+  onEmployeeUpdated?: (employee: Employee) => void;
   showContractType?: boolean;
 }
 
@@ -53,6 +55,7 @@ export default function EmployeesTable({
   onExit,
   onReinstate,
   onImport,
+  onEmployeeUpdated,
   showContractType = true,
 }: Props) {
   const [search, setSearch] = useState("");
@@ -68,6 +71,8 @@ export default function EmployeesTable({
   const [historyEmp, setHistoryEmp] = useState<Employee | null>(null);
   const [careerOpen, setCareerOpen] = useState(false);
   const [careerEmp, setCareerEmp] = useState<Employee | null>(null);
+  const [contractChangeOpen, setContractChangeOpen] = useState(false);
+  const [contractChangeEmp, setContractChangeEmp] = useState<Employee | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: "asc" | "desc" } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isSendingCodes, setIsSendingCodes] = useState(false);
@@ -310,26 +315,28 @@ export default function EmployeesTable({
     const service  = resolveService(rowEmp);
 
     const rowActions = [
-      { id: "edit",           icon: <FaEdit size={15} />,            label: "Modifier les informations",    color: "text-amber-600",    show: true },
-      { id: "career",         icon: <FaBriefcase size={15} />,       label: "Parcours de carrière",         color: "text-teal-600",     show: true },
-      { id: "history",        icon: <FaHistory size={15} />,         label: "Voir l'historique des modifs", color: "text-indigo-600",   show: true },
-      { id: "send-code",      icon: <FaPaperPlane size={15} />,      label: "Envoyer le code d'accès",      color: "text-emerald-600",  show: true },
-      { id: "create-account", icon: <FaUserPlus size={15} />,        label: "Créer un accès utilisateur",   color: "text-blue-600",     show: !isExited },
-      { id: "exit",           icon: <TbLogout size={15} />,          label: "Enregistrer la sortie",        color: "text-red-600",      show: !isExited },
-      { id: "reinstate",      icon: <AiOutlineRollback size={15} />, label: "Réintégrer l'employé",         color: "text-camublue-900", show: isExited },
-      { id: "payslip",        icon: <FaFilePdf size={15} />,         label: "Renvoyer un bulletin de paie", color: "text-purple-600",   show: true },
+      { id: "edit",            icon: <FaEdit size={15} />,            label: "Modifier les informations",    color: "text-amber-600",    show: true },
+      { id: "contract-change", icon: <FaExchangeAlt size={15} />,     label: "Mutation contractuelle",       color: "text-orange-600",   show: !isExited },
+      { id: "career",          icon: <FaBriefcase size={15} />,       label: "Parcours de carrière",         color: "text-teal-600",     show: true },
+      { id: "history",         icon: <FaHistory size={15} />,         label: "Voir l'historique des modifs", color: "text-indigo-600",   show: true },
+      { id: "send-code",       icon: <FaPaperPlane size={15} />,      label: "Envoyer le code d'accès",      color: "text-emerald-600",  show: true },
+      { id: "create-account",  icon: <FaUserPlus size={15} />,        label: "Créer un accès utilisateur",   color: "text-blue-600",     show: !isExited },
+      { id: "exit",            icon: <TbLogout size={15} />,          label: "Enregistrer la sortie",        color: "text-red-600",      show: !isExited },
+      { id: "reinstate",       icon: <AiOutlineRollback size={15} />, label: "Réintégrer l'employé",         color: "text-camublue-900", show: isExited },
+      { id: "payslip",         icon: <FaFilePdf size={15} />,         label: "Renvoyer un bulletin de paie", color: "text-purple-600",   show: true },
     ].filter((a) => a.show);
 
     const handleRowAction = (id: string) => {
       if (!rowEmp) return;
-      if      (id === "edit")           { onEdit(rowEmp); setRowOpen(false); }
-      else if (id === "career")         { setCareerEmp(rowEmp); setCareerOpen(true); setRowOpen(false); }
-      else if (id === "history")        { setHistoryEmp(rowEmp); setHistoryOpen(true); setRowOpen(false); }
-      else if (id === "send-code")      { doSendCodeSingle(rowEmp); }
-      else if (id === "create-account") { handleCreateAccount(rowEmp); }
-      else if (id === "exit")           { onExit(rowEmp); setRowOpen(false); }
-      else if (id === "reinstate")      { onReinstate(rowEmp); setRowOpen(false); }
-      else if (id === "payslip")        { setPayslipEmp(rowEmp); setPayslipOpen(true); setRowOpen(false); }
+      if      (id === "edit")            { onEdit(rowEmp); setRowOpen(false); }
+      else if (id === "contract-change") { setContractChangeEmp(rowEmp); setContractChangeOpen(true); setRowOpen(false); }
+      else if (id === "career")          { setCareerEmp(rowEmp); setCareerOpen(true); setRowOpen(false); }
+      else if (id === "history")         { setHistoryEmp(rowEmp); setHistoryOpen(true); setRowOpen(false); }
+      else if (id === "send-code")       { doSendCodeSingle(rowEmp); }
+      else if (id === "create-account")  { handleCreateAccount(rowEmp); }
+      else if (id === "exit")            { onExit(rowEmp); setRowOpen(false); }
+      else if (id === "reinstate")       { onReinstate(rowEmp); setRowOpen(false); }
+      else if (id === "payslip")         { setPayslipEmp(rowEmp); setPayslipOpen(true); setRowOpen(false); }
     };
 
     return (
@@ -799,6 +806,17 @@ export default function EmployeesTable({
         open={careerOpen}
         employee={careerEmp}
         onClose={() => { setCareerOpen(false); setCareerEmp(null); }}
+      />
+
+      <ContractChangeModal
+        open={contractChangeOpen}
+        employee={contractChangeEmp}
+        onClose={() => { setContractChangeOpen(false); setContractChangeEmp(null); }}
+        onSuccess={(updatedEmp) => {
+          setContractChangeOpen(false);
+          setContractChangeEmp(null);
+          if (onEmployeeUpdated) onEmployeeUpdated(updatedEmp);
+        }}
       />
     </div>
   );
