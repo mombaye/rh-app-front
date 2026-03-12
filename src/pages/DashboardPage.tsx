@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, FileText, Clock, TrendingUp,
   UserCheck, UserX, AlertTriangle, CheckCircle,
-  ChevronDown, RefreshCw, Calendar, Award,
+  RefreshCw, Calendar, Award,
   ArrowUp, ArrowDown, Minus, LogIn, LogOut, Star,
 } from "lucide-react";
 import {
@@ -54,7 +54,6 @@ const firstDayOfYearMonth = (y: number, m: number) => `${y}-${String(m).padStart
 // ─── Types ───────────────────────────────────────────────────────────────────
 type EmpFilter  = ContractType | "ALL";
 type SectionKey = "employees" | "pointages" | "bulletins" | "conges";
-interface MonthYear { month: number; year: number }
 
 // ─── Helpers Top Présents ────────────────────────────────────────────────────
 const ARRIVAL_CUTOFF  = 8 * 60;
@@ -136,53 +135,34 @@ function SectionTabs({
   );
 }
 
-// ─── Month Picker ─────────────────────────────────────────────────────────────
-function MonthPicker({ value, onChange }: { value: MonthYear; onChange: (m: MonthYear) => void }) {
-  const [open, setOpen] = useState(false);
-  const now = new Date();
-  const months: MonthYear[] = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    return { month: d.getMonth() + 1, year: d.getFullYear() };
-  });
-
+// ─── Date Range Picker ────────────────────────────────────────────────────────
+function DateRangePicker({
+  start, end, onStartChange, onEndChange,
+}: {
+  start: string; end: string;
+  onStartChange: (v: string) => void;
+  onEndChange: (v: string) => void;
+}) {
+  const maxDate = new Date().toISOString().split("T")[0];
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition shadow-sm"
-      >
-        <Calendar className="h-4 w-4 text-camublue-900" />
-        <span className="hidden sm:inline">{MONTH_FULL[value.month]}</span>
-        <span className="sm:hidden">{MONTH_NAMES[value.month]}</span>
-        <span>{value.year}</span>
-        <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.97 }}
-            transition={{ duration: 0.15 }}
-            className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50 max-h-72 overflow-y-auto"
-          >
-            {months.map((m) => {
-              const active = m.month === value.month && m.year === value.year;
-              return (
-                <button
-                  key={`${m.year}-${m.month}`}
-                  onClick={() => { onChange(m); setOpen(false); }}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors
-                    ${active ? "bg-camublue-900 text-white font-semibold" : "text-slate-700 hover:bg-slate-50"}`}
-                >
-                  <span>{MONTH_FULL[m.month]}</span>
-                  <span className={active ? "text-blue-200" : "text-slate-400"}>{m.year}</span>
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm">
+      <Calendar className="h-4 w-4 text-camublue-900 shrink-0" />
+      <input
+        type="date"
+        value={start}
+        max={end}
+        onChange={(e) => onStartChange(e.target.value)}
+        className="text-sm font-medium text-slate-700 bg-transparent outline-none cursor-pointer w-32"
+      />
+      <span className="text-slate-400 text-xs font-medium">→</span>
+      <input
+        type="date"
+        value={end}
+        min={start}
+        max={maxDate}
+        onChange={(e) => onEndChange(e.target.value)}
+        className="text-sm font-medium text-slate-700 bg-transparent outline-none cursor-pointer w-32"
+      />
     </div>
   );
 }
@@ -550,13 +530,14 @@ function CongesSection({ monthLabel }: { monthLabel: string }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const now = new Date();
-  const [activeSection,  setActiveSection]  = useState<SectionKey>("employees");
-  const [empFilter,      setEmpFilter]      = useState<EmpFilter>("ALL");
-  const [selectedMonth,  setSelectedMonth]  = useState<MonthYear>({
-    month: now.getMonth() + 1,
-    year:  now.getFullYear(),
-  });
-  const [refreshing, setRefreshing] = useState(false);
+  const defaultStart = firstDayOfYearMonth(now.getFullYear(), now.getMonth() + 1);
+  const defaultEnd   = todayStr();
+
+  const [activeSection, setActiveSection] = useState<SectionKey>("employees");
+  const [empFilter,     setEmpFilter]     = useState<EmpFilter>("ALL");
+  const [dateStart,     setDateStart]     = useState(defaultStart);
+  const [dateEnd,       setDateEnd]       = useState(defaultEnd);
+  const [refreshing,    setRefreshing]    = useState(false);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [daily,     setDaily]     = useState<DailyStatsResponse | null>(null);
@@ -581,30 +562,27 @@ export default function DashboardPage() {
     finally { setLoadEmp(false); }
   }, []);
 
-  const fetchAttendance = useCallback(async (my: MonthYear) => {
-    const ymStr     = yearMonthStr(my.year, my.month);
-    const firstDay  = firstDayOfYearMonth(my.year, my.month);
-    const weekStr   = isoWeekFromDate(new Date(firstDay));
-    const isCurrent = my.month === now.getMonth() + 1 && my.year === now.getFullYear();
-    const dayStr    = isCurrent ? todayStr() : firstDay;
+  const fetchAttendance = useCallback(async (start: string, end: string) => {
+    const weekStr = isoWeekFromDate(new Date(start));
+    const ymStr   = start.slice(0, 7);
 
     setLoadDaily(true); setLoadWeekly(true); setLoadMonthly(true); setLoadBulletin(true);
     await Promise.allSettled([
-      getDailyStats(dayStr)   .then(setDaily)    .finally(() => setLoadDaily(false)),
+      getDailyStats(start)    .then(setDaily)    .finally(() => setLoadDaily(false)),
       getWeeklyStats(weekStr) .then(setWeekly)   .finally(() => setLoadWeekly(false)),
       getMonthlyStats(ymStr)  .then(setMonthly)  .finally(() => setLoadMonthly(false)),
-      fetchBulletinsSummary({ start: firstDay, end: isCurrent ? todayStr() : `${ymStr}-31` })
+      fetchBulletinsSummary({ start, end })
         .then(setBulletins).finally(() => setLoadBulletin(false)),
     ]);
   }, []);
 
-  useEffect(() => { fetchEmployees(empFilter); fetchAttendance(selectedMonth); }, []);
-  useEffect(() => { fetchAttendance(selectedMonth); }, [selectedMonth]);
+  useEffect(() => { fetchEmployees(empFilter); fetchAttendance(dateStart, dateEnd); }, []);
+  useEffect(() => { fetchAttendance(dateStart, dateEnd); }, [dateStart, dateEnd]);
   useEffect(() => { fetchEmployees(empFilter); }, [empFilter]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.allSettled([fetchEmployees(empFilter), fetchAttendance(selectedMonth)]);
+    await Promise.allSettled([fetchEmployees(empFilter), fetchAttendance(dateStart, dateEnd)]);
     setRefreshing(false);
   };
 
@@ -614,9 +592,10 @@ export default function DashboardPage() {
   const sortis   = employees.filter((e) => e.status === "EXITED").length;
   const hommes   = employees.filter((e) => e.status === "ACTIVE" && e.sexe === "H").length;
   const femmes   = employees.filter((e) => e.status === "ACTIVE" && e.sexe === "F").length;
-  const firstDay = firstDayOfYearMonth(selectedMonth.year, selectedMonth.month);
   const nouveaux = employees.filter(
-    (e) => e.status === "ACTIVE" && (e.date_embauche ?? "") >= firstDay
+    (e) => e.status === "ACTIVE" &&
+      (e.date_embauche ?? "") >= dateStart &&
+      (e.date_embauche ?? "") <= dateEnd
   ).length;
 
   const contratMap: Record<string, number> = {};
@@ -687,7 +666,14 @@ export default function DashboardPage() {
     .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
     .map((b) => ({ mois: MONTH_NAMES[b.month], envoyes: b.sent, total: b.total }));
 
-  const monthLabel = `${MONTH_FULL[selectedMonth.month]} ${selectedMonth.year}`;
+  const fmtDateFr = (d: string) => {
+    const [y, m, day] = d.split("-");
+    return `${day}/${m}/${y}`;
+  };
+  const rangeLabel = dateStart === dateEnd
+    ? fmtDateFr(dateStart)
+    : `${fmtDateFr(dateStart)} – ${fmtDateFr(dateEnd)}`;
+  const monthLabel = rangeLabel;
 
   return (
     <AppLayout>
@@ -701,7 +687,12 @@ export default function DashboardPage() {
               <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">Vue d'ensemble · {monthLabel}</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
+              <DateRangePicker
+                start={dateStart}
+                end={dateEnd}
+                onStartChange={setDateStart}
+                onEndChange={setDateEnd}
+              />
               <button
                 onClick={handleRefresh} disabled={refreshing}
                 className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition shadow-sm disabled:opacity-50"
