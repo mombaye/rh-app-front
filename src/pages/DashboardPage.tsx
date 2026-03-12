@@ -261,6 +261,12 @@ function ExportModal({
     });
   };
 
+  const toggleAll = () => {
+    const availableKeys = SECTION_DEFS.filter((s) => s.available).map((s) => s.key);
+    const allSelected = availableKeys.every((k) => selected.has(k));
+    setSelected(allSelected ? new Set() : new Set(availableKeys));
+  };
+
   const handleExport = () => {
     const wb = XLSX.utils.book_new();
 
@@ -279,12 +285,12 @@ function ExportModal({
 
     if (selected.has("pointages_jour") && daily) {
       const rows = (daily.records ?? []).map((r) => ({
-        "Nom complet":  r.full_name,
-        Département:    r.department ?? "",
-        Date:           r.work_date,
-        Statut:         r.status,
-        Entrée:         r.in_time ?? "",
-        Sortie:         r.out_time ?? "",
+        "Nom complet":     r.full_name,
+        Département:       r.department ?? "",
+        Date:              r.work_date,
+        Statut:            r.status,
+        Entrée:            r.in_time ?? "",
+        Sortie:            r.out_time ?? "",
         "Min travaillés":  r.worked_minutes,
         "Min attendus":    r.expected_minutes,
         "Retard (min)":    r.late_minutes,
@@ -295,37 +301,37 @@ function ExportModal({
 
     if (selected.has("pointages_semaine") && weekly) {
       const rows = (weekly.by_day ?? []).map((d) => ({
-        Date:           d.date,
-        Jour:           d.weekday_label,
-        Présents:       d.ok_count,
-        Absents:        d.absent_count,
-        Incomplets:     d.incomplete_count,
-        "En retard":    d.late_count,
-        "Min travaillés": d.worked_minutes,
-        "Min attendus":   d.expected_minutes,
+        Date:               d.date,
+        Jour:               d.weekday_label,
+        Présents:           d.ok_count,
+        Absents:            d.absent_count,
+        Incomplets:         d.incomplete_count,
+        "En retard":        d.late_count,
+        "Min travaillés":   d.worked_minutes,
+        "Min attendus":     d.expected_minutes,
       }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pointages Semaine");
     }
 
     if (selected.has("pointages_mois") && monthly) {
       const rows = (monthly.by_week ?? []).map((w) => ({
-        Semaine:          w.week,
-        "Min travaillés": w.worked_minutes,
-        "Min attendus":   w.expected_minutes,
-        "H travaillées":  Math.round(w.worked_minutes / 60),
-        "H attendues":    Math.round(w.expected_minutes / 60),
-        "Nb retards":     w.late_count,
+        Semaine:            w.week,
+        "H travaillées":    Math.round(w.worked_minutes / 60),
+        "H attendues":      Math.round(w.expected_minutes / 60),
+        "Min travaillés":   w.worked_minutes,
+        "Min attendus":     w.expected_minutes,
+        "Nb retards":       w.late_count,
       }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pointages Mois");
     }
 
     if (selected.has("bulletins") && bulletins.length > 0) {
       const rows = bulletins.map((b) => ({
-        Année:     b.year,
-        Mois:      MONTH_FULL[b.month],
-        Générés:   b.total,
-        Envoyés:   b.sent,
-        "Non envoyés": Math.max(0, (b.total ?? 0) - (b.sent ?? 0)),
+        Année:           b.year,
+        Mois:            MONTH_FULL[b.month],
+        Générés:         b.total,
+        Envoyés:         b.sent,
+        "Non envoyés":   Math.max(0, (b.total ?? 0) - (b.sent ?? 0)),
       }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Bulletins");
     }
@@ -335,68 +341,189 @@ function ExportModal({
     onClose();
   };
 
-  const SECTIONS: { key: ExportSection; label: string; available: boolean }[] = [
-    { key: "employes",          label: "Employés",                available: employees.length > 0   },
-    { key: "pointages_jour",    label: "Pointages du jour",       available: !!daily                },
-    { key: "pointages_semaine", label: "Présence — Semaine",      available: !!weekly               },
-    { key: "pointages_mois",    label: "Heures — Mois (par sem.)", available: !!monthly             },
-    { key: "bulletins",         label: "Bulletins de salaire",    available: bulletins.length > 0   },
+  const SECTION_DEFS: {
+    key: ExportSection;
+    label: string;
+    sub: string;
+    icon: React.ReactNode;
+    badge: string;
+    badgeColor: string;
+    available: boolean;
+  }[] = [
+    {
+      key: "employes",
+      label: "Employés",
+      sub: "Matricule · Statut · Contrat · Genre",
+      icon: <Users className="h-4 w-4" />,
+      badge: employees.length > 0 ? `${employees.length} lignes` : "Vide",
+      badgeColor: "bg-blue-50 text-blue-700",
+      available: employees.length > 0,
+    },
+    {
+      key: "pointages_jour",
+      label: "Pointages du jour",
+      sub: "Entrée · Sortie · Retard · Statut",
+      icon: <Clock className="h-4 w-4" />,
+      badge: daily ? `${(daily.records ?? []).length} lignes` : "Vide",
+      badgeColor: "bg-emerald-50 text-emerald-700",
+      available: !!daily && (daily.records ?? []).length > 0,
+    },
+    {
+      key: "pointages_semaine",
+      label: "Présence — Semaine",
+      sub: "Présents · Absents · Retards par jour",
+      icon: <Calendar className="h-4 w-4" />,
+      badge: weekly ? `${(weekly.by_day ?? []).length} jours` : "Vide",
+      badgeColor: "bg-violet-50 text-violet-700",
+      available: !!weekly && (weekly.by_day ?? []).length > 0,
+    },
+    {
+      key: "pointages_mois",
+      label: "Heures — Mois",
+      sub: "Heures travaillées vs attendues / semaine",
+      icon: <TrendingUp className="h-4 w-4" />,
+      badge: monthly ? `${(monthly.by_week ?? []).length} semaines` : "Vide",
+      badgeColor: "bg-amber-50 text-amber-700",
+      available: !!monthly && (monthly.by_week ?? []).length > 0,
+    },
+    {
+      key: "bulletins",
+      label: "Bulletins de salaire",
+      sub: "Générés · Envoyés par mois",
+      icon: <FileText className="h-4 w-4" />,
+      badge: bulletins.length > 0 ? `${bulletins.length} mois` : "Vide",
+      badgeColor: "bg-rose-50 text-rose-700",
+      available: bulletins.length > 0,
+    },
   ];
+
+  const availableCount = SECTION_DEFS.filter((s) => s.available).length;
+  const selectedCount  = SECTION_DEFS.filter((s) => s.available && selected.has(s.key)).length;
+  const allSelected    = availableCount > 0 && selectedCount === availableCount;
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.15 }}
-        className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-sm p-5"
+        initial={{ opacity: 0, y: 16, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.97 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden"
       >
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-bold text-slate-800">Exporter les données</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Période : {rangeLabel}</p>
+        {/* ── Header ── */}
+        <div className="bg-gradient-to-r from-camublue-900 to-blue-700 px-5 py-4 flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+              <Download className="h-4.5 w-4.5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white leading-tight">Exporter les données</h3>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Calendar className="h-3 w-3 text-blue-200" />
+                <span className="text-[11px] text-blue-200 font-medium">{rangeLabel}</span>
+              </div>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
-            <X className="h-4 w-4 text-slate-500" />
-          </button>
-        </div>
-        <p className="text-xs text-slate-500 mb-3 font-medium">Sélectionnez les données à inclure :</p>
-        <div className="space-y-2">
-          {SECTIONS.map(({ key, label, available }) => (
-            <label
-              key={key}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all
-                ${!available ? "opacity-40 cursor-not-allowed" : ""}
-                ${selected.has(key) && available
-                  ? "border-camublue-900 bg-camublue-900/5"
-                  : "border-slate-100 hover:border-slate-200 bg-slate-50"
-                }`}
-            >
-              <input
-                type="checkbox"
-                checked={selected.has(key) && available}
-                disabled={!available}
-                onChange={() => available && toggleSection(key)}
-                className="accent-camublue-900 w-4 h-4 shrink-0"
-              />
-              <span className="text-xs font-medium text-slate-700">{label}</span>
-              {!available && <span className="ml-auto text-[10px] text-slate-400">Aucune donnée</span>}
-            </label>
-          ))}
-        </div>
-        <div className="flex gap-2 mt-5">
           <button
             onClick={onClose}
-            className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition text-white mt-0.5"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* ── Body ── */}
+        <div className="p-5">
+          {/* Select all row */}
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold text-slate-600">
+              Sélectionner les feuilles à inclure
+            </span>
+            <button
+              onClick={toggleAll}
+              className="text-[11px] font-semibold text-camublue-900 hover:underline transition"
+            >
+              {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {SECTION_DEFS.map(({ key, label, sub, icon, badge, badgeColor, available }) => {
+              const isOn = selected.has(key) && available;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={!available}
+                  onClick={() => available && toggleSection(key)}
+                  className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border text-left transition-all
+                    ${!available ? "opacity-40 cursor-not-allowed bg-slate-50 border-slate-100" : ""}
+                    ${available && isOn
+                      ? "border-camublue-900 bg-camublue-900/5 shadow-sm"
+                      : available
+                        ? "border-slate-200 bg-white hover:border-camublue-900/40 hover:bg-slate-50"
+                        : ""
+                    }`}
+                >
+                  {/* Icon */}
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors
+                    ${isOn ? "bg-camublue-900 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    {icon}
+                  </div>
+
+                  {/* Text */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-semibold leading-tight ${isOn ? "text-camublue-900" : "text-slate-700"}`}>
+                        {label}
+                      </span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${badgeColor}`}>
+                        {badge}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-0.5 truncate">{sub}</p>
+                  </div>
+
+                  {/* Checkbox custom */}
+                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all
+                    ${isOn
+                      ? "bg-camublue-900 border-camublue-900"
+                      : "bg-white border-slate-300"
+                    }`}>
+                    {isOn && (
+                      <svg viewBox="0 0 12 10" fill="none" className="w-3 h-3">
+                        <path d="M1 5l3.5 3.5L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="px-5 pb-5 flex items-center gap-2.5">
+          {/* Counter */}
+          <div className="flex-1">
+            <span className="text-[11px] text-slate-400">
+              {selectedCount > 0
+                ? <><span className="font-bold text-camublue-900">{selectedCount}</span> feuille{selectedCount > 1 ? "s" : ""} sélectionnée{selectedCount > 1 ? "s" : ""}</>
+                : "Aucune sélection"
+              }
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
           >
             Annuler
           </button>
           <button
             onClick={handleExport}
-            disabled={selected.size === 0}
-            className="flex-1 py-2 rounded-xl bg-camublue-900 text-white text-xs font-semibold hover:bg-camublue-800 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+            disabled={selectedCount === 0}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-xs font-bold hover:bg-blue-800 transition disabled:opacity-40 shadow-sm disabled:shadow-none"
           >
             <Download className="h-3.5 w-3.5" />
             Exporter XLSX
