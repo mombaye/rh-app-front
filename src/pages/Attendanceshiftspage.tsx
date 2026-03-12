@@ -1610,7 +1610,31 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                   ) : (
                     /* ── Vue Planning identique à l'Excel : dates en colonnes, employés en lignes, couleurs réelles ── */
                     <div style={{ overflowX: "auto" }}>
-                      <table style={{ borderCollapse: "collapse", fontSize: "11px", tableLayout: "auto" }}>
+                      {/* Légende équipes */}
+                      {(() => {
+                        const teamIds = Array.from(new Set(excelGrid.flatMap(g => g.teams.map(t => t.team_id)).filter(Boolean)));
+                        if (!teamIds.length) return null;
+                        return (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", padding: "8px 10px 4px", borderBottom: "1px solid #e2e8f0" }}>
+                            <span style={{ fontSize: "10px", fontWeight: 700, color: "#64748b", alignSelf: "center", marginRight: 4 }}>ÉQUIPES :</span>
+                            {teamIds.map((tid) => {
+                              const rs = planningRowStyle(tid);
+                              return (
+                                <span key={tid} style={{
+                                  display: "inline-flex", alignItems: "center", gap: 5,
+                                  padding: "2px 8px", borderRadius: 99, fontSize: "10px", fontWeight: 600,
+                                  backgroundColor: rs.backgroundColor, color: rs.color,
+                                  border: "1px solid rgba(0,0,0,0.12)",
+                                }}>
+                                  <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: rs.color, opacity: 0.5, display: "inline-block" }} />
+                                  {tid}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                      <table style={{ borderCollapse: "collapse", fontSize: "11px", tableLayout: "auto", width: "100%" }}>
                         <thead style={{ position: "sticky", top: 0, zIndex: 20 }}>
                           <tr style={{ backgroundColor: "#1b2d50", color: "white" }}>
                             {/* Colonne SHIFT — sticky gauche */}
@@ -1619,29 +1643,32 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                               backgroundColor: "#1b2d50", color: "white",
                               fontWeight: "bold", fontSize: "10px",
                               padding: "6px 10px",
-                              borderRight: "2px solid rgba(255,255,255,0.25)",
-                              minWidth: "70px", textAlign: "center",
+                              border: "1px solid rgba(255,255,255,0.18)",
+                              minWidth: "62px", textAlign: "center",
                             }}>SHIFT</th>
                             {/* Colonnes dates */}
                             {activeDays.map((date) => {
                               const d = new Date(date + "T00:00:00");
                               const isToday = date === todayISO();
                               const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                              const dd = String(d.getDate()).padStart(2, "0");
+                              const mm = String(d.getMonth() + 1).padStart(2, "0");
+                              const yy = d.getFullYear().toString().slice(2);
                               return (
                                 <th key={date} style={{
-                                  backgroundColor: isToday ? "#2563eb" : isWeekend ? "#374558" : "#1b2d50",
+                                  backgroundColor: isToday ? "#1d4ed8" : isWeekend ? "#2d3f5a" : "#1b2d50",
                                   color: "white",
                                   fontWeight: 700,
-                                  padding: "4px 2px",
-                                  borderRight: "1px solid rgba(255,255,255,0.12)",
-                                  minWidth: "110px",
+                                  padding: "4px 3px",
+                                  border: "1px solid rgba(255,255,255,0.15)",
+                                  minWidth: "88px",
                                   textAlign: "center",
                                   whiteSpace: "nowrap",
                                 }}>
-                                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.3 }}>
-                                    <span style={{ fontSize: "9px", textTransform: "uppercase", opacity: 0.85 }}>{DAYS_FR[d.getDay()]}</span>
-                                    <span style={{ fontSize: "14px", fontWeight: 900, lineHeight: 1 }}>{d.getDate()}</span>
-                                    <span style={{ fontSize: "9px", opacity: 0.7 }}>{MONTHS_SHORT[d.getMonth()]}/{d.getFullYear().toString().slice(2)}</span>
+                                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+                                    <span style={{ fontSize: "9px", textTransform: "uppercase", opacity: 0.75, letterSpacing: "0.04em" }}>{DAYS_FR[d.getDay()]}</span>
+                                    <span style={{ fontSize: "13px", fontWeight: 900, lineHeight: 1 }}>{dd}/{mm}</span>
+                                    <span style={{ fontSize: "8px", opacity: 0.6 }}>{yy}</span>
                                   </div>
                                 </th>
                               );
@@ -1651,43 +1678,89 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                         <tbody>
                           {(() => {
                             const tableRows: React.ReactNode[] = [];
-                            const SHIFT_LABELS: Record<string, string> = { jour: "08H-16H", soir1: "16H-22H", soir2: "22H-08H" };
-                            const SHIFT_HEADER_COLORS: Record<string, string> = { jour: "#1a6b5e", soir1: "#8a5c08", soir2: "#5b2d8e" };
+                            const SHIFT_LABELS: Record<string, string> = { jour: "08H – 16H", soir1: "16H – 22H", soir2: "22H – 08H" };
+                            const SHIFT_HEADER_COLORS: Record<string, { bg: string; border: string }> = {
+                              jour:  { bg: "#166534", border: "#14532d" },
+                              soir1: { bg: "#92400e", border: "#78350f" },
+                              soir2: { bg: "#581c87", border: "#4c1d95" },
+                            };
 
-                            for (const { shift_type, teams } of excelGrid) {
+                            excelGrid.forEach(({ shift_type, teams }, shiftIdx) => {
                               const shiftLabel = SHIFT_LABELS[shift_type] ?? shift_type;
-                              const shiftHeaderColor = SHIFT_HEADER_COLORS[shift_type] ?? "#334155";
+                              const shiftColors = SHIFT_HEADER_COLORS[shift_type] ?? { bg: "#334155", border: "#1e293b" };
                               const totalRows = teams.reduce((sum, t) => sum + t.rows.length, 0);
-                              let isFirstShiftRow = true;
 
+                              // Ligne séparateur de shift (sauf le premier)
+                              if (shiftIdx > 0) {
+                                tableRows.push(
+                                  <tr key={`sep-${shift_type}`}>
+                                    <td colSpan={activeDays.length + 1} style={{
+                                      height: "6px",
+                                      backgroundColor: "#e2e8f0",
+                                      padding: 0,
+                                    }} />
+                                  </tr>
+                                );
+                              }
+
+                              // Ligne bannière du shift
+                              tableRows.push(
+                                <tr key={`banner-${shift_type}`}>
+                                  <td colSpan={activeDays.length + 1} style={{
+                                    backgroundColor: shiftColors.bg,
+                                    color: "white",
+                                    fontWeight: 800,
+                                    fontSize: "11px",
+                                    padding: "5px 12px",
+                                    letterSpacing: "0.08em",
+                                    textTransform: "uppercase",
+                                    borderBottom: `2px solid ${shiftColors.border}`,
+                                    position: "sticky",
+                                    left: 0,
+                                  }}>
+                                    ▶ {shiftLabel}
+                                  </td>
+                                </tr>
+                              );
+
+                              let isFirstShiftRow = true;
                               for (const { team_id, rows: teamRows } of teams) {
                                 const rowStyle = planningRowStyle(team_id);
+                                const teamRowCount = teamRows.length;
 
-                                for (const { row_slot, cells } of teamRows) {
+                                for (let ri = 0; ri < teamRows.length; ri++) {
+                                  const { row_slot, cells } = teamRows[ri];
                                   const showShiftCell = isFirstShiftRow;
+                                  const showTeamCell = ri === 0;
                                   isFirstShiftRow = false;
+
+                                  const isLastTeamRow = ri === teamRows.length - 1;
+                                  const rowBorderBottom = isLastTeamRow
+                                    ? `2px solid rgba(0,0,0,0.18)`
+                                    : `1px solid rgba(0,0,0,0.07)`;
 
                                   tableRows.push(
                                     <tr key={`${shift_type}-${team_id}-${row_slot}`}
-                                      style={{ borderBottom: "1px solid rgba(0,0,0,0.10)" }}>
-                                      {/* Colonne SHIFT — rowspan sur tout le groupe */}
+                                      style={{ borderBottom: rowBorderBottom }}>
+                                      {/* Colonne SHIFT — rowspan sur tout le groupe shift */}
                                       {showShiftCell && (
                                         <td rowSpan={totalRows} style={{
                                           position: "sticky", left: 0, zIndex: 10,
-                                          backgroundColor: shiftHeaderColor,
+                                          backgroundColor: shiftColors.bg,
                                           color: "white",
                                           fontWeight: "bold",
                                           fontSize: "11px",
-                                          padding: "4px 6px",
-                                          borderRight: "2px solid rgba(0,0,0,0.20)",
+                                          padding: "4px 5px",
+                                          border: `1px solid ${shiftColors.border}`,
                                           textAlign: "center",
                                           verticalAlign: "middle",
                                           whiteSpace: "nowrap",
                                           writingMode: "vertical-lr",
                                           transform: "rotate(180deg)",
-                                          letterSpacing: "0.05em",
-                                          minWidth: "50px",
-                                          boxShadow: "2px 0 4px rgba(0,0,0,0.12)",
+                                          letterSpacing: "0.06em",
+                                          minWidth: "48px",
+                                          maxWidth: "48px",
+                                          boxShadow: "2px 0 6px rgba(0,0,0,0.18)",
                                         }}>
                                           {shiftLabel}
                                         </td>
@@ -1700,20 +1773,25 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                                         const empName = cells[date] ?? "";
                                         const cellBg = empName
                                           ? rowStyle.backgroundColor
-                                          : isToday ? "#dbeafe" : isWeekend ? "#f1f5f9" : "#ffffff";
-                                        const cellColor = empName ? rowStyle.color : "#94a3b8";
+                                          : isToday ? "#dbeafe" : isWeekend ? "#f8fafc" : "#ffffff";
+                                        const cellColor = empName ? rowStyle.color : "#cbd5e1";
+                                        const cellBorderRight = isWeekend
+                                          ? "1px solid #cbd5e1"
+                                          : "1px solid #e2e8f0";
                                         return (
                                           <td key={date} style={{
                                             backgroundColor: cellBg,
                                             color: cellColor,
-                                            padding: "4px 7px",
-                                            borderRight: "1px solid rgba(0,0,0,0.08)",
+                                            padding: "4px 6px",
+                                            borderRight: cellBorderRight,
+                                            borderBottom: "1px solid #e2e8f0",
                                             fontSize: "11px",
-                                            fontWeight: empName ? 500 : 400,
-                                            minWidth: "110px",
+                                            fontWeight: empName ? 600 : 400,
+                                            minWidth: "88px",
                                             whiteSpace: "nowrap",
+                                            outline: isToday ? "1px inset #3b82f6" : undefined,
                                           }}>
-                                            {empName}
+                                            {empName || <span style={{ fontSize: "10px", opacity: 0.3 }}>—</span>}
                                           </td>
                                         );
                                       })}
@@ -1721,7 +1799,7 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                                   );
                                 }
                               }
-                            }
+                            });
                             return tableRows;
                           })()}
                         </tbody>
