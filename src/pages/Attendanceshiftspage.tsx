@@ -1608,117 +1608,119 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                       </button>
                     </div>
                   ) : (
-                    /* ── Vue Planning identique à l'Excel : dates en colonnes, employés en lignes, couleurs réelles ── */
+                    /* ── Vue Planning : groupée par semaine (7 jours), design Excel exact ── */
                     <div style={{ overflowX: "auto" }}>
                       <table style={{ borderCollapse: "collapse", fontSize: "11px", tableLayout: "auto" }}>
-                        <thead style={{ position: "sticky", top: 0, zIndex: 20 }}>
-                          <tr style={{ backgroundColor: "#1b2d50", color: "white" }}>
-                            {/* Colonne SHIFT — sticky gauche */}
-                            <th style={{
-                              position: "sticky", left: 0, zIndex: 30,
-                              backgroundColor: "#1b2d50", color: "white",
-                              fontWeight: "bold", fontSize: "10px",
-                              padding: "6px 10px",
-                              borderRight: "2px solid rgba(255,255,255,0.25)",
-                              minWidth: "70px", textAlign: "center",
-                            }}>SHIFT</th>
-                            {/* Colonnes dates */}
-                            {activeDays.map((date) => {
-                              const d = new Date(date + "T00:00:00");
-                              const isToday = date === todayISO();
-                              const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                              return (
-                                <th key={date} style={{
-                                  backgroundColor: isToday ? "#2563eb" : isWeekend ? "#374558" : "#1b2d50",
-                                  color: "white",
-                                  fontWeight: 700,
-                                  padding: "4px 2px",
-                                  borderRight: "1px solid rgba(255,255,255,0.12)",
-                                  minWidth: "110px",
-                                  textAlign: "center",
-                                  whiteSpace: "nowrap",
-                                }}>
-                                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.3 }}>
-                                    <span style={{ fontSize: "9px", textTransform: "uppercase", opacity: 0.85 }}>{DAYS_FR[d.getDay()]}</span>
-                                    <span style={{ fontSize: "14px", fontWeight: 900, lineHeight: 1 }}>{d.getDate()}</span>
-                                    <span style={{ fontSize: "9px", opacity: 0.7 }}>{MONTHS_SHORT[d.getMonth()]}/{d.getFullYear().toString().slice(2)}</span>
-                                  </div>
-                                </th>
-                              );
-                            })}
-                          </tr>
-                        </thead>
                         <tbody>
                           {(() => {
                             const tableRows: React.ReactNode[] = [];
                             const SHIFT_LABELS: Record<string, string> = { jour: "08H-16H", soir1: "16H-22H", soir2: "22H-08H" };
-                            const SHIFT_HEADER_COLORS: Record<string, string> = { jour: "#1a6b5e", soir1: "#8a5c08", soir2: "#5b2d8e" };
+                            const HEADER_BG = "#2e7d32";
+                            const HEADER_TEXT = "#ffffff";
+                            const SHIFT_COL_STYLE: React.CSSProperties = {
+                              position: "sticky", left: 0, zIndex: 10,
+                              backgroundColor: HEADER_BG,
+                              color: HEADER_TEXT,
+                              fontWeight: "bold",
+                              fontSize: "11px",
+                              padding: "4px 6px",
+                              borderRight: "2px solid rgba(255,255,255,0.30)",
+                              textAlign: "center",
+                              verticalAlign: "middle",
+                              whiteSpace: "nowrap",
+                              writingMode: "vertical-lr",
+                              transform: "rotate(180deg)",
+                              letterSpacing: "0.05em",
+                              minWidth: "50px",
+                              boxShadow: "2px 0 4px rgba(0,0,0,0.12)",
+                            };
 
-                            for (const { shift_type, teams } of excelGrid) {
-                              const shiftLabel = SHIFT_LABELS[shift_type] ?? shift_type;
-                              const shiftHeaderColor = SHIFT_HEADER_COLORS[shift_type] ?? "#334155";
-                              const totalRows = teams.reduce((sum, t) => sum + t.rows.length, 0);
-                              let isFirstShiftRow = true;
+                            // Découpage en semaines de 7 jours
+                            const weekChunks: string[][] = [];
+                            for (let i = 0; i < activeDays.length; i += 7) {
+                              weekChunks.push(activeDays.slice(i, i + 7));
+                            }
 
-                              for (const { team_id, rows: teamRows } of teams) {
-                                const rowStyle = planningRowStyle(team_id);
+                            for (const weekDays of weekChunks) {
+                              // ── Ligne d'en-tête de semaine ──
+                              tableRows.push(
+                                <tr key={`hdr-${weekDays[0]}`} style={{ backgroundColor: HEADER_BG, color: HEADER_TEXT }}>
+                                  <th style={{
+                                    position: "sticky", left: 0, zIndex: 30,
+                                    backgroundColor: HEADER_BG, color: HEADER_TEXT,
+                                    fontWeight: "bold", fontSize: "11px",
+                                    padding: "6px 10px",
+                                    borderRight: "2px solid rgba(255,255,255,0.30)",
+                                    minWidth: "50px", textAlign: "center",
+                                    whiteSpace: "nowrap",
+                                  }}>SHIFT</th>
+                                  {weekDays.map((date) => {
+                                    const d = new Date(date + "T00:00:00");
+                                    const dd = String(d.getDate()).padStart(2, "0");
+                                    const mm = String(d.getMonth() + 1).padStart(2, "0");
+                                    const yyyy = d.getFullYear();
+                                    return (
+                                      <th key={date} style={{
+                                        backgroundColor: HEADER_BG,
+                                        color: HEADER_TEXT,
+                                        fontWeight: 700,
+                                        padding: "6px 4px",
+                                        borderRight: "1px solid rgba(255,255,255,0.20)",
+                                        minWidth: "120px",
+                                        textAlign: "center",
+                                        whiteSpace: "nowrap",
+                                        fontSize: "11px",
+                                      }}>
+                                        {`${dd}/${mm}/${yyyy}`}
+                                      </th>
+                                    );
+                                  })}
+                                </tr>
+                              );
 
-                                for (const { row_slot, cells } of teamRows) {
-                                  const showShiftCell = isFirstShiftRow;
-                                  isFirstShiftRow = false;
+                              // ── Lignes employés pour chaque shift ──
+                              for (const { shift_type, teams } of excelGrid) {
+                                const shiftLabel = SHIFT_LABELS[shift_type] ?? shift_type;
+                                const totalRows = teams.reduce((sum, t) => sum + t.rows.length, 0);
+                                let isFirstShiftRow = true;
 
-                                  tableRows.push(
-                                    <tr key={`${shift_type}-${team_id}-${row_slot}`}
-                                      style={{ borderBottom: "1px solid rgba(0,0,0,0.10)" }}>
-                                      {/* Colonne SHIFT — rowspan sur tout le groupe */}
-                                      {showShiftCell && (
-                                        <td rowSpan={totalRows} style={{
-                                          position: "sticky", left: 0, zIndex: 10,
-                                          backgroundColor: shiftHeaderColor,
-                                          color: "white",
-                                          fontWeight: "bold",
-                                          fontSize: "11px",
-                                          padding: "4px 6px",
-                                          borderRight: "2px solid rgba(0,0,0,0.20)",
-                                          textAlign: "center",
-                                          verticalAlign: "middle",
-                                          whiteSpace: "nowrap",
-                                          writingMode: "vertical-lr",
-                                          transform: "rotate(180deg)",
-                                          letterSpacing: "0.05em",
-                                          minWidth: "50px",
-                                          boxShadow: "2px 0 4px rgba(0,0,0,0.12)",
-                                        }}>
-                                          {shiftLabel}
-                                        </td>
-                                      )}
-                                      {/* Cellules dates */}
-                                      {activeDays.map((date) => {
-                                        const d = new Date(date + "T00:00:00");
-                                        const isToday = date === todayISO();
-                                        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                                        const empName = cells[date] ?? "";
-                                        const cellBg = empName
-                                          ? rowStyle.backgroundColor
-                                          : isToday ? "#dbeafe" : isWeekend ? "#f1f5f9" : "#ffffff";
-                                        const cellColor = empName ? rowStyle.color : "#94a3b8";
-                                        return (
-                                          <td key={date} style={{
-                                            backgroundColor: cellBg,
-                                            color: cellColor,
-                                            padding: "4px 7px",
-                                            borderRight: "1px solid rgba(0,0,0,0.08)",
-                                            fontSize: "11px",
-                                            fontWeight: empName ? 500 : 400,
-                                            minWidth: "110px",
-                                            whiteSpace: "nowrap",
-                                          }}>
-                                            {empName}
+                                for (const { team_id, rows: teamRows } of teams) {
+                                  const rowStyle = planningRowStyle(team_id);
+
+                                  for (const { row_slot, cells } of teamRows) {
+                                    const showShiftCell = isFirstShiftRow;
+                                    isFirstShiftRow = false;
+
+                                    tableRows.push(
+                                      <tr key={`${weekDays[0]}-${shift_type}-${team_id}-${row_slot}`}
+                                        style={{ borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
+                                        {showShiftCell && (
+                                          <td rowSpan={totalRows} style={SHIFT_COL_STYLE}>
+                                            {shiftLabel}
                                           </td>
-                                        );
-                                      })}
-                                    </tr>
-                                  );
+                                        )}
+                                        {weekDays.map((date) => {
+                                          const empName = cells[date] ?? "";
+                                          const cellBg = empName ? rowStyle.backgroundColor : "#ffffff";
+                                          const cellColor = empName ? rowStyle.color : "#94a3b8";
+                                          return (
+                                            <td key={date} style={{
+                                              backgroundColor: cellBg,
+                                              color: cellColor,
+                                              padding: "5px 8px",
+                                              borderRight: "1px solid rgba(0,0,0,0.08)",
+                                              fontSize: "11px",
+                                              fontWeight: empName ? 600 : 400,
+                                              minWidth: "120px",
+                                              whiteSpace: "nowrap",
+                                            }}>
+                                              {empName}
+                                            </td>
+                                          );
+                                        })}
+                                      </tr>
+                                    );
+                                  }
                                 }
                               }
                             }
