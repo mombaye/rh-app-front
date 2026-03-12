@@ -308,21 +308,100 @@ function detectShiftTeamFromTime(inIso: string | null): ShiftTeamKey | null {
   return "soir2";
 }
 
+// Retourne le statut du shift par rapport à l'heure actuelle
+// upcoming = pas encore commencé | active = en cours | ended = terminé
 function getShiftActiveStatus(shiftKey: ShiftTeamKey): "active" | "upcoming" | "ended" {
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
+  // 08H-16H : commence 08h00, tolérance entrée dès 05h00, finit 16h00
   if (shiftKey === "jour") {
     if (nowMin >= 5 * 60 && nowMin < 16 * 60) return "active";
     if (nowMin < 5 * 60) return "upcoming";
     return "ended";
   }
+  // 16H-22H : commence 16h00, tolérance dès 14h00, finit 22h00
   if (shiftKey === "soir1") {
     if (nowMin >= 14 * 60 && nowMin < 22 * 60) return "active";
     if (nowMin < 14 * 60) return "upcoming";
     return "ended";
   }
+  // 22H-08H : commence 22h00, tolérance dès 20h00, finit 08h00 lendemain
   if (nowMin >= 20 * 60 || nowMin < 8 * 60) return "active";
+  if (nowMin >= 8 * 60 && nowMin < 20 * 60) return "ended";
   return "upcoming";
+}
+
+// Retourne l'heure de début planifiée d'un shift en minutes depuis minuit
+function getShiftStartMin(shiftKey: ShiftTeamKey, presets: WorkSchedulePreset[]): number {
+  const preset = presets.find(p => detectShiftLabel(p.context) === shiftKey);
+  if (preset) return preset.startH * 60 + preset.startM;
+  if (shiftKey === "jour") return 8 * 60;
+  if (shiftKey === "soir1") return 16 * 60;
+  return 22 * 60;
+}
+
+function getShiftEndMin(shiftKey: ShiftTeamKey, presets: WorkSchedulePreset[]): number {
+  const preset = presets.find(p => detectShiftLabel(p.context) === shiftKey);
+  if (preset) return preset.endH * 60 + preset.endM;
+  if (shiftKey === "jour") return 16 * 60;
+  if (shiftKey === "soir1") return 22 * 60;
+  return 8 * 60; // lendemain
+}
+
+// Détermine le statut de coordination planning↔pointage
+function resolveCoordinationStatus(
+  shiftKey: ShiftTeamKey,
+  hasPointage: boolean,
+  apiStatus: string,
+  inTime: string | null,
+  presets: WorkSchedulePreset[],
+): {
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "pending" | "not_working";
+  is_shift_pending: boolean;
+  coordination_label: string;
+} {
+  const shiftPhase = getShiftActiveStatus(shiftKey);
+
+  // Shift pas encore commencé
+  if (shiftPhase === "upcoming") {
+    if (hasPointage && inTime) {
+      // A déjà pointé avant l'heure — présence anticipée, on marque ok
+      return { status: "ok", is_shift_pending: false, coordination_label: "Pointage anticipé" };
+    }
+    // Pas encore pointé, shift à venir → en attente
+    return { status: "pending", is_shift_pending: true, coordination_label: "En attente" };
+  }
+
+  // Shift en cours
+  if (shiftPhase === "active") {
+    if (hasPointage && inTime && apiStatus !== "absent") {
+      // Pointé → présent
+      const startMin = getShiftStartMin(shiftKey, presets);
+      const nowDate = new Date(inTime);
+      const inMin = nowDate.getHours() * 60 + nowDate.getMinutes();
+      // Pour shift nuit, gérer le passage minuit
+      let lateCheck = inMin > startMin + 5; // 5 min de tolérance
+      if (shiftKey === "soir2" && startMin > 18 * 60) {
+        // shift nuit : startMin = 22h = 1320. Si inMin < 8h (480) c'est le lendemain, pas en retard
+        lateCheck = inMin > startMin + 5 && inMin < 18 * 60;
+      }
+      return { status: apiStatus as any || "ok", is_shift_pending: false, coordination_label: "Présent" };
+    }
+    if (!hasPointage || apiStatus === "absent") {
+      // Shift en cours, pas pointé → absent
+      return { status: "absent", is_shift_pending: false, coordination_label: "Absent (shift en cours)" };
+    }
+  }
+
+  // Shift terminé
+  if (shiftPhase === "ended") {
+    if (hasPointage && inTime && apiStatus !== "absent") {
+      return { status: apiStatus as any || "ok", is_shift_pending: false, coordination_label: "Terminé" };
+    }
+    return { status: "absent", is_shift_pending: false, coordination_label: "Absent" };
+  }
+
+  return { status: "pending", is_shift_pending: true, coordination_label: "En attente" };
 }
 
 function getTeamPalette(teamId: string) {
@@ -1607,7 +1686,16 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
         </td>
         <td className="px-4 py-3 text-xs"><span className="font-semibold text-camublue-900 text-xs">{r.project !== "—" ? r.project : "—"}</span></td>
         <td className="px-4 py-3 text-xs"><span className="font-semibold text-camublue-900 text-xs">{r.department !== "—" ? r.department : "—"}</span></td>
-        <td className="px-4 py-3"><div className="flex justify-center"><ShiftTeamPill teamKey={r.shift_team} /></div></td>
+        <td className="px-4 py-3">
+          <div className="flex flex-col items-center gap-0.5">
+            <ShiftTeamPill teamKey={r.shift_team} />
+            {r.is_scheduled && r.shift_team && (
+              <span className="text-[9px] text-slate-400 font-mono">
+                {r.shift_team === "jour" ? "08h→16h" : r.shift_team === "soir1" ? "16h→22h" : "22h→08h"}
+              </span>
+            )}
+          </div>
+        </td>
         <td className="px-4 py-3">
           <div className="flex justify-center">
             {r.not_scheduled_rest ? <RestDayBadge />
@@ -1617,7 +1705,14 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
           </div>
         </td>
         <td className="px-4 py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
-        <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.computed_late_minutes > 0 ? "text-red-600 font-semibold" : "text-slate-700"}`}><div className="flex justify-center">{formatTime(r.in_time)}</div></td>
+        <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.is_shift_pending ? "text-blue-400" : r.status === "absent" ? "text-red-400" : r.computed_late_minutes > 0 ? "text-orange-500 font-semibold" : "text-slate-700"}`}>
+          <div className="flex justify-center">
+            {r.in_time ? formatTime(r.in_time)
+              : r.is_shift_pending ? <span className="text-[10px] text-blue-400 font-medium">En attente</span>
+                : r.status === "absent" ? <span className="text-[10px] text-red-400 font-medium">—</span>
+                  : "—"}
+          </div>
+        </td>
         <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.overtime_minutes > 0 ? "text-emerald-600 font-semibold" : "text-slate-700"}`}><div className="flex justify-center">{formatTime(r.out_time)}</div></td>
         <td className="px-4 py-3"><div className="flex justify-center"><WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} /></div></td>
         <td className="px-4 py-3"><div className="flex justify-center"><OvertimeBadge minutes={r.overtime_minutes} /></div></td>
@@ -1654,6 +1749,48 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
 }
 
 // ============================================================================
+// ============================================================================
+// COMPOSANT: SummaryTable — Vue hebdomadaire / mensuelle
+// ============================================================================
+
+function SummaryTable({ rows, mode, isLoading }: { rows: SummaryRecord[]; mode: "weekly" | "monthly"; isLoading: boolean }) {
+  const headers = ["Matricule", "Nom", "Département", "Projet", "Équipe", mode === "weekly" ? "Jours" : "Jours travaillés", "Heures travaillées"];
+  return (
+    <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-slate-200 shadow-sm">
+      <table className="min-w-full bg-white">
+        <thead className="sticky top-0 z-10 bg-camublue-900 text-white">
+          <tr>{headers.map(h => <th key={h} className="px-4 py-3 text-center border-b border-white/20 text-sm font-semibold whitespace-nowrap">{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {isLoading
+            ? [...Array(6)].map((_, i) => (
+              <tr key={i} className="border-b border-slate-100">
+                {headers.map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>)}
+              </tr>
+            ))
+            : rows.length === 0
+              ? <tr><td colSpan={headers.length} className="text-center py-16 text-slate-400 text-sm">Aucune donnée disponible</td></tr>
+              : rows.map(r => (
+                <tr key={`${r.employee_id}-${r.matricule}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors text-sm">
+                  <td className="px-4 py-3"><div className="flex justify-center font-mono text-slate-500 text-xs">{r.matricule || "—"}</div></td>
+                  <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.full_name}</span></td>
+                  <td className="px-4 py-3 text-xs"><span className="font-semibold text-camublue-900">{r.department !== "—" ? r.department : "—"}</span></td>
+                  <td className="px-4 py-3 text-xs"><span className="font-semibold text-camublue-900">{r.project !== "—" ? r.project : "—"}</span></td>
+                  <td className="px-4 py-3"><div className="flex justify-center"><ShiftTeamPill teamKey={r.shift_team} /></div></td>
+                  <td className="px-4 py-3 tabular-nums text-center font-semibold text-slate-700">{r.nb_jours}</td>
+                  <td className="px-4 py-3 tabular-nums text-center">
+                    <span className={`font-semibold ${r.worked_minutes > 0 ? "text-emerald-600" : "text-slate-400"}`}>
+                      {r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // COMPOSANT: LiveClock — Heure temps réel
 // ============================================================================
 
@@ -1900,14 +2037,8 @@ export default function AttendanceShiftsPage() {
   const allRecords = useMemo((): FlatRecord[] => {
     if (viewMode !== "daily") return [];
 
-    const sched = effectiveSchedule;
-    const effectiveWorkMin = workDayMinutes(sched);
-    const planningLoaded = todayPlanning.loaded;
-
-    // ── Normalisation nom pour lookup robuste ──
     const normName = (n: string) => n.trim().toLowerCase().replace(/\s+/g, " ");
 
-    // ── Index API records par matricule ET par nom normalisé ──
     const recordByMatricule = new Map<string, ShiftRecord>();
     const recordByName = new Map<string, ShiftRecord>();
     if (shiftData) {
@@ -1916,162 +2047,147 @@ export default function AttendanceShiftsPage() {
         recordByName.set(normName(r.full_name), r);
       }
     }
-
-    const findRecord = (name: string, mat?: string | null): ShiftRecord | null => {
+    const findApiRecord = (name: string, mat?: string | null): ShiftRecord | null => {
       if (mat) { const r = recordByMatricule.get(mat); if (r) return r; }
       return recordByName.get(normName(name)) ?? null;
     };
 
-    // ── Construire un FlatRecord depuis un ShiftRecord ──
-    const buildFromShiftRecord = (
-      r: ShiftRecord,
-      shiftTeam: ShiftTeamKey | null,
-      isScheduled: boolean,
-      isReplacement: boolean,
-      notScheduledRest: boolean,
-      isPending: boolean,
-      teamId: string,
-      replacedBy: string | null,
-      forceStatus?: FlatRecord["status"],
-    ): FlatRecord => {
-      // Choisir le bon schedule selon le shift
-      let schedForShift = sched;
-      if (shiftTeam) {
-        const preset = presets.find(p => detectShiftLabel(p.context) === shiftTeam);
-        if (preset) schedForShift = preset;
-      }
-      const workedRaw = computeWorkedMinutesFromTimes(r.in_time, r.out_time) || (r.worked_minutes ?? 0);
-      const workedNetMin = Math.max(0, workedRaw - schedForShift.breakMin);
-      const lateMin = r.in_time ? computeLateMinutes(r.in_time, schedForShift.startH, schedForShift.startM) : 0;
-      const overtimeMin = r.out_time ? computeOvertimeMinutes(r.out_time, schedForShift.endH, schedForShift.endM) : 0;
-      const effMin = workDayMinutes(schedForShift);
-
-      let status: FlatRecord["status"] = forceStatus ?? (r.status as any);
-      if (!isScheduled && r.status !== "absent") { isReplacement = true; status = "ok"; }
-      else if (!isScheduled && r.status === "absent") { notScheduledRest = true; status = "not_working"; }
-
-      return {
-        employee_id: r.employee_id,
-        matricule: r.matricule,
-        full_name: r.full_name,
-        department: (r.department ?? departmentMap.get(r.matricule) ?? "—").toUpperCase(),
-        project: (() => {
-          const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
-          return p ? String(p).toUpperCase() : (projectMap.get(r.matricule) ?? "—");
-        })(),
-        status,
-        is_late_api: r.is_late,
-        late_label_api: r.late_label,
-        computed_late_minutes: lateMin,
-        overtime_minutes: overtimeMin,
-        compensation: computeCompensation(lateMin, overtimeMin),
-        deficit_minutes: computeDeficitMinutes(workedNetMin, effMin),
-        in_time: r.in_time,
-        out_time: r.out_time,
-        worked_minutes: workedNetMin,
-        expected_minutes: effMin,
-        email: emailMap.get(r.matricule) ?? (r as any).email ?? null,
-        shift_team: shiftTeam,
-        shift_team_label: SHIFT_TEAMS.find((t) => t.key === shiftTeam)?.label ?? "",
-        is_scheduled: isScheduled,
-        is_replacement: isReplacement,
-        not_scheduled_rest: notScheduledRest,
-        is_shift_pending: isPending,
-        team_id: teamId,
-        replaced_by: replacedBy,
-      };
-    };
-
-    // ── Construire un FlatRecord "vide" pour un employé planifié sans pointage ──
-    const buildPendingRecord = (
-      empName: string,
-      empMat: string | null | undefined,
-      shiftTeam: ShiftTeamKey,
-      teamId: string,
-    ): FlatRecord => {
-      const shiftStatus = getShiftActiveStatus(shiftTeam);
-      const isPending = shiftStatus === "upcoming";
-      const status: FlatRecord["status"] = isPending ? "pending" : "absent";
-      let schedForShift = sched;
-      const preset = presets.find(p => detectShiftLabel(p.context) === shiftTeam);
-      if (preset) schedForShift = preset;
-      const mat = empMat ?? "";
-      return {
-        employee_id: -1,
-        matricule: mat,
-        full_name: empName,
-        department: departmentMap.get(mat) ?? "—",
-        project: projectMap.get(mat) ?? "—",
-        status,
-        is_late_api: false, late_label_api: null,
-        computed_late_minutes: 0, overtime_minutes: 0,
-        compensation: { late_min: 0, overtime_min: 0, compensated_min: 0, remaining_min: 0, is_compensated: false, has_overtime: false },
-        deficit_minutes: 0,
-        in_time: null, out_time: null,
-        worked_minutes: 0,
-        expected_minutes: workDayMinutes(schedForShift),
-        email: emailMap.get(mat) ?? null,
-        shift_team: shiftTeam,
-        shift_team_label: SHIFT_TEAMS.find((t) => t.key === shiftTeam)?.label ?? "",
-        is_scheduled: true,
-        is_replacement: false,
-        not_scheduled_rest: false,
-        is_shift_pending: isPending,
-        team_id: teamId,
-        replaced_by: null,
-      };
-    };
+    const getPreset = (shiftKey: ShiftTeamKey): WorkSchedulePreset =>
+      presets.find(p => detectShiftLabel(p.context) === shiftKey)
+      ?? DEFAULT_PRESETS.find(p => detectShiftLabel(p.context) === shiftKey)
+      ?? effectiveSchedule;
 
     const result: FlatRecord[] = [];
-    const seenEmployees = new Set<string>(); // éviter doublons par nom normalisé
+    const seenKeys = new Set<string>();
 
-    // ── ÉTAPE 1 : Parcourir TOUS les employés planifiés aujourd'hui ──
-    if (planningLoaded) {
+    if (todayPlanning.loaded) {
       for (const shiftKey of (["jour", "soir1", "soir2"] as ShiftTeamKey[])) {
         for (const emp of todayPlanning[shiftKey]) {
-          const key = normName(emp.employee_name);
-          if (seenEmployees.has(key)) continue;
-          seenEmployees.add(key);
+          const dedupKey = emp.employee_matricule
+            ? `mat:${emp.employee_matricule}`
+            : `name:${normName(emp.employee_name)}`;
+          if (seenKeys.has(dedupKey)) continue;
+          seenKeys.add(dedupKey);
 
-          const apiRec = findRecord(emp.employee_name, emp.employee_matricule);
-          if (apiRec) {
-            // L'employé a un pointage → construire depuis l'API
-            const r = buildFromShiftRecord(
-              apiRec, shiftKey,
-              true, false, false,
-              false,
-              emp.team_id ?? "",
-              null,
-            );
-            // Corriger le matricule si l'API ne l'a pas mais le planning oui
-            result.push({ ...r, matricule: r.matricule || emp.employee_matricule || "" });
+          const apiRec = findApiRecord(emp.employee_name, emp.employee_matricule);
+          const hasPointage = !!apiRec && apiRec.status !== "absent";
+          const sched = getPreset(shiftKey);
+          const effMin = workDayMinutes(sched);
+
+          const coord = resolveCoordinationStatus(
+            shiftKey, hasPointage,
+            apiRec?.status ?? "absent",
+            apiRec?.in_time ?? null,
+            presets,
+          );
+
+          if (apiRec && hasPointage) {
+            const workedRaw = computeWorkedMinutesFromTimes(apiRec.in_time, apiRec.out_time) || (apiRec.worked_minutes ?? 0);
+            const workedNetMin = Math.max(0, workedRaw - sched.breakMin);
+            const lateMin = apiRec.in_time ? computeLateMinutes(apiRec.in_time, sched.startH, sched.startM) : 0;
+            const overtimeMin = apiRec.out_time ? computeOvertimeMinutes(apiRec.out_time, sched.endH, sched.endM) : 0;
+            const projVal = (() => {
+              const p = (apiRec as any).project ?? (apiRec as any).projet ?? (apiRec as any).project_name ?? (apiRec as any).site ?? null;
+              return p ? String(p).toUpperCase() : (projectMap.get(apiRec.matricule) ?? "—");
+            })();
+            result.push({
+              employee_id: apiRec.employee_id,
+              matricule: apiRec.matricule || emp.employee_matricule || "",
+              full_name: apiRec.full_name,
+              department: (apiRec.department ?? departmentMap.get(apiRec.matricule) ?? "—").toUpperCase(),
+              project: projVal,
+              status: coord.status,
+              is_late_api: apiRec.is_late,
+              late_label_api: apiRec.late_label,
+              computed_late_minutes: lateMin,
+              overtime_minutes: overtimeMin,
+              compensation: computeCompensation(lateMin, overtimeMin),
+              deficit_minutes: computeDeficitMinutes(workedNetMin, effMin),
+              in_time: apiRec.in_time,
+              out_time: apiRec.out_time,
+              worked_minutes: workedNetMin,
+              expected_minutes: effMin,
+              email: emailMap.get(apiRec.matricule) ?? (apiRec as any).email ?? null,
+              shift_team: shiftKey,
+              shift_team_label: SHIFT_TEAMS.find(t => t.key === shiftKey)?.label ?? "",
+              is_scheduled: true,
+              is_replacement: false,
+              not_scheduled_rest: false,
+              is_shift_pending: coord.is_shift_pending,
+              team_id: emp.team_id ?? "",
+              replaced_by: null,
+            });
           } else {
-            // Pas de pointage → créer un record pending/absent
-            result.push(buildPendingRecord(emp.employee_name, emp.employee_matricule, shiftKey, emp.team_id ?? ""));
+            const mat = emp.employee_matricule ?? "";
+            result.push({
+              employee_id: apiRec?.employee_id ?? -1,
+              matricule: mat,
+              full_name: emp.employee_name,
+              department: (departmentMap.get(mat) ?? "—").toUpperCase(),
+              project: projectMap.get(mat) ?? "—",
+              status: coord.status,
+              is_late_api: false, late_label_api: null,
+              computed_late_minutes: 0, overtime_minutes: 0,
+              compensation: { late_min: 0, overtime_min: 0, compensated_min: 0, remaining_min: 0, is_compensated: false, has_overtime: false },
+              deficit_minutes: 0,
+              in_time: null, out_time: null,
+              worked_minutes: 0, expected_minutes: effMin,
+              email: emailMap.get(mat) ?? null,
+              shift_team: shiftKey,
+              shift_team_label: SHIFT_TEAMS.find(t => t.key === shiftKey)?.label ?? "",
+              is_scheduled: true, is_replacement: false, not_scheduled_rest: false,
+              is_shift_pending: coord.is_shift_pending,
+              team_id: emp.team_id ?? "", replaced_by: null,
+            });
           }
         }
       }
     }
 
-    // ── ÉTAPE 2 : Ajouter les employés qui ont pointé SANS être dans le planning ──
     if (shiftData) {
       for (const r of shiftData.records) {
-        const key = normName(r.full_name);
-        if (seenEmployees.has(key)) continue; // déjà traité via planning
-        seenEmployees.add(key);
-
-        // Non planifié : déterminer si c'est un jour de repos ou un remplacement
+        const dedupKey = r.matricule ? `mat:${r.matricule}` : `name:${normName(r.full_name)}`;
+        if (seenKeys.has(dedupKey)) continue;
+        seenKeys.add(dedupKey);
+        if (r.status === "absent") continue;
         const shiftTeam = detectShiftTeamFromTime(r.in_time);
-        const notScheduledRest = r.status === "absent";
-        const isReplacement = !notScheduledRest;
-
-        result.push(buildFromShiftRecord(
-          r, shiftTeam,
-          false, isReplacement, notScheduledRest,
-          false, "", null,
-        ));
+        const sched = shiftTeam ? getPreset(shiftTeam) : effectiveSchedule;
+        const effMin = workDayMinutes(sched);
+        const workedRaw = computeWorkedMinutesFromTimes(r.in_time, r.out_time) || (r.worked_minutes ?? 0);
+        const workedNetMin = Math.max(0, workedRaw - sched.breakMin);
+        const lateMin = r.in_time ? computeLateMinutes(r.in_time, sched.startH, sched.startM) : 0;
+        const overtimeMin = r.out_time ? computeOvertimeMinutes(r.out_time, sched.endH, sched.endM) : 0;
+        const projVal = (() => {
+          const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
+          return p ? String(p).toUpperCase() : (projectMap.get(r.matricule) ?? "—");
+        })();
+        result.push({
+          employee_id: r.employee_id, matricule: r.matricule, full_name: r.full_name,
+          department: (r.department ?? departmentMap.get(r.matricule) ?? "—").toUpperCase(),
+          project: projVal, status: "ok",
+          is_late_api: r.is_late, late_label_api: r.late_label,
+          computed_late_minutes: lateMin, overtime_minutes: overtimeMin,
+          compensation: computeCompensation(lateMin, overtimeMin),
+          deficit_minutes: computeDeficitMinutes(workedNetMin, effMin),
+          in_time: r.in_time, out_time: r.out_time,
+          worked_minutes: workedNetMin, expected_minutes: effMin,
+          email: emailMap.get(r.matricule) ?? (r as any).email ?? null,
+          shift_team: shiftTeam,
+          shift_team_label: SHIFT_TEAMS.find(t => t.key === shiftTeam)?.label ?? "",
+          is_scheduled: false, is_replacement: true, not_scheduled_rest: false,
+          is_shift_pending: false, team_id: "", replaced_by: null,
+        });
       }
     }
+
+    const shiftOrder: Record<string, number> = { jour: 0, soir1: 1, soir2: 2 };
+    result.sort((a, b) => {
+      if (a.is_scheduled !== b.is_scheduled) return a.is_scheduled ? -1 : 1;
+      const sa = shiftOrder[a.shift_team ?? ""] ?? 3;
+      const sb = shiftOrder[b.shift_team ?? ""] ?? 3;
+      if (sa !== sb) return sa - sb;
+      return a.full_name.localeCompare(b.full_name);
+    });
 
     return result;
   }, [shiftData, emailMap, effectiveSchedule, viewMode, projectMap, departmentMap, todayPlanning, presets]);
@@ -2127,10 +2243,14 @@ export default function AttendanceShiftsPage() {
         r.full_name.toLowerCase().trim() === e.employee_name.toLowerCase().trim()
       );
       if (rec) {
+        // Recalculer le statut coordonné pour ce shift spécifique
+        const hasPointage = !!rec.in_time;
+        const coord = resolveCoordinationStatus(selectedTeam, hasPointage, rec.status, rec.in_time, presets);
         return {
           ...rec, shift_team: selectedTeam, is_scheduled: true,
           is_replacement: false, not_scheduled_rest: false,
-          is_shift_pending: (shiftStat === "upcoming" && (rec.status === "absent" || rec.status === "pending")),
+          status: coord.status,
+          is_shift_pending: coord.is_shift_pending,
         };
       }
       return {
