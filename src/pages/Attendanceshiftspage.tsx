@@ -508,8 +508,8 @@ function parseOneSheet(ws: XLSX.WorkSheet, sheetName: string = ""): PlanningEntr
   }
 
   let currentShift: ShiftTeamKey | null = null;
-  const colorToTeam: Record<string, string> = {};
-  let teamCounter = 0;
+  // row_slot counter per (shift_type, team_id) — préserve l'ordre des lignes Excel
+  const rowSlotCounters: Record<string, number> = {};
 
   for (let row = 1; row < rawRows.length; row++) {
     const rowData = rawRows[row] as unknown[];
@@ -527,20 +527,19 @@ function parseOneSheet(ws: XLSX.WorkSheet, sheetName: string = ""): PlanningEntr
       if (col) { rowColor = col; break; }
     }
 
-    let teamId = "";
-    if (rowColor) {
-      if (!(rowColor in colorToTeam)) {
-        teamCounter++;
-        colorToTeam[rowColor] = `equipe-${teamCounter}`;
-      }
-      teamId = colorToTeam[rowColor];
-    }
+    // Stocker la couleur hex directement comme team_id (ex: "#FFFF00")
+    const teamId = rowColor ?? "";
+
+    // Calculer le row_slot : compteur de lignes dans ce groupe (shift + couleur)
+    const slotKey = `${currentShift}|${teamId}`;
+    if (!(slotKey in rowSlotCounters)) rowSlotCounters[slotKey] = 0;
+    const rowSlot = rowSlotCounters[slotKey]++;
 
     for (let c = 1; c < rowData.length; c++) {
       const name = String(rowData[c] ?? "").trim();
       const date = dates[c - 1];
       if (name && date) {
-        entries.push({ date, shift_type: currentShift, employee_name: name, team_id: teamId });
+        entries.push({ date, shift_type: currentShift, employee_name: name, team_id: teamId, row_slot: rowSlot });
       }
     }
   }
@@ -1333,6 +1332,41 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
 }
 
 // ============================================================================
+// HELPERS COULEUR — pour reproduire exactement les couleurs Excel
+// ============================================================================
+
+/** Calcule la luminance relative d'une couleur hex (#RRGGBB ou #RGB) */
+function hexLuminance(hex: string): number {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.length === 3 ? h[0] + h[0] : h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.length === 3 ? h[1] + h[1] : h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.length === 3 ? h[2] + h[2] : h.slice(4, 6), 16) / 255;
+  const toLinear = (c: number) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+}
+
+/**
+ * Retourne les styles inline pour une ligne de la grille planning.
+ * Si team_id est une couleur hex ("#RRGGBB"), l'utilise directement.
+ * Sinon, utilise la TEAM_PALETTE (ancien format equipe-N).
+ */
+function planningRowStyle(teamId: string): { backgroundColor: string; color: string } {
+  if (teamId.startsWith("#") && teamId.length >= 4) {
+    const lum = hexLuminance(teamId);
+    return {
+      backgroundColor: teamId,
+      color: lum > 0.4 ? "#1a1a1a" : "#ffffff",
+    };
+  }
+  // Fallback: ancien format equipe-N → TEAM_PALETTE
+  const idx = parseInt(teamId.replace(/\D/g, "") || "0", 10) - 1;
+  const pal = TEAM_PALETTE[Math.max(0, idx) % TEAM_PALETTE.length];
+  // On retourne une couleur approximative depuis la classe Tailwind
+  const BG_FALLBACKS = ["#fef08a","#bbf7d0","#bae6fd","#fbcfe8","#fed7aa","#e9d5ff","#99f6e4","#fecaca","#c7d2fe","#d9f99d","#fde68a","#a5f3fc"];
+  return { backgroundColor: BG_FALLBACKS[Math.max(0, idx) % BG_FALLBACKS.length], color: "#1a1a1a" };
+}
+
+// ============================================================================
 // COMPOSANT: PlanningUploadModal (modifié pour ajouter colonne matricule)
 // ============================================================================
 
@@ -1375,42 +1409,41 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
     if (open) { setFile(null); setPreview([]); setParsedSheets([]); setError(""); setUploaded(false); setAddingCell(null); setNewName(""); }
   }, [open]);
 
-  const grouped = useMemo(() => {
-    const map: Record<string, Record<string, PlanningEntry[]>> = {};
-    for (const e of entries) {
-      if (!map[e.date]) map[e.date] = { jour: [], soir1: [], soir2: [] };
-      (map[e.date][e.shift_type] ??= []).push(e);
-    }
-    return map;
-  }, [entries]);
+  // Grille Excel : shift_type → équipes (dans l'ordre d'apparition) → lignes (row_slot) → date → employé
+  const excelGrid = useMemo(() => {
+    const SHIFT_ORDER = ["jour", "soir1", "soir2"];
+    const shiftTeamOrder: Record<string, string[]> = {};
+    const grid: Record<string, Record<string, Record<number, Record<string, string>>>> = {};
 
-  const teamGroups = useMemo(() => {
-    const map: Record<string, { employees: { name: string; matricule: string | null }[]; dateShifts: Record<string, string> }> = {};
     for (const e of entries) {
-      const tid = e.team_id || "_no_team";
-      if (!map[tid]) map[tid] = { employees: [], dateShifts: {} };
-      if (!map[tid].employees.some((emp) => emp.name === e.employee_name)) {
-        map[tid].employees.push({ name: e.employee_name, matricule: e.employee_matricule || null });
-      }
-      map[tid].dateShifts[e.date] = e.shift_type;
+      const shift = e.shift_type;
+      const team  = e.team_id ?? "";
+      const slot  = e.row_slot ?? 0;
+      const date  = e.date;
+      if (!grid[shift]) { grid[shift] = {}; shiftTeamOrder[shift] = []; }
+      if (!grid[shift][team]) { grid[shift][team] = {}; shiftTeamOrder[shift].push(team); }
+      if (!grid[shift][team][slot]) grid[shift][team][slot] = {};
+      // Ne pas écraser : premier employé trouvé gagne (ordre du backend)
+      if (!grid[shift][team][slot][date]) grid[shift][team][slot][date] = e.employee_name;
     }
-    return map;
-  }, [entries]);
 
-  const teamIds = useMemo(() => Object.keys(teamGroups).sort((a, b) => {
-    const na = parseInt(a.replace(/\D/g, "") || "999", 10);
-    const nb = parseInt(b.replace(/\D/g, "") || "999", 10);
-    return na - nb;
-  }), [teamGroups]);
+    return SHIFT_ORDER.filter(s => s in grid).map(shift => ({
+      shift_type: shift,
+      teams: (shiftTeamOrder[shift] ?? []).map(team_id => ({
+        team_id,
+        rows: Object.entries(grid[shift][team_id])
+          .sort(([a], [b]) => parseInt(a) - parseInt(b))
+          .map(([slot, cells]) => ({ row_slot: parseInt(slot), cells })),
+      })),
+    }));
+  }, [entries]);
 
   const activeDays = useMemo(() => {
     const daysSet = new Set(entries.map((e) => e.date));
     return daysInMonth(viewMonth).filter((d) => daysSet.has(d));
   }, [entries, viewMonth]);
 
-  const monthDays = useMemo(() => daysInMonth(viewMonth), [viewMonth]);
   const hasAnyData = entries.length > 0;
-  const hasTeams = teamIds.length > 0 && !teamIds.every((t) => t === "_no_team");
 
   const handleFile = (f: File | null) => {
     if (!f) { setFile(null); setPreview([]); setParsedSheets([]); return; }
@@ -1474,12 +1507,6 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
     catch { loadMonthPlanning(viewMonth); } finally { setSaving(false); }
   };
 
-  const monthShiftCounts = useMemo(() => {
-    const c: Record<string, number> = { jour: 0, soir1: 0, soir2: 0 };
-    entries.forEach((e) => { if (e.shift_type in c) c[e.shift_type]++; });
-    return c;
-  }, [entries]);
-
   const initials = (name: string) =>
     name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? "").slice(0, 2).join("");
 
@@ -1539,16 +1566,22 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                     <span className="font-bold text-slate-800 text-base">{MONTHS_FR[m - 1]} {y}</span>
                     {hasAnyData ? (
                       <div className="flex items-center gap-2 flex-wrap justify-center">
-                        {hasTeams && (
+                        {excelGrid.length > 0 && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            {teamIds.filter((t) => t !== "_no_team").length} équipes
+                            {new Set(excelGrid.flatMap(g => g.teams.map(t => t.team_id))).size} équipes
                           </span>
                         )}
-                        {SHIFT_KEYS.map((s) => monthShiftCounts[s.key] > 0 && (
-                          <span key={s.key} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.bg} ${s.text} border ${s.border}`}>
-                            {s.label} · {monthShiftCounts[s.key]}
-                          </span>
-                        ))}
+                        {excelGrid.map((g) => {
+                          const s = SHIFT_KEYS.find(k => k.key === g.shift_type);
+                          if (!s) return null;
+                          const count = g.teams.reduce((sum, t) => sum + t.rows.reduce((rs, r) => rs + Object.keys(r.cells).length, 0), 0);
+                          if (!count) return null;
+                          return (
+                            <span key={g.shift_type} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.bg} ${s.text} border ${s.border}`}>
+                              {s.label} · {count}
+                            </span>
+                          );
+                        })}
                       </div>
                     ) : (
                       <span className="text-xs text-slate-400">Aucun planning ce mois</span>
@@ -1574,33 +1607,41 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                         <Upload className="h-4 w-4" />Importer un planning Excel
                       </button>
                     </div>
-                  ) : hasTeams ? (
-                    <div className="min-w-max">
-                      <table className="text-xs border-collapse w-full">
-                        <thead className="sticky top-0 z-10">
-                          <tr className="bg-camublue-900 text-white">
-                            {/* Col fixe Nom */}
-                            <th className="px-1 py-1 text-left font-bold min-w-[130px] w-[130px] border-r border-white/20 sticky left-0 bg-camublue-900 z-20 text-[10px]">
-                              Nom
-                            </th>
-                            {/* Col fixe Matricule */}
-                            <th className="px-1 py-1 text-left font-bold min-w-[58px] w-[58px] border-r border-white/20 sticky left-[130px] bg-camublue-900 z-20 text-[10px]">
-                              Matr.
-                            </th>
-                            {/* Col Shift */}
-                            <th className="px-1 py-1 text-center font-bold min-w-[52px] w-[52px] border-r border-white/20 text-[10px]">
-                              Shift
-                            </th>
+                  ) : (
+                    /* ── Vue Planning identique à l'Excel : dates en colonnes, employés en lignes, couleurs réelles ── */
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ borderCollapse: "collapse", fontSize: "11px", tableLayout: "auto" }}>
+                        <thead style={{ position: "sticky", top: 0, zIndex: 20 }}>
+                          <tr style={{ backgroundColor: "#1b2d50", color: "white" }}>
+                            {/* Colonne SHIFT — sticky gauche */}
+                            <th style={{
+                              position: "sticky", left: 0, zIndex: 30,
+                              backgroundColor: "#1b2d50", color: "white",
+                              fontWeight: "bold", fontSize: "10px",
+                              padding: "6px 10px",
+                              borderRight: "2px solid rgba(255,255,255,0.25)",
+                              minWidth: "70px", textAlign: "center",
+                            }}>SHIFT</th>
                             {/* Colonnes dates */}
                             {activeDays.map((date) => {
                               const d = new Date(date + "T00:00:00");
                               const isToday = date === todayISO();
                               const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                               return (
-                                <th key={date}
-                                  className={`px-0 py-1 text-center font-semibold min-w-[22px] w-[22px] border-r border-white/10 last:border-r-0 ${isToday ? "bg-blue-600" : isWeekend ? "bg-camublue-800/70" : ""}`}>
-                                  <div className="flex flex-col items-center leading-none">
-                                    <span className="text-[8px] font-bold">{d.getDate()}</span>
+                                <th key={date} style={{
+                                  backgroundColor: isToday ? "#2563eb" : isWeekend ? "#374558" : "#1b2d50",
+                                  color: "white",
+                                  fontWeight: 700,
+                                  padding: "4px 2px",
+                                  borderRight: "1px solid rgba(255,255,255,0.12)",
+                                  minWidth: "110px",
+                                  textAlign: "center",
+                                  whiteSpace: "nowrap",
+                                }}>
+                                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.3 }}>
+                                    <span style={{ fontSize: "9px", textTransform: "uppercase", opacity: 0.85 }}>{DAYS_FR[d.getDay()]}</span>
+                                    <span style={{ fontSize: "14px", fontWeight: 900, lineHeight: 1 }}>{d.getDate()}</span>
+                                    <span style={{ fontSize: "9px", opacity: 0.7 }}>{MONTHS_SHORT[d.getMonth()]}/{d.getFullYear().toString().slice(2)}</span>
                                   </div>
                                 </th>
                               );
@@ -1608,201 +1649,84 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                           </tr>
                         </thead>
                         <tbody>
-                          {teamIds.map((tid, tIdx) => {
-                            const tg = teamGroups[tid];
-                            const pal = tid === "_no_team"
-                              ? { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-300", header: "bg-slate-400", dot: "bg-slate-400", chipBg: "bg-slate-100", label: "Sans équipe" }
-                              : getTeamPalette(tid);
+                          {(() => {
+                            const tableRows: React.ReactNode[] = [];
+                            const SHIFT_LABELS: Record<string, string> = { jour: "08H-16H", soir1: "16H-22H", soir2: "22H-08H" };
+                            const SHIFT_HEADER_COLORS: Record<string, string> = { jour: "#1a6b5e", soir1: "#8a5c08", soir2: "#5b2d8e" };
 
-                            // Détecter le shift principal de cette équipe
-                            const shiftCounts: Record<string, number> = {};
-                            Object.values(tg.dateShifts).forEach((s) => { shiftCounts[s] = (shiftCounts[s] ?? 0) + 1; });
-                            const dominantShift = Object.entries(shiftCounts).sort((a, b) => b[1] - a[1])[0]?.[0] as ShiftTeamKey | undefined;
-                            const shiftLabel = dominantShift === "jour" ? "08-16H"
-                              : dominantShift === "soir1" ? "16-22H"
-                              : dominantShift === "soir2" ? "22-08H"
-                              : "—";
+                            for (const { shift_type, teams } of excelGrid) {
+                              const shiftLabel = SHIFT_LABELS[shift_type] ?? shift_type;
+                              const shiftHeaderColor = SHIFT_HEADER_COLORS[shift_type] ?? "#334155";
+                              const totalRows = teams.reduce((sum, t) => sum + t.rows.length, 0);
+                              let isFirstShiftRow = true;
 
-                            const emps = tg.employees;
+                              for (const { team_id, rows: teamRows } of teams) {
+                                const rowStyle = planningRowStyle(team_id);
 
-                            return (
-                              <React.Fragment key={tid}>
-                                {/* ── En-tête équipe : ligne séparatrice colorée ── */}
-                                <tr className={`${pal.header}`}>
-                                  <td className={`px-2 py-0.5 sticky left-0 z-10 ${pal.header} text-white`} colSpan={2}>
-                                    <span className="font-bold text-[10px] uppercase tracking-wide">
-                                      {tid === "_no_team" ? "Sans équipe" : `Équipe ${tIdx + 1}`}
-                                    </span>
-                                    <span className="text-[9px] opacity-80 ml-1">({emps.length})</span>
-                                  </td>
-                                  <td className={`px-1 py-0.5 text-center ${pal.header} text-white`}>
-                                    <span className="text-[9px] font-bold opacity-90">{shiftLabel}</span>
-                                  </td>
-                                  {activeDays.map((date) => {
-                                    const d = new Date(date + "T00:00:00");
-                                    const isToday = date === todayISO();
-                                    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                                    return (
-                                      <td key={date}
-                                        className={`border-r border-white/10 last:border-r-0 ${isToday ? "bg-blue-500" : isWeekend ? `${pal.header} opacity-80` : pal.header}`} />
-                                    );
-                                  })}
-                                </tr>
+                                for (const { row_slot, cells } of teamRows) {
+                                  const showShiftCell = isFirstShiftRow;
+                                  isFirstShiftRow = false;
 
-                                {/* ── Lignes employés ── */}
-                                {emps.map((emp) => {
-                                  // Déterminer le shift de cet employé (peut varier par date)
-                                  // On prend le dominant pour la colonne "Shift"
-                                  const empShiftCounts: Record<string, number> = {};
-                                  activeDays.forEach((date) => {
-                                    const shiftForTeam = tg.dateShifts[date];
-                                    if (shiftForTeam) {
-                                      const hasEmp = (grouped[date]?.[shiftForTeam] ?? []).some(
-                                        (e) => e.employee_name === emp.name && e.team_id === tid
-                                      );
-                                      if (hasEmp) empShiftCounts[shiftForTeam] = (empShiftCounts[shiftForTeam] ?? 0) + 1;
-                                    }
-                                  });
-                                  const empDominant = Object.entries(empShiftCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
-                                  const empShiftLabel = empDominant === "jour" ? "08-16H"
-                                    : empDominant === "soir1" ? "16-22H"
-                                    : empDominant === "soir2" ? "22-08H"
-                                    : "";
-
-                                  return (
-                                    <tr key={emp.name} className={`border-b border-white/30 hover:brightness-95 transition-all ${pal.bg}`}>
-                                      {/* Nom (sticky) */}
-                                      <td className={`px-1.5 py-0 sticky left-0 z-10 ${pal.bg} border-r border-white/40 min-w-[130px] w-[130px]`}>
-                                        <span className={`text-[9px] font-semibold ${pal.text} truncate block leading-5`} title={emp.name}>
-                                          {emp.name}
-                                        </span>
-                                      </td>
-                                      {/* Matricule (sticky) */}
-                                      <td className={`px-1 py-0 sticky left-[130px] z-10 ${pal.bg} border-r border-white/40 min-w-[58px] w-[58px]`}>
-                                        <span className={`text-[9px] font-mono ${pal.text} opacity-70 leading-5 block`}>{emp.matricule || "—"}</span>
-                                      </td>
-                                      {/* Shift indicator */}
-                                      <td className={`px-0 py-0 border-r border-white/40 min-w-[52px] w-[52px] text-center`}>
-                                        {empShiftLabel ? (
-                                          <span className={`text-[8px] font-bold ${pal.text} opacity-80`}>{empShiftLabel}</span>
-                                        ) : null}
-                                      </td>
-                                      {/* Cellules dates : fond équipe si planifié, blanc sinon */}
+                                  tableRows.push(
+                                    <tr key={`${shift_type}-${team_id}-${row_slot}`}
+                                      style={{ borderBottom: "1px solid rgba(0,0,0,0.10)" }}>
+                                      {/* Colonne SHIFT — rowspan sur tout le groupe */}
+                                      {showShiftCell && (
+                                        <td rowSpan={totalRows} style={{
+                                          position: "sticky", left: 0, zIndex: 10,
+                                          backgroundColor: shiftHeaderColor,
+                                          color: "white",
+                                          fontWeight: "bold",
+                                          fontSize: "11px",
+                                          padding: "4px 6px",
+                                          borderRight: "2px solid rgba(0,0,0,0.20)",
+                                          textAlign: "center",
+                                          verticalAlign: "middle",
+                                          whiteSpace: "nowrap",
+                                          writingMode: "vertical-lr",
+                                          transform: "rotate(180deg)",
+                                          letterSpacing: "0.05em",
+                                          minWidth: "50px",
+                                          boxShadow: "2px 0 4px rgba(0,0,0,0.12)",
+                                        }}>
+                                          {shiftLabel}
+                                        </td>
+                                      )}
+                                      {/* Cellules dates */}
                                       {activeDays.map((date) => {
-                                        const shiftForTeam = tg.dateShifts[date];
-                                        const hasEntry = shiftForTeam &&
-                                          (grouped[date]?.[shiftForTeam] ?? []).some(
-                                            (e) => e.employee_name === emp.name && e.team_id === tid
-                                          );
                                         const d = new Date(date + "T00:00:00");
                                         const isToday = date === todayISO();
                                         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                                        const empName = cells[date] ?? "";
+                                        const cellBg = empName
+                                          ? rowStyle.backgroundColor
+                                          : isToday ? "#dbeafe" : isWeekend ? "#f1f5f9" : "#ffffff";
+                                        const cellColor = empName ? rowStyle.color : "#94a3b8";
                                         return (
-                                          <td key={date}
-                                            className={`border-r border-white/30 last:border-r-0 min-w-[22px] w-[22px] h-5 ${hasEntry ? pal.bg : isToday ? "bg-blue-50" : isWeekend ? "bg-slate-100" : "bg-white"}`}
-                                          />
+                                          <td key={date} style={{
+                                            backgroundColor: cellBg,
+                                            color: cellColor,
+                                            padding: "4px 7px",
+                                            borderRight: "1px solid rgba(0,0,0,0.08)",
+                                            fontSize: "11px",
+                                            fontWeight: empName ? 500 : 400,
+                                            minWidth: "110px",
+                                            whiteSpace: "nowrap",
+                                          }}>
+                                            {empName}
+                                          </td>
                                         );
                                       })}
                                     </tr>
                                   );
-                                })}
-                              </React.Fragment>
-                            );
-                          })}
+                                }
+                              }
+                            }
+                            return tableRows;
+                          })()}
                         </tbody>
                       </table>
                     </div>
-                  ) : (
-                    // Vue sans équipes : on ajoute aussi une colonne matricule
-                    <table className="min-w-full text-xs border-collapse">
-                      <thead className="sticky top-0 z-10">
-                        <tr className="bg-camublue-900 text-white">
-                          <th className="px-4 py-3 text-left font-semibold w-20 border-r border-white/10">Date</th>
-                          {SHIFT_KEYS.map((s) => {
-                            const team = SHIFT_TEAMS.find((t) => t.key === s.key);
-                            return (
-                              <th key={s.key} className="px-4 py-3 text-center font-semibold min-w-[200px] border-r border-white/10 last:border-r-0">
-                                <div className="flex items-center justify-center gap-2">
-                                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${team?.dot}`} />
-                                  <span>{s.label}</span>
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${s.bg} ${s.text} opacity-90`}>
-                                    {monthShiftCounts[s.key] ?? 0}
-                                  </span>
-                                </div>
-                              </th>
-                            );
-                          })}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {monthDays.map((date) => {
-                          const dayData = grouped[date];
-                          const dateObj = new Date(date + "T00:00:00");
-                          const isToday = date === todayISO();
-                          const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-                          const hasEntries = dayData && SHIFT_KEYS.some((s) => (dayData[s.key]?.length ?? 0) > 0);
-                          if (!hasEntries && !isToday) return null;
-                          return (
-                            <tr key={date} className={`border-b transition-colors ${isToday ? "border-blue-200 bg-blue-50/40" : isWeekend ? "border-slate-100 bg-slate-50/50" : "border-slate-100 hover:bg-slate-50/60"}`}>
-                              <td className={`py-2 px-2 border-r border-slate-100 align-middle ${isToday ? "border-r-blue-200" : ""}`}>
-                                <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl mx-auto ${isToday ? "bg-blue-600 text-white shadow-md shadow-blue-200" : isWeekend ? "bg-slate-200/70 text-slate-500" : "bg-slate-100 text-slate-600"}`}>
-                                  <span className="text-[9px] font-bold uppercase tracking-wider leading-none">{DAYS_FR[dateObj.getDay()]}</span>
-                                  <span className="text-xl font-black leading-tight">{dateObj.getDate()}</span>
-                                  <span className="text-[9px] font-semibold leading-none opacity-70">{MONTHS_SHORT[dateObj.getMonth()]}</span>
-                                </div>
-                              </td>
-                              {SHIFT_KEYS.map((s) => {
-                                const cellEntries = dayData?.[s.key] ?? [];
-                                const isAdding = addingCell?.date === date && addingCell?.shift === s.key;
-                                return (
-                                  <td key={s.key} className={`px-3 py-2 align-top border-r border-slate-100 last:border-r-0 ${isAdding ? `${s.bg}/60` : ""}`}>
-                                    <div className="flex flex-wrap gap-1 min-h-[28px]">
-                                      {cellEntries.map((e) => (
-                                        <span key={e.employee_name}
-                                          title={`${e.employee_matricule ? e.employee_matricule + " · " : ""}${e.employee_name}`}
-                                          className={`group inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full text-xs font-semibold ${s.bg} ${s.text} border ${s.border} shadow-sm`}>
-                                          <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-[9px] font-black shrink-0 ${s.text}`}>
-                                            {initials(e.employee_name)}
-                                          </span>
-                                          <div className="flex flex-col min-w-0 max-w-[100px]">
-                                            {e.employee_matricule && (
-                                              <span className="text-[8px] font-mono opacity-70 leading-none truncate">{e.employee_matricule}</span>
-                                            )}
-                                            <span className="truncate text-xs leading-tight">{e.employee_name}</span>
-                                          </div>
-                                          <button onClick={() => handleRemove(e)} className="ml-0.5 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all shrink-0">
-                                            <X className="h-2.5 w-2.5" />
-                                          </button>
-                                        </span>
-                                      ))}
-                                      {cellEntries.length === 0 && !isAdding && (
-                                        <span className="text-[10px] text-slate-300 italic self-center">Aucun</span>
-                                      )}
-                                      {isAdding ? (
-                                        <div className="flex items-center gap-1 w-full mt-0.5">
-                                          <input autoFocus value={newName}
-                                            onChange={(e) => setNewName(e.target.value)}
-                                            onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAddingCell(null); setNewName(""); } }}
-                                            placeholder="Nom de l'employé…"
-                                            className={`flex-1 text-xs border-2 ${s.border} rounded-lg px-2 py-1 bg-white focus:ring-2 focus:ring-offset-1 focus:outline-none min-w-0`} />
-                                          <button onClick={handleAdd} disabled={saving || !newName.trim()} className="p-1 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-40 shrink-0"><Check className="h-3 w-3" /></button>
-                                          <button onClick={() => { setAddingCell(null); setNewName(""); }} className="p-1 rounded-lg bg-slate-200 text-slate-500 hover:bg-slate-300 shrink-0"><X className="h-3 w-3" /></button>
-                                        </div>
-                                      ) : (
-                                        <button onClick={() => { setAddingCell({ date, shift: s.key }); setNewName(""); }}
-                                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold shadow-sm active:scale-95 transition-all duration-150 ${s.addBtn}`}>
-                                          <span className="flex items-center justify-center w-4 h-4 rounded-full bg-white/30"><Plus className="h-2.5 w-2.5" /></span>Ajouter
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
                   )}
                 </div>
               </div>

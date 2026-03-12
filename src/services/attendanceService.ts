@@ -78,7 +78,8 @@ export interface PlanningEntry {
   shift_type:         string;
   employee_name:      string;
   employee_matricule?: string | null;
-  team_id?:           string;   // identifiant de l'équipe (groupe coloré du planning)
+  team_id?:           string;   // couleur hex ou identifiant de l'équipe (groupe coloré du planning)
+  row_slot?:          number;   // position de la ligne dans le groupe — préserve l'ordre Excel
 }
 
 export interface ShiftPlanningUpload {
