@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import {
   FaEdit, FaFileExcel, FaUserPlus, FaPaperPlane,
-  FaSort, FaSortUp, FaSortDown, FaFilePdf,
+  FaSort, FaSortUp, FaSortDown, FaFilePdf, FaHistory,
   FaSearch, FaTimes, FaChevronRight, FaArrowLeft, FaCheck,
   FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight
 } from "react-icons/fa";
@@ -15,6 +15,7 @@ import { ImSpinner2 } from "react-icons/im";
 import { Menu, Transition } from "@headlessui/react";
 import { motion, AnimatePresence } from "framer-motion";
 import EmployeePayslipResendModal from "@/components/employees/EmployeePayslipResendModal";
+import EmployeeHistoryModal from "@/components/employees/EmployeeHistoryModal";
 
 interface Props {
   employees: Employee[];
@@ -62,6 +63,8 @@ export default function EmployeesTable({
   const [isExporting, setIsExporting] = useState(false);
   const [payslipOpen, setPayslipOpen] = useState(false);
   const [payslipEmp, setPayslipEmp] = useState<Employee | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyEmp, setHistoryEmp] = useState<Employee | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: "asc" | "desc" } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isSendingCodes, setIsSendingCodes] = useState(false);
@@ -305,6 +308,7 @@ export default function EmployeesTable({
 
     const rowActions = [
       { id: "edit",           icon: <FaEdit size={15} />,            label: "Modifier les informations",    color: "text-amber-600",    show: true },
+      { id: "history",        icon: <FaHistory size={15} />,         label: "Voir l'historique",            color: "text-indigo-600",   show: true },
       { id: "send-code",      icon: <FaPaperPlane size={15} />,      label: "Envoyer le code d'accès",      color: "text-emerald-600",  show: true },
       { id: "create-account", icon: <FaUserPlus size={15} />,        label: "Créer un accès utilisateur",   color: "text-blue-600",     show: !isExited },
       { id: "exit",           icon: <TbLogout size={15} />,          label: "Enregistrer la sortie",        color: "text-red-600",      show: !isExited },
@@ -315,6 +319,7 @@ export default function EmployeesTable({
     const handleRowAction = (id: string) => {
       if (!rowEmp) return;
       if      (id === "edit")           { onEdit(rowEmp); setRowOpen(false); }
+      else if (id === "history")        { setHistoryEmp(rowEmp); setHistoryOpen(true); setRowOpen(false); }
       else if (id === "send-code")      { doSendCodeSingle(rowEmp); }
       else if (id === "create-account") { handleCreateAccount(rowEmp); }
       else if (id === "exit")           { onExit(rowEmp); setRowOpen(false); }
@@ -777,6 +782,12 @@ export default function EmployeesTable({
         open={payslipOpen}
         employee={payslipEmp}
         onClose={() => { setPayslipOpen(false); setPayslipEmp(null); }}
+      />
+
+      <EmployeeHistoryModal
+        open={historyOpen}
+        employee={historyEmp}
+        onClose={() => { setHistoryOpen(false); setHistoryEmp(null); }}
       />
     </div>
   );
