@@ -1,94 +1,89 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FaTimes, FaBriefcase, FaCalendarAlt, FaUser, FaChevronDown, FaChevronUp,
+  FaTimes, FaBriefcase, FaChevronDown,
   FaArrowUp, FaExchangeAlt, FaRedo, FaSignOutAlt, FaSignInAlt, FaStar, FaLayerGroup,
 } from "react-icons/fa";
 import { ImSpinner2 } from "react-icons/im";
 import { Employee } from "@/types/employee";
 import { getCareerHistory, CareerHistoryEntry, CareerEventType } from "@/services/employeeService";
 
-// ── Couleurs et icônes par type d'événement ────────────────────────────────
-const EVENT_CONFIG: Record<CareerEventType, { label: string; color: string; bg: string; border: string; Icon: any }> = {
-  EMBAUCHE:           { label: "Embauche",                  color: "text-emerald-700", bg: "bg-emerald-50",  border: "border-emerald-200", Icon: FaBriefcase },
-  PROMOTION:          { label: "Promotion",                 color: "text-blue-700",    bg: "bg-blue-50",     border: "border-blue-200",    Icon: FaArrowUp },
-  CHANGEMENT_CONTRAT: { label: "Changement de contrat",     color: "text-orange-700",  bg: "bg-orange-50",   border: "border-orange-200",  Icon: FaExchangeAlt },
-  RENOUVELLEMENT_CDD: { label: "Renouvellement CDD",        color: "text-yellow-700",  bg: "bg-yellow-50",   border: "border-yellow-200",  Icon: FaRedo },
-  CHANGEMENT_SERVICE: { label: "Changement de service",     color: "text-purple-700",  bg: "bg-purple-50",   border: "border-purple-200",  Icon: FaLayerGroup },
-  TITULARISATION:     { label: "Titularisation",            color: "text-green-700",   bg: "bg-green-50",    border: "border-green-200",   Icon: FaStar },
-  SORTIE:             { label: "Sortie",                    color: "text-red-700",     bg: "bg-red-50",      border: "border-red-200",     Icon: FaSignOutAlt },
-  REINTEGRATION:      { label: "Réintégration",             color: "text-teal-700",    bg: "bg-teal-50",     border: "border-teal-200",    Icon: FaSignInAlt },
-  AUTRE:              { label: "Autre",                     color: "text-slate-700",   bg: "bg-slate-50",    border: "border-slate-200",   Icon: FaBriefcase },
-};
-
-const DOT_COLOR: Record<CareerEventType, string> = {
-  EMBAUCHE:           "bg-emerald-500",
-  PROMOTION:          "bg-blue-500",
-  CHANGEMENT_CONTRAT: "bg-orange-500",
-  RENOUVELLEMENT_CDD: "bg-yellow-500",
-  CHANGEMENT_SERVICE: "bg-purple-500",
-  TITULARISATION:     "bg-green-600",
-  SORTIE:             "bg-red-500",
-  REINTEGRATION:      "bg-teal-500",
-  AUTRE:              "bg-slate-400",
+const EVENT_CONFIG: Record<CareerEventType, { label: string; dot: string; iconColor: string; Icon: any }> = {
+  EMBAUCHE:           { label: "Embauche",               dot: "bg-emerald-500", iconColor: "text-emerald-600", Icon: FaBriefcase },
+  PROMOTION:          { label: "Promotion",              dot: "bg-blue-500",    iconColor: "text-blue-600",    Icon: FaArrowUp },
+  CHANGEMENT_CONTRAT: { label: "Changement de contrat",  dot: "bg-orange-500",  iconColor: "text-orange-600",  Icon: FaExchangeAlt },
+  RENOUVELLEMENT_CDD: { label: "Renouvellement CDD",     dot: "bg-yellow-500",  iconColor: "text-yellow-600",  Icon: FaRedo },
+  CHANGEMENT_SERVICE: { label: "Changement de service",  dot: "bg-purple-500",  iconColor: "text-purple-600",  Icon: FaLayerGroup },
+  TITULARISATION:     { label: "Titularisation",         dot: "bg-green-600",   iconColor: "text-green-700",   Icon: FaStar },
+  SORTIE:             { label: "Sortie",                 dot: "bg-red-500",     iconColor: "text-red-600",     Icon: FaSignOutAlt },
+  REINTEGRATION:      { label: "Réintégration",          dot: "bg-teal-500",    iconColor: "text-teal-600",    Icon: FaSignInAlt },
+  AUTRE:              { label: "Autre",                  dot: "bg-slate-400",   iconColor: "text-slate-500",   Icon: FaBriefcase },
 };
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("fr-FR", {
+    day: "2-digit", month: "short", year: "numeric",
+  });
 }
 
-function CareerEventCard({ entry, isFirst }: { entry: CareerHistoryEntry; isFirst: boolean }) {
-  const [expanded, setExpanded] = useState(isFirst);
+const DETAIL_FIELDS: { key: keyof CareerHistoryEntry; label: string }[] = [
+  { key: "type_contrat",  label: "Contrat" },
+  { key: "fonction",      label: "Fonction" },
+  { key: "categorie",     label: "Catégorie" },
+  { key: "service",       label: "Service" },
+  { key: "manager",       label: "Manager" },
+  { key: "projet",        label: "Projet" },
+  { key: "business_line", label: "Business line" },
+  { key: "localisation",  label: "Localisation" },
+  { key: "date_fin_cdd",  label: "Fin CDD" },
+];
+
+function EventRow({ entry }: { entry: CareerHistoryEntry }) {
+  const [open, setOpen] = useState(false);
   const cfg = EVENT_CONFIG[entry.event_type] ?? EVENT_CONFIG.AUTRE;
   const { Icon } = cfg;
 
-  const details = [
-    { label: "Contrat",      value: entry.type_contrat },
-    { label: "Fonction",     value: entry.fonction },
-    { label: "Catégorie",    value: entry.categorie },
-    { label: "Service",      value: entry.service },
-    { label: "Manager",      value: entry.manager },
-    { label: "Projet",       value: entry.projet },
-    { label: "Business line",value: entry.business_line },
-    { label: "Localisation", value: entry.localisation },
-    { label: "Fin CDD",      value: entry.date_fin_cdd ? formatDate(entry.date_fin_cdd) : null },
-  ].filter(d => d.value);
+  const details = DETAIL_FIELDS
+    .map(f => ({ label: f.label, value: f.key === "date_fin_cdd" ? (entry.date_fin_cdd ? formatDate(entry.date_fin_cdd) : null) : (entry[f.key] as string | null) }))
+    .filter(d => d.value);
+
+  const hasDetails = details.length > 0 || !!entry.description;
 
   return (
-    <div className={`rounded-xl border ${cfg.border} bg-white shadow-sm overflow-hidden`}>
+    <div className="relative">
+      {/* Dot on timeline */}
+      <span className={`absolute -left-[22px] top-[14px] w-3 h-3 rounded-full ring-2 ring-white ${cfg.dot}`} />
+
+      {/* Row */}
       <button
         type="button"
-        onClick={() => setExpanded(p => !p)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+        disabled={!hasDetails}
+        onClick={() => hasDetails && setOpen(p => !p)}
+        className={`w-full flex items-center justify-between py-2.5 px-3 rounded-lg transition-colors text-left ${
+          hasDetails ? "hover:bg-slate-50 cursor-pointer" : "cursor-default"
+        }`}
       >
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-lg ${cfg.bg}`}>
-            <Icon className={cfg.color} size={13} />
-          </div>
-          <div>
-            <p className={`text-sm font-semibold ${cfg.color}`}>{entry.event_type_display}</p>
-            {entry.description && (
-              <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{entry.description}</p>
-            )}
-          </div>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Icon className={`shrink-0 ${cfg.iconColor}`} size={13} />
+          <span className="text-sm font-medium text-slate-700 truncate">
+            {cfg.label}
+          </span>
         </div>
-        <div className="flex items-center gap-3 shrink-0 ml-3">
-          <div className="flex items-center gap-1.5 text-xs text-slate-400">
-            <FaCalendarAlt size={10} />
-            {formatDate(entry.event_date)}
-          </div>
-          {details.length > 0 && (
-            <span className="text-slate-300">
-              {expanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
-            </span>
+        <div className="flex items-center gap-2 shrink-0 ml-3">
+          <span className="text-xs text-slate-400">{formatDate(entry.event_date)}</span>
+          {hasDetails && (
+            <FaChevronDown
+              size={10}
+              className={`text-slate-300 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+            />
           )}
         </div>
       </button>
 
+      {/* Details panel */}
       <AnimatePresence initial={false}>
-        {expanded && details.length > 0 && (
+        {open && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -96,25 +91,23 @@ function CareerEventCard({ entry, isFirst }: { entry: CareerHistoryEntry; isFirs
             transition={{ duration: 0.18 }}
             className="overflow-hidden"
           >
-            <div className={`border-t ${cfg.border} px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2`}>
-              {details.map(({ label, value }) => (
-                <div key={label} className="text-xs">
-                  <span className="text-slate-400 uppercase tracking-wide text-[10px] font-medium block">{label}</span>
-                  <span className="text-slate-700 font-medium">{value}</span>
+            <div className="mx-3 mb-3 bg-slate-50 rounded-lg border border-slate-100 px-4 py-3 space-y-2">
+              {entry.description && (
+                <p className="text-xs text-slate-600 italic border-b border-slate-100 pb-2 mb-2">
+                  {entry.description}
+                </p>
+              )}
+              {details.length > 0 && (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                  {details.map(({ label, value }) => (
+                    <div key={label}>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium">{label}</p>
+                      <p className="text-xs text-slate-700 font-medium">{value}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-            {entry.created_by && (
-              <div className="px-4 pb-3 flex items-center gap-1.5 text-[11px] text-slate-400">
-                <FaUser size={9} />
-                {entry.created_by}
-                {entry.created_at && (
-                  <span className="ml-1">
-                    · {new Date(entry.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}
-                  </span>
-                )}
-              </div>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -156,19 +149,17 @@ export default function CareerHistoryModal({ open, employee, onClose }: Props) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh]"
+            className="w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col max-h-[80vh]"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-camublue-900/10">
-                  <FaBriefcase className="text-camublue-900" size={16} />
+                  <FaBriefcase className="text-camublue-900" size={15} />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-slate-800 text-base">
-                    Parcours de carrière
-                  </h2>
+                  <h2 className="font-semibold text-slate-800 text-sm">Parcours de carrière</h2>
                   <p className="text-xs text-slate-400">
                     {employee.prenom} {employee.nom} · {employee.matricule}
                   </p>
@@ -178,53 +169,44 @@ export default function CareerHistoryModal({ open, employee, onClose }: Props) {
                 onClick={onClose}
                 className="text-slate-400 hover:text-slate-700 transition-colors p-1.5 rounded-lg hover:bg-slate-100"
               >
-                <FaTimes size={14} />
+                <FaTimes size={13} />
               </button>
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="flex-1 overflow-y-auto px-5 py-4">
               {loading ? (
-                <div className="flex items-center justify-center py-16">
-                  <ImSpinner2 className="animate-spin text-camublue-900" size={28} />
+                <div className="flex items-center justify-center py-12">
+                  <ImSpinner2 className="animate-spin text-camublue-900" size={24} />
                 </div>
               ) : history.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
-                  <FaBriefcase size={32} className="opacity-30" />
-                  <p className="text-sm">Aucun événement de carrière enregistré</p>
-                  <p className="text-xs text-slate-300">
-                    Les modifications futures du dossier apparaîtront automatiquement ici.
-                  </p>
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
+                  <FaBriefcase size={28} className="opacity-20" />
+                  <p className="text-sm">Aucun événement enregistré</p>
                 </div>
               ) : (
-                <ol className="relative border-l-2 border-slate-100 ml-3 space-y-0">
+                <div className="relative border-l-2 border-slate-100 ml-3 space-y-0.5">
                   {history.map((entry, idx) => (
-                    <li key={String(entry.id ?? idx)} className="ml-6 pb-4">
-                      {/* Timeline dot */}
-                      <span
-                        className={`absolute -left-[9px] flex h-4 w-4 items-center justify-center rounded-full ring-4 ring-white ${
-                          DOT_COLOR[entry.event_type] ?? "bg-slate-400"
-                        }`}
-                      />
-                      <CareerEventCard entry={entry} isFirst={idx === 0} />
-                    </li>
+                    <EventRow key={String(entry.id ?? idx)} entry={entry} />
                   ))}
-                </ol>
+                </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-3 border-t border-slate-100 shrink-0 flex justify-between items-center">
-              <span className="text-xs text-slate-400">
-                {history.length} événement{history.length !== 1 ? "s" : ""} au total
-              </span>
-              <button
-                onClick={onClose}
-                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition-colors"
-              >
-                Fermer
-              </button>
-            </div>
+            {!loading && history.length > 0 && (
+              <div className="px-5 py-3 border-t border-slate-100 shrink-0 flex justify-between items-center">
+                <span className="text-xs text-slate-400">
+                  {history.length} événement{history.length !== 1 ? "s" : ""}
+                </span>
+                <button
+                  onClick={onClose}
+                  className="px-4 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition-colors"
+                >
+                  Fermer
+                </button>
+              </div>
+            )}
           </motion.div>
         </div>
       )}
