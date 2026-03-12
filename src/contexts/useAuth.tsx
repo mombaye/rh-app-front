@@ -6,6 +6,7 @@ type User = {
   username: string;
   email: string;
   is_global_admin?: boolean;
+  is_planning_manager?: boolean;
   country?: any;
   first_login?: boolean;
 };

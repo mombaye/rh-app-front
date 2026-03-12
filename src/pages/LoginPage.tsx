@@ -15,8 +15,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const navigate = useNavigate(); 
-  const {login} = useAuth()
+  const navigate = useNavigate();
+  const { login } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,8 +24,8 @@ export default function LoginPage() {
     setError("");
     try {
       await login(username, password);
+      // NonPlanningRoute dans App.tsx gère la redirection vers /planning si is_planning_manager
       navigate("/dashboard");
-      console.log("login sucess")
     } catch (err: any) {
       const msg =
         err?.response?.data?.detail ||

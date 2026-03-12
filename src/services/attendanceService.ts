@@ -134,3 +134,16 @@ export async function addSinglePlanningEntry(entry: {
   const { data } = await api.post("/api/attendance/shift-planning/entry/", entry);
   return data;
 }
+
+/** Déplace une entrée du planning (drag & drop) — PATCH. */
+export async function moveShiftPlanningEntry(params: {
+  date: string;
+  shift_type: string;
+  employee_name: string;
+  new_date?: string;
+  new_shift_type?: string;
+  new_employee_name?: string;
+}): Promise<{ ok: boolean; date: string; shift_type: string; employee_name: string; employee_matricule: string }> {
+  const { data } = await api.patch("/api/attendance/shift-planning/entry/", params);
+  return data;
+}

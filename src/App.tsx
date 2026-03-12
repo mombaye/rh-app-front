@@ -11,6 +11,26 @@ import InterimEmployeesPage from "@/pages/InterimEmployeesPage";
 import InterneEmployeesPage from "./pages/InterneEmployeesPage";
 import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
 import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
+import PlanningPage from "@/pages/PlanningPage";
+import { useAuth } from "@/contexts/useAuth";
+
+/** Redirige les gestionnaires de planning vers /planning */
+function PlanningManagerRedirect({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user?.is_planning_manager) {
+    return <Navigate to="/planning" replace />;
+  }
+  return <>{children}</>;
+}
+
+/** Protège les routes accessibles uniquement aux non-planning-managers */
+function NonPlanningRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user?.is_planning_manager) {
+    return <Navigate to="/planning" replace />;
+  }
+  return <>{children}</>;
+}
 
 function App() {
   return (
@@ -29,13 +49,27 @@ function App() {
           }
         />
 
-        {/* Toutes les autres pages protégées par la FirstLoginGuard */}
+        {/* Page dédiée au gestionnaire de planning */}
+        <Route
+          path="/planning"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <PlanningPage />
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Toutes les autres pages protégées — redirigées vers /planning pour planning managers */}
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
               <FirstLoginGuard>
-                <DashboardPage />
+                <NonPlanningRoute>
+                  <DashboardPage />
+                </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
           }
@@ -46,7 +80,9 @@ function App() {
           element={
             <ProtectedRoute>
               <FirstLoginGuard>
-                <InterneEmployeesPage />
+                <NonPlanningRoute>
+                  <InterneEmployeesPage />
+                </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
           }
@@ -57,7 +93,9 @@ function App() {
           element={
             <ProtectedRoute>
               <FirstLoginGuard>
-                <InterimEmployeesPage />
+                <NonPlanningRoute>
+                  <InterimEmployeesPage />
+                </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
           }
@@ -68,7 +106,9 @@ function App() {
           element={
             <ProtectedRoute>
               <FirstLoginGuard>
-                <PayslipPage />
+                <NonPlanningRoute>
+                  <PayslipPage />
+                </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
           }
@@ -84,7 +124,9 @@ function App() {
           element={
             <ProtectedRoute>
               <FirstLoginGuard>
-                <AttendanceNormalesPage />
+                <NonPlanningRoute>
+                  <AttendanceNormalesPage />
+                </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
           }
@@ -95,7 +137,9 @@ function App() {
           element={
             <ProtectedRoute>
               <FirstLoginGuard>
-                <AttendanceShiftsPage />
+                <NonPlanningRoute>
+                  <AttendanceShiftsPage />
+                </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
           }
@@ -106,12 +150,15 @@ function App() {
           element={
             <ProtectedRoute>
               <FirstLoginGuard>
-                <LeavePage />
+                <NonPlanningRoute>
+                  <LeavePage />
+                </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
           }
         />
 
+        {/* Redirection par défaut */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </>

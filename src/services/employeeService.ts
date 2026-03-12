@@ -49,6 +49,49 @@ export const patchEmployee = async (id: number, data: Partial<Employee>) =>
 export const getEmployeeHistory = async (id: number): Promise<EmployeeHistoryEntry[]> =>
   (await api.get(`/api/employees/${id}/history/`)).data;
 
+// ══════════════════════════════════════════════════════
+//  PARCOURS DE CARRIERE
+// ══════════════════════════════════════════════════════
+export type CareerEventType =
+  | "EMBAUCHE"
+  | "PROMOTION"
+  | "CHANGEMENT_CONTRAT"
+  | "RENOUVELLEMENT_CDD"
+  | "CHANGEMENT_SERVICE"
+  | "TITULARISATION"
+  | "SORTIE"
+  | "REINTEGRATION"
+  | "AUTRE";
+
+export type CareerHistoryEntry = {
+  id: number | string | null;
+  event_type: CareerEventType;
+  event_type_display: string;
+  event_date: string;
+  description: string;
+  type_contrat: string | null;
+  fonction: string | null;
+  categorie: string | null;
+  service: string | null;
+  manager: string | null;
+  projet: string | null;
+  business_line: string | null;
+  localisation: string | null;
+  date_fin_cdd: string | null;
+  created_at: string | null;
+  created_by: string;
+  source: "computed" | "history" | "manual" | "exit" | "reinstate";
+};
+
+export const getCareerHistory = async (employeeId: number): Promise<CareerHistoryEntry[]> =>
+  (await api.get(`/api/employees/${employeeId}/career-history/`)).data;
+
+export const addCareerHistoryEntry = async (
+  employeeId: number,
+  entry: Partial<CareerHistoryEntry>
+): Promise<CareerHistoryEntry> =>
+  (await api.post(`/api/employees/${employeeId}/career-history/`, entry)).data;
+
 export const deleteEmployee = async (id: number) =>
   await api.delete(`/api/employees/${id}/`);
 

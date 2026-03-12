@@ -10,6 +10,7 @@ import {
   ChevronRight,
   X,
   Menu,
+  CalendarRange,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -162,10 +163,21 @@ export default function Sidebar() {
     );
   };
 
+  // Navigation filtrée selon le rôle de l'utilisateur
+  const visibleNavItems = user?.is_planning_manager
+    ? [{ label: "Planning Shifts", path: "/planning", icon: <CalendarRange size={20} /> }]
+    : navItems;
+
   const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
     <>
+      {user?.is_planning_manager && (
+        <div className="mx-4 mt-4 px-3 py-2 rounded-lg bg-camublue-900/10 text-camublue-900 text-xs font-semibold flex items-center gap-2">
+          <CalendarRange size={14} />
+          Gestionnaire de Planning
+        </div>
+      )}
       <nav className="flex-1 px-4 py-6 space-y-1">
-        {navItems.map((item) => (
+        {visibleNavItems.map((item) => (
           <NavLink key={item.path} item={item} onClose={onClose} />
         ))}
       </nav>
