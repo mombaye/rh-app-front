@@ -1821,6 +1821,18 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", delay = 0, lo
 // ============================================================================
 
 export default function AttendanceShiftsPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const handlePlanningClick = () => {
+    // Les admins RH ont accès direct sans reconnexion
+    if (user?.is_global_admin || user?.is_planning_manager) {
+      navigate("/planning");
+    } else {
+      setPlanningLoginOpen(true);
+    }
+  };
+
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("daily");
   const [selectedTeam, setSelectedTeam] = useState<ShiftTeamKey | null>(null);
@@ -2409,7 +2421,7 @@ export default function AttendanceShiftsPage() {
               className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 font-medium ${isActiveLocked ? "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100" : "bg-white border-slate-300 text-camublue-900 hover:bg-slate-50"}`}>
               <Settings className="h-4 w-4" /><span className="hidden sm:inline">Heures de travail</span>{isActiveLocked && <Lock className="h-3 w-3" />}
             </button>
-            <button onClick={() => setPlanningLoginOpen(true)}
+            <button onClick={handlePlanningClick}
               className={`border px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 ? "bg-green-50 border-green-400 text-green-700 hover:bg-green-100" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
               <CalendarRange className="h-4 w-4" /><span className="hidden sm:inline">Planning</span>
               {todayPlanning.loaded && (todayPlanning.jour.length + todayPlanning.soir1.length + todayPlanning.soir2.length) > 0 && (
@@ -2526,7 +2538,7 @@ export default function AttendanceShiftsPage() {
                               <div className="flex flex-col items-center gap-3">
                                 <CalendarRange className="h-12 w-12 text-slate-200" />
                                 <p className="font-medium text-slate-500">Pas de planning disponible pour aujourd'hui</p>
-                                <button onClick={() => setPlanningLoginOpen(true)}
+                                <button onClick={handlePlanningClick}
                                   className="mt-1 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
                                   <CalendarRange className="h-4 w-4" /> Gérer le planning
                                 </button>
