@@ -980,11 +980,6 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
     })));
   };
 
-  const isWeekend = (p: Pointage) => {
-    const dow = new Date(p.date + "T00:00:00").getDay();
-    return dow === 0 || dow === 6;
-  };
-
   return (
     <AnimatePresence>
       {open && (
@@ -1050,25 +1045,22 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
                     <span>Jour</span><span>Date</span><span>Statut</span><span>Entrée</span><span>Sortie</span>
                   </div>
                   {pointages.map((p, i) => {
-                    const weekend = isWeekend(p);
-                    const rowBg = weekend
-                      ? "bg-slate-50 border-slate-200"
-                      : p.status === "ok" ? "bg-white border-slate-100" : "bg-rose-50 border-rose-100";
+                    const rowBg = p.status === "ok" ? "bg-white border-slate-100" : "bg-rose-50 border-rose-100";
                     return (
                       <div key={i} className={`rounded-xl border p-3 ${rowBg}`}>
                         <div className="hidden sm:grid grid-cols-5 gap-4 items-center">
-                          <span className={`font-medium text-sm ${weekend ? "text-slate-400 italic" : "text-slate-800"}`}>{p.day}</span>
+                          <span className="font-medium text-sm text-slate-800">{p.day}</span>
                           <span className="text-sm text-slate-600">
                             {new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}
                           </span>
-                          <span>{weekend ? <span className="text-xs text-slate-400 italic">Week-end</span> : <StatusPill status={p.status} />}</span>
+                          <span><StatusPill status={p.status} /></span>
                           <span className={`text-sm ${p.in_time ? "text-slate-700" : "text-slate-400"}`}>{p.in_time ? formatTime(p.in_time) : "—"}</span>
                           <span className={`text-sm ${p.out_time ? "text-slate-700" : "text-slate-400"}`}>{p.out_time ? formatTime(p.out_time) : "—"}</span>
                         </div>
                         {/* Mobile */}
                         <div className="sm:hidden flex items-center justify-between gap-2">
-                          <span className={`font-semibold text-sm ${weekend ? "text-slate-400 italic" : "text-slate-800"}`}>{p.day} · {new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"short"})}</span>
-                          {weekend ? <span className="text-xs text-slate-400 italic">Week-end</span> : <StatusPill status={p.status} />}
+                          <span className="font-semibold text-sm text-slate-800">{p.day} · {new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"short"})}</span>
+                          <StatusPill status={p.status} />
                           <span className="text-xs text-slate-500">{p.in_time ? formatTime(p.in_time) : "—"} → {p.out_time ? formatTime(p.out_time) : "—"}</span>
                         </div>
                       </div>
