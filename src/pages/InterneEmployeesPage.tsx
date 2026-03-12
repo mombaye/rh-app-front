@@ -1165,6 +1165,7 @@ export default function InterneEmployeesPage() {
             loading={isLoading}
             profileFilter={profileFilter}
             onProfileFilterChange={setProfileFilter}
+            showExitsByContract
           />
         </div>
 
