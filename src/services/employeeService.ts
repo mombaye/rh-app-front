@@ -1,5 +1,5 @@
 import api from "@/api/axios";
-import { Employee, ContractType } from "@/types/employee";
+import { Employee, ContractType, EmployeeHistoryEntry } from "@/types/employee";
 
 // ══════════════════════════════════════════════════════
 //  EMPLOYEES
@@ -42,6 +42,12 @@ export const createEmployee = async (data: Partial<Employee>) =>
 
 export const updateEmployee = async (id: number, data: Partial<Employee>) =>
   (await api.put(`/api/employees/${id}/`, data)).data;
+
+export const patchEmployee = async (id: number, data: Partial<Employee>) =>
+  (await api.patch(`/api/employees/${id}/`, data)).data;
+
+export const getEmployeeHistory = async (id: number): Promise<EmployeeHistoryEntry[]> =>
+  (await api.get(`/api/employees/${id}/history/`)).data;
 
 export const deleteEmployee = async (id: number) =>
   await api.delete(`/api/employees/${id}/`);

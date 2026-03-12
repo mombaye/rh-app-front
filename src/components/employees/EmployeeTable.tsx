@@ -26,8 +26,7 @@ interface Props {
   showContractType?: boolean;
 }
 
-// ✅ SortKey étendu avec "service"
-type SortKey = "matricule" | "nom" | "prenom" | "fonction" | "sexe" | "service";
+type SortKey = "matricule" | "nom" | "prenom" | "fonction" | "service";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
@@ -366,8 +365,7 @@ export default function EmployeesTable({
     );
   };
 
-  // ✅ colCount : +1 pour Service, +1 si showContractType
-  const colCount = 12 + (showContractType ? 1 : 0);
+  const colCount = 19 + (showContractType ? 1 : 0);
 
   return (
     <div className="flex flex-col h-full gap-3">
@@ -497,7 +495,7 @@ export default function EmployeesTable({
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                 Statut
               </th>
-              {(["matricule", "nom", "prenom", "sexe", "fonction"] as SortKey[]).map((col) => (
+              {(["matricule", "nom", "prenom", "fonction"] as SortKey[]).map((col) => (
                 <th key={col} className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                   <button
                     type="button"
@@ -513,12 +511,34 @@ export default function EmployeesTable({
               {/* Type contrat — optionnel */}
               {showContractType && (
                 <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
-                  Type contrat
+                  Contrat
                 </th>
               )}
 
-              {/* ✅ NOUVELLE COLONNE : Service — triable, largeur min garantie */}
-              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap min-w-[150px]">
+              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
+                Catégorie
+              </th>
+              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
+                Date d'embauche
+              </th>
+              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
+                Ancienneté
+              </th>
+              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
+                Fin CDD
+              </th>
+              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
+                Fin essai
+              </th>
+              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
+                Business Line
+              </th>
+              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
+                Projet
+              </th>
+
+              {/* Service — triable */}
+              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap min-w-[130px]">
                 <button
                   type="button"
                   onClick={() => handleSort("service")}
@@ -530,16 +550,16 @@ export default function EmployeesTable({
               </th>
 
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
-                Date d'embauche
-              </th>
-              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
-                Projet/Département
-              </th>
-              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                 Manager
               </th>
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
+                Localisation
+              </th>
+              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                 Email
+              </th>
+              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
+                Téléphone
               </th>
               <th className="px-4 py-3 text-center border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                 Actions
@@ -577,10 +597,7 @@ export default function EmployeesTable({
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.matricule}</td>
                 <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">{emp.nom}</td>
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.prenom}</td>
-                <td className="px-4 py-3 text-sm whitespace-nowrap">
-                  {emp.sexe === "H" ? "Homme" : emp.sexe === "F" ? "Femme" : ""}
-                </td>
-                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.fonction}</td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.fonction || <span className="text-slate-300">—</span>}</td>
 
                 {/* Type contrat */}
                 {showContractType && (
@@ -597,15 +614,22 @@ export default function EmployeesTable({
                   </td>
                 )}
 
-                {/* ✅ NOUVELLE CELLULE : Service */}
+                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.categorie || <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.date_embauche || <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">
+                  {emp.anciennete != null ? `${emp.anciennete} an${emp.anciennete !== 1 ? "s" : ""}` : <span className="text-slate-300">—</span>}
+                </td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.date_fin_cdd || <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.date_fin_periode_essai || <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.business_line || <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.projet || <span className="text-slate-300">—</span>}</td>
                 <td className="px-4 py-3">
                   <ServiceBadge emp={emp} />
                 </td>
-
-                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.date_embauche}</td>
-                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.projet}</td>
-                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.manager}</td>
-                <td className="px-4 py-3 text-sm">{emp.email}</td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.manager || <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.localisation || <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-sm">{emp.email || <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.telephone || <span className="text-slate-300">—</span>}</td>
 
                 <td className="px-4 py-3 text-center">
                   <button
