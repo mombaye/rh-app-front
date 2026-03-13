@@ -2,10 +2,12 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { leaveTypeService, leaveRequestService } from "@/services/leaveService";
+import { getEmployees } from "@/services/employeeService";
 import { ContractType, LeaveType } from "@/types/leave";
+import { Employee } from "@/types/employee";
 import { FiX } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
-import { Upload, FileCheck, Paperclip, CheckCircle2 } from "lucide-react";
+import { Upload, FileCheck, Paperclip, CheckCircle2, Search, User } from "lucide-react";
 
 interface Props {
   onClose:       () => void;
@@ -38,11 +40,19 @@ function parseDRFErrors(data: unknown): string {
 }
 
 export default function LeaveRequestForm({ onClose, onSuccess, contractType = "INTERNE" }: Props) {
-  const [leaveTypes,     setLeaveTypes]     = useState<LeaveType[]>([]);
-  const [form,           setForm]           = useState<FormState>(EMPTY_FORM);
-  const [loading,        setLoading]        = useState(false);
-  const [error,          setError]          = useState<string | null>(null);
-  const [isLoadingTypes, setIsLoadingTypes] = useState(true);
+  const [leaveTypes,      setLeaveTypes]      = useState<LeaveType[]>([]);
+  const [form,            setForm]            = useState<FormState>(EMPTY_FORM);
+  const [loading,         setLoading]         = useState(false);
+  const [error,           setError]           = useState<string | null>(null);
+  const [isLoadingTypes,  setIsLoadingTypes]  = useState(true);
+
+  // Employee search
+  const [allEmployees,     setAllEmployees]     = useState<Employee[]>([]);
+  const [empSearch,        setEmpSearch]        = useState("");
+  const [empResults,       setEmpResults]       = useState<Employee[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [showEmpDrop,      setShowEmpDrop]      = useState(false);
+  const empRef = useRef<HTMLDivElement>(null);
 
   // Document upload step
   const [createdId,   setCreatedId]   = useState<number | null>(null);
@@ -51,6 +61,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   const [docDone,     setDocDone]     = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Load leave types
   useEffect(() => {
     setIsLoadingTypes(true);
     leaveTypeService.getAll()
@@ -58,6 +69,41 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
       .catch(() => { setError("Impossible de charger les types de congé."); setIsLoadingTypes(false); });
   }, []);
 
+  // Load employees filtered by contract type
+  useEffect(() => {
+    getEmployees({ status: "ACTIVE" }).then((list) => {
+      const filtered = contractType === "INTERIM"
+        ? list.filter((e) => e.type_contrat === "INTERIM")
+        : list.filter((e) => e.type_contrat !== "INTERIM");
+      setAllEmployees(filtered);
+    }).catch(() => {/* silent */});
+  }, [contractType]);
+
+  // Filter employees on search input
+  useEffect(() => {
+    if (!empSearch.trim()) { setEmpResults([]); return; }
+    const q = empSearch.toLowerCase();
+    const results = allEmployees.filter(
+      (e) =>
+        e.matricule.toLowerCase().includes(q) ||
+        e.nom.toLowerCase().includes(q) ||
+        e.prenom.toLowerCase().includes(q)
+    ).slice(0, 8);
+    setEmpResults(results);
+  }, [empSearch, allEmployees]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (empRef.current && !empRef.current.contains(e.target as Node)) {
+        setShowEmpDrop(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Auto-calculate days
   useEffect(() => {
     if (form.start_date && form.end_date) {
       const start = new Date(form.start_date), end = new Date(form.end_date);
@@ -73,6 +119,21 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
     setError(null);
+  };
+
+  const selectEmployee = (emp: Employee) => {
+    setSelectedEmployee(emp);
+    setForm((f) => ({ ...f, employee_id: String(emp.id) }));
+    setEmpSearch("");
+    setEmpResults([]);
+    setShowEmpDrop(false);
+    setError(null);
+  };
+
+  const clearEmployee = () => {
+    setSelectedEmployee(null);
+    setForm((f) => ({ ...f, employee_id: "" }));
+    setEmpSearch("");
   };
 
   const selectedType = leaveTypes.find((t) => String(t.id) === form.leave_type_id);
@@ -96,7 +157,6 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         motif:         form.motif.trim(),
       });
       if (needsDoc) {
-        // Passer à l'étape upload justificatif
         setCreatedId(created.id);
       } else {
         onSuccess?.();
@@ -262,15 +322,86 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
             )}
           </AnimatePresence>
 
+          {/* ── Recherche employé par matricule ────────────────────── */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
-              ID Employé <span className="text-red-500">*</span>
+              Employé <span className="text-red-500">*</span>
             </label>
-            <input type="number" name="employee_id" value={form.employee_id} onChange={handleChange}
-              placeholder="Ex : 42" min={1}
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
+
+            {selectedEmployee ? (
+              /* Carte employé sélectionné */
+              <div className="flex items-center gap-3 border border-emerald-200 bg-emerald-50 rounded-xl px-4 py-3">
+                <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                  <User className="h-4 w-4 text-emerald-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-800 truncate">
+                    {selectedEmployee.nom} {selectedEmployee.prenom}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {selectedEmployee.matricule}
+                    {selectedEmployee.fonction ? ` · ${selectedEmployee.fonction}` : ""}
+                    {selectedEmployee.service ? ` · ${selectedEmployee.service}` : ""}
+                  </p>
+                </div>
+                <button onClick={clearEmployee}
+                  className="text-slate-400 hover:text-slate-600 transition p-1 rounded-lg hover:bg-white">
+                  <FiX size={15} />
+                </button>
+              </div>
+            ) : (
+              /* Champ de recherche */
+              <div className="relative" ref={empRef}>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={empSearch}
+                    onChange={(e) => { setEmpSearch(e.target.value); setShowEmpDrop(true); }}
+                    onFocus={() => setShowEmpDrop(true)}
+                    placeholder="Rechercher par matricule ou nom…"
+                    className="w-full border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition"
+                  />
+                </div>
+
+                <AnimatePresence>
+                  {showEmpDrop && empResults.length > 0 && (
+                    <motion.ul
+                      initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                      className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-52 overflow-y-auto">
+                      {empResults.map((emp) => (
+                        <li key={emp.id}
+                          onMouseDown={() => selectEmployee(emp)}
+                          className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition">
+                          <div className="w-7 h-7 rounded-full bg-camublue-100 flex items-center justify-center shrink-0">
+                            <User className="h-3.5 w-3.5 text-camublue-700" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-800 truncate">
+                              {emp.nom} {emp.prenom}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {emp.matricule}
+                              {emp.service ? ` · ${emp.service}` : ""}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </motion.ul>
+                  )}
+                  {showEmpDrop && empSearch.trim() && empResults.length === 0 && (
+                    <motion.div
+                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                      className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3 text-sm text-gray-400">
+                      Aucun employé trouvé pour «&nbsp;{empSearch}&nbsp;»
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
 
+          {/* ── Type de congé ───────────────────────────────────────── */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
               Type de congé <span className="text-red-500">*</span>
@@ -304,6 +435,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
             )}
           </div>
 
+          {/* ── Dates ───────────────────────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
@@ -332,6 +464,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
             )}
           </AnimatePresence>
 
+          {/* ── Motif ───────────────────────────────────────────────── */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
               Motif <span className="text-red-500">*</span>
