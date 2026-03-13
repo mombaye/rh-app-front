@@ -382,7 +382,7 @@ export default function EmployeesTable({
     );
   };
 
-  const colCount = 19 + (showContractType ? 1 : 0);
+  const colCount = 13 + (showContractType ? 1 : 0);
 
   return (
     <div className="flex flex-col h-full gap-3">
@@ -533,22 +533,7 @@ export default function EmployeesTable({
               )}
 
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
-                Catégorie
-              </th>
-              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                 Date d'embauche
-              </th>
-              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
-                Ancienneté
-              </th>
-              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
-                Fin CDD
-              </th>
-              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
-                Fin essai
-              </th>
-              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
-                Business Line
               </th>
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                 Projet
@@ -568,9 +553,6 @@ export default function EmployeesTable({
 
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                 Manager
-              </th>
-              <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
-                Localisation
               </th>
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                 Email
@@ -631,20 +613,12 @@ export default function EmployeesTable({
                   </td>
                 )}
 
-                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.categorie || <span className="text-slate-300">—</span>}</td>
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.date_embauche || <span className="text-slate-300">—</span>}</td>
-                <td className="px-4 py-3 text-sm whitespace-nowrap">
-                  {emp.anciennete != null ? `${emp.anciennete} an${emp.anciennete !== 1 ? "s" : ""}` : <span className="text-slate-300">—</span>}
-                </td>
-                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.date_fin_cdd || <span className="text-slate-300">—</span>}</td>
-                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.date_fin_periode_essai || <span className="text-slate-300">—</span>}</td>
-                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.business_line || <span className="text-slate-300">—</span>}</td>
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.projet || <span className="text-slate-300">—</span>}</td>
                 <td className="px-4 py-3">
                   <ServiceBadge emp={emp} />
                 </td>
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.manager || <span className="text-slate-300">—</span>}</td>
-                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.localisation || <span className="text-slate-300">—</span>}</td>
                 <td className="px-4 py-3 text-sm">{emp.email || <span className="text-slate-300">—</span>}</td>
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.telephone || <span className="text-slate-300">—</span>}</td>
 
