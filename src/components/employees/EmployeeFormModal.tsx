@@ -163,8 +163,19 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
       date_fin_periode_essai: nullDate(form.date_fin_periode_essai),
     };
     try {
-      if (isEdit && initialData) { await updateEmployee(initialData.id, payload); toast.success("Employé mis à jour !"); }
-      else                       { await createEmployee(payload);                 toast.success("Employé ajouté !"); }
+      if (isEdit && initialData) {
+        await updateEmployee(initialData.id, payload);
+        const planningSync =
+          form.nom        !== (initialData.nom        ?? "") ||
+          form.prenom     !== (initialData.prenom     ?? "") ||
+          form.matricule  !== (initialData.matricule  ?? "");
+        toast.success(
+          planningSync
+            ? "Employé mis à jour — le planning shifts a été synchronisé automatiquement."
+            : "Employé mis à jour !",
+          { duration: planningSync ? 4000 : 2000 },
+        );
+      } else { await createEmployee(payload); toast.success("Employé ajouté !"); }
       onSuccess(); onClose();
     } catch (err: any) {
       const detail = err?.response?.data;
