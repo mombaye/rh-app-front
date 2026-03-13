@@ -99,6 +99,7 @@ export default function PlanningPage() {
   // Modal: modifier un employé dans le planning
   const [editModal, setEditModal] = useState<PlanningEntry | null>(null);
   const [editName, setEditName] = useState("");
+  const [editMatricule, setEditMatricule] = useState("");
   const [editLoading, setEditLoading] = useState(false);
 
   // Modal: import Excel
@@ -272,28 +273,35 @@ export default function PlanningPage() {
 
   // ── Modifier l'employé d'une entrée ──────────────────────────────────────
   const handleEditConfirm = async () => {
-    if (!editModal || !editName.trim() || editName.trim() === editModal.employee_name) {
-      setEditModal(null);
-      return;
-    }
+    if (!editModal) return;
+    const newName = editName.trim();
+    const newMat  = editMatricule.trim();
+    const nameChanged = newName && newName !== editModal.employee_name;
+    const matChanged  = newMat !== (editModal.employee_matricule ?? "");
+    if (!nameChanged && !matChanged) { setEditModal(null); return; }
+
     setEditLoading(true);
     try {
-      await moveShiftPlanningEntry({
-        date:              editModal.date,
-        shift_type:        editModal.shift_type,
-        employee_name:     editModal.employee_name,
-        new_employee_name: editName.trim(),
+      const result = await moveShiftPlanningEntry({
+        date:                    editModal.date,
+        shift_type:              editModal.shift_type,
+        employee_name:           editModal.employee_name,
+        ...(nameChanged && { new_employee_name: newName }),
+        new_employee_matricule:  newMat || null,
       });
       setEntries(prev => prev.map(e =>
         e.date === editModal.date &&
         e.shift_type === editModal.shift_type &&
         e.employee_name === editModal.employee_name
-          ? { ...e, employee_name: editName.trim(), employee_matricule: null }
+          ? { ...e,
+              employee_name:      result.employee_name,
+              employee_matricule: result.employee_matricule || null }
           : e
       ));
-      toast.success(`Employé mis à jour : ${editName.trim()}`);
+      toast.success("Planning mis à jour");
       setEditModal(null);
       setEditName("");
+      setEditMatricule("");
       await load();
     } catch (err: any) {
       if (err?.response?.status === 409) {
@@ -446,7 +454,7 @@ export default function PlanningPage() {
                                   onDragStart={handleDragStart}
                                   onDragEnd={handleDragEnd}
                                   onDelete={handleDelete}
-                                  onEdit={(e) => { setEditModal(e); setEditName(e.employee_name); }}
+                                  onEdit={(e) => { setEditModal(e); setEditName(e.employee_name); setEditMatricule(e.employee_matricule ?? ""); }}
                                 />
                               ))}
 
@@ -533,22 +541,22 @@ export default function PlanningPage() {
 
       {/* ── Modal: modifier l'employé ── */}
       {editModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditModal(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setEditModal(null); }}>
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
               <Pencil size={15} className="text-camublue-900" />
               Modifier l'employé
             </h3>
-            <p className="text-xs text-slate-400 mb-1">
+            <p className="text-xs text-slate-400 mb-4">
               {fmtDay(editModal.date).day} {fmtDay(editModal.date).num} — {SHIFT_LABELS[editModal.shift_type]}
             </p>
-            <p className="text-xs text-slate-500 mb-4">
-              Actuellement : <span className="font-semibold text-slate-700">{editModal.employee_name}</span>
-            </p>
+
+            {/* Nom */}
+            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Nom</label>
             <input
               list="edit-employee-list"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30 mb-4"
-              placeholder="Nouveau nom ou matricule…"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30 mb-3"
+              placeholder="Nom de l'employé…"
               value={editName}
               onChange={e => setEditName(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleEditConfirm()}
@@ -559,6 +567,28 @@ export default function PlanningPage() {
                 <option key={emp.id} value={`${emp.nom} ${emp.prenom}`} />
               ))}
             </datalist>
+
+            {/* Matricule */}
+            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
+              Matricule <span className="text-slate-300 font-normal normal-case">(optionnel)</span>
+            </label>
+            <input
+              list="edit-matricule-list"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-camublue-900/30 mb-1"
+              placeholder="Ex : CAM-001"
+              value={editMatricule}
+              onChange={e => setEditMatricule(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleEditConfirm()}
+            />
+            <datalist id="edit-matricule-list">
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.matricule} label={`${emp.nom} ${emp.prenom}`} />
+              ))}
+            </datalist>
+            <p className="text-[10px] text-slate-400 mb-4">
+              Laisser vide pour détecter automatiquement selon le nom saisi.
+            </p>
+
             <div className="flex justify-end gap-2">
               <button onClick={() => setEditModal(null)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm hover:bg-slate-200 transition">
                 <X size={13} /> Annuler

@@ -143,6 +143,7 @@ export async function moveShiftPlanningEntry(params: {
   new_date?: string;
   new_shift_type?: string;
   new_employee_name?: string;
+  new_employee_matricule?: string | null;
 }): Promise<{ ok: boolean; date: string; shift_type: string; employee_name: string; employee_matricule: string }> {
   const { data } = await api.patch("/api/attendance/shift-planning/entry/", params);
   return data;
