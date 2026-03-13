@@ -139,12 +139,19 @@ export default function PlanningPage() {
   // ── Map : nom normalisé → matricule ───────────────────────────────────────
   const nameToMatricule = useMemo(() => {
     const m = new Map<string, string>();
+    const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
     for (const emp of employees) {
-      const key = `${emp.nom} ${emp.prenom}`.trim().toLowerCase();
-      const key2 = `${emp.prenom} ${emp.nom}`.trim().toLowerCase();
-      if (emp.matricule) {
-        m.set(key, emp.matricule);
-        m.set(key2, emp.matricule);
+      if (!emp.matricule) continue;
+      const nom = emp.nom?.trim() ?? "";
+      const prenom = emp.prenom?.trim() ?? "";
+      const fullNameApi = (emp as any).full_name?.trim() ?? "";
+      const candidates = [
+        `${nom} ${prenom}`,
+        `${prenom} ${nom}`,
+        fullNameApi,
+      ];
+      for (const c of candidates) {
+        if (c.trim()) m.set(norm(c), emp.matricule);
       }
     }
     return m;

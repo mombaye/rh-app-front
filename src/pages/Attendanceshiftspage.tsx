@@ -23,7 +23,7 @@ import { getEmployees } from "@/services/employeeService";
 import type {
   ShiftDailyStatsResponse, ShiftTeamKey, ShiftRecord,
   EmployeePeriodDetailResponse, DayDetail,
-  WeeklyStatsResponse, MonthlyStatsResponse,
+  WeeklyStatsResponse, MonthlyStatsResponse, WeeklyDayEntry,
 } from "@/types/attendance";
 import type { Employee } from "@/types/employee";
 import * as XLSX from "xlsx";
@@ -64,6 +64,8 @@ interface SummaryRecord {
   employee_id: number; matricule: string; full_name: string; department: string; project: string;
   shift_team: ShiftTeamKey | null;
   nb_jours: number; worked_minutes: number;
+  absent_days: number; late_days: number; anomaly_days: number;
+  delta_minutes: number; expected_minutes: number;
 }
 
 interface Pointage {
@@ -1487,40 +1489,116 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
 // COMPOSANT: SummaryTable — Vue hebdomadaire / mensuelle
 // ============================================================================
 
-function SummaryTable({ rows, mode, isLoading }: { rows: SummaryRecord[]; mode: "weekly" | "monthly"; isLoading: boolean }) {
-  const headers = ["Matricule", "Nom", "Département", "Projet", "Équipe", mode === "weekly" ? "Jours" : "Jours travaillés", "Heures travaillées"];
+const DAY_SHORT = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+
+function WeekDayBar({ byDay }: { byDay: WeeklyDayEntry[] }) {
+  if (!byDay.length) return null;
+  const sorted = [...byDay].sort((a, b) => a.date.localeCompare(b.date));
   return (
-    <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-slate-200 shadow-sm">
-      <table className="min-w-full bg-white">
-        <thead className="sticky top-0 z-10 bg-camublue-900 text-white">
-          <tr>{headers.map(h => <th key={h} className="px-4 py-3 text-center border-b border-white/20 text-sm font-semibold whitespace-nowrap">{h}</th>)}</tr>
-        </thead>
-        <tbody>
-          {isLoading
-            ? [...Array(6)].map((_, i) => (
-              <tr key={i} className="border-b border-slate-100">
-                {headers.map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>)}
-              </tr>
-            ))
-            : rows.length === 0
-              ? <tr><td colSpan={headers.length} className="text-center py-16 text-slate-400 text-sm">Aucune donnée disponible</td></tr>
-              : rows.map(r => (
-                <tr key={`${r.employee_id}-${r.matricule}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors text-sm">
-                  <td className="px-4 py-3"><div className="flex justify-center font-mono text-slate-500 text-xs">{r.matricule || "—"}</div></td>
-                  <td className="px-4 py-3"><span className="font-medium text-slate-800">{r.full_name}</span></td>
-                  <td className="px-4 py-3 text-xs"><span className="font-semibold text-camublue-900">{r.department !== "—" ? r.department : "—"}</span></td>
-                  <td className="px-4 py-3 text-xs"><span className="font-semibold text-camublue-900">{r.project !== "—" ? r.project : "—"}</span></td>
-                  <td className="px-4 py-3"><div className="flex justify-center"><ShiftTeamPill teamKey={r.shift_team} /></div></td>
-                  <td className="px-4 py-3 tabular-nums text-center font-semibold text-slate-700">{r.nb_jours}</td>
-                  <td className="px-4 py-3 tabular-nums text-center">
-                    <span className={`font-semibold ${r.worked_minutes > 0 ? "text-emerald-600" : "text-slate-400"}`}>
-                      {r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—"}
-                    </span>
-                  </td>
+    <div className="grid grid-cols-7 gap-1 shrink-0 mb-1">
+      {sorted.map(d => {
+        const total = d.ok_count + d.absent_count + d.incomplete_count + d.anomaly_count;
+        const dateObj = new Date(d.date + "T00:00:00");
+        const dayLabel = DAY_SHORT[dateObj.getDay()];
+        const dayNum = String(dateObj.getDate()).padStart(2, "0");
+        return (
+          <div key={d.date} className="bg-white border border-slate-100 rounded-xl p-2 shadow-sm flex flex-col gap-1 min-w-0">
+            <div className="flex items-baseline gap-1">
+              <span className="text-[10px] font-semibold text-slate-500 uppercase">{dayLabel}</span>
+              <span className="text-xs font-bold text-camublue-900">{dayNum}</span>
+            </div>
+            <div className="flex flex-col gap-0.5 text-[10px]">
+              <span className="text-emerald-600 font-semibold">{d.ok_count} prés.</span>
+              {d.absent_count > 0 && <span className="text-red-500 font-semibold">{d.absent_count} abs.</span>}
+              {d.late_count > 0 && <span className="text-orange-500">{d.late_count} retard</span>}
+              {d.anomaly_count > 0 && <span className="text-violet-500">{d.anomaly_count} anom.</span>}
+              {total > 0 && <span className="text-slate-300 text-[9px] mt-0.5">{total} total</span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SummaryTable({ rows, mode, isLoading, byDay }: {
+  rows: SummaryRecord[];
+  mode: "weekly" | "monthly";
+  isLoading: boolean;
+  byDay?: WeeklyDayEntry[];
+}) {
+  const MAX_MIN = mode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33);
+  const headers = ["Matricule", "Nom", "Projet/Dép.", "Équipe", "Présent", "Absent", "Retard", "Anomalie", "Heures trav.", "Progression"];
+  return (
+    <div className="flex flex-col flex-1 min-h-0 gap-2">
+      {mode === "weekly" && byDay && byDay.length > 0 && (
+        <WeekDayBar byDay={byDay} />
+      )}
+      <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-slate-200 shadow-sm">
+        <table className="min-w-full bg-white">
+          <thead className="sticky top-0 z-10 bg-camublue-900 text-white">
+            <tr>{headers.map(h => <th key={h} className="px-3 py-3 text-center border-b border-white/20 text-xs font-semibold whitespace-nowrap">{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {isLoading
+              ? [...Array(6)].map((_, i) => (
+                <tr key={i} className="border-b border-slate-100">
+                  {headers.map((_, j) => <td key={j} className="px-3 py-3"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>)}
                 </tr>
-              ))}
-        </tbody>
-      </table>
+              ))
+              : rows.length === 0
+                ? <tr><td colSpan={headers.length} className="text-center py-16 text-slate-400 text-sm">Aucune donnée disponible</td></tr>
+                : rows.map(r => {
+                  const pct = MAX_MIN > 0 ? Math.min(100, Math.round((r.worked_minutes / MAX_MIN) * 100)) : 0;
+                  const barCls = pct >= 100 ? "bg-emerald-500" : pct >= 75 ? "bg-blue-500" : pct >= 50 ? "bg-amber-400" : "bg-red-400";
+                  return (
+                    <tr key={`${r.employee_id}-${r.matricule}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors text-sm">
+                      <td className="px-3 py-2.5 font-mono text-xs text-slate-500 text-center">{r.matricule || "—"}</td>
+                      <td className="px-3 py-2.5"><span className="font-medium text-slate-800">{r.full_name}</span></td>
+                      <td className="px-3 py-2.5 text-xs">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-semibold text-camublue-900 leading-tight">{r.project !== "—" ? r.project : r.department !== "—" ? r.department : "—"}</span>
+                          {r.project !== "—" && <span className="text-[10px] text-slate-400 leading-tight">{r.department}</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5"><div className="flex justify-center"><ShiftTeamPill teamKey={r.shift_team} /></div></td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold">{r.nb_jours}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {r.absent_days > 0
+                          ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-50 text-red-600 text-xs font-bold">{r.absent_days}</span>
+                          : <span className="text-slate-300 text-xs">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {r.late_days > 0
+                          ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-orange-50 text-orange-600 text-xs font-bold">{r.late_days}</span>
+                          : <span className="text-slate-300 text-xs">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {r.anomaly_days > 0
+                          ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-violet-50 text-violet-600 text-xs font-bold">{r.anomaly_days}</span>
+                          : <span className="text-slate-300 text-xs">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className={`font-semibold tabular-nums text-sm ${r.worked_minutes > 0 ? "text-emerald-600" : "text-slate-400"}`}>
+                          {r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 min-w-[120px]">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${barCls}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-[10px] font-semibold tabular-nums text-slate-500 w-8 text-right">{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1793,6 +1871,11 @@ export default function AttendanceShiftsPage() {
       shift_team: assignments[r.matricule ?? ""] ?? r.shift_team ?? null,
       nb_jours: r.present_days ?? r.worked_days ?? 0,
       worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
+      absent_days: r.absent_days ?? 0,
+      late_days: r.late_days ?? 0,
+      anomaly_days: r.anomaly_days ?? 0,
+      delta_minutes: r.delta_minutes ?? 0,
+      expected_minutes: r.expected_minutes ?? 0,
     });
     if (viewMode === "weekly" && weeklyData) return weeklyData.by_employee.map(mapEmp);
     if (viewMode === "monthly" && monthlyData) return monthlyData.by_employee.map(mapEmp);
@@ -1949,14 +2032,21 @@ export default function AttendanceShiftsPage() {
         Email: r.email ?? "Manquant",
       })));
     } else {
+      const MAX_MIN = viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33);
       exportXLSX(`shift_${viewMode === "weekly" ? "hebdo" : "mensuel"}`, filteredSummaryRecords.map((r) => ({
-        Matricule: r.matricule, Nom: r.full_name,
+        Matricule: r.matricule,
+        Nom: r.full_name,
         Projet: r.project !== "—" ? r.project : "—",
         Département: r.department !== "—" ? r.department : "—",
         Équipe: SHIFT_TEAMS.find((t) => t.key === r.shift_team)?.short || r.shift_team || "—",
-        "Nb jours": r.nb_jours,
+        "Jours présents": r.nb_jours,
+        "Jours absents": r.absent_days,
+        "Jours retard": r.late_days,
+        "Jours anomalie": r.anomaly_days,
         "Heures travaillées": formatMinutes(r.worked_minutes) || "0h",
-        "% quota (40h)": `${Math.min(100, Math.round((r.worked_minutes / (viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33))) * 100))}%`,
+        "Heures attendues": formatMinutes(r.expected_minutes) || "0h",
+        "Delta": r.delta_minutes >= 0 ? `+${formatMinutes(r.delta_minutes)}` : `-${formatMinutes(Math.abs(r.delta_minutes))}`,
+        "% quota": `${Math.min(100, Math.round((r.worked_minutes / MAX_MIN) * 100))}%`,
       })));
     }
   };
@@ -2247,7 +2337,12 @@ export default function AttendanceShiftsPage() {
             </div>
           </>
         ) : (
-          <SummaryTable rows={filteredSummaryRecords} mode={viewMode as "weekly" | "monthly"} isLoading={loading} />
+          <SummaryTable
+            rows={filteredSummaryRecords}
+            mode={viewMode as "weekly" | "monthly"}
+            isLoading={loading}
+            byDay={viewMode === "weekly" ? weeklyData?.by_day : undefined}
+          />
         )}
 
         {/* ── Modals ── */}
