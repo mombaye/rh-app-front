@@ -27,7 +27,7 @@ import toast from "react-hot-toast";
 import { parseNOCPlanningExcel } from "@/utils/planningParser";
 import {
   ChevronLeft, ChevronRight, Upload, Plus, Trash2, RefreshCw,
-  Calendar, Users, Download, GripVertical, AlertTriangle,
+  Calendar, Users, Download, GripVertical, AlertTriangle, Pencil, Check, X,
 } from "lucide-react";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -95,6 +95,11 @@ export default function PlanningPage() {
   const [addModal, setAddModal] = useState<{ date: string; shift_type: string } | null>(null);
   const [addName, setAddName] = useState("");
   const [addLoading, setAddLoading] = useState(false);
+
+  // Modal: modifier un employé dans le planning
+  const [editModal, setEditModal] = useState<PlanningEntry | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
 
   // Modal: import Excel
   const [importOpen, setImportOpen] = useState(false);
@@ -265,6 +270,42 @@ export default function PlanningPage() {
     }
   };
 
+  // ── Modifier l'employé d'une entrée ──────────────────────────────────────
+  const handleEditConfirm = async () => {
+    if (!editModal || !editName.trim() || editName.trim() === editModal.employee_name) {
+      setEditModal(null);
+      return;
+    }
+    setEditLoading(true);
+    try {
+      await moveShiftPlanningEntry({
+        date:              editModal.date,
+        shift_type:        editModal.shift_type,
+        employee_name:     editModal.employee_name,
+        new_employee_name: editName.trim(),
+      });
+      setEntries(prev => prev.map(e =>
+        e.date === editModal.date &&
+        e.shift_type === editModal.shift_type &&
+        e.employee_name === editModal.employee_name
+          ? { ...e, employee_name: editName.trim(), employee_matricule: null }
+          : e
+      ));
+      toast.success(`Employé mis à jour : ${editName.trim()}`);
+      setEditModal(null);
+      setEditName("");
+      await load();
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        toast.error("Conflit : cet employé est déjà affecté à ce créneau");
+      } else {
+        toast.error("Erreur lors de la mise à jour");
+      }
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   // ── Import Excel ──────────────────────────────────────────────────────────
   const handleFileImport = async (file: File) => {
     const reader = new FileReader();
@@ -405,6 +446,7 @@ export default function PlanningPage() {
                                   onDragStart={handleDragStart}
                                   onDragEnd={handleDragEnd}
                                   onDelete={handleDelete}
+                                  onEdit={(e) => { setEditModal(e); setEditName(e.employee_name); }}
                                 />
                               ))}
 
@@ -435,6 +477,10 @@ export default function PlanningPage() {
           <div className="flex items-center gap-1.5">
             <GripVertical size={11} />
             Glisser-déposer pour changer de shift ou de date
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Pencil size={11} className="text-amber-500" />
+            Survoler une carte pour modifier l'employé
           </div>
           <div className="flex items-center gap-1.5">
             <Trash2 size={11} />
@@ -479,6 +525,53 @@ export default function PlanningPage() {
                 className="px-4 py-2 rounded-lg bg-camublue-900 text-white text-sm font-medium hover:bg-camublue-800 transition disabled:opacity-50"
               >
                 {addLoading ? "Ajout…" : "Ajouter"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: modifier l'employé ── */}
+      {editModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditModal(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
+              <Pencil size={15} className="text-camublue-900" />
+              Modifier l'employé
+            </h3>
+            <p className="text-xs text-slate-400 mb-1">
+              {fmtDay(editModal.date).day} {fmtDay(editModal.date).num} — {SHIFT_LABELS[editModal.shift_type]}
+            </p>
+            <p className="text-xs text-slate-500 mb-4">
+              Actuellement : <span className="font-semibold text-slate-700">{editModal.employee_name}</span>
+            </p>
+            <input
+              list="edit-employee-list"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30 mb-4"
+              placeholder="Nouveau nom ou matricule…"
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleEditConfirm()}
+              autoFocus
+            />
+            <datalist id="edit-employee-list">
+              {employees.map(emp => (
+                <option key={emp.id} value={`${emp.nom} ${emp.prenom}`} />
+              ))}
+            </datalist>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setEditModal(null)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm hover:bg-slate-200 transition">
+                <X size={13} /> Annuler
+              </button>
+              <button
+                onClick={handleEditConfirm}
+                disabled={!editName.trim() || editLoading}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-camublue-900 text-white text-sm font-medium hover:bg-camublue-800 transition disabled:opacity-50"
+              >
+                {editLoading
+                  ? <><RefreshCw size={13} className="animate-spin" /> Mise à jour…</>
+                  : <><Check size={13} /> Enregistrer</>
+                }
               </button>
             </div>
           </div>
@@ -539,10 +632,11 @@ interface DraggableEmployeeProps {
   onDragStart: (e: React.DragEvent, entry: PlanningEntry) => void;
   onDragEnd: () => void;
   onDelete: (entry: PlanningEntry) => void;
+  onEdit: (entry: PlanningEntry) => void;
 }
 
 function DraggableEmployee({
-  entry, cfg, isDragging, matricule, onDragStart, onDragEnd, onDelete,
+  entry, cfg, isDragging, matricule, onDragStart, onDragEnd, onDelete, onEdit,
 }: DraggableEmployeeProps) {
   const [hovered, setHovered] = useState(false);
 
@@ -564,15 +658,27 @@ function DraggableEmployee({
           <span className="text-[9px] opacity-60 font-mono">{matricule}</span>
         )}
       </div>
-      {/* Bouton supprimer */}
+
+      {/* Boutons d'action (au survol) */}
       {hovered && (
-        <button
-          onClick={e => { e.stopPropagation(); onDelete(entry); }}
-          className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition shadow-sm"
-          title="Supprimer"
-        >
-          <Trash2 size={9} />
-        </button>
+        <>
+          {/* Modifier */}
+          <button
+            onClick={e => { e.stopPropagation(); onEdit(entry); }}
+            className="absolute -top-1.5 -right-6 bg-amber-400 text-white rounded-full p-0.5 hover:bg-amber-500 transition shadow-sm"
+            title="Modifier l'employé"
+          >
+            <Pencil size={9} />
+          </button>
+          {/* Supprimer */}
+          <button
+            onClick={e => { e.stopPropagation(); onDelete(entry); }}
+            className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition shadow-sm"
+            title="Supprimer"
+          >
+            <Trash2 size={9} />
+          </button>
+        </>
       )}
     </div>
   );
