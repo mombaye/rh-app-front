@@ -1993,6 +1993,21 @@ export default function AttendanceShiftsPage() {
 
     const shiftOrder: Record<string, number> = { jour: 0, soir1: 1, soir2: 2 };
 
+    // Heure actuelle en minutes depuis minuit
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+
+    // Retourne true si le shift de l'équipe n'a pas encore commencé
+    const shiftNotStarted = (team: ShiftTeamKey | null): boolean => {
+      if (!team) return false;
+      if (team === "soir2") {
+        // 22H-08H : en attente si on est entre 08h00 et 22h00
+        return nowMin >= 8 * 60 && nowMin < 22 * 60;
+      }
+      const startMin: Record<string, number> = { jour: 8 * 60, soir1: 16 * 60 };
+      return nowMin < (startMin[team] ?? 0);
+    };
+
     return shiftData.records.map((r): FlatRecord => {
       const projVal = (() => {
         const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
@@ -2006,7 +2021,7 @@ export default function AttendanceShiftsPage() {
         full_name: r.full_name,
         department: (r.department ?? departmentMap.get(r.matricule) ?? "—").toUpperCase(),
         project: projVal,
-        status: (!r.is_planned && r.status === "absent") ? "pending" : r.status as FlatRecord["status"],
+        status: (r.status === "absent" && shiftNotStarted(r.shift_team)) ? "pending" : r.status as FlatRecord["status"],
         is_late_api: r.is_late,
         late_label_api: r.late_label,
         computed_late_minutes: lateMin,
@@ -2023,7 +2038,7 @@ export default function AttendanceShiftsPage() {
         is_scheduled: r.is_planned,
         is_replacement: false,
         not_scheduled_rest: !r.is_planned && r.status === "not_working",
-        is_shift_pending: !r.is_planned && r.status === "absent",
+        is_shift_pending: r.status === "absent" && shiftNotStarted(r.shift_team),
         team_id: (r as any).team_id ?? "",
         replaced_by: null,
       };
