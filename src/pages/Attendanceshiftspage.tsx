@@ -8,7 +8,7 @@ import {
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
   Check, Settings, CheckCircle, Lock, CalendarDays,
   TrendingUp, Pencil, Plus, Trash2, Upload, CalendarRange, ArrowLeftRight,
-  Table2,
+  Table2, Filter,
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import {
@@ -145,14 +145,14 @@ const STATUS_CFG = {
 };
 
 const QUICK_FILTERS = [
-  { key: "all" as StatusFilter, label: "Tous", dotColor: "bg-slate-400", activeDot: "bg-white" },
-  { key: "ok" as StatusFilter, label: "OK", dotColor: "bg-emerald-400", activeDot: "bg-emerald-500" },
-  { key: "absent" as StatusFilter, label: "Absents", dotColor: "bg-red-400", activeDot: "bg-red-500" },
-  { key: "late" as StatusFilter, label: "Retards", dotColor: "bg-orange-400", activeDot: "bg-orange-500" },
-  { key: "incomplete" as StatusFilter, label: "Incomplets", dotColor: "bg-amber-400", activeDot: "bg-amber-500" },
-  { key: "anomaly" as StatusFilter, label: "Anomalies", dotColor: "bg-violet-400", activeDot: "bg-violet-500" },
-  { key: "deficit" as StatusFilter, label: "Heures moins", dotColor: "bg-rose-400", activeDot: "bg-rose-500" },
-  { key: "pending" as StatusFilter, label: "En attente", dotColor: "bg-blue-400", activeDot: "bg-blue-500" },
+  { key: "all"        as StatusFilter, label: "Tous",         dotColor: "bg-slate-400",  activeText: "text-slate-800",   activeBg: "bg-slate-900",  activeDot: "bg-white"        },
+  { key: "ok"         as StatusFilter, label: "OK",           dotColor: "bg-emerald-400",activeText: "text-emerald-700", activeBg: "bg-emerald-50", activeDot: "bg-emerald-500"  },
+  { key: "absent"     as StatusFilter, label: "Absents",      dotColor: "bg-red-400",    activeText: "text-red-700",     activeBg: "bg-red-50",     activeDot: "bg-red-500"      },
+  { key: "late"       as StatusFilter, label: "Retards",      dotColor: "bg-orange-400", activeText: "text-orange-700",  activeBg: "bg-orange-50",  activeDot: "bg-orange-500"   },
+  { key: "incomplete" as StatusFilter, label: "Incomplets",   dotColor: "bg-amber-400",  activeText: "text-amber-800",   activeBg: "bg-amber-50",   activeDot: "bg-amber-500"    },
+  { key: "anomaly"    as StatusFilter, label: "Anomalies",    dotColor: "bg-violet-400", activeText: "text-violet-700",  activeBg: "bg-violet-50",  activeDot: "bg-violet-500"   },
+  { key: "deficit"    as StatusFilter, label: "Heures moins", dotColor: "bg-rose-400",   activeText: "text-rose-700",    activeBg: "bg-rose-50",    activeDot: "bg-rose-500"     },
+  { key: "pending"    as StatusFilter, label: "En attente",   dotColor: "bg-blue-400",   activeText: "text-blue-700",    activeBg: "bg-blue-50",    activeDot: "bg-blue-500"     },
 ];
 
 const DAYS_FR = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
@@ -1751,6 +1751,82 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", delay = 0, lo
   );
 }
 
+// ─── Modal filtre ─────────────────────────────────────────────────────────────
+function FilterModal({
+  open, onClose, viewMode, setViewMode, date, setDate, week, setWeek,
+  month, setMonth, statusFilter, setStatusFilter, onApply,
+}: {
+  open: boolean; onClose: () => void; viewMode: ViewMode; setViewMode: (v: ViewMode) => void;
+  date: string; setDate: (v: string) => void; week: string; setWeek: (v: string) => void;
+  month: string; setMonth: (v: string) => void; statusFilter: StatusFilter;
+  setStatusFilter: (v: StatusFilter) => void; onApply: () => void;
+}) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+          <motion.div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10"
+            initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 40, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-gray-600" />
+                <span className="font-semibold text-gray-900">Filtres & Période</span>
+              </div>
+              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-gray-100 transition"><X className="h-4 w-4 text-gray-500" /></button>
+            </div>
+            <div className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Affichage</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { k: "daily"   as ViewMode, label: "Journalier",   icon: "📅" },
+                    { k: "weekly"  as ViewMode, label: "Hebdomadaire", icon: "📆" },
+                    { k: "monthly" as ViewMode, label: "Mensuel",      icon: "🗓️" },
+                  ].map((v) => (
+                    <button key={v.k} onClick={() => setViewMode(v.k)}
+                      className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl border-2 text-xs font-semibold transition-all ${
+                        viewMode === v.k ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                      }`}>
+                      <span className="text-xl">{v.icon}</span>{v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Période</p>
+                {viewMode === "daily"   && <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
+                {viewMode === "weekly"  && <input value={week} onChange={(e) => setWeek(e.target.value)} placeholder="2026-W09" className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
+                {viewMode === "monthly" && <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Statut / Type</p>
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_FILTERS.map((f) => (
+                    <button key={f.key} onClick={() => setStatusFilter(f.key)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                        statusFilter === f.key ? `${f.activeBg} ${f.activeText} border-transparent` : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                      }`}>
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusFilter === f.key ? f.activeDot : f.dotColor}`} />{f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+              <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
+              <button onClick={() => { onApply(); onClose(); }} className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-medium transition">Appliquer</button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 // ============================================================================
 // COMPOSANT PRINCIPAL: AttendanceShiftsPage
 // ============================================================================
@@ -1764,7 +1840,9 @@ export default function AttendanceShiftsPage() {
   };
 
   const [loading, setLoading] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("daily");
+  const [date, setDate] = useState(todayISO());
   const [selectedTeam, setSelectedTeam] = useState<ShiftTeamKey | null>(null);
   const [shiftData, setShiftData] = useState<ShiftDailyStatsResponse | null>(null);
   const [weeklyData, setWeeklyData] = useState<WeeklyStatsResponse | null>(null);
@@ -1889,7 +1967,7 @@ export default function AttendanceShiftsPage() {
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      if (viewMode === "daily") setShiftData(await getShiftDailyStats({ date: todayISO() }));
+      if (viewMode === "daily") setShiftData(await getShiftDailyStats({ date }));
       if (viewMode === "weekly") setWeeklyData(await getWeeklyStats(week));
       if (viewMode === "monthly") setMonthlyData(await getMonthlyStats(month));
     } catch (e) {
@@ -1897,10 +1975,10 @@ export default function AttendanceShiftsPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [viewMode, week, month]);
+  }, [viewMode, date, week, month]);
 
   // Fetch on mount + view change
-  useEffect(() => { fetchData(); }, [viewMode, week, month]);
+  useEffect(() => { fetchData(); }, [viewMode, date, week, month]);
 
   // Auto-refresh every 60s in daily mode (silent = no spinner)
   useEffect(() => {
@@ -2183,12 +2261,14 @@ export default function AttendanceShiftsPage() {
               <input value={searchQ} onChange={(e) => { setSearchQ(e.target.value); setPage(1); }} placeholder="Nom, matricule, équipe…"
                 className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-48 md:w-56 focus:outline-none" />
             </div>
-            <select value={viewMode} onChange={(e) => setViewMode(e.target.value as ViewMode)}
-              className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none flex-1 sm:flex-none">
-              <option value="daily">Journalier</option>
-              <option value="weekly">Hebdomadaire</option>
-              <option value="monthly">Mensuel</option>
-            </select>
+            <button onClick={() => setFilterOpen(true)}
+              className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 ${statusFilter !== "all" ? "bg-orange-50 border-orange-300 text-orange-700" : "bg-white border-slate-300 hover:bg-slate-50"}`}>
+              <Filter className="h-4 w-4" />
+              <span className="hidden sm:inline">
+                {viewMode === "daily" ? "Journalier" : viewMode === "weekly" ? "Hebdomadaire" : "Mensuel"}
+              </span>
+              {statusFilter !== "all" && <span className="bg-orange-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold leading-none">1</span>}
+            </button>
             <button onClick={() => setScheduleOpen(true)}
               className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 font-medium ${isActiveLocked ? "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100" : "bg-white border-slate-300 text-camublue-900 hover:bg-slate-50"}`}>
               <Settings className="h-4 w-4" /><span className="hidden sm:inline">Heures de travail</span>{isActiveLocked && <Lock className="h-3 w-3" />}
@@ -2445,6 +2525,15 @@ export default function AttendanceShiftsPage() {
         )}
 
         {/* ── Modals ── */}
+        <FilterModal
+          open={filterOpen} onClose={() => setFilterOpen(false)}
+          viewMode={viewMode} setViewMode={setViewMode}
+          date={date} setDate={setDate}
+          week={week} setWeek={setWeek}
+          month={month} setMonth={setMonth}
+          statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+          onApply={() => fetchData()} />
+
         <WorkScheduleModal
           open={scheduleOpen} onClose={() => setScheduleOpen(false)}
           active={activeSchedule} presets={presets}
