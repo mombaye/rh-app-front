@@ -17,7 +17,8 @@ export interface DailyRecord {
   late_label: string | null;
   is_late: boolean;
   early_leave_minutes: number;
-  status: "ok" | "absent" | "incomplete" | "anomaly";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working";
+  is_planned: boolean;
   flags: Record<string, unknown>;
   position?: string;
   fonction?: string;
@@ -206,6 +207,7 @@ export interface ShiftTeamKpi {
   incomplete: number;
   anomalies: number;
   late: number;
+  not_working: number;
 }
 
 export interface ShiftRecord {
@@ -219,6 +221,7 @@ export interface ShiftRecord {
   weekday_label: string;
   shift_team: ShiftTeamKey | null;
   shift_team_label: string;
+  is_planned: boolean;
   in_time: string | null;
   out_time: string | null;
   worked_minutes: number;
@@ -228,7 +231,7 @@ export interface ShiftRecord {
   late_label: string | null;
   is_late: boolean;
   early_leave_minutes: number;
-  status: "ok" | "absent" | "incomplete" | "anomaly";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working";
   flags: Record<string, any>;
 }
 
@@ -244,6 +247,7 @@ export interface ShiftDailyStatsResponse {
     absent: number;
     incomplete: number;
     anomalies: number;
+    not_working: number;
     late: number;
     by_team: Record<ShiftTeamKey | "unknown", ShiftTeamKpi>;
   };
