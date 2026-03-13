@@ -1020,7 +1020,6 @@ export default function DashboardPage() {
   const tauxPresence  = totalPointing > 0 ? Math.round((present / totalPointing) * 100) : 0;
 
   const attendanceDonut = [
-    { name: "Présents",   value: present,    fill: "#22c55e" },
     { name: "Absents",    value: absent,     fill: "#ef4444" },
     { name: "Incomplets", value: incomplete, fill: "#f59e0b" },
     { name: "En retard",  value: late,       fill: "#8b5cf6" },
@@ -1030,15 +1029,12 @@ export default function DashboardPage() {
 
   // ── Derived: Shift Daily ─────────────────────────────────────────────────────
   const shiftKpis       = shiftDaily?.kpis;
-  const shiftPresent    = shiftKpis?.present    ?? 0;
   const shiftAbsent     = shiftKpis?.absent     ?? 0;
   const shiftIncomplete = shiftKpis?.incomplete ?? 0;
   const shiftLate       = shiftKpis?.late       ?? 0;
-  const shiftTotal      = shiftPresent + shiftAbsent + shiftIncomplete;
-  const shiftTaux       = shiftTotal > 0 ? Math.round((shiftPresent / shiftTotal) * 100) : 0;
+  const shiftTotal      = (shiftKpis?.total ?? 0);
 
   const shiftDonut = [
-    { name: "Présents",   value: shiftPresent,    fill: "#0d9488" },
     { name: "Absents",    value: shiftAbsent,     fill: "#ef4444" },
     { name: "Incomplets", value: shiftIncomplete, fill: "#f59e0b" },
     { name: "En retard",  value: shiftLate,       fill: "#8b5cf6" },
@@ -1256,20 +1252,15 @@ export default function DashboardPage() {
                               </div>
                               <div className="flex-1 space-y-2">
                                 {[
-                                  { label: "Présents",   value: present,    cls: "text-emerald-700 bg-emerald-50 ring-emerald-200" },
-                                  { label: "Absents",    value: absent,     cls: "text-red-700 bg-red-50 ring-red-200"             },
-                                  { label: "Incomplets", value: incomplete, cls: "text-amber-700 bg-amber-50 ring-amber-200"       },
-                                  { label: "Retards",    value: late,       cls: "text-violet-700 bg-violet-50 ring-violet-200"    },
+                                  { label: "Absents",    value: absent,     cls: "text-red-700 bg-red-50 ring-red-200"          },
+                                  { label: "Incomplets", value: incomplete, cls: "text-amber-700 bg-amber-50 ring-amber-200"    },
+                                  { label: "Retards",    value: late,       cls: "text-violet-700 bg-violet-50 ring-violet-200" },
                                 ].map((s) => (
                                   <div key={s.label} className="flex items-center justify-between">
                                     <span className="text-xs text-slate-500">{s.label}</span>
                                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ring-1 ${s.cls}`}>{s.value}</span>
                                   </div>
                                 ))}
-                                <div className="pt-1 border-t border-slate-100 flex justify-between items-center">
-                                  <span className="text-xs text-slate-400">Taux présence</span>
-                                  <span className="text-sm font-bold text-camublue-900">{tauxPresence}%</span>
-                                </div>
                               </div>
                             </div>
                           )
@@ -1291,34 +1282,22 @@ export default function DashboardPage() {
                                     <Tooltip content={<CustomTooltip />} />
                                   </PieChart>
                                 </ResponsiveContainer>
-                                <div className="text-center mt-0.5">
-                                  <span className="text-sm font-bold text-teal-700">{shiftTaux}%</span>
-                                  <div className="text-[10px] text-slate-400">présence</div>
-                                </div>
                               </div>
                               <div className="flex-1 space-y-1.5">
                                 {shiftByTeam.map((t) => {
                                   const kpi = t.kpi;
                                   if (!kpi || kpi.total === 0) return null;
-                                  const taux = kpi.total > 0 ? Math.round((kpi.present / kpi.total) * 100) : 0;
                                   return (
                                     <div key={t.key} className={`rounded-lg px-2.5 py-1.5 ${t.bg}`}>
-                                      <div className="flex items-center justify-between mb-1">
-                                        <span className={`text-xs font-bold ${t.text}`}>{t.label}</span>
-                                        <span className={`text-[10px] font-semibold ${t.text}`}>{taux}%</span>
-                                      </div>
-                                      <div className="flex gap-2 text-[10px] text-slate-500">
-                                        <span className="text-emerald-600 font-semibold">{kpi.present} prés.</span>
+                                      <span className={`text-xs font-bold ${t.text}`}>{t.label}</span>
+                                      <div className="flex gap-3 mt-0.5 text-[10px]">
                                         <span className="text-red-500 font-semibold">{kpi.absent} abs.</span>
+                                        {kpi.incomplete > 0 && <span className="text-amber-600 font-semibold">{kpi.incomplete} incompl.</span>}
                                         {kpi.late > 0 && <span className="text-violet-500 font-semibold">{kpi.late} ret.</span>}
                                       </div>
                                     </div>
                                   );
                                 })}
-                                <div className="pt-1 border-t border-slate-100 flex justify-between items-center">
-                                  <span className="text-xs text-slate-400">Total shifts</span>
-                                  <span className="text-xs font-bold text-teal-700">{shiftPresent}/{shiftTotal}</span>
-                                </div>
                               </div>
                             </div>
                           )
@@ -1349,20 +1328,12 @@ export default function DashboardPage() {
                                   </div>
                                 ))}
                               </div>
-                              <div className="mt-3 pt-2 border-t border-slate-100">
-                                <ProgressBar
-                                  value={present} max={actifs || totalPointing}
-                                  color="#22c55e"
-                                  label={`Présents / Effectif (${actifs || totalPointing})`}
-                                  valueLabel={`${tauxPresence}%`}
-                                />
-                              </div>
                             </>
                           )
                         }
                       </ChartCard>
 
-                      <ChartCard title="Présence — Semaine en cours" sub="Par jour de la semaine" loading={loadWeekly} minH={220}>
+                      <ChartCard title="Absences — Semaine en cours" sub="Par jour de la semaine" loading={loadWeekly} minH={220}>
                         {semaineData.length === 0
                           ? <p className="text-xs text-slate-400 text-center pt-20">Aucune donnée</p>
                           : (
@@ -1373,7 +1344,6 @@ export default function DashboardPage() {
                                 <YAxis tick={{ fontSize: 10 }} />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
-                                <Bar dataKey="present" name="Présents"  fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={26} />
                                 <Bar dataKey="absent"  name="Absents"   fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={26} />
                                 <Bar dataKey="retard"  name="En retard" fill="#8b5cf6" radius={[3, 3, 0, 0]} maxBarSize={26} />
                               </BarChart>
@@ -1395,9 +1365,9 @@ export default function DashboardPage() {
                           </div>
                           <div className="grid grid-cols-3 gap-2 pt-1">
                             {[
-                              { label: "Présents",   value: present,    cls: "text-emerald-700 bg-emerald-50" },
-                              { label: "Absents",    value: absent,     cls: "text-red-700 bg-red-50"         },
-                              { label: "Incomplets", value: incomplete, cls: "text-amber-700 bg-amber-50"     },
+                              { label: "Absents",    value: absent,     cls: "text-red-700 bg-red-50"      },
+                              { label: "Incomplets", value: incomplete, cls: "text-amber-700 bg-amber-50"  },
+                              { label: "Retards",    value: late,       cls: "text-violet-700 bg-violet-50"},
                             ].map((s) => (
                               <div key={s.label} className={`rounded-xl p-2 text-center ${s.cls}`}>
                                 <div className="text-lg font-bold">{s.value}</div>
