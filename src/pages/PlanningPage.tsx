@@ -480,7 +480,7 @@ export default function PlanningPage() {
           </div>
           <div className="flex items-center gap-1.5">
             <Pencil size={11} className="text-amber-500" />
-            Survoler une carte pour modifier l'employé
+            Double-clic sur une carte pour modifier l'employé
           </div>
           <div className="flex items-center gap-1.5">
             <Trash2 size={11} />
@@ -645,11 +645,13 @@ function DraggableEmployee({
       draggable
       onDragStart={e => onDragStart(e, entry)}
       onDragEnd={onDragEnd}
+      onDoubleClick={e => { e.stopPropagation(); onEdit(entry); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className={`group relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium cursor-grab select-none transition-all duration-150 ${cfg.bg} ${cfg.text} border ${cfg.border} ${
         isDragging ? "opacity-40 scale-95 shadow-lg ring-2 ring-camublue-900/20" : "hover:shadow-sm"
       }`}
+      title="Double-clic pour modifier · Glisser pour déplacer"
     >
       <GripVertical size={10} className="text-current opacity-40 shrink-0" />
       <div className="flex flex-col flex-1 min-w-0">
@@ -659,26 +661,15 @@ function DraggableEmployee({
         )}
       </div>
 
-      {/* Boutons d'action (au survol) */}
+      {/* Bouton supprimer (au survol) */}
       {hovered && (
-        <>
-          {/* Modifier */}
-          <button
-            onClick={e => { e.stopPropagation(); onEdit(entry); }}
-            className="absolute -top-1.5 -right-6 bg-amber-400 text-white rounded-full p-0.5 hover:bg-amber-500 transition shadow-sm"
-            title="Modifier l'employé"
-          >
-            <Pencil size={9} />
-          </button>
-          {/* Supprimer */}
-          <button
-            onClick={e => { e.stopPropagation(); onDelete(entry); }}
-            className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition shadow-sm"
-            title="Supprimer"
-          >
-            <Trash2 size={9} />
-          </button>
-        </>
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(entry); }}
+          className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition shadow-sm"
+          title="Supprimer"
+        >
+          <Trash2 size={9} />
+        </button>
       )}
     </div>
   );
