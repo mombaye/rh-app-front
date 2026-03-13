@@ -147,3 +147,14 @@ export async function moveShiftPlanningEntry(params: {
   const { data } = await api.patch("/api/attendance/shift-planning/entry/", params);
   return data;
 }
+
+/** Correction manuelle d'un pointage (entrée / sortie). */
+export async function updateAttendanceRecord(params: {
+  employee_id: number;
+  date: string;
+  in_time: string | null;
+  out_time: string | null;
+}): Promise<{ ok: boolean; status: string; worked_minutes: number }> {
+  const { data } = await api.patch("/api/attendance/record/update/", params);
+  return data;
+}

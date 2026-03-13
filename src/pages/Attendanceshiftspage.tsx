@@ -15,6 +15,7 @@ import {
   getShiftDailyStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning,
   getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
+  updateAttendanceRecord,
 } from "@/services/attendanceService";
 import type { PlanningEntry } from "@/services/attendanceService";
 import { parseNOCPlanningExcel, cellToDateStr, extractMonthYearFromSheetName } from "@/utils/planningParser";
@@ -1478,11 +1479,116 @@ function AlertModal({ open, onClose, employee, onConfirm, sending }: {
 }
 
 // ============================================================================
+// COMPOSANT: EditPointageModal  — correction manuelle in_time / out_time
+// ============================================================================
+
+function EditPointageModal({ record, date, onClose, onSaved }: {
+  record: FlatRecord;
+  date: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toHHMM = (iso: string | null) => {
+    if (!iso) return "";
+    // iso peut être "HH:MM:SS" ou datetime ISO complet
+    const t = iso.includes("T") ? iso.split("T")[1] : iso;
+    return t.slice(0, 5);
+  };
+  const [inVal,   setInVal]   = useState(toHHMM(record.in_time));
+  const [outVal,  setOutVal]  = useState(toHHMM(record.out_time));
+  const [saving,  setSaving]  = useState(false);
+  const [err,     setErr]     = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setSaving(true); setErr(null);
+    try {
+      await updateAttendanceRecord({
+        employee_id: record.employee_id,
+        date,
+        in_time:  inVal  || null,
+        out_time: outVal || null,
+      });
+      onSaved();
+      onClose();
+    } catch {
+      setErr("Erreur lors de la mise à jour.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}>
+        <motion.div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm"
+          initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }}
+          onClick={(e) => e.stopPropagation()}>
+
+          {/* Header */}
+          <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+            <div>
+              <h2 className="text-base font-bold text-slate-800">Modifier le pointage</h2>
+              <p className="text-xs text-slate-400 mt-0.5">{record.full_name} · {record.matricule} · {date}</p>
+            </div>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition p-1 rounded-lg hover:bg-slate-100">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="px-6 py-5 space-y-4">
+            {err && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-2">{err}</p>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Entrée</label>
+                <input type="time" value={inVal} onChange={(e) => setInVal(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Sortie</label>
+                <input type="time" value={outVal} onChange={(e) => setOutVal(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
+              </div>
+            </div>
+            {inVal && outVal && inVal !== outVal && (
+              <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-xs text-blue-700 font-semibold">
+                Durée calculée : {(() => {
+                  const [ih, im] = inVal.split(":").map(Number);
+                  const [oh, om] = outVal.split(":").map(Number);
+                  const diff = (oh * 60 + om) - (ih * 60 + im);
+                  if (diff <= 0) return "⚠️ Heure de sortie avant l'entrée";
+                  return `${Math.floor(diff / 60)}h${String(diff % 60).padStart(2, "0")}`;
+                })()}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 pb-6 flex gap-3">
+            <button onClick={onClose} className="flex-1 border border-slate-200 text-slate-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition">
+              Annuler
+            </button>
+            <button onClick={handleSave} disabled={saving}
+              className="flex-[2] bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-bold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin" />Enregistrement…</> : <><Check className="h-4 w-4" />Enregistrer</>}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+// ============================================================================
 // COMPOSANT: TableRow
 // ============================================================================
 
-function TableRow({ r, isLate, onAlert, onDetail }: {
-  r: FlatRecord; isLate: boolean; onAlert: () => void; onDetail: () => void;
+function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
+  r: FlatRecord; isLate: boolean; onAlert: () => void; onDetail: () => void; onEdit: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const deficit = r.deficit_minutes > 0;
@@ -1546,6 +1652,9 @@ function TableRow({ r, isLate, onAlert, onDetail }: {
             <button onClick={onAlert} disabled={r.status !== "absent" || !r.email || r.not_scheduled_rest}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email && !r.not_scheduled_rest ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
               <Bell className="h-3 w-3" />Alerter
+            </button>
+            <button onClick={onEdit} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 ring-1 ring-amber-200 transition">
+              <Pencil className="h-3 w-3" />Modifier
             </button>
             <button onClick={onDetail} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">Détail</button>
           </div>
@@ -1856,6 +1965,8 @@ export default function AttendanceShiftsPage() {
   const [projectMap, setProjectMap] = useState<Map<string, string>>(new Map());
   const [alertModalOpen, setAlertModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editRecord, setEditRecord] = useState<FlatRecord | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<FlatRecord | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [sendingAlert, setSendingAlert] = useState(false);
@@ -2025,7 +2136,12 @@ export default function AttendanceShiftsPage() {
         full_name: r.full_name,
         department: (r.department ?? departmentMap.get(r.matricule) ?? "—").toUpperCase(),
         project: projVal,
-        status: (r.status === "absent" && shiftNotStarted(r.shift_team)) ? "pending" : r.status as FlatRecord["status"],
+        status: (() => {
+          if (r.status === "absent" && shiftNotStarted(r.shift_team)) return "pending";
+          // Anomalie avec entrée ≠ sortie → considéré normal (user requirement)
+          if (r.status === "anomaly" && r.in_time && r.out_time && r.in_time !== r.out_time) return "ok";
+          return r.status as FlatRecord["status"];
+        })(),
         is_late_api: r.is_late,
         late_label_api: r.late_label,
         computed_late_minutes: lateMin,
@@ -2401,7 +2517,8 @@ export default function AttendanceShiftsPage() {
                           ? pageData.map((r) => (
                             <TableRow key={r.employee_id} r={r} isLate={isLateRecord(r)}
                               onAlert={() => { setSelectedEmployee(r); setAlertModalOpen(true); }}
-                              onDetail={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }} />
+                              onDetail={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
+                              onEdit={() => { setEditRecord(r); setEditModalOpen(true); }} />
                           ))
                           : <tr><td colSpan={tableHeaders.length} className="text-center py-16 text-slate-400 text-sm">
                             {noPlanningToday && statusFilter === "all" && !selectedTeam ? (
@@ -2574,6 +2691,14 @@ export default function AttendanceShiftsPage() {
         <AlertModal
           open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
           employee={selectedEmployee} onConfirm={handleSendAlert} sending={sendingAlert} />
+
+        {editModalOpen && editRecord && (
+          <EditPointageModal
+            record={editRecord}
+            date={date}
+            onClose={() => { setEditModalOpen(false); setEditRecord(null); }}
+            onSaved={() => fetchData(true)} />
+        )}
 
       </motion.div>
     </AppLayout>
