@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";
 import LeaveRequestForm from "@/components/leaves/LeaveRequestForm";
 import LeaveCalendar from "@/components/leaves/LeaveCalendar";
+import LeaveTypeManagement from "@/components/leaves/LeaveTypeManagement";
 import { leaveRequestService, leaveTypeService } from "@/services/leaveService";
 import { getEmployees } from "@/services/employeeService";
 import { Employee } from "@/types/employee";
@@ -15,7 +16,7 @@ import {
   CalendarDays, RefreshCw, Plus, X, CheckCircle2, XCircle,
   Ban, RotateCcw, ChevronDown, Table2, CalendarRange,
   Download, Loader2, AlertTriangle, Clock, Pencil, Paperclip,
-  FileCheck, Upload, ExternalLink, Users,
+  FileCheck, Upload, ExternalLink, Users, Settings2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
@@ -96,10 +97,11 @@ export default function LeavePage() {
   const [fetchError,   setFetchError]   = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [contractType, setContractType] = useState<ContractType>("INTERNE");
-  const [showForm,     setShowForm]     = useState(false);
-  const [selected,     setSelected]     = useState<LeaveRequest | null>(null);
-  const [editTarget,   setEditTarget]   = useState<LeaveRequest | null>(null);
-  const [filterOpen,   setFilterOpen]   = useState(false);
+  const [showForm,       setShowForm]       = useState(false);
+  const [showLeaveTypes, setShowLeaveTypes] = useState(false);
+  const [selected,       setSelected]       = useState<LeaveRequest | null>(null);
+  const [editTarget,     setEditTarget]     = useState<LeaveRequest | null>(null);
+  const [filterOpen,     setFilterOpen]     = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -186,6 +188,13 @@ export default function LeavePage() {
               <button onClick={fetchAll} disabled={loading} title="Actualiser"
                 className="p-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition">
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              </button>
+
+              <button onClick={() => setShowLeaveTypes(true)}
+                title="Gérer les types de congés"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 text-sm font-semibold transition">
+                <Settings2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Types de congés</span>
               </button>
 
               <button onClick={() => setShowForm(true)}
@@ -442,6 +451,63 @@ export default function LeavePage() {
           <LeaveRequestForm contractType={contractType}
             onClose={() => setShowForm(false)}
             onSuccess={() => { setShowForm(false); fetchAll(); }} />
+        )}
+      </AnimatePresence>
+
+      {/* Modal Gestion des types de congés */}
+      <AnimatePresence>
+        {showLeaveTypes && (
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+            onClick={() => setShowLeaveTypes(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97, y: 20 }}
+              animate={{ opacity: 1, scale: 1,    y: 0  }}
+              exit={{ opacity: 0, scale: 0.97,    y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="bg-slate-50 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header modal */}
+              <div className="shrink-0 flex items-center justify-between px-6 pt-5 pb-4 bg-white rounded-t-3xl border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-camublue-900 text-white">
+                    <Settings2 className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h2 className="font-black text-slate-800 text-base">Types de congés</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Configurez les types avant de créer une demande</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowLeaveTypes(false)}
+                  className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Contenu scrollable */}
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                <LeaveTypeManagement />
+              </div>
+
+              {/* Footer */}
+              <div className="shrink-0 border-t border-slate-100 bg-white px-6 py-4 flex items-center justify-between">
+                <p className="text-xs text-slate-400">
+                  Les types configurés ici seront disponibles lors de la création d'une demande.
+                </p>
+                <button
+                  onClick={() => { setShowLeaveTypes(false); setShowForm(true); }}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-bold rounded-xl transition whitespace-nowrap ml-4"
+                >
+                  <Plus className="h-4 w-4" />
+                  Nouvelle demande
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </AppLayout>
