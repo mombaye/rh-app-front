@@ -1997,15 +1997,19 @@ export default function AttendanceShiftsPage() {
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
 
-    // Retourne true si le shift de l'équipe n'a pas encore commencé
+    // Fenêtres de pointage selon l'algorithme (heure_debut - 2h … heure_debut + 30min) :
+    //   jour  (08h-16h) → fenêtre s'ouvre à 06h00
+    //   soir1 (16h-22h) → fenêtre s'ouvre à 14h00
+    //   soir2 (22h-08h) → fenêtre s'ouvre à 20h00
+    // "En attente" = heure actuelle AVANT l'ouverture de la fenêtre
     const shiftNotStarted = (team: ShiftTeamKey | null): boolean => {
       if (!team) return false;
       if (team === "soir2") {
-        // 22H-08H : en attente si on est entre 08h00 et 22h00
-        return nowMin >= 8 * 60 && nowMin < 22 * 60;
+        // Fenêtre ouvre à 20h ; entre 0h et 8h le shift nuit est en cours (J+1)
+        return nowMin >= 8 * 60 && nowMin < 20 * 60;
       }
-      const startMin: Record<string, number> = { jour: 8 * 60, soir1: 16 * 60 };
-      return nowMin < (startMin[team] ?? 0);
+      const windowOpenMin: Record<string, number> = { jour: 6 * 60, soir1: 14 * 60 };
+      return nowMin < (windowOpenMin[team] ?? 0);
     };
 
     return shiftData.records.map((r): FlatRecord => {
