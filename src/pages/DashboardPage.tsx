@@ -936,15 +936,17 @@ export default function DashboardPage() {
   }, []);
 
   const fetchAttendance = useCallback(async (start: string, end: string) => {
-    const weekStr = isoWeekFromDate(new Date(start));
-    const ymStr   = start.slice(0, 7);
+    // daily et weekly utilisent toujours la date/semaine du JOUR (comme les pages Pointages)
+    const today   = todayStr();
+    const weekStr = isoWeekFromDate(new Date());   // semaine courante réelle
+    const ymStr   = start.slice(0, 7);             // mois sélectionné pour les stats mensuelles
 
     setLoadDaily(true); setLoadShiftDaily(true); setLoadWeekly(true); setLoadMonthly(true); setLoadBulletin(true);
     await Promise.allSettled([
-      getDailyStats(start)              .then(setDaily)      .finally(() => setLoadDaily(false)),
-      getShiftDailyStats({ date: start }).then(setShiftDaily) .finally(() => setLoadShiftDaily(false)),
-      getWeeklyStats(weekStr)           .then(setWeekly)     .finally(() => setLoadWeekly(false)),
-      getMonthlyStats(ymStr)            .then(setMonthly)    .finally(() => setLoadMonthly(false)),
+      getDailyStats(today)               .then(setDaily)      .finally(() => setLoadDaily(false)),
+      getShiftDailyStats({ date: today }).then(setShiftDaily) .finally(() => setLoadShiftDaily(false)),
+      getWeeklyStats(weekStr)            .then(setWeekly)     .finally(() => setLoadWeekly(false)),
+      getMonthlyStats(ymStr)             .then(setMonthly)    .finally(() => setLoadMonthly(false)),
       fetchBulletinsSummary({ start, end })
         .then(setBulletins).finally(() => setLoadBulletin(false)),
     ]);
