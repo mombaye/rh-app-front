@@ -2006,7 +2006,7 @@ export default function AttendanceShiftsPage() {
         full_name: r.full_name,
         department: (r.department ?? departmentMap.get(r.matricule) ?? "—").toUpperCase(),
         project: projVal,
-        status: r.status as FlatRecord["status"],
+        status: (!r.is_planned && r.status === "absent") ? "pending" : r.status as FlatRecord["status"],
         is_late_api: r.is_late,
         late_label_api: r.late_label,
         computed_late_minutes: lateMin,
@@ -2023,7 +2023,7 @@ export default function AttendanceShiftsPage() {
         is_scheduled: r.is_planned,
         is_replacement: false,
         not_scheduled_rest: !r.is_planned && r.status === "not_working",
-        is_shift_pending: false,
+        is_shift_pending: !r.is_planned && r.status === "absent",
         team_id: (r as any).team_id ?? "",
         replaced_by: null,
       };
