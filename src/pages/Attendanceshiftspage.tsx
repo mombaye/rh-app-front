@@ -2430,7 +2430,7 @@ export default function AttendanceShiftsPage() {
         <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
           <button onClick={() => setSelectedTeam(null)}
             className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${selectedTeam === null ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
-            <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" /><span className="truncate text-xs sm:text-sm">Toutes</span>
+            <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" /><span className="truncate text-xs sm:text-sm">Infomation Journalière</span>
           </button>
           {SHIFT_TEAMS.map((team) => {
             const isActive = selectedTeam === team.key;
