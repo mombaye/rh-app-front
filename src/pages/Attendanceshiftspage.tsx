@@ -981,80 +981,168 @@ function WorkScheduleModal({
 // COMPOSANT: DetailModal
 // ============================================================================
 
+const FR_WEEKDAYS_DETAIL = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+
 function DetailModal({ open, onClose, employeeId, initialWeek }: {
   open: boolean; onClose: () => void; employeeId: number | null; initialWeek: string;
 }) {
   const [pointages, setPointages] = useState<Pointage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [periodType, setPeriodType] = useState<"weekly" | "monthly">("weekly");
   const [selWeek, setSelWeek] = useState(initialWeek);
+  const [selMonth, setSelMonth] = useState(yyyyMmToday());
 
   const weekBounds = (ws: string) => {
     const [y, wn] = ws.split("-W").map(Number);
     const fw = new Date(y, 0, 1);
     fw.setDate(fw.getDate() + (wn - 1) * 7 - fw.getDay() + 1);
-    const lw = new Date(fw); lw.setDate(lw.getDate() + 4);
+    const lw = new Date(fw); lw.setDate(lw.getDate() + 6); // Lun → Dim
     return { start: fw.toISOString().split("T")[0], end: lw.toISOString().split("T")[0] };
+  };
+
+  const monthBounds = (ym: string) => {
+    const [y, m] = ym.split("-").map(Number);
+    const start = `${y}-${String(m).padStart(2, "0")}-01`;
+    const lastDay = new Date(y, m, 0).getDate();
+    const end = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    return { start, end };
   };
 
   const fetchPointages = useCallback(async () => {
     if (!employeeId || !open) return;
     setLoading(true);
     try {
-      const { start, end } = weekBounds(selWeek);
+      const { start, end } = periodType === "weekly" ? weekBounds(selWeek) : monthBounds(selMonth);
       const res: EmployeePeriodDetailResponse = await getEmployeePeriodDetail({ employee_id: employeeId, start, end });
-      setPointages(["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"].map((day, i) => {
-        const cur = new Date(start); cur.setDate(cur.getDate() + i);
+      const entries: Pointage[] = [];
+      const startDate = new Date(start + "T00:00:00");
+      const endDate   = new Date(end   + "T00:00:00");
+      for (let cur = new Date(startDate); cur <= endDate; cur.setDate(cur.getDate() + 1)) {
         const ds = cur.toISOString().split("T")[0];
         const dd = res.days.find((d: DayDetail) => d.date === ds);
+        const dayLabel = periodType === "weekly"
+          ? ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"][cur.getDay() === 0 ? 6 : cur.getDay() - 1]
+          : FR_WEEKDAYS_DETAIL[cur.getDay()];
         const rawStatus = dd?.status ?? "absent";
-        const status: Pointage["status"] = rawStatus === "not_working" ? "not_working" : (rawStatus as "ok" | "absent" | "incomplete" | "anomaly");
-        return { day, date: ds, in_time: dd?.in_time ?? null, out_time: dd?.out_time ?? null, status, is_planned: (dd as any)?.is_planned ?? true };
-      }));
+        const status: Pointage["status"] = rawStatus === "not_working" ? "not_working" : (rawStatus as Pointage["status"]);
+        entries.push({ day: dayLabel, date: ds, in_time: dd?.in_time ?? null, out_time: dd?.out_time ?? null, status, is_planned: (dd as any)?.is_planned ?? true });
+      }
+      setPointages(entries);
     } catch (e) { console.error(e); } finally { setLoading(false); }
-  }, [employeeId, selWeek, open]);
+  }, [employeeId, selWeek, selMonth, periodType, open]);
 
   useEffect(() => { fetchPointages(); }, [fetchPointages]);
+
+  const handleExport = () => {
+    if (!pointages.length) return;
+    const label = periodType === "weekly" ? selWeek : selMonth;
+    exportXLSX(`pointages_shift_${label}`, pointages.map((p) => ({
+      Jour: p.day,
+      Date: new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
+      Statut: STATUS_CFG[p.status as keyof typeof STATUS_CFG]?.label ?? p.status,
+      Entrée: p.in_time ? formatTime(p.in_time) : "—",
+      Sortie: p.out_time ? formatTime(p.out_time) : "—",
+    })));
+  };
 
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/30 backdrop-blur-sm"
+        <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/30 backdrop-blur-sm"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
           <motion.div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
-            initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 40, opacity: 0, scale: 0.97 }}
-            onClick={(e) => e.stopPropagation()}>
+            initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 40, opacity: 0, scale: 0.97 }} onClick={(e) => e.stopPropagation()}>
+
+            {/* Header */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100 shrink-0">
-              <h3 className="text-lg sm:text-xl font-bold text-camublue-900">Pointages hebdomadaires</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-camublue-900">Pointages</h3>
               <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 transition"><X className="h-5 w-5 text-slate-500" /></button>
             </div>
-            <div className="px-4 sm:px-6 py-3 border-b border-slate-100 shrink-0">
+
+            {/* Contrôles période */}
+            <div className="px-4 sm:px-6 py-3 border-b border-slate-100 shrink-0 space-y-3">
+              {/* Toggle Hebdo / Mensuel */}
               <div className="flex gap-2">
-                <input type="text" value={selWeek} onChange={(e) => setSelWeek(e.target.value)} placeholder="2026-W09"
-                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
-                <button onClick={fetchPointages} className="px-4 py-2 bg-camublue-900 text-white rounded-lg text-sm hover:bg-camublue-800 transition whitespace-nowrap">Charger</button>
+                {([
+                  { k: "weekly"  as const, label: "Hebdomadaire" },
+                  { k: "monthly" as const, label: "Mensuel" },
+                ]).map(({ k, label }) => (
+                  <button key={k} onClick={() => setPeriodType(k)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-all ${
+                      periodType === k
+                        ? "bg-camublue-900 text-white border-camublue-900"
+                        : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {/* Sélecteur + actions */}
+              <div className="flex gap-2">
+                {periodType === "weekly" ? (
+                  <input type="text" value={selWeek} onChange={(e) => setSelWeek(e.target.value)} placeholder="2026-W09"
+                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
+                ) : (
+                  <input type="month" value={selMonth} onChange={(e) => setSelMonth(e.target.value)}
+                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
+                )}
+                <button onClick={fetchPointages}
+                  className="px-4 py-2 bg-camublue-900 text-white rounded-lg text-sm hover:bg-camublue-800 transition whitespace-nowrap">
+                  Charger
+                </button>
+                <button onClick={handleExport} disabled={!pointages.length}
+                  className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                  <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                  <span className="hidden sm:inline">Exporter</span>
+                </button>
               </div>
             </div>
+
+            {/* Contenu */}
             <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-              {loading
-                ? <div className="flex justify-center py-12"><div className="h-10 w-10 border-4 border-camublue-900 border-t-transparent rounded-full animate-spin" /></div>
-                : pointages.length > 0
-                  ? <div className="space-y-2">
-                    {pointages.map((p, i) => (
-                      <div key={i} className={`rounded-xl border p-3 grid grid-cols-5 gap-4 ${p.status === "ok" ? "bg-white border-slate-100" :
-                        p.status === "not_working" ? "bg-slate-50 border-slate-200 opacity-70" :
-                          "bg-rose-50 border-rose-100"
-                        }`}>
-                        <span className="font-medium text-slate-800 text-sm">{p.day}</span>
-                        <span className="text-sm text-slate-600">{new Date(p.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
-                        <span><StatusPill status={p.status} /></span>
-                        <span className={`text-sm ${p.in_time ? "text-slate-700" : "text-slate-400"}`}>{p.in_time ? formatTime(p.in_time) : "—"}</span>
-                        <span className={`text-sm ${p.out_time ? "text-slate-700" : "text-slate-400"}`}>{p.out_time ? formatTime(p.out_time) : "—"}</span>
-                      </div>
-                    ))}
+              {loading ? (
+                <div className="flex justify-center py-12"><div className="h-10 w-10 border-4 border-camublue-900 border-t-transparent rounded-full animate-spin" /></div>
+              ) : pointages.length > 0 ? (
+                <div className="space-y-1.5">
+                  <div className="hidden sm:grid grid-cols-5 gap-4 px-3 py-2 bg-slate-50 rounded-xl font-semibold text-slate-700 text-xs uppercase tracking-wide">
+                    <span>Jour</span><span>Date</span><span>Statut</span><span>Entrée</span><span>Sortie</span>
                   </div>
-                  : <div className="flex flex-col items-center justify-center py-12 text-slate-400"><AlertTriangle className="h-10 w-10 mb-3 text-slate-300" /><p>Aucun pointage trouvé.</p></div>
-              }
+                  {pointages.map((p, i) => {
+                    const rowBg = p.status === "ok" ? "bg-white border-slate-100"
+                      : p.status === "not_working" ? "bg-slate-50 border-slate-200 opacity-70"
+                      : "bg-rose-50 border-rose-100";
+                    return (
+                      <div key={i} className={`rounded-xl border p-3 ${rowBg}`}>
+                        {/* Desktop */}
+                        <div className="hidden sm:grid grid-cols-5 gap-4 items-center">
+                          <span className="font-medium text-sm text-slate-800">{p.day}</span>
+                          <span className="text-sm text-slate-600">
+                            {new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                          </span>
+                          <span><StatusPill status={p.status} /></span>
+                          <span className={`text-sm ${p.in_time ? "text-slate-700" : "text-slate-400"}`}>{p.in_time ? formatTime(p.in_time) : "—"}</span>
+                          <span className={`text-sm ${p.out_time ? "text-slate-700" : "text-slate-400"}`}>{p.out_time ? formatTime(p.out_time) : "—"}</span>
+                        </div>
+                        {/* Mobile */}
+                        <div className="sm:hidden flex items-center justify-between gap-2">
+                          <span className="font-semibold text-sm text-slate-800">
+                            {p.day} · {new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}
+                          </span>
+                          <StatusPill status={p.status} />
+                          <span className="text-xs text-slate-500">{p.in_time ? formatTime(p.in_time) : "—"} → {p.out_time ? formatTime(p.out_time) : "—"}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                  <AlertTriangle className="h-10 w-10 mb-3 text-slate-300" /><p>Aucun pointage trouvé.</p>
+                </div>
+              )}
             </div>
+
             <div className="px-4 sm:px-6 py-4 border-t border-slate-100 flex justify-end shrink-0">
               <button onClick={onClose} className="px-5 py-2 text-sm font-medium text-white bg-camublue-900 rounded-xl hover:bg-camublue-800 transition">Fermer</button>
             </div>
@@ -1521,14 +1609,15 @@ function WeekDayBar({ byDay }: { byDay: WeeklyDayEntry[] }) {
   );
 }
 
-function SummaryTable({ rows, mode, isLoading, byDay }: {
+function SummaryTable({ rows, mode, isLoading, byDay, onDetail }: {
   rows: SummaryRecord[];
   mode: "weekly" | "monthly";
   isLoading: boolean;
   byDay?: WeeklyDayEntry[];
+  onDetail?: (employeeId: number) => void;
 }) {
   const MAX_MIN = mode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33);
-  const headers = ["Matricule", "Nom", "Projet/Dép.", "Équipe", "Présent", "Absent", "Retard", "Anomalie", "Heures trav.", "Progression"];
+  const headers = ["Matricule", "Nom", "Projet/Dép.", "Équipe", "Présent", "Absent", "Retard", "Anomalie", "Heures trav.", "Progression", ""];
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-2">
       {mode === "weekly" && byDay && byDay.length > 0 && (
@@ -1592,6 +1681,15 @@ function SummaryTable({ rows, mode, isLoading, byDay }: {
                           </div>
                           <span className="text-[10px] font-semibold tabular-nums text-slate-500 w-8 text-right">{pct}%</span>
                         </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {onDetail && (
+                          <button
+                            onClick={() => onDetail(r.employee_id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
+                            Détail
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -2342,6 +2440,7 @@ export default function AttendanceShiftsPage() {
             mode={viewMode as "weekly" | "monthly"}
             isLoading={loading}
             byDay={viewMode === "weekly" ? weeklyData?.by_day : undefined}
+            onDetail={(id) => { setSelectedEmployeeId(id); setDetailModalOpen(true); }}
           />
         )}
 
@@ -2361,7 +2460,8 @@ export default function AttendanceShiftsPage() {
 
         <DetailModal
           open={detailModalOpen} onClose={() => setDetailModalOpen(false)}
-          employeeId={selectedEmployeeId} initialWeek={currentWeek} />
+          employeeId={selectedEmployeeId}
+          initialWeek={viewMode === "weekly" ? week : currentWeek} />
 
         <AlertModal
           open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
