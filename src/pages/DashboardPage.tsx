@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import type {
   DailyStatsResponse, WeeklyStatsResponse, MonthlyStatsResponse, DailyRecord,
+  ShiftDailyStatsResponse,
 } from "@/types/attendance";
 import type { Employee, ContractType } from "@/types/employee";
 import type { BulletinMonthSummary } from "@/services/employeeService";
@@ -23,7 +24,7 @@ import {
   getEmployees, getEmployeesByContractType, fetchBulletinsSummary,
 } from "@/services/employeeService";
 import {
-  getDailyStats, getWeeklyStats, getMonthlyStats,
+  getDailyStats, getWeeklyStats, getMonthlyStats, getShiftDailyStats,
 } from "@/services/attendanceService";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -910,16 +911,18 @@ export default function DashboardPage() {
   const [showExport,     setShowExport]     = useState(false);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [daily,     setDaily]     = useState<DailyStatsResponse | null>(null);
-  const [weekly,    setWeekly]    = useState<WeeklyStatsResponse | null>(null);
-  const [monthly,   setMonthly]   = useState<MonthlyStatsResponse | null>(null);
+  const [daily,      setDaily]      = useState<DailyStatsResponse | null>(null);
+  const [shiftDaily, setShiftDaily] = useState<ShiftDailyStatsResponse | null>(null);
+  const [weekly,     setWeekly]     = useState<WeeklyStatsResponse | null>(null);
+  const [monthly,    setMonthly]    = useState<MonthlyStatsResponse | null>(null);
   const [bulletins, setBulletins] = useState<BulletinMonthSummary[]>([]);
 
-  const [loadEmp,      setLoadEmp]      = useState(true);
-  const [loadDaily,    setLoadDaily]    = useState(true);
-  const [loadWeekly,   setLoadWeekly]   = useState(true);
-  const [loadMonthly,  setLoadMonthly]  = useState(true);
-  const [loadBulletin, setLoadBulletin] = useState(true);
+  const [loadEmp,        setLoadEmp]        = useState(true);
+  const [loadDaily,      setLoadDaily]      = useState(true);
+  const [loadShiftDaily, setLoadShiftDaily] = useState(true);
+  const [loadWeekly,     setLoadWeekly]     = useState(true);
+  const [loadMonthly,    setLoadMonthly]    = useState(true);
+  const [loadBulletin,   setLoadBulletin]   = useState(true);
 
   const fetchEmployees = useCallback(async (filter: EmpFilter) => {
     setLoadEmp(true);
@@ -936,11 +939,12 @@ export default function DashboardPage() {
     const weekStr = isoWeekFromDate(new Date(start));
     const ymStr   = start.slice(0, 7);
 
-    setLoadDaily(true); setLoadWeekly(true); setLoadMonthly(true); setLoadBulletin(true);
+    setLoadDaily(true); setLoadShiftDaily(true); setLoadWeekly(true); setLoadMonthly(true); setLoadBulletin(true);
     await Promise.allSettled([
-      getDailyStats(start)    .then(setDaily)    .finally(() => setLoadDaily(false)),
-      getWeeklyStats(weekStr) .then(setWeekly)   .finally(() => setLoadWeekly(false)),
-      getMonthlyStats(ymStr)  .then(setMonthly)  .finally(() => setLoadMonthly(false)),
+      getDailyStats(start)              .then(setDaily)      .finally(() => setLoadDaily(false)),
+      getShiftDailyStats({ date: start }).then(setShiftDaily) .finally(() => setLoadShiftDaily(false)),
+      getWeeklyStats(weekStr)           .then(setWeekly)     .finally(() => setLoadWeekly(false)),
+      getMonthlyStats(ymStr)            .then(setMonthly)    .finally(() => setLoadMonthly(false)),
       fetchBulletinsSummary({ start, end })
         .then(setBulletins).finally(() => setLoadBulletin(false)),
     ]);
@@ -1021,6 +1025,31 @@ export default function DashboardPage() {
   ].filter((d) => d.value > 0);
 
   const dailyRecords = daily?.records ?? [];
+
+  // ── Derived: Shift Daily ─────────────────────────────────────────────────────
+  const shiftKpis       = shiftDaily?.kpis;
+  const shiftPresent    = shiftKpis?.present    ?? 0;
+  const shiftAbsent     = shiftKpis?.absent     ?? 0;
+  const shiftIncomplete = shiftKpis?.incomplete ?? 0;
+  const shiftLate       = shiftKpis?.late       ?? 0;
+  const shiftTotal      = shiftPresent + shiftAbsent + shiftIncomplete;
+  const shiftTaux       = shiftTotal > 0 ? Math.round((shiftPresent / shiftTotal) * 100) : 0;
+
+  const shiftDonut = [
+    { name: "Présents",   value: shiftPresent,    fill: "#0d9488" },
+    { name: "Absents",    value: shiftAbsent,     fill: "#ef4444" },
+    { name: "Incomplets", value: shiftIncomplete, fill: "#f59e0b" },
+    { name: "En retard",  value: shiftLate,       fill: "#8b5cf6" },
+  ].filter((d) => d.value > 0);
+
+  const shiftByTeam = [
+    { key: "jour",  label: "08H-16H", color: "#0d9488", bg: "bg-teal-50",   text: "text-teal-800"  },
+    { key: "soir1", label: "16H-22H", color: "#d97706", bg: "bg-amber-50",  text: "text-amber-800" },
+    { key: "soir2", label: "22H-08H", color: "#7c3aed", bg: "bg-violet-50", text: "text-violet-800"},
+  ].map((t) => ({
+    ...t,
+    kpi: shiftDaily?.kpis.by_team[t.key as "jour" | "soir1" | "soir2"] ?? null,
+  }));
 
   // ── Derived: Weekly ─────────────────────────────────────────────────────────
   const heuresTrav  = weekly ? Math.round(weekly.worked_minutes / 60) : 0;
@@ -1205,6 +1234,96 @@ export default function DashboardPage() {
                   <Section title="Pointages" icon={Clock} delay={0.05}
                     action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
                   >
+                    {/* ── Comparaison Normal vs Shifts ── */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      {/* ─ Normaux ─ */}
+                      <ChartCard title="Pointages Normaux" sub={`Aujourd'hui · ${totalPointing} employés suivis`} loading={loadDaily} minH={200}>
+                        {attendanceDonut.length === 0
+                          ? <p className="text-xs text-slate-400 text-center pt-16">Aucun pointage enregistré</p>
+                          : (
+                            <div className="flex gap-4 items-center">
+                              <div className="shrink-0">
+                                <ResponsiveContainer width={110} height={110}>
+                                  <PieChart>
+                                    <Pie data={attendanceDonut} dataKey="value" outerRadius={50} innerRadius={34} paddingAngle={2}>
+                                      {attendanceDonut.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                              </div>
+                              <div className="flex-1 space-y-2">
+                                {[
+                                  { label: "Présents",   value: present,    cls: "text-emerald-700 bg-emerald-50 ring-emerald-200" },
+                                  { label: "Absents",    value: absent,     cls: "text-red-700 bg-red-50 ring-red-200"             },
+                                  { label: "Incomplets", value: incomplete, cls: "text-amber-700 bg-amber-50 ring-amber-200"       },
+                                  { label: "Retards",    value: late,       cls: "text-violet-700 bg-violet-50 ring-violet-200"    },
+                                ].map((s) => (
+                                  <div key={s.label} className="flex items-center justify-between">
+                                    <span className="text-xs text-slate-500">{s.label}</span>
+                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ring-1 ${s.cls}`}>{s.value}</span>
+                                  </div>
+                                ))}
+                                <div className="pt-1 border-t border-slate-100 flex justify-between items-center">
+                                  <span className="text-xs text-slate-400">Taux présence</span>
+                                  <span className="text-sm font-bold text-camublue-900">{tauxPresence}%</span>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        }
+                      </ChartCard>
+
+                      {/* ─ Shifts ─ */}
+                      <ChartCard title="Pointages Shifts" sub={`Aujourd'hui · ${shiftTotal} employés suivis`} loading={loadShiftDaily} minH={200}>
+                        {shiftDonut.length === 0
+                          ? <p className="text-xs text-slate-400 text-center pt-16">Aucun pointage shift enregistré</p>
+                          : (
+                            <div className="flex gap-4 items-start">
+                              <div className="shrink-0">
+                                <ResponsiveContainer width={110} height={110}>
+                                  <PieChart>
+                                    <Pie data={shiftDonut} dataKey="value" outerRadius={50} innerRadius={34} paddingAngle={2}>
+                                      {shiftDonut.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                                <div className="text-center mt-0.5">
+                                  <span className="text-sm font-bold text-teal-700">{shiftTaux}%</span>
+                                  <div className="text-[10px] text-slate-400">présence</div>
+                                </div>
+                              </div>
+                              <div className="flex-1 space-y-1.5">
+                                {shiftByTeam.map((t) => {
+                                  const kpi = t.kpi;
+                                  if (!kpi || kpi.total === 0) return null;
+                                  const taux = kpi.total > 0 ? Math.round((kpi.present / kpi.total) * 100) : 0;
+                                  return (
+                                    <div key={t.key} className={`rounded-lg px-2.5 py-1.5 ${t.bg}`}>
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className={`text-xs font-bold ${t.text}`}>{t.label}</span>
+                                        <span className={`text-[10px] font-semibold ${t.text}`}>{taux}%</span>
+                                      </div>
+                                      <div className="flex gap-2 text-[10px] text-slate-500">
+                                        <span className="text-emerald-600 font-semibold">{kpi.present} prés.</span>
+                                        <span className="text-red-500 font-semibold">{kpi.absent} abs.</span>
+                                        {kpi.late > 0 && <span className="text-violet-500 font-semibold">{kpi.late} ret.</span>}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                <div className="pt-1 border-t border-slate-100 flex justify-between items-center">
+                                  <span className="text-xs text-slate-400">Total shifts</span>
+                                  <span className="text-xs font-bold text-teal-700">{shiftPresent}/{shiftTotal}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        }
+                      </ChartCard>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <ChartCard title="Pointage aujourd'hui" sub={`Effectif suivi : ${totalPointing}`} loading={loadDaily} minH={220}>
                         {attendanceDonut.length === 0
