@@ -72,6 +72,9 @@ export interface Employee {
   attendance_status?: string | null;
   is_active_employee?: boolean;
   has_user?:           boolean;
+
+  // ── Workflow congés ───────────────────────────────────────
+  requires_two_approvals?: boolean;
 }
 
 export interface EmployeeHistoryEntry {

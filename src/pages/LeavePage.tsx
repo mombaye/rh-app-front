@@ -5,6 +5,8 @@ import AppLayout from "@/layouts/AppLayout";
 import LeaveRequestForm from "@/components/leaves/LeaveRequestForm";
 import LeaveCalendar from "@/components/leaves/LeaveCalendar";
 import { leaveRequestService, leaveTypeService } from "@/services/leaveService";
+import { getEmployees } from "@/services/employeeService";
+import { Employee } from "@/types/employee";
 import {
   ContractType, LeaveRequest, LeaveStatus, LeaveSummary, LeaveType,
   ApprovePayload, RevokePayload,
@@ -13,7 +15,7 @@ import {
   CalendarDays, RefreshCw, Plus, X, CheckCircle2, XCircle,
   Ban, RotateCcw, ChevronDown, Table2, CalendarRange,
   Download, Loader2, AlertTriangle, Clock, Pencil, Paperclip,
-  FileCheck, Upload, ExternalLink,
+  FileCheck, Upload, ExternalLink, Users,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
@@ -387,7 +389,7 @@ export default function LeavePage() {
                                   <div className="flex gap-1.5 flex-wrap">
                                     {isPending && (
                                       <>
-                                        <QuickApproveBtn request={r} onDone={fetchAll} />
+                                        <QuickApproveBtn request={r} onDone={fetchAll} onOpenDetail={() => openDetail(r)} />
                                         <button onClick={() => openDetail(r)}
                                           className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap">
                                           Rejeter
@@ -447,10 +449,24 @@ export default function LeavePage() {
 }
 
 // ─── Bouton d'approbation rapide ──────────────────────────────────────────────
-function QuickApproveBtn({ request, onDone }: { request: LeaveRequest; onDone: () => void }) {
+function QuickApproveBtn({
+  request,
+  onDone,
+  onOpenDetail,
+}: {
+  request: LeaveRequest;
+  onDone: () => void;
+  onOpenDetail: () => void;
+}) {
   const [loading, setLoading] = useState(false);
+
   const handle = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    // Si l'employé requiert 2 validations → ouvrir le modal détail
+    if (request.employee?.requires_two_approvals) {
+      onOpenDetail();
+      return;
+    }
     setLoading(true);
     try {
       await leaveRequestService.approve(request.id);
@@ -460,11 +476,24 @@ function QuickApproveBtn({ request, onDone }: { request: LeaveRequest; onDone: (
       toast.error(err?.response?.data?.error ?? "Erreur lors de l'approbation");
     } finally { setLoading(false); }
   };
+
+  // Deux variantes visuelles : flux 1 niveau vs 2 niveaux
+  const needsTwo = request.employee?.requires_two_approvals;
   return (
     <button onClick={handle} disabled={loading}
-      className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg transition disabled:opacity-50 whitespace-nowrap flex items-center gap-1">
-      {loading ? <ImSpinner2 className="animate-spin" size={11} /> : <CheckCircle2 className="h-3 w-3" />}
-      Approuver
+      title={needsTwo ? "Cet employé nécessite 2 validations — cliquez pour ouvrir le détail" : "Approuver"}
+      className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition disabled:opacity-50 whitespace-nowrap flex items-center gap-1 ${
+        needsTwo
+          ? "bg-violet-50 hover:bg-violet-100 text-violet-700"
+          : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700"
+      }`}>
+      {loading
+        ? <ImSpinner2 className="animate-spin" size={11} />
+        : needsTwo
+          ? <Users className="h-3 w-3" />
+          : <CheckCircle2 className="h-3 w-3" />
+      }
+      {needsTwo ? "Valider (N+2)" : "Approuver"}
     </button>
   );
 }
@@ -597,13 +626,37 @@ function DetailModal({ request: r, onClose, onDone }: {
 }) {
   const [actionLoading,    setActionLoading]    = useState(false);
   const [rejectReason,     setRejectReason]     = useState("");
-  const [secondApproverId, setSecondApproverId] = useState("");
+  const [secondApproverId, setSecondApproverId] = useState<string>("");
+  const [approverSearch,   setApproverSearch]   = useState("");
+  const [allEmployees,     setAllEmployees]      = useState<Employee[]>([]);
+  const [showApproverList, setShowApproverList] = useState(false);
   const [revokeReason,     setRevokeReason]     = useState("");
   const [recallDate,       setRecallDate]       = useState(new Date().toISOString().slice(0, 10));
   const [showRevoke,       setShowRevoke]       = useState(false);
   const [docFile,          setDocFile]          = useState<File | null>(null);
   const [docLoading,       setDocLoading]       = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const fileRef          = useRef<HTMLInputElement>(null);
+  const approverRef      = useRef<HTMLDivElement>(null);
+
+  // Charger les employés actifs pour le sélecteur de 2ème approbateur
+  useEffect(() => {
+    if (r.status === "PENDING") {
+      getEmployees({ status: "ACTIVE" })
+        .then(setAllEmployees)
+        .catch(() => {});
+    }
+  }, [r.status]);
+
+  // Fermer dropdown approbateur au clic extérieur
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (approverRef.current && !approverRef.current.contains(e.target as Node)) {
+        setShowApproverList(false);
+      }
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
 
   const run = async (fn: () => Promise<void>, msg: string) => {
     setActionLoading(true);
@@ -810,14 +863,111 @@ function DetailModal({ request: r, onClose, onDone }: {
               </div>
 
               {r.status === "PENDING" && (
-                <div>
+                <div ref={approverRef}>
+                  {/* Bandeau d'info si l'employé nécessite 2 validations */}
+                  {r.employee?.requires_two_approvals && (
+                    <div className="flex items-start gap-2 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2.5 mb-2">
+                      <Users className="h-4 w-4 text-violet-600 shrink-0 mt-0.5" />
+                      <p className="text-xs text-violet-700 font-semibold">
+                        Cet employé est configuré avec un flux <span className="font-black">2 validations</span>.
+                        Veuillez sélectionner le Manager N+2 ci-dessous.
+                      </p>
+                    </div>
+                  )}
+
                   <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">
-                    2ème approbateur — ID employé{" "}
-                    <span className="normal-case font-normal text-slate-400">(laisser vide pour approbation directe)</span>
+                    2ème approbateur (N+2){" "}
+                    <span className="normal-case font-normal text-slate-400">
+                      — laisser vide pour approbation directe (1 niveau)
+                    </span>
                   </label>
-                  <input type="number" min={1} placeholder="Ex : 12"
-                    value={secondApproverId} onChange={(e) => setSecondApproverId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition" />
+
+                  {/* Champ de recherche + dropdown */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Rechercher un employé…"
+                      value={approverSearch}
+                      onChange={(e) => {
+                        setApproverSearch(e.target.value);
+                        setShowApproverList(true);
+                        if (!e.target.value.trim()) setSecondApproverId("");
+                      }}
+                      onFocus={() => setShowApproverList(true)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition"
+                    />
+                    {/* Sélection actuelle affichée */}
+                    {secondApproverId && !showApproverList && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded-lg font-bold">
+                        ID&nbsp;{secondApproverId}
+                      </span>
+                    )}
+
+                    {/* Dropdown résultats */}
+                    <AnimatePresence>
+                      {showApproverList && (
+                        <motion.ul
+                          initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.12 }}
+                          className="absolute z-40 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto"
+                        >
+                          {/* Option : aucun (approbation directe) */}
+                          <li
+                            onClick={() => {
+                              setSecondApproverId("");
+                              setApproverSearch("");
+                              setShowApproverList(false);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer hover:bg-slate-50 text-slate-500 italic border-b border-slate-100"
+                          >
+                            <XCircle className="h-3.5 w-3.5 text-slate-300" />
+                            Approbation directe (1 niveau)
+                          </li>
+
+                          {allEmployees
+                            .filter((emp) => {
+                              if (!approverSearch.trim()) return true;
+                              const q = approverSearch.toLowerCase();
+                              return (
+                                emp.nom.toLowerCase().includes(q) ||
+                                emp.prenom.toLowerCase().includes(q) ||
+                                emp.matricule.toLowerCase().includes(q) ||
+                                (emp.service ?? "").toLowerCase().includes(q)
+                              );
+                            })
+                            .filter((emp) => emp.id !== r.employee?.id) // exclure l'employé lui-même
+                            .slice(0, 40)
+                            .map((emp) => (
+                              <li
+                                key={emp.id}
+                                onClick={() => {
+                                  setSecondApproverId(String(emp.id));
+                                  setApproverSearch(`${emp.nom} ${emp.prenom} — ${emp.matricule}`);
+                                  setShowApproverList(false);
+                                }}
+                                className={`flex items-center justify-between px-4 py-2.5 text-sm cursor-pointer hover:bg-violet-50 transition ${
+                                  secondApproverId === String(emp.id) ? "bg-violet-50 font-bold text-violet-700" : "text-slate-700"
+                                }`}
+                              >
+                                <div>
+                                  <p className="font-semibold">{emp.nom} {emp.prenom}</p>
+                                  <p className="text-[10px] text-slate-400">{emp.matricule} · {emp.service ?? "—"} · {emp.fonction ?? "—"}</p>
+                                </div>
+                                {secondApproverId === String(emp.id) && (
+                                  <CheckCircle2 className="h-4 w-4 text-violet-600 shrink-0" />
+                                )}
+                              </li>
+                            ))
+                          }
+                          {allEmployees.length === 0 && (
+                            <li className="px-4 py-3 text-sm text-slate-400 text-center">
+                              Chargement des employés…
+                            </li>
+                          )}
+                        </motion.ul>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               )}
 

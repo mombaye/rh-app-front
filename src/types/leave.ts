@@ -17,13 +17,14 @@ export interface LeaveType {
 
 // ── EmployeeMini ── mirrors EmployeeMiniSerializer ────────────────────────────
 export interface EmployeeMini {
-  id:        number;
-  matricule: string;
-  full_name: string;
-  fonction:  string;
-  service:   string;
-  manager:   string;
-  email?:    string;
+  id:                      number;
+  matricule:               string;
+  full_name:               string;
+  fonction:                string;
+  service:                 string;
+  manager:                 string;
+  email?:                  string;
+  requires_two_approvals?: boolean;
 }
 
 // ── LeaveStatus ── mirrors LeaveRequest.Status choices ───────────────────────
