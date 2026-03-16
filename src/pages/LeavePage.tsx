@@ -17,6 +17,7 @@ import {
   Ban, RotateCcw, ChevronDown, Table2, CalendarRange,
   Download, Loader2, AlertTriangle, Clock, Pencil, Paperclip,
   FileCheck, Upload, ExternalLink, Users, Settings2, Wallet,
+  Search, History, Info,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
@@ -411,10 +412,7 @@ export default function LeavePage() {
                                       </>
                                     )}
                                     {r.status === "APPROVED" && (
-                                      <button onClick={() => openDetail(r)}
-                                        className="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-semibold rounded-lg transition whitespace-nowrap">
-                                        Révoquer
-                                      </button>
+                                      <QuickRevokeBtn request={r} onDone={fetchAll} />
                                     )}
                                     {r.leave_type?.requires_justification && !r.justification_document && (
                                       <button onClick={() => openDetail(r)}
@@ -522,9 +520,12 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
   const [balances,     setBalances]     = useState<LeaveBalance[]>([]);
   const [employees,    setEmployees]    = useState<Employee[]>([]);
   const [loading,      setLoading]      = useState(true);
-  const [crediting,    setCrediting]    = useState(false);
   const [adjustTarget, setAdjustTarget] = useState<LeaveBalance | null>(null);
+  const [historyEmp,   setHistoryEmp]   = useState<{ id: number; name: string } | null>(null);
+  const [searchQuery,  setSearchQuery]  = useState("");
   const currentYear = new Date().getFullYear();
+  const todayDay    = new Date().getDate();
+  const isMonthStart = todayDay <= 5;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -548,25 +549,17 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
   }, [employees]);
 
   const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return balances.filter((b) => {
       const emp = empMap.get(b.employee);
       if (!emp) return false;
-      if (contractType === "INTERIM") return emp.attendance_status === "SHIFT";
-      return emp.attendance_status !== "SHIFT";
+      if (contractType === "INTERIM" ? emp.attendance_status !== "SHIFT" : emp.attendance_status === "SHIFT") return false;
+      if (!q) return true;
+      const name = b.employee_name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const mat  = (emp.matricule ?? "").toLowerCase();
+      return name.includes(q) || mat.includes(q);
     });
-  }, [balances, empMap, contractType]);
-
-  const handleCredit = async () => {
-    setCrediting(true);
-    try {
-      const res = await leaveRequestService.triggerMonthlyCredit();
-      const count = res.employees_credited ?? 0;
-      toast.success(`Crédit mensuel appliqué — ${count} employé(s) crédité(s) ✓`);
-      load();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error ?? "Erreur lors du crédit mensuel");
-    } finally { setCrediting(false); }
-  };
+  }, [balances, empMap, contractType, searchQuery]);
 
   if (loading)
     return (
@@ -577,16 +570,39 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
+      {/* Bannière début de mois */}
+      {isMonthStart && (
+        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+          <Info className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+          <p className="text-sm text-emerald-800 font-semibold">
+            Début du mois — <span className="font-black">+2 jours</span> de congé ont été automatiquement crédités
+            à tous les employés actifs.
+          </p>
+        </div>
+      )}
+
+      {/* Header + search */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1">
           <p className="font-bold text-slate-800">Soldes de congés — {currentYear}</p>
           <p className="text-xs text-slate-400">{filtered.length} enregistrement(s)</p>
         </div>
-        <button onClick={handleCredit} disabled={crediting}
-          className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition disabled:opacity-50">
-          {crediting ? <ImSpinner2 className="animate-spin" size={13} /> : <RefreshCw className="h-4 w-4" />}
-          Créditer le mois (+2j)
-        </button>
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Rechercher un employé…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition bg-white"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm">
@@ -607,7 +623,7 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
-                    Aucun solde trouvé pour ce type d'employé
+                    {searchQuery ? "Aucun résultat pour cette recherche" : "Aucun solde trouvé pour ce type d'employé"}
                   </td>
                 </tr>
               )}
@@ -642,11 +658,18 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
                         {b.remaining}j
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <button onClick={() => setAdjustTarget(b)}
-                        className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition">
-                        Ajuster
-                      </button>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button onClick={() => setAdjustTarget(b)}
+                          className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition">
+                          Ajuster
+                        </button>
+                        <button
+                          onClick={() => setHistoryEmp({ id: b.employee, name: b.employee_name })}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition flex items-center gap-1">
+                          <History className="h-3 w-3" /> Historique
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -665,6 +688,271 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
           />
         )}
       </AnimatePresence>
+      <AnimatePresence>
+        {historyEmp && (
+          <LeaveHistoryModal
+            employeeId={historyEmp.id}
+            employeeName={historyEmp.name}
+            onClose={() => setHistoryEmp(null)}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Modal Historique de congés d'un employé ─────────────────────────────────
+function LeaveHistoryModal({ employeeId, employeeName, onClose }: {
+  employeeId: number; employeeName: string; onClose: () => void;
+}) {
+  const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [loading,  setLoading]  = useState(true);
+
+  useEffect(() => {
+    leaveRequestService.getByEmployee(employeeId)
+      .then(setRequests)
+      .catch(() => toast.error("Erreur lors du chargement de l'historique"))
+      .finally(() => setLoading(false));
+  }, [employeeId]);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+      onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 20 }} transition={{ duration: 0.2 }}
+        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}>
+
+        <div className="shrink-0 flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-slate-100">
+              <History className="h-4 w-4 text-slate-600" />
+            </div>
+            <div>
+              <p className="font-black text-slate-800">Historique des congés</p>
+              <p className="text-xs text-slate-400">{employeeName}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 transition">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <ImSpinner2 className="animate-spin text-camublue-900" size={22} />
+            </div>
+          ) : requests.length === 0 ? (
+            <p className="text-center text-sm text-slate-400 py-10">Aucun congé enregistré pour cet employé.</p>
+          ) : (
+            <div className="space-y-2">
+              {requests.map((req) => {
+                const cfg = STATUS_CFG[req.status] ?? STATUS_CFG.PENDING;
+                const totalDays = parseFloat(req.days ?? req.duration_days ?? "0");
+                return (
+                  <div key={req.id}
+                    className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 border border-slate-100 rounded-2xl px-4 py-3 bg-slate-50 hover:bg-white transition">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold whitespace-nowrap"
+                          style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                          {cfg.label}
+                        </span>
+                        {req.leave_type && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold"
+                            style={{ backgroundColor: (req.leave_type.color ?? "#6b7280") + "20", color: req.leave_type.color ?? "#6b7280" }}>
+                            {req.leave_type.label}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm font-semibold text-slate-700">
+                        {fmtDate(req.start_date)} → {fmtDate(req.end_date)}
+                        <span className="ml-2 text-xs font-normal text-slate-400">({totalDays}j)</span>
+                      </p>
+                      {req.motif && <p className="text-xs text-slate-400 mt-0.5 truncate">{req.motif}</p>}
+                      {req.status === "REVOKED" && req.days_remaining_at_revocation != null && (
+                        <p className="text-xs text-orange-600 font-semibold mt-0.5">
+                          Révoqué · {req.days_remaining_at_revocation}j restitués
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400 shrink-0">{fmtDate(req.created_at?.slice(0, 10))}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Bouton de révocation rapide (depuis la liste des demandes) ───────────────
+function QuickRevokeBtn({ request, onDone }: { request: LeaveRequest; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        className="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+        <RotateCcw className="h-3 w-3" /> Révoquer
+      </button>
+      <AnimatePresence>
+        {open && (
+          <QuickRevokeModal
+            request={request}
+            onClose={() => setOpen(false)}
+            onDone={() => { setOpen(false); onDone(); }}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+// ─── Modal de révocation rapide ───────────────────────────────────────────────
+function QuickRevokeModal({ request: r, onClose, onDone }: {
+  request: LeaveRequest; onClose: () => void; onDone: () => void;
+}) {
+  const [revokeReason, setRevokeReason] = useState("");
+  const [recallDate,   setRecallDate]   = useState(new Date().toISOString().slice(0, 10));
+  const [loading,      setLoading]      = useState(false);
+  const [result,       setResult]       = useState<{ daysRestored: number; daysTaken: number; total: number } | null>(null);
+
+  const totalDays = parseFloat(r.days ?? r.duration_days ?? "0");
+
+  const handleRevoke = async () => {
+    if (!revokeReason.trim()) { toast.error("Le motif est obligatoire."); return; }
+    setLoading(true);
+    try {
+      const res = await leaveRequestService.revoke(r.id, { revoke_reason: revokeReason, recall_date: recallDate });
+      const restored = parseFloat(String(res.days_restored ?? res.days_remaining_at_revocation ?? 0));
+      const taken    = Math.max(0, totalDays - restored);
+      setResult({ daysRestored: restored, daysTaken: taken, total: totalDays });
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors de la révocation");
+    } finally { setLoading(false); }
+  };
+
+  // Date bounds: must be between start and end of leave
+  const minDate = r.start_date;
+  const maxDate = r.end_date;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-0 sm:p-4"
+      onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 20 }} transition={{ duration: 0.2 }}
+        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-[480px] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-orange-100 bg-orange-50">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-orange-200/60">
+              <AlertTriangle className="h-4 w-4 text-orange-700" />
+            </div>
+            <div>
+              <p className="font-black text-orange-900">Révocation d'urgence</p>
+              <p className="text-xs text-orange-700">{r.employee?.full_name ?? "—"} · #{r.id}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-orange-100 text-orange-400 transition">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* Résumé du congé */}
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Début</p>
+              <p className="text-sm font-bold text-slate-700">{fmtDate(r.start_date)}</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Fin</p>
+              <p className="text-sm font-bold text-slate-700">{fmtDate(r.end_date)}</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Durée</p>
+              <p className="text-sm font-bold text-slate-700">{totalDays}j</p>
+            </div>
+          </div>
+
+          {result ? (
+            /* ── Résultat de la révocation ── */
+            <div className="space-y-3">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-2">
+                <p className="text-sm font-black text-emerald-800 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" /> Congé révoqué avec succès
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-center mt-2">
+                  <div className="bg-white rounded-xl p-3 border border-emerald-100">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Jours pris</p>
+                    <p className="font-black text-slate-700 text-xl">{result.daysTaken}j</p>
+                  </div>
+                  <div className="bg-emerald-100 rounded-xl p-3 border border-emerald-200">
+                    <p className="text-[10px] text-emerald-700 uppercase font-bold mb-0.5">Restitués</p>
+                    <p className="font-black text-emerald-700 text-xl">{result.daysRestored}j</p>
+                  </div>
+                </div>
+                {result.daysRestored > 0 && (
+                  <p className="text-xs text-emerald-700 font-semibold mt-2">
+                    L'employé peut soumettre une nouvelle demande de{" "}
+                    <strong>{result.daysRestored}j</strong> pour compléter son congé.
+                  </p>
+                )}
+              </div>
+              <button onClick={onClose}
+                className="w-full py-2.5 border border-slate-200 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-50 transition">
+                Fermer
+              </button>
+            </div>
+          ) : (
+            /* ── Formulaire de révocation ── */
+            <>
+              <p className="text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-xl px-3 py-2.5">
+                L'employé est rappelé d'urgence. Les jours restants depuis la date de rappel
+                seront restitués automatiquement dans son solde.
+              </p>
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">
+                  Date de rappel effectif <span className="text-red-500">*</span>
+                </label>
+                <input type="date" value={recallDate}
+                  onChange={(e) => setRecallDate(e.target.value)}
+                  min={minDate} max={maxDate}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-200 transition" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">
+                  Motif de révocation <span className="text-red-500">*</span>
+                </label>
+                <textarea value={revokeReason} onChange={(e) => setRevokeReason(e.target.value)}
+                  placeholder="Situation d'urgence nécessitant l'intervention de l'employé…" rows={3}
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-200 resize-none transition" />
+              </div>
+              <div className="flex gap-3">
+                <button onClick={onClose}
+                  className="flex-1 border border-slate-200 text-slate-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition">
+                  Annuler
+                </button>
+                <button onClick={handleRevoke} disabled={loading || !revokeReason.trim()}
+                  className="flex-[2] bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
+                  {loading ? <ImSpinner2 className="animate-spin" size={13} /> : <RotateCcw className="h-4 w-4" />}
+                  Confirmer la révocation
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </motion.div>
     </div>
   );
 }
