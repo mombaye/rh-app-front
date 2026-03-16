@@ -243,24 +243,29 @@ export default function LeavePage() {
 
   const currentFilterLabel = STATUS_FILTERS.find((f) => f.value === statusFilter)?.label ?? "Toutes";
 
-  // ── Recherche côté client ─────────────────────────────────────────────────
+  // ── Recherche + filtre contrat côté client ────────────────────────────────
   const filteredRequests = useMemo(() => {
-    if (!searchQ.trim()) return requests;
-    const q = searchQ.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const q = searchQ.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return requests.filter((r) => {
+      // Filtre Interne / Intérimaire (attendance_status === "SHIFT" → intérimaire)
+      const isShift = r.employee?.attendance_status === "SHIFT";
+      if (contractType === "INTERIM"  && !isShift) return false;
+      if (contractType === "INTERNE"  &&  isShift) return false;
+
+      if (!q) return true;
       const name = (r.employee?.full_name ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const mat  = (r.employee?.matricule ?? "").toLowerCase();
       const svc  = (r.employee?.service ?? "").toLowerCase();
       const type = (r.leave_type?.label ?? "").toLowerCase();
       return name.includes(q) || mat.includes(q) || svc.includes(q) || type.includes(q);
     });
-  }, [requests, searchQ]);
+  }, [requests, searchQ, contractType]);
 
   const totalReqPages  = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
   const pagedRequests  = filteredRequests.slice((page - 1) * pageSize, page * pageSize);
 
   // Reset page sur changement de filtre/recherche
-  useEffect(() => { setPage(1); }, [searchQ, statusFilter, filterLeaveTypeId, filterStartDate, filterEndDate, filterDepartment, filterEmployeeName, filterYear]);
+  useEffect(() => { setPage(1); }, [searchQ, contractType, statusFilter, filterLeaveTypeId, filterStartDate, filterEndDate, filterDepartment, filterEmployeeName, filterYear]);
 
   // ── Suppression d'une demande Annulée ────────────────────────────────────
   const handleDelete = async () => {

@@ -25,6 +25,7 @@ export interface EmployeeMini {
   manager:                 string;
   email?:                  string;
   requires_two_approvals?: boolean;
+  attendance_status?:      string;   // "SHIFT" → intérimaire, sinon interne
 }
 
 // ── LeaveStatus ── mirrors LeaveRequest.Status choices ───────────────────────
