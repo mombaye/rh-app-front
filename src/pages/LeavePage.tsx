@@ -545,6 +545,8 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return balances.filter((b) => {
+      // Soldes : uniquement les congés payés (les autres types s'affichent dans l'Historique)
+      if (!b.leave_type.is_paid) return false;
       const emp = empMap.get(b.employee);
       if (!emp) return false;
       if (contractType === "INTERIM" ? emp.attendance_status !== "SHIFT" : emp.attendance_status === "SHIFT") return false;
