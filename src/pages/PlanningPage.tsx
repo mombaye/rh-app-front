@@ -27,7 +27,7 @@ import toast from "react-hot-toast";
 import { parseNOCPlanningExcel } from "@/utils/planningParser";
 import {
   ChevronLeft, ChevronRight, Upload, Plus, Trash2, RefreshCw,
-  Calendar, Users, Download, GripVertical, AlertTriangle, Pencil, Check, X,
+  Calendar, Users, Download, GripVertical, AlertTriangle, Pencil, Check, X, Search,
 } from "lucide-react";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -106,6 +106,9 @@ export default function PlanningPage() {
   const [importOpen, setImportOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // ── Recherche d'employé ───────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState("");
+
   // Semaine courante — 7 jours
   const weekDates = useMemo(() =>
     Array.from({ length: 7 }, (_, i) => toISO(addDays(weekStart, i))),
@@ -151,14 +154,23 @@ export default function PlanningPage() {
 
   // ── Map : date + shift → entrées ──────────────────────────────────────────
   const planMap = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const filtered = q
+      ? entries.filter(e => {
+          const name = e.employee_name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const mat  = (e.employee_matricule ?? "").toLowerCase();
+          return name.includes(q) || mat.includes(q);
+        })
+      : entries;
+
     const m: Record<string, Record<string, PlanningEntry[]>> = {};
-    for (const e of entries) {
+    for (const e of filtered) {
       if (!m[e.date]) m[e.date] = {};
       if (!m[e.date][e.shift_type]) m[e.date][e.shift_type] = [];
       m[e.date][e.shift_type].push(e);
     }
     return m;
-  }, [entries]);
+  }, [entries, searchQuery]);
 
   // ── Normalisation robuste des noms (accents + espaces) ───────────────────
   const normName = (s: string) =>
@@ -436,6 +448,45 @@ export default function PlanningPage() {
           <button onClick={nextWeek} className="p-2 rounded-lg hover:bg-slate-100 transition">
             <ChevronRight size={18} className="text-slate-600" />
           </button>
+        </div>
+
+        {/* ── Recherche d'employé ── */}
+        <div className="flex flex-col gap-1.5">
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Rechercher un employé par nom ou matricule…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-9 py-2.5 text-sm bg-white border border-slate-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30 focus:border-camublue-900/40 placeholder:text-slate-400 transition"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+                title="Effacer la recherche"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {searchQuery.trim() && (() => {
+            const q = searchQuery.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const matched = new Set(entries.filter(e => {
+              const name = e.employee_name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              const mat  = (e.employee_matricule ?? "").toLowerCase();
+              return name.includes(q) || mat.includes(q);
+            }).map(e => e.employee_name)).size;
+            return (
+              <p className="text-xs text-slate-500 pl-1">
+                {matched === 0
+                  ? <span className="text-red-400">Aucun employé trouvé pour « {searchQuery} »</span>
+                  : <><span className="font-medium text-camublue-900">{matched}</span> employé{matched > 1 ? "s" : ""} trouvé{matched > 1 ? "s" : ""}</>
+                }
+              </p>
+            );
+          })()}
         </div>
 
         {/* ── Grille planning ── */}
