@@ -131,6 +131,24 @@ export default function PlanningPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // ── Polling temps réel : rafraîchissement silencieux toutes les 30s ───────
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const [data, emps] = await Promise.all([
+          getShiftPlanning(weekDates[0], weekDates[6]),
+          getEmployees({ status: "ACTIVE" }),
+        ]);
+        setEntries(data);
+        setEmployees(emps);
+      } catch {
+        // Silencieux : ne pas afficher d'erreur lors du polling
+      }
+    };
+    const interval = setInterval(poll, 30_000);
+    return () => clearInterval(interval);
+  }, [weekDates]);
+
   // ── Map : date + shift → entrées ──────────────────────────────────────────
   const planMap = useMemo(() => {
     const m: Record<string, Record<string, PlanningEntry[]>> = {};

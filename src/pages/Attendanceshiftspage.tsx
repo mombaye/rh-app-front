@@ -1653,9 +1653,6 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email && !r.not_scheduled_rest ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
               <Bell className="h-3 w-3" />Alerter
             </button>
-            <button onClick={onEdit} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 ring-1 ring-amber-200 transition">
-              <Pencil className="h-3 w-3" />Modifier
-            </button>
             <button onClick={onDetail} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">Détail</button>
           </div>
         </td>
