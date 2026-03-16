@@ -351,7 +351,7 @@ function BulkMatriculeModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 10 }}
         transition={{ duration: 0.2 }}
-        className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]"
+        className="w-full max-w-full sm:max-w-3xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -450,7 +450,8 @@ function BulkMatriculeModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 pb-2 min-h-0">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[500px]">
             <thead className="sticky top-0 bg-white z-10">
               <tr className="border-b border-gray-200">
                 <th className="text-left py-3 pr-4 font-semibold text-gray-600 w-1/4">Employé</th>
@@ -552,9 +553,10 @@ function BulkMatriculeModal({
               )}
             </tbody>
           </table>
+          </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between shrink-0 gap-3">
+        <div className="px-6 py-4 border-t border-gray-100 flex flex-wrap items-center justify-between shrink-0 gap-3">
           <p className="text-xs text-gray-400">
             {employees.length} employé(s) au total
             {changedCount > 0 && ` · ${changedCount} modification(s) en attente`}
@@ -562,7 +564,7 @@ function BulkMatriculeModal({
               <span className="text-red-500"> · {conflictCount} conflit(s) à résoudre</span>
             )}
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => excelInputRef.current?.click()}
               disabled={isPreviewing || isSubmitting}
@@ -697,7 +699,7 @@ function EmployeeDocumentsModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 10 }}
         transition={{ duration: 0.2 }}
-        className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]"
+        className="w-full max-w-full sm:max-w-2xl lg:max-w-5xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -722,10 +724,10 @@ function EmployeeDocumentsModal({
         </div>
 
         {/* Body */}
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-col sm:flex-row flex-1 min-h-0 overflow-hidden">
 
           {/* Panneau gauche — liste employés */}
-          <div className="w-72 border-r border-gray-100 flex flex-col shrink-0">
+          <div className="w-full sm:w-72 border-b sm:border-b-0 sm:border-r border-gray-100 flex flex-col shrink-0 max-h-48 sm:max-h-none">
             <div className="px-4 py-3 border-b border-gray-100">
               <input
                 type="text"

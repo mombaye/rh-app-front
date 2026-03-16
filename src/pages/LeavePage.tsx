@@ -227,8 +227,8 @@ export default function LeavePage() {
           )}
 
           {/* Tabs + filtre */}
-          <div className="flex items-center justify-between mt-3">
-            <div className="flex gap-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
+            <div className="flex gap-1 overflow-x-auto">
               {TABS.map(({ id, label, Icon }) => (
                 <button key={id} onClick={() => setTab(id)}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
@@ -640,7 +640,7 @@ function EditModal({ request: r, onClose, onDone }: {
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Date début</label>
               <input type="date" value={form.start_date}
@@ -831,7 +831,7 @@ function DetailModal({ request: r, onClose, onDone }: {
           </div>
 
           {/* Grille d'infos */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {infoRows.map(([k, v]) => (
               <div key={k} className="bg-slate-50 rounded-xl p-3">
                 <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">{k}</p>

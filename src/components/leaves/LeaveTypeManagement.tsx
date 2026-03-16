@@ -327,7 +327,7 @@ export default function LeaveTypeManagement() {
                   )}
                 </AnimatePresence>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
                       Code <span className="text-red-500">*</span>
@@ -366,7 +366,7 @@ export default function LeaveTypeManagement() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
                       Accrual mensuel (jours)

@@ -288,7 +288,7 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                   <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Enfants</p>
                   <div className="space-y-2">
                     {Array.from({ length: form.nombre_enfants }).map((_, i) => (
-                      <div key={i} className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                      <div key={i} className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
                         <F label={`Nom enfant ${i + 1}`}>
                           <Input value={form.enfants[i]?.nom ?? ""} onChange={e => chEnfant(i, "nom", e.target.value)} placeholder="Nom complet" />
                         </F>

@@ -390,7 +390,7 @@ export default function LeaveRequestList({
                 </div>
 
                 {/* Grille d'informations */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {([
                     ["Employé",    selected.employee?.full_name ?? "—"],
                     ["Matricule",  selected.employee?.matricule ?? "—"],
