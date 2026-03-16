@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, Fragment } from "react";
+import { useEffect, useState, useCallback, Fragment, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAdminAuth } from "@/contexts/useAdminAuth";
 import AdminLayout from "@/layouts/AdminLayout";
@@ -36,6 +36,7 @@ import {
   ChevronRight,
   X,
   Download,
+  Upload,
   Activity,
   History,
 } from "lucide-react";
@@ -234,6 +235,190 @@ function ExportModal({ onClose }: { onClose: () => void }) {
             <Download size={15} />
             {loading ? "Export..." : "Exporter"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Import Modal ─────────────────────────────────────────────────────────────
+
+const IMPORT_ROLE_OPTIONS: { value: UserForm["role"]; label: string }[] = [
+  { value: "employee", label: "Employé" },
+  { value: "rh",       label: "Compte RH" },
+  { value: "manager1", label: "Manager Niveau 1" },
+  { value: "manager2", label: "Manager Niveau 2" },
+];
+
+type ImportRow = { username: string; email: string; password: string; role: UserForm["role"] };
+
+function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [rows, setRows] = useState<ImportRow[]>([]);
+  const [fileName, setFileName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<{ ok: number; errors: string[] } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    setResults(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target?.result, { type: "binary" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data: Record<string, string>[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        const parsed: ImportRow[] = data.map((r) => ({
+          username: String(r["Nom d'utilisateur"] || r["username"] || ""),
+          email:    String(r["Email"]             || r["email"]    || ""),
+          password: String(r["Mot de passe"]      || r["password"] || ""),
+          role: (["employee","rh","manager1","manager2"].includes(r["role"] as string)
+            ? r["role"] as UserForm["role"]
+            : "employee"),
+        }));
+        setRows(parsed.filter((r) => r.username));
+      } catch {
+        toast.error("Impossible de lire le fichier. Vérifiez le format.");
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleImport = async () => {
+    if (!rows.length) return;
+    setLoading(true);
+    let ok = 0;
+    const errors: string[] = [];
+    for (const row of rows) {
+      try {
+        await createAdminAccount(formToPayload({ ...row, is_active: true }) as any);
+        ok++;
+      } catch (err: any) {
+        const msg = err?.response?.data
+          ? Object.values(err.response.data).flat().join(" ")
+          : "Erreur inconnue";
+        errors.push(`${row.username}: ${msg}`);
+      }
+    }
+    setLoading(false);
+    setResults({ ok, errors });
+    if (ok > 0) onDone();
+  };
+
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.json_to_sheet([{
+      "Nom d'utilisateur": "jdupont",
+      "Email": "j.dupont@camusat.com",
+      "Mot de passe": "MotDePasse123!",
+      "role": "employee",
+    }]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Comptes");
+    XLSX.writeFile(wb, "modele_import_comptes.xlsx");
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-camublue-900">Importer des comptes</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition p-1 rounded-lg hover:bg-gray-100">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Template download */}
+        <div className="mb-4 p-3 bg-camublue-900/5 rounded-xl flex items-center justify-between">
+          <p className="text-xs text-gray-600">
+            Colonnes attendues : <span className="font-medium">Nom d'utilisateur, Email, Mot de passe, role</span>
+          </p>
+          <button
+            onClick={downloadTemplate}
+            className="flex items-center gap-1.5 text-xs text-camublue-900 font-semibold hover:underline shrink-0 ml-3"
+          >
+            <Download size={13} />
+            Modèle
+          </button>
+        </div>
+
+        {/* File picker */}
+        <div className="mb-4">
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl py-6 text-sm text-gray-500 hover:border-camublue-900/40 hover:text-camublue-900 transition"
+          >
+            <Upload size={18} />
+            {fileName ? fileName : "Choisir un fichier Excel (.xlsx)"}
+          </button>
+        </div>
+
+        {/* Preview */}
+        {rows.length > 0 && !results && (
+          <div className="mb-4">
+            <p className="text-xs font-medium text-gray-500 mb-2">{rows.length} ligne(s) détectée(s)</p>
+            <div className="max-h-36 overflow-y-auto border border-gray-100 rounded-lg">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="px-3 py-2 text-left text-gray-500 font-semibold">Utilisateur</th>
+                    <th className="px-3 py-2 text-left text-gray-500 font-semibold">Email</th>
+                    <th className="px-3 py-2 text-left text-gray-500 font-semibold">Rôle</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i} className="border-b border-gray-50">
+                      <td className="px-3 py-1.5 text-gray-700 font-medium">{r.username}</td>
+                      <td className="px-3 py-1.5 text-gray-500">{r.email || "—"}</td>
+                      <td className="px-3 py-1.5 text-gray-500">
+                        {IMPORT_ROLE_OPTIONS.find((o) => o.value === r.role)?.label ?? r.role}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Results */}
+        {results && (
+          <div className="mb-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
+                {results.ok} créé(s)
+              </span>
+              {results.errors.length > 0 && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-100 text-red-600 text-xs font-semibold">
+                  {results.errors.length} erreur(s)
+                </span>
+              )}
+            </div>
+            {results.errors.length > 0 && (
+              <div className="max-h-28 overflow-y-auto bg-red-50 rounded-lg p-3 text-xs text-red-600 space-y-1">
+                {results.errors.map((e, i) => <div key={i}>{e}</div>)}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-3 pt-1">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm transition">
+            {results ? "Fermer" : "Annuler"}
+          </button>
+          {!results && (
+            <button
+              onClick={handleImport}
+              disabled={loading || !rows.length}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-camublue-900 text-white hover:bg-camublue-900/90 text-sm transition disabled:opacity-60"
+            >
+              <Upload size={15} />
+              {loading ? "Import en cours..." : `Importer ${rows.length > 0 ? `(${rows.length})` : ""}`}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -832,6 +1017,8 @@ function AccountsTab({
   managerLevel,
   onLevelChange,
   onCreate,
+  onImport,
+  onExport,
   onGerer,
 }: {
   tab: Tab;
@@ -842,6 +1029,8 @@ function AccountsTab({
   managerLevel: string;
   onLevelChange: (v: string) => void;
   onCreate: () => void;
+  onImport: () => void;
+  onExport: () => void;
   onGerer: (u: AdminUser) => void;
 }) {
   const titles: Record<Tab, string> = {
@@ -882,7 +1071,8 @@ function AccountsTab({
 
       {/* Toolbar */}
       <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+        {/* Recherche — occupe tout l'espace à gauche */}
+        <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <Input
             value={search}
@@ -891,10 +1081,33 @@ function AccountsTab({
             className="pl-9 bg-white border-gray-300 shadow-sm focus:ring-2 focus:ring-camublue-900"
           />
         </div>
-        <Button onClick={onCreate} className="bg-camublue-900 text-white hover:bg-camublue-900/90 gap-2 shadow-sm">
-          <Plus size={15} />
-          Créer compte
-        </Button>
+
+        {/* Boutons à droite */}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            onClick={onImport}
+            variant="outline"
+            className="gap-2 border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-800 shadow-sm"
+          >
+            <Upload size={15} />
+            <span className="hidden sm:inline">Importer</span>
+          </Button>
+          <Button
+            onClick={onExport}
+            variant="outline"
+            className="gap-2 border-camublue-900/30 text-camublue-900 hover:bg-camublue-900/5 shadow-sm"
+          >
+            <Download size={15} />
+            <span className="hidden sm:inline">Exporter</span>
+          </Button>
+          <Button
+            onClick={onCreate}
+            className="bg-camublue-900 text-white hover:bg-camublue-900/90 gap-2 shadow-sm"
+          >
+            <Plus size={15} />
+            <span className="hidden sm:inline">Créer compte</span>
+          </Button>
+        </div>
       </div>
 
       {/* Table card */}
@@ -943,6 +1156,7 @@ export default function AdminDashboardPage() {
 
   // Modals
   const [showExport, setShowExport] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [gererUser, setGererUser] = useState<AdminUser | null>(null);
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
@@ -1022,6 +1236,8 @@ export default function AdminDashboardPage() {
             managerLevel={managerLevel}
             onLevelChange={setLevel}
             onCreate={() => setShowCreate(true)}
+            onImport={() => setShowImport(true)}
+            onExport={() => setShowExport(true)}
             onGerer={setGererUser}
           />
         )}
@@ -1029,6 +1245,10 @@ export default function AdminDashboardPage() {
 
       {/* Modals */}
       {showExport && <ExportModal onClose={() => setShowExport(false)} />}
+
+      {showImport && (
+        <ImportModal onClose={() => setShowImport(false)} onDone={fetchUsers} />
+      )}
 
       {showCreate && (
         <UserModal mode="create" user={null} onClose={() => setShowCreate(false)} onSave={fetchUsers} />
