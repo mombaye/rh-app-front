@@ -17,8 +17,9 @@ import {
   Ban, RotateCcw, ChevronDown, Table2, CalendarRange,
   Download, Loader2, AlertTriangle, Clock, Pencil, Paperclip,
   FileCheck, Upload, ExternalLink, Users, Settings2, Wallet,
-  Search, History, Info,
+  Search, History, Info, Filter,
 } from "lucide-react";
+import { ExportColumnKey, ExportColumnDef } from "@/types/leave";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 
@@ -34,6 +35,33 @@ const STATUS_CFG: Record<
   CANCELLED:      { label: "Annulé",              color: "#64748b", bg: "#f8fafc", border: "#e2e8f0", dot: "bg-slate-400"   },
   REVOKED:        { label: "Révoqué (urgence)",   color: "#b45309", bg: "#fff7ed", border: "#fed7aa", dot: "bg-orange-500"  },
 };
+
+// ─── Colonnes disponibles pour l'export personnalisé ─────────────────────────
+const EXPORT_COLUMNS: ExportColumnDef[] = [
+  { key: "id",                 label: "ID"                    },
+  { key: "employee",           label: "Employé"               },
+  { key: "matricule",          label: "Matricule"             },
+  { key: "service",            label: "Service"               },
+  { key: "leave_type",         label: "Type de congé"         },
+  { key: "start_date",         label: "Date début"            },
+  { key: "end_date",           label: "Date fin"              },
+  { key: "days",               label: "Jours"                 },
+  { key: "motif",              label: "Motif"                 },
+  { key: "status",             label: "Statut"                },
+  { key: "reviewed_by",        label: "Validé par (N+1)"      },
+  { key: "reviewed_at",        label: "Date validation N+1"   },
+  { key: "second_reviewer",    label: "Validé par (N+2)"      },
+  { key: "second_reviewed_at", label: "Date validation N+2"   },
+  { key: "reject_reason",      label: "Motif de rejet"        },
+  { key: "revoke_reason",      label: "Motif de révocation"   },
+  { key: "created_at",         label: "Date de demande"       },
+];
+
+// Sélection par défaut pour l'export
+const DEFAULT_EXPORT_COLUMNS: ExportColumnKey[] = [
+  "employee", "matricule", "service", "leave_type",
+  "start_date", "end_date", "days", "status",
+];
 
 type TabId        = "requests" | "calendar" | "balances";
 type StatusFilter = "ALL" | LeaveStatus;
@@ -106,6 +134,26 @@ export default function LeavePage() {
   const [filterOpen,     setFilterOpen]     = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
 
+  // ── Filtres avancés ────────────────────────────────────────────────────────
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [filterLeaveTypeId,   setFilterLeaveTypeId]   = useState<string>("");
+  const [filterStartDate,     setFilterStartDate]     = useState<string>("");
+  const [filterEndDate,       setFilterEndDate]       = useState<string>("");
+  const [filterDepartment,    setFilterDepartment]    = useState<string>("");
+  const [filterEmployeeName,  setFilterEmployeeName]  = useState<string>("");
+  const [filterYear,          setFilterYear]          = useState<string>("");
+  const [availableLeaveTypes, setAvailableLeaveTypes] = useState<LeaveType[]>([]);
+
+  // ── Export personnalisé ────────────────────────────────────────────────────
+  const [showExportDialog,    setShowExportDialog]    = useState(false);
+  const [exportColumns,       setExportColumns]       = useState<ExportColumnKey[]>(DEFAULT_EXPORT_COLUMNS);
+  const [exportLoading,       setExportLoading]       = useState(false);
+
+  const advancedFilterCount = [
+    filterLeaveTypeId, filterStartDate, filterEndDate,
+    filterDepartment, filterEmployeeName, filterYear,
+  ].filter(Boolean).length;
+
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
@@ -114,12 +162,26 @@ export default function LeavePage() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
+  // Charger les types de congés pour le filtre
+  useEffect(() => {
+    leaveTypeService.getAll().then(setAvailableLeaveTypes).catch(() => {});
+  }, []);
+
   const fetchAll = useCallback(async () => {
     setLoading(true); setFetchError(null);
     try {
       const apiStatus = statusFilter !== "ALL" ? statusFilter as LeaveStatus : undefined;
+      const filters: Parameters<typeof leaveRequestService.getAll>[0] = {
+        ...(apiStatus ? { status: apiStatus } : {}),
+        ...(filterLeaveTypeId ? { leave_type_id: Number(filterLeaveTypeId) } : {}),
+        ...(filterStartDate   ? { start_date: filterStartDate }             : {}),
+        ...(filterEndDate     ? { end_date:   filterEndDate }               : {}),
+        ...(filterDepartment  ? { department: filterDepartment }            : {}),
+        ...(filterEmployeeName? { employee_name: filterEmployeeName }       : {}),
+        ...(filterYear        ? { year: Number(filterYear) }                : {}),
+      };
       const [data, sum] = await Promise.all([
-        leaveRequestService.getAll({ ...(apiStatus ? { status: apiStatus } : {}) }),
+        leaveRequestService.getAll(filters),
         leaveRequestService.getSummary(),
       ]);
       setRequests(Array.isArray(data) ? data : []);
@@ -128,22 +190,39 @@ export default function LeavePage() {
       const msg = err?.response?.data?.detail ?? err?.response?.data?.error ?? "Erreur de chargement.";
       setFetchError(msg); setRequests([]);
     } finally { setLoading(false); }
-  }, [statusFilter]);
+  }, [statusFilter, filterLeaveTypeId, filterStartDate, filterEndDate, filterDepartment, filterEmployeeName, filterYear]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const handleExport = () => {
-    const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
-    const token    = localStorage.getItem("access_token");
-    fetch(`${BASE_URL}/api/leaves/export/excel/`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.blob())
-      .then((blob) => {
-        const a   = document.createElement("a");
-        a.href     = URL.createObjectURL(blob);
-        a.download = `conges_${new Date().toISOString().slice(0, 10)}.xlsx`;
-        a.click();
-      })
-      .catch(() => toast.error("Erreur lors de l'export Excel"));
+  const resetAdvancedFilters = () => {
+    setFilterLeaveTypeId(""); setFilterStartDate(""); setFilterEndDate("");
+    setFilterDepartment(""); setFilterEmployeeName(""); setFilterYear("");
+  };
+
+  const handleExport = async (columns?: ExportColumnKey[]) => {
+    try {
+      setExportLoading(true);
+      const apiStatus = statusFilter !== "ALL" ? statusFilter as LeaveStatus : undefined;
+      const filters = {
+        ...(apiStatus        ? { status: apiStatus }                        : {}),
+        ...(filterLeaveTypeId? { leave_type_id: Number(filterLeaveTypeId) } : {}),
+        ...(filterStartDate  ? { start_date: filterStartDate }              : {}),
+        ...(filterEndDate    ? { end_date:   filterEndDate }                : {}),
+        ...(filterDepartment ? { department: filterDepartment }             : {}),
+        ...(filterEmployeeName?{ employee_name: filterEmployeeName }        : {}),
+        ...(filterYear       ? { year: Number(filterYear) }                 : {}),
+      };
+      const blob = await leaveRequestService.exportExcel(filters, columns);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `conges_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error("Erreur lors de l'export Excel");
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const openDetail  = (r: LeaveRequest) => setSelected(r);
@@ -182,9 +261,11 @@ export default function LeavePage() {
                 ))}
               </div>
 
-              <button onClick={handleExport} title="Exporter Excel"
-                className="p-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-emerald-600 hover:border-emerald-300 transition">
-                <Download className="h-4 w-4" />
+              <button onClick={() => setShowExportDialog(true)} title="Export personnalisé"
+                disabled={exportLoading}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-emerald-600 hover:border-emerald-300 transition text-xs font-semibold disabled:opacity-50">
+                {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                <span className="hidden sm:inline">Exporter</span>
               </button>
 
               <button onClick={fetchAll} disabled={loading} title="Actualiser"
@@ -242,37 +323,208 @@ export default function LeavePage() {
             </div>
 
             {tab === "requests" && (
-              <div className="relative" ref={filterRef}>
-                <button onClick={() => setFilterOpen((o) => !o)}
-                  className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-medium transition">
-                  <span className="hidden sm:inline text-xs">{currentFilterLabel}</span>
-                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
-                </button>
-                <AnimatePresence>
-                  {filterOpen && (
-                    <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -6 }}
-                      className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-30">
-                      {STATUS_FILTERS.map(({ value, label }) => {
-                        const cfg = value === "ALL" ? null : STATUS_CFG[value as LeaveStatus];
-                        return (
-                          <button key={value}
-                            onClick={() => { setStatusFilter(value); setFilterOpen(false); }}
-                            className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors text-left ${
-                              statusFilter === value ? "font-bold bg-slate-50 text-camublue-900" : "text-slate-700 hover:bg-slate-50"
-                            }`}>
-                            {cfg && <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />}
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </motion.div>
+              <div className="flex items-center gap-2">
+                {/* Filtre statut */}
+                <div className="relative" ref={filterRef}>
+                  <button onClick={() => setFilterOpen((o) => !o)}
+                    className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-medium transition">
+                    <span className="hidden sm:inline text-xs">{currentFilterLabel}</span>
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  <AnimatePresence>
+                    {filterOpen && (
+                      <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-30">
+                        {STATUS_FILTERS.map(({ value, label }) => {
+                          const cfg = value === "ALL" ? null : STATUS_CFG[value as LeaveStatus];
+                          return (
+                            <button key={value}
+                              onClick={() => { setStatusFilter(value); setFilterOpen(false); }}
+                              className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors text-left ${
+                                statusFilter === value ? "font-bold bg-slate-50 text-camublue-900" : "text-slate-700 hover:bg-slate-50"
+                              }`}>
+                              {cfg && <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />}
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Filtres avancés */}
+                <button onClick={() => setShowAdvancedFilters((o) => !o)}
+                  className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border transition font-medium ${
+                    advancedFilterCount > 0
+                      ? "border-camublue-300 bg-camublue-50 text-camublue-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}>
+                  <Filter className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline text-xs">Filtres</span>
+                  {advancedFilterCount > 0 && (
+                    <span className="bg-camublue-700 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                      {advancedFilterCount}
+                    </span>
                   )}
-                </AnimatePresence>
+                </button>
               </div>
             )}
           </div>
+
+          {/* ── Panneau de filtres avancés ─────────────────────────────────────── */}
+          <AnimatePresence>
+            {showAdvancedFilters && tab === "requests" && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden border-t border-slate-100 mt-3">
+                <div className="py-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {/* Type de congé */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Type</label>
+                    <select value={filterLeaveTypeId} onChange={(e) => setFilterLeaveTypeId(e.target.value)}
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300">
+                      <option value="">Tous les types</option>
+                      {availableLeaveTypes.map((t) => (
+                        <option key={t.id} value={t.id}>{t.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Employé */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Employé</label>
+                    <input type="text" value={filterEmployeeName}
+                      onChange={(e) => setFilterEmployeeName(e.target.value)}
+                      placeholder="Nom / Matricule"
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
+                  </div>
+
+                  {/* Service */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Service</label>
+                    <input type="text" value={filterDepartment}
+                      onChange={(e) => setFilterDepartment(e.target.value)}
+                      placeholder="Département"
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
+                  </div>
+
+                  {/* Date début */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Début (≥)</label>
+                    <input type="date" value={filterStartDate}
+                      onChange={(e) => setFilterStartDate(e.target.value)}
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
+                  </div>
+
+                  {/* Date fin */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Fin (≤)</label>
+                    <input type="date" value={filterEndDate}
+                      onChange={(e) => setFilterEndDate(e.target.value)}
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
+                  </div>
+
+                  {/* Année */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Année</label>
+                    <input type="number" value={filterYear}
+                      onChange={(e) => setFilterYear(e.target.value)}
+                      placeholder={String(new Date().getFullYear())}
+                      min="2020" max="2099"
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
+                  </div>
+                </div>
+                {advancedFilterCount > 0 && (
+                  <div className="pb-2">
+                    <button onClick={resetAdvancedFilters}
+                      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-500 transition font-medium">
+                      <X className="h-3 w-3" />Réinitialiser les filtres
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
+
+        {/* ── Export Dialog ──────────────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {showExportDialog && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+              <motion.div
+                initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                  <div>
+                    <h2 className="font-black text-camublue-900 text-base">Export personnalisé</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Sélectionnez les colonnes à inclure dans l'export</p>
+                  </div>
+                  <button onClick={() => setShowExportDialog(false)}
+                    className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="px-5 py-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <p className="text-xs font-semibold text-slate-500">
+                      {exportColumns.length}/{EXPORT_COLUMNS.length} colonnes sélectionnées
+                    </p>
+                    <div className="flex gap-2">
+                      <button onClick={() => setExportColumns(EXPORT_COLUMNS.map((c) => c.key))}
+                        className="text-xs text-camublue-700 hover:underline font-medium">Tout</button>
+                      <span className="text-slate-300">|</span>
+                      <button onClick={() => setExportColumns([])}
+                        className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                    {EXPORT_COLUMNS.map((col) => {
+                      const checked = exportColumns.includes(col.key);
+                      return (
+                        <label key={col.key}
+                          className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer border transition text-sm ${
+                            checked ? "bg-camublue-50 border-camublue-200 text-camublue-800" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                          }`}>
+                          <input type="checkbox" checked={checked} onChange={() => {
+                            setExportColumns((prev) =>
+                              prev.includes(col.key) ? prev.filter((k) => k !== col.key) : [...prev, col.key]
+                            );
+                          }} className="accent-camublue-700 w-3.5 h-3.5" />
+                          <span className="font-medium">{col.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                  <button onClick={() => setShowExportDialog(false)}
+                    className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
+                    Annuler
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await handleExport(exportColumns.length > 0 ? exportColumns : undefined);
+                      setShowExportDialog(false);
+                    }}
+                    disabled={exportLoading || exportColumns.length === 0}
+                    className="flex items-center gap-2 px-5 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
+                    {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    Télécharger
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Content ─────────────────────────────────────────────────────────── */}
         <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4">

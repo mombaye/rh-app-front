@@ -13,6 +13,7 @@ import {
   LeaveCalendarEntry,
   ApprovePayload,
   RevokePayload,
+  ExportColumnKey,
 } from "../types/leave";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
@@ -310,6 +311,37 @@ export const leaveRequestService = {
       {},
       { headers: getAuthHeaders() }
     );
+    return res.data;
+  },
+
+  /**
+   * GET /api/leaves/requests/export/excel/
+   * Export Excel personnalisé : filtres + sélection de colonnes.
+   * Retourne un Blob pour téléchargement côté client.
+   *
+   * @param filters  - Filtres à appliquer (mêmes que getAll)
+   * @param columns  - Liste des clés de colonnes à inclure (toutes si vide)
+   */
+  exportExcel: async (
+    filters?: Omit<LeaveRequestFilters, "contract_type">,
+    columns?: ExportColumnKey[]
+  ): Promise<Blob> => {
+    const params: Record<string, string> = {};
+    if (filters) {
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== "") {
+          params[k] = String(v);
+        }
+      });
+    }
+    if (columns && columns.length > 0) {
+      params.columns = columns.join(",");
+    }
+    const res = await axios.get(`${API}/requests/export/excel/`, {
+      headers: getAuthHeaders(),
+      params,
+      responseType: "blob",
+    });
     return res.data;
   },
 };

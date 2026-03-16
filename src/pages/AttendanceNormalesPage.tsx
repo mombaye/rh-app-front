@@ -20,7 +20,7 @@ import * as XLSX from "xlsx";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ViewMode = "daily" | "weekly" | "monthly";
-type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" | "deficit";
+type StatusFilter = "all" | "ok" | "absent" | "on_leave" | "incomplete" | "anomaly" | "late" | "deficit";
 type MotifType = "absent" | "not_pointing";
 type WorkContext = "Normale" | "Ramadan" | string;
 
@@ -75,7 +75,7 @@ interface CompensationResult {
 
 interface FlatRecord {
   employee_id: number; matricule: string; full_name: string; department: string; project: string;
-  status: "ok" | "absent" | "incomplete" | "anomaly";
+  status: "ok" | "absent" | "on_leave" | "incomplete" | "anomaly";
   is_late_api: boolean; late_label_api: string | null; late_minutes_api: number;
   computed_late_minutes: number; overtime_minutes: number;
   compensation: CompensationResult; deficit_minutes: number;
@@ -193,16 +193,18 @@ async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ succ
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const STATUS_CFG = {
-  ok:        { label: "OK",       dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-  absent:    { label: "Absent",   dot: "bg-red-500",     badge: "bg-red-50 text-red-700 ring-red-200" },
-  incomplete:{ label: "Incomplet",dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200" },
-  anomaly:   { label: "Anomalie", dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200" },
+  ok:        { label: "OK",        dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+  absent:    { label: "Absent",    dot: "bg-red-500",     badge: "bg-red-50 text-red-700 ring-red-200" },
+  on_leave:  { label: "En Congé", dot: "bg-sky-500",     badge: "bg-sky-50 text-sky-700 ring-sky-200" },
+  incomplete:{ label: "Incomplet", dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200" },
+  anomaly:   { label: "Anomalie",  dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200" },
 };
 
 const QUICK_FILTERS = [
   { key: "all"       as StatusFilter, label: "Tous",         dotColor: "bg-slate-400",  activeText: "text-slate-800",   activeBg: "bg-slate-900", activeDot: "bg-white"         },
   { key: "ok"        as StatusFilter, label: "OK",           dotColor: "bg-emerald-400",activeText: "text-emerald-700", activeBg: "bg-emerald-50",activeDot: "bg-emerald-500"   },
   { key: "absent"    as StatusFilter, label: "Absents",      dotColor: "bg-red-400",    activeText: "text-red-700",     activeBg: "bg-red-50",    activeDot: "bg-red-500"       },
+  { key: "on_leave"  as StatusFilter, label: "En Congé",    dotColor: "bg-sky-400",    activeText: "text-sky-700",     activeBg: "bg-sky-50",    activeDot: "bg-sky-500"       },
   { key: "late"      as StatusFilter, label: "Retards",      dotColor: "bg-orange-400", activeText: "text-orange-700",  activeBg: "bg-orange-50", activeDot: "bg-orange-500"    },
   { key: "incomplete"as StatusFilter, label: "Incomplets",   dotColor: "bg-amber-400",  activeText: "text-amber-800",   activeBg: "bg-amber-50",  activeDot: "bg-amber-500"     },
   { key: "anomaly"   as StatusFilter, label: "Anomalies",    dotColor: "bg-violet-400", activeText: "text-violet-700",  activeBg: "bg-violet-50", activeDot: "bg-violet-500"    },

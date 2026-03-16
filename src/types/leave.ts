@@ -132,7 +132,21 @@ export interface LeaveRequestFilters {
   start_date?:    string;
   end_date?:      string;
   department?:    string;
+  employee_name?: string;  // recherche par nom/prénom/matricule
+  year?:          number;  // filtre par année de début
   contract_type?: ContractType; // filtré côté frontend uniquement
+}
+
+// ── ExportColumn ── colonnes disponibles pour l'export personnalisé ──────────
+export type ExportColumnKey =
+  | "id" | "employee" | "matricule" | "service" | "leave_type"
+  | "start_date" | "end_date" | "days" | "motif" | "status"
+  | "reviewed_by" | "reviewed_at" | "second_reviewer" | "second_reviewed_at"
+  | "reject_reason" | "revoke_reason" | "created_at";
+
+export interface ExportColumnDef {
+  key:   ExportColumnKey;
+  label: string;
 }
 
 // ── ApprovePayload ────────────────────────────────────────────────────────────
