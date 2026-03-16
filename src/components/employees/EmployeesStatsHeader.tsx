@@ -10,14 +10,14 @@ const StatCard = ({
   label,
   active = false,
   onClick,
-  children,
+  footer,
 }: {
   icon: React.ReactNode;
   value: React.ReactNode;
   label: string;
   active?: boolean;
   onClick?: () => void;
-  children?: React.ReactNode;
+  footer?: React.ReactNode;
 }) => (
   <Card
     onClick={onClick}
@@ -32,7 +32,6 @@ const StatCard = ({
     <div className="flex items-center gap-3">
       <div className="flex items-center justify-center shrink-0">{icon}</div>
       <span className="text-xl font-bold leading-none">{value}</span>
-      {children}
     </div>
     <div className="text-gray-600 text-sm flex items-center justify-between">
       <span>{label}</span>
@@ -42,6 +41,7 @@ const StatCard = ({
         </span>
       )}
     </div>
+    {footer && <div className="mt-1.5">{footer}</div>}
   </Card>
 );
 
@@ -91,35 +91,45 @@ export default function EmployeesStatsHeader({
     );
   }).length;
 
-  const exitedByContractType = {
-    CDI:   data.filter((e) => e.status === "EXITED" && e.type_contrat === "CDI").length,
-    CDD:   data.filter((e) => e.status === "EXITED" && e.type_contrat === "CDD").length,
-    STAGE: data.filter((e) => e.status === "EXITED" && e.type_contrat === "STAGE").length,
-  };
-
-  const exitedTotal = exitedCount || 1;
-  const pctCDI   = Math.round((exitedByContractType.CDI   / exitedTotal) * 100);
-  const pctCDD   = Math.round((exitedByContractType.CDD   / exitedTotal) * 100);
-  const pctStage = Math.round((exitedByContractType.STAGE / exitedTotal) * 100);
-
   const handleClick = (filter: ProfileFilter) => {
     if (!onProfileFilterChange) return;
     onProfileFilterChange(profileFilter === filter ? "ALL" : filter);
   };
 
-  const exitBadges = (
-    <div className="ml-auto flex flex-col gap-0.5 text-right shrink-0">
-      <span className="text-[11px] font-semibold text-slate-600">
-        CDI <span className="text-slate-800">{pctCDI}%</span>
-      </span>
-      <span className="text-[11px] font-semibold text-orange-600">
-        CDD <span className="text-orange-800">{pctCDD}%</span>
-      </span>
-      <span className="text-[11px] font-semibold text-purple-600">
-        Stage <span className="text-purple-800">{pctStage}%</span>
-      </span>
-    </div>
-  );
+  // ── Détail des sortis par contrat (employés internes uniquement) ──────────
+  let exitFooter: React.ReactNode = null;
+  if (showExitsByContract && exitedCount > 0) {
+    const cdi   = data.filter((e) => e.status === "EXITED" && e.type_contrat === "CDI").length;
+    const cdd   = data.filter((e) => e.status === "EXITED" && e.type_contrat === "CDD").length;
+    const stage = data.filter((e) => e.status === "EXITED" && e.type_contrat === "STAGE").length;
+    const pct   = (n: number) => Math.round((n / exitedCount) * 100);
+
+    exitFooter = (
+      <div className="flex flex-wrap gap-1">
+        {cdi > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+            CDI
+            <strong className="text-slate-900">{cdi}</strong>
+            <span className="text-slate-400">· {pct(cdi)}%</span>
+          </span>
+        )}
+        {cdd > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-orange-50 text-orange-700 border border-orange-200">
+            CDD
+            <strong className="text-orange-900">{cdd}</strong>
+            <span className="text-orange-400">· {pct(cdd)}%</span>
+          </span>
+        )}
+        {stage > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+            Stage
+            <strong className="text-purple-900">{stage}</strong>
+            <span className="text-purple-400">· {pct(stage)}%</span>
+          </span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -147,9 +157,8 @@ export default function EmployeesStatsHeader({
           label="Sortis"
           active={profileFilter === "EXITED"}
           onClick={() => handleClick("EXITED")}
-        >
-          {exitBadges}
-        </StatCard>
+          footer={exitFooter}
+        />
         <StatCard
           icon={<FaUserPlus size={28} className="text-green-500" />}
           value={newThisMonth}
