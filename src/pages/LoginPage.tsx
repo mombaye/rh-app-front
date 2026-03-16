@@ -23,9 +23,14 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      await login(username, password);
-      // NonPlanningRoute dans App.tsx gère la redirection vers /planning si is_planning_manager
-      navigate("/dashboard");
+      const profile = await login(username, password);
+      if (profile.is_global_admin || profile.is_staff) {
+        navigate("/admin");
+      } else if (profile.is_planning_manager) {
+        navigate("/planning");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err: any) {
       const msg =
         err?.response?.data?.detail ||
