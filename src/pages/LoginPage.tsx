@@ -69,10 +69,10 @@ export default function LoginPage() {
               draggable={false}
             />
             <h1 className="text-2xl font-bold text-camublue-900 mb-1">
-              Bienvenue sur RH Camusat
+              Espace RH — Camusat
             </h1>
             <p className="text-sm text-gray-500 mb-6 text-center">
-              Merci de vous connecter pour accéder à vos outils RH.
+              Connectez-vous pour accéder à votre espace Ressources Humaines.
             </p>
 
             <form onSubmit={handleSubmit} className="w-full space-y-4">
