@@ -520,7 +520,6 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
   const [balances,     setBalances]     = useState<LeaveBalance[]>([]);
   const [employees,    setEmployees]    = useState<Employee[]>([]);
   const [loading,      setLoading]      = useState(true);
-  const [adjustTarget, setAdjustTarget] = useState<LeaveBalance | null>(null);
   const [historyEmp,   setHistoryEmp]   = useState<{ id: number; name: string } | null>(null);
   const [searchQuery,  setSearchQuery]  = useState("");
   const currentYear = new Date().getFullYear();
@@ -658,18 +657,12 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
                         {b.remaining}j
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button onClick={() => setAdjustTarget(b)}
-                          className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition">
-                          Ajuster
-                        </button>
-                        <button
-                          onClick={() => setHistoryEmp({ id: b.employee, name: b.employee_name })}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition flex items-center gap-1">
-                          <History className="h-3 w-3" /> Historique
-                        </button>
-                      </div>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => setHistoryEmp({ id: b.employee, name: b.employee_name })}
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition flex items-center gap-1 mx-auto">
+                        <History className="h-3 w-3" /> Historique
+                      </button>
                     </td>
                   </tr>
                 );
@@ -679,15 +672,6 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
         </div>
       </div>
 
-      <AnimatePresence>
-        {adjustTarget && (
-          <AdjustBalanceModal
-            balance={adjustTarget}
-            onClose={() => setAdjustTarget(null)}
-            onDone={() => { setAdjustTarget(null); load(); }}
-          />
-        )}
-      </AnimatePresence>
       <AnimatePresence>
         {historyEmp && (
           <LeaveHistoryModal
@@ -951,84 +935,6 @@ function QuickRevokeModal({ request: r, onClose, onDone }: {
               </div>
             </>
           )}
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-// ─── Modal Ajustement de solde ────────────────────────────────────────────────
-function AdjustBalanceModal({ balance: b, onClose, onDone }: {
-  balance: LeaveBalance; onClose: () => void; onDone: () => void;
-}) {
-  const [value,   setValue]   = useState(b.adjusted);
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    try {
-      await leaveBalanceService.adjust(b.id, { adjusted: parseFloat(value) });
-      toast.success("Ajustement enregistré ✓");
-      onDone();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error ?? "Erreur lors de l'ajustement");
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onClose}>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97, y: 20 }} transition={{ duration: 0.2 }}
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-[400px]"
-        onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <p className="font-black text-slate-800">Ajuster le solde</p>
-            <p className="text-xs text-slate-400">{b.employee_name} · {b.leave_type.label}</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 transition">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="px-6 py-5 space-y-4">
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="bg-slate-50 rounded-xl p-3">
-              <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Acquis</p>
-              <p className="font-bold text-slate-700">{b.acquired}j</p>
-            </div>
-            <div className="bg-slate-50 rounded-xl p-3">
-              <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Pris</p>
-              <p className="font-bold text-red-500">{b.taken}j</p>
-            </div>
-            <div className="bg-emerald-50 rounded-xl p-3">
-              <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Solde</p>
-              <p className="font-black text-emerald-600">{b.remaining}j</p>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">
-              Ajustement (±jours)
-            </label>
-            <input type="number" step="0.5" value={value}
-              onChange={(e) => setValue(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
-            <p className="text-xs text-slate-400 mt-1.5">
-              Valeur positive pour ajouter, négative pour retirer. Cette valeur remplace l'ajustement actuel.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={onClose}
-              className="flex-1 border border-slate-200 text-slate-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition">
-              Annuler
-            </button>
-            <button onClick={handleSubmit} disabled={loading || value === ""}
-              className="flex-[2] bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-bold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
-              {loading ? <ImSpinner2 className="animate-spin" size={14} /> : <CheckCircle2 className="h-4 w-4" />}
-              Enregistrer l'ajustement
-            </button>
-          </div>
         </div>
       </motion.div>
     </div>
