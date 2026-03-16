@@ -160,13 +160,22 @@ export default function PlanningPage() {
     return m;
   }, [entries]);
 
+  // ── Normalisation robuste des noms (accents + espaces) ───────────────────
+  const normName = (s: string) =>
+    s.trim()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+
   // ── Map : nom normalisé → matricule ───────────────────────────────────────
-  const nameToMatricule = useMemo(() => {
+  // Also keep a word-set index for fuzzy matching (same words, any order)
+  const { nameToMatricule, wordSetIndex } = useMemo(() => {
     const m = new Map<string, string>();
-    const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+    const wsi: Array<{ key: string; mat: string }> = [];
     for (const emp of employees) {
       if (!emp.matricule) continue;
-      const nom = emp.nom?.trim() ?? "";
+      const nom    = emp.nom?.trim()    ?? "";
       const prenom = emp.prenom?.trim() ?? "";
       const fullNameApi = (emp as any).full_name?.trim() ?? "";
       const candidates = [
@@ -175,11 +184,36 @@ export default function PlanningPage() {
         fullNameApi,
       ];
       for (const c of candidates) {
-        if (c.trim()) m.set(norm(c), emp.matricule);
+        const n = normName(c);
+        if (n.trim()) {
+          m.set(n, emp.matricule);
+          wsi.push({ key: n, mat: emp.matricule });
+        }
       }
     }
-    return m;
+    return { nameToMatricule: m, wordSetIndex: wsi };
   }, [employees]);
+
+  // ── Resolve matricule : exact match first, then word-set fallback ─────────
+  const resolveMatricule = useCallback(
+    (entryName: string, storedMat: string | null | undefined): string | null => {
+      if (storedMat) return storedMat;
+      const norm = normName(entryName);
+      const exact = nameToMatricule.get(norm);
+      if (exact) return exact;
+      // Word-set fallback: same set of words regardless of order / extra chars
+      const words = new Set(norm.split(" ").filter(Boolean));
+      if (words.size === 0) return null;
+      for (const { key, mat } of wordSetIndex) {
+        const dbWords = new Set(key.split(" ").filter(Boolean));
+        if (words.size === dbWords.size && [...words].every(w => dbWords.has(w))) {
+          return mat;
+        }
+      }
+      return null;
+    },
+    [nameToMatricule, wordSetIndex]
+  );
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const prevWeek = () => setWeekStart(d => addDays(d, -7));
@@ -473,7 +507,7 @@ export default function PlanningPage() {
                                     dragState?.shift_type === entry.shift_type &&
                                     dragState?.employee_name === entry.employee_name
                                   }
-                                  matricule={entry.employee_matricule || nameToMatricule.get(entry.employee_name.trim().toLowerCase().replace(/\s+/g, " ")) || null}
+                                  matricule={resolveMatricule(entry.employee_name, entry.employee_matricule)}
                                   onDragStart={handleDragStart}
                                   onDragEnd={handleDragEnd}
                                   onDelete={handleDelete}
