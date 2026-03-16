@@ -17,7 +17,7 @@ import {
   Ban, RotateCcw, ChevronDown, Table2, CalendarRange,
   Download, Loader2, AlertTriangle, Clock, Pencil, Paperclip,
   FileCheck, Upload, ExternalLink, Users, Settings2, Wallet,
-  Search, History, Info, Filter,
+  Search, History, Info, Filter, Trash2, Send,
 } from "lucide-react";
 import { ExportColumnKey, ExportColumnDef } from "@/types/leave";
 import toast from "react-hot-toast";
@@ -149,6 +149,17 @@ export default function LeavePage() {
   const [exportColumns,       setExportColumns]       = useState<ExportColumnKey[]>(DEFAULT_EXPORT_COLUMNS);
   const [exportLoading,       setExportLoading]       = useState(false);
 
+  // ── Recherche + Pagination (onglet Demandes) ──────────────────────────────
+  const [searchQ,          setSearchQ]          = useState("");
+  const [page,             setPage]             = useState(1);
+  const [pageSize,         setPageSize]         = useState(20);
+  const PAGE_SIZES = [10, 20, 50, 100] as const;
+
+  // ── Suppression / Relance ─────────────────────────────────────────────────
+  const [confirmDeleteId,  setConfirmDeleteId]  = useState<number | null>(null);
+  const [deleteLoading,    setDeleteLoading]    = useState(false);
+  const [relaunchRequest,  setRelaunchRequest]  = useState<LeaveRequest | null>(null);
+
   const advancedFilterCount = [
     filterLeaveTypeId, filterStartDate, filterEndDate,
     filterDepartment, filterEmployeeName, filterYear,
@@ -231,6 +242,38 @@ export default function LeavePage() {
   const afterEdit   = async ()           => { setEditTarget(null); await fetchAll(); };
 
   const currentFilterLabel = STATUS_FILTERS.find((f) => f.value === statusFilter)?.label ?? "Toutes";
+
+  // ── Recherche côté client ─────────────────────────────────────────────────
+  const filteredRequests = useMemo(() => {
+    if (!searchQ.trim()) return requests;
+    const q = searchQ.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return requests.filter((r) => {
+      const name = (r.employee?.full_name ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const mat  = (r.employee?.matricule ?? "").toLowerCase();
+      const svc  = (r.employee?.service ?? "").toLowerCase();
+      const type = (r.leave_type?.label ?? "").toLowerCase();
+      return name.includes(q) || mat.includes(q) || svc.includes(q) || type.includes(q);
+    });
+  }, [requests, searchQ]);
+
+  const totalReqPages  = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
+  const pagedRequests  = filteredRequests.slice((page - 1) * pageSize, page * pageSize);
+
+  // Reset page sur changement de filtre/recherche
+  useEffect(() => { setPage(1); }, [searchQ, statusFilter, filterLeaveTypeId, filterStartDate, filterEndDate, filterDepartment, filterEmployeeName, filterYear]);
+
+  // ── Suppression d'une demande Annulée ────────────────────────────────────
+  const handleDelete = async () => {
+    if (!confirmDeleteId) return;
+    setDeleteLoading(true);
+    try {
+      await leaveRequestService.delete(confirmDeleteId);
+      toast.success("Demande supprimée ✓");
+      setConfirmDeleteId(null);
+      await fetchAll();
+    } catch { toast.error("Erreur lors de la suppression"); }
+    finally   { setDeleteLoading(false); }
+  };
 
   return (
     <AppLayout>
@@ -550,130 +593,215 @@ export default function LeavePage() {
               )}
 
               {!loading && !fetchError && (
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                  {requests.length === 0 ? (
-                    <div className="py-20 text-center text-slate-400">
-                      <CalendarDays className="h-12 w-12 mx-auto mb-3 text-slate-200" />
-                      <p className="font-medium text-sm">Aucune demande trouvée</p>
-                      {statusFilter !== "ALL" && (
-                        <button onClick={() => setStatusFilter("ALL")}
-                          className="text-xs mt-2 text-camublue-900 underline underline-offset-2">
-                          Afficher toutes les demandes
+                <div className="space-y-3">
+                  {/* ── Barre de recherche + compteur ─────────────────────── */}
+                  <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+                    <p className="text-xs text-slate-400 font-medium">
+                      {filteredRequests.length} demande(s)
+                      {searchQ && ` · "${searchQ}"`}
+                      {filteredRequests.length > pageSize && ` · page ${page}/${totalReqPages}`}
+                    </p>
+                    <div className="relative w-full sm:w-72">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Rechercher employé, type, service…"
+                        value={searchQ}
+                        onChange={(e) => setSearchQ(e.target.value)}
+                        className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition bg-white"
+                      />
+                      {searchQ && (
+                        <button onClick={() => setSearchQ("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                          <X className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-100">
-                          <tr>
-                            {["Employé", "Type de congé", "Période", "Durée", "Statut", "Justificatif", "Actions"].map((h) => (
-                              <th key={h}
-                                className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                          {requests.map((r, i) => {
-                            const lc = r.leave_type?.color ?? "#6b7280";
-                            const isPending = r.status === "PENDING" || r.status === "PENDING_SECOND";
-                            const needsDoc  = r.leave_type?.requires_justification && !r.justification_document;
-                            return (
-                              <motion.tr key={r.id}
-                                initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.12, delay: i * 0.02 }}
-                                onClick={() => openDetail(r)}
-                                className={`hover:bg-slate-50/80 transition cursor-pointer ${i % 2 !== 0 ? "bg-slate-50/20" : ""}`}>
+                  </div>
 
-                                {/* Employé */}
-                                <td className="px-4 py-3.5">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black text-white shrink-0"
-                                      style={{ backgroundColor: lc }}>
-                                      {(r.employee?.full_name ?? "??").slice(0, 2).toUpperCase()}
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    {filteredRequests.length === 0 ? (
+                      <div className="py-20 text-center text-slate-400">
+                        <CalendarDays className="h-12 w-12 mx-auto mb-3 text-slate-200" />
+                        <p className="font-medium text-sm">Aucune demande trouvée</p>
+                        {(statusFilter !== "ALL" || searchQ) && (
+                          <button onClick={() => { setStatusFilter("ALL"); setSearchQ(""); }}
+                            className="text-xs mt-2 text-camublue-900 underline underline-offset-2">
+                            Réinitialiser les filtres
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 border-b border-slate-100">
+                            <tr>
+                              {["Employé", "Type de congé", "Période", "Durée", "Statut", "Justificatif", "Actions"].map((h) => (
+                                <th key={h}
+                                  className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                                  {h}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {pagedRequests.map((r, i) => {
+                              const lc = r.leave_type?.color ?? "#6b7280";
+                              const isPending = r.status === "PENDING" || r.status === "PENDING_SECOND";
+                              const needsDoc  = r.leave_type?.requires_justification && !r.justification_document;
+                              return (
+                                <motion.tr key={r.id}
+                                  initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                                  transition={{ duration: 0.12, delay: i * 0.02 }}
+                                  onClick={() => openDetail(r)}
+                                  className={`hover:bg-slate-50/80 transition cursor-pointer ${i % 2 !== 0 ? "bg-slate-50/20" : ""}`}>
+
+                                  {/* Employé */}
+                                  <td className="px-4 py-3.5">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black text-white shrink-0"
+                                        style={{ backgroundColor: lc }}>
+                                        {(r.employee?.full_name ?? "??").slice(0, 2).toUpperCase()}
+                                      </div>
+                                      <div>
+                                        <p className="font-semibold text-slate-800 truncate max-w-[140px]">
+                                          {r.employee?.full_name ?? "—"}
+                                        </p>
+                                        <p className="text-xs text-slate-400 truncate max-w-[140px]">
+                                          {r.employee?.matricule} · {r.employee?.service ?? "—"}
+                                        </p>
+                                      </div>
                                     </div>
-                                    <div>
-                                      <p className="font-semibold text-slate-800 truncate max-w-[140px]">
-                                        {r.employee?.full_name ?? "—"}
-                                      </p>
-                                      <p className="text-xs text-slate-400 truncate max-w-[140px]">
-                                        {r.employee?.matricule} · {r.employee?.service ?? "—"}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </td>
+                                  </td>
 
-                                {/* Type */}
-                                <td className="px-4 py-3.5">
-                                  <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap"
-                                    style={{ backgroundColor: lc + "20", color: lc }}>
-                                    {r.leave_type?.label ?? "—"}
-                                  </span>
-                                </td>
+                                  {/* Type */}
+                                  <td className="px-4 py-3.5">
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap"
+                                      style={{ backgroundColor: lc + "20", color: lc }}>
+                                      {r.leave_type?.label ?? "—"}
+                                    </span>
+                                  </td>
 
-                                {/* Période */}
-                                <td className="px-4 py-3.5 text-slate-600 text-xs whitespace-nowrap font-mono">
-                                  {fmtDate(r.start_date)} → {fmtDate(r.end_date)}
-                                </td>
+                                  {/* Période */}
+                                  <td className="px-4 py-3.5 text-slate-600 text-xs whitespace-nowrap font-mono">
+                                    {fmtDate(r.start_date)} → {fmtDate(r.end_date)}
+                                  </td>
 
-                                {/* Durée */}
-                                <td className="px-4 py-3.5 font-bold text-slate-800 whitespace-nowrap">
-                                  {r.days ?? r.duration_days ?? "—"}j
-                                </td>
+                                  {/* Durée */}
+                                  <td className="px-4 py-3.5 font-bold text-slate-800 whitespace-nowrap">
+                                    {r.days ?? r.duration_days ?? "—"}j
+                                  </td>
 
-                                {/* Statut */}
-                                <td className="px-4 py-3.5">
-                                  <StatusBadge status={r.status} />
-                                </td>
+                                  {/* Statut */}
+                                  <td className="px-4 py-3.5">
+                                    <StatusBadge status={r.status} />
+                                  </td>
 
-                                {/* Justificatif */}
-                                <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                                  {r.leave_type?.requires_justification ? (
-                                    r.justification_document ? (
-                                      <a href={r.justification_document} target="_blank" rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700">
-                                        <FileCheck className="h-3.5 w-3.5" /> Voir
-                                      </a>
+                                  {/* Justificatif */}
+                                  <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                                    {r.leave_type?.requires_justification ? (
+                                      r.justification_document ? (
+                                        <a href={r.justification_document} target="_blank" rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700">
+                                          <FileCheck className="h-3.5 w-3.5" /> Voir
+                                        </a>
+                                      ) : (
+                                        <span className={`inline-flex items-center gap-1 text-xs font-semibold ${needsDoc ? "text-amber-600" : "text-slate-400"}`}>
+                                          <Paperclip className="h-3.5 w-3.5" />
+                                          {needsDoc ? "Requis" : "—"}
+                                        </span>
+                                      )
                                     ) : (
-                                      <span className={`inline-flex items-center gap-1 text-xs font-semibold ${needsDoc ? "text-amber-600" : "text-slate-400"}`}>
-                                        <Paperclip className="h-3.5 w-3.5" />
-                                        {needsDoc ? "Requis" : "—"}
-                                      </span>
-                                    )
-                                  ) : (
-                                    <span className="text-xs text-slate-300">—</span>
-                                  )}
-                                </td>
+                                      <span className="text-xs text-slate-300">—</span>
+                                    )}
+                                  </td>
 
-                                {/* Actions */}
-                                <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex flex-col gap-1.5">
-                                    {isPending && (
-                                      <>
-                                        {/* Indicateur d'étapes */}
-                                        <ApprovalStepIndicator request={r} />
-                                        {/* Approuver + Modifier uniquement */}
-                                        <div className="flex gap-1.5 flex-wrap">
-                                          <QuickApproveBtn request={r} onDone={fetchAll} onOpenDetail={() => openDetail(r)} />
-                                          <button onClick={(e) => { e.stopPropagation(); setEditTarget(r); }}
-                                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
-                                            <Pencil className="h-3 w-3" /> Modifier
-                                          </button>
-                                        </div>
-                                      </>
-                                    )}
-                                    {r.status === "APPROVED" && (
-                                      <QuickRevokeBtn request={r} onDone={fetchAll} />
-                                    )}
-                                  </div>
-                                </td>
-                              </motion.tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                  {/* Actions */}
+                                  <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex flex-col gap-1.5">
+                                      {isPending && (
+                                        <>
+                                          <ApprovalStepIndicator request={r} />
+                                          <div className="flex gap-1.5 flex-wrap">
+                                            <QuickApproveBtn request={r} onDone={fetchAll} onOpenDetail={() => openDetail(r)} />
+                                            <button onClick={(e) => { e.stopPropagation(); setEditTarget(r); }}
+                                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+                                              <Pencil className="h-3 w-3" /> Modifier
+                                            </button>
+                                          </div>
+                                        </>
+                                      )}
+                                      {r.status === "APPROVED" && (
+                                        <QuickRevokeBtn request={r} onDone={fetchAll} />
+                                      )}
+                                      {r.status === "CANCELLED" && (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(r.id); }}
+                                          className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+                                          <Trash2 className="h-3 w-3" /> Supprimer
+                                        </button>
+                                      )}
+                                      {r.status === "REVOKED" && (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setRelaunchRequest(r); }}
+                                          className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+                                          <Send className="h-3 w-3" /> Relancer
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </motion.tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Pagination ─────────────────────────────────────────── */}
+                  {filteredRequests.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-1">
+                      <div className="flex items-center gap-3 text-xs text-slate-500">
+                        <span>
+                          {Math.min((page - 1) * pageSize + 1, filteredRequests.length)}–{Math.min(page * pageSize, filteredRequests.length)} sur {filteredRequests.length}
+                        </span>
+                        <span className="text-slate-300">|</span>
+                        <span>Lignes :</span>
+                        {PAGE_SIZES.map((s) => (
+                          <button key={s} onClick={() => { setPageSize(s); setPage(1); }}
+                            className={`px-2 py-0.5 rounded-lg font-semibold transition ${pageSize === s ? "bg-camublue-900 text-white" : "hover:bg-slate-100 text-slate-500"}`}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setPage(1)} disabled={page === 1}
+                          className="px-2 py-1 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition">«</button>
+                        <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition">‹</button>
+                        {Array.from({ length: totalReqPages }, (_, i) => i + 1)
+                          .filter((p) => p === 1 || p === totalReqPages || Math.abs(p - page) <= 2)
+                          .reduce<(number | "…")[]>((acc, p, i, arr) => {
+                            if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("…");
+                            acc.push(p);
+                            return acc;
+                          }, [])
+                          .map((p, i) =>
+                            p === "…" ? (
+                              <span key={`e${i}`} className="px-1 text-slate-400 text-xs">…</span>
+                            ) : (
+                              <button key={p} onClick={() => setPage(p as number)}
+                                className={`w-7 h-7 rounded-lg text-xs font-bold transition ${page === p ? "bg-camublue-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
+                                {p}
+                              </button>
+                            )
+                          )}
+                        <button onClick={() => setPage((p) => Math.min(totalReqPages, p + 1))} disabled={page === totalReqPages}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition">›</button>
+                        <button onClick={() => setPage(totalReqPages)} disabled={page === totalReqPages}
+                          className="px-2 py-1 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition">»</button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -699,6 +827,29 @@ export default function LeavePage() {
           <LeaveRequestForm contractType={contractType}
             onClose={() => setShowForm(false)}
             onSuccess={() => { setShowForm(false); fetchAll(); }} />
+        )}
+      </AnimatePresence>
+
+      {/* Modal Suppression (Annulé) */}
+      <AnimatePresence>
+        {confirmDeleteId !== null && (
+          <DeleteConfirmModal
+            requestId={confirmDeleteId}
+            onClose={() => setConfirmDeleteId(null)}
+            onConfirm={handleDelete}
+            loading={deleteLoading}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Modal Relancer (Révoqué) */}
+      <AnimatePresence>
+        {relaunchRequest && (
+          <RelaunchModal
+            request={relaunchRequest}
+            onClose={() => setRelaunchRequest(null)}
+            onDone={() => { setRelaunchRequest(null); fetchAll(); }}
+          />
         )}
       </AnimatePresence>
 
@@ -1405,6 +1556,185 @@ function QuickApproveBtn({
       }
       {blocked ? "En attente" : label}
     </button>
+  );
+}
+
+// ─── Modal Suppression (CANCELLED only) ──────────────────────────────────────
+function DeleteConfirmModal({ requestId, onClose, onConfirm, loading }: {
+  requestId: number; onClose: () => void; onConfirm: () => void; loading: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+      onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.15 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+        onClick={(e) => e.stopPropagation()}>
+
+        <div className="px-6 pt-6 pb-5 text-center">
+          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Trash2 className="h-5 w-5 text-red-600" />
+          </div>
+          <h3 className="font-black text-slate-800 text-base">Supprimer la demande ?</h3>
+          <p className="text-sm text-slate-500 mt-2">
+            Cette action est <strong>irréversible</strong>. La demande #{requestId} sera définitivement supprimée.
+          </p>
+        </div>
+
+        <div className="px-6 pb-6 flex gap-3">
+          <button onClick={onClose}
+            className="flex-1 border border-slate-200 text-slate-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition">
+            Annuler
+          </button>
+          <button onClick={onConfirm} disabled={loading}
+            className="flex-1 bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
+            {loading ? <ImSpinner2 className="animate-spin" size={13} /> : <Trash2 className="h-4 w-4" />}
+            Supprimer
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Modal Relancer (REVOKED only) ────────────────────────────────────────────
+function RelaunchModal({ request: r, onClose, onDone }: {
+  request: LeaveRequest; onClose: () => void; onDone: () => void;
+}) {
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [form, setForm] = useState({
+    leave_type_id: String(r.leave_type?.id ?? ""),
+    start_date:    r.start_date,
+    end_date:      r.end_date,
+    days:          r.days ?? r.duration_days ?? "",
+    motif:         r.motif ?? "",
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    leaveTypeService.getAll().then(setLeaveTypes).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (form.start_date && form.end_date) {
+      const s = new Date(form.start_date), e = new Date(form.end_date);
+      if (e >= s) {
+        const diff = Math.ceil((e.getTime() - s.getTime()) / 86400000) + 1;
+        setForm((f) => ({ ...f, days: String(diff) }));
+      }
+    }
+  }, [form.start_date, form.end_date]);
+
+  const handleSubmit = async () => {
+    if (!form.leave_type_id || !form.start_date || !form.end_date) {
+      toast.error("Tous les champs sont requis.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await leaveRequestService.create({
+        employee_id:   r.employee.id,
+        leave_type_id: parseInt(form.leave_type_id, 10),
+        start_date:    form.start_date,
+        end_date:      form.end_date,
+        days:          parseFloat(form.days),
+        motif:         form.motif.trim(),
+      });
+      toast.success("Nouvelle demande soumise ✓");
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors de la soumission");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-0 sm:p-4"
+      onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 20 }} transition={{ duration: 0.2 }}
+        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-[500px] max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}>
+
+        <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 px-6 pt-5 pb-4 flex items-center justify-between z-10">
+          <div className="flex items-center gap-2">
+            <Send className="h-4 w-4 text-blue-600" />
+            <p className="font-black text-slate-800">Relancer la demande</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 transition">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-700">
+            Basé sur la demande <strong>#{r.id}</strong> de <strong>{r.employee?.full_name}</strong>.
+            Modifiez les dates si nécessaire puis soumettez.
+          </div>
+
+          {/* Employé (read-only) */}
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Employé</label>
+            <div className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 text-slate-600">
+              {r.employee?.full_name} · {r.employee?.matricule}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Type de congé</label>
+            <select value={form.leave_type_id}
+              onChange={(e) => setForm((f) => ({ ...f, leave_type_id: e.target.value }))}
+              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition">
+              {leaveTypes.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Date début</label>
+              <input type="date" value={form.start_date}
+                onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Date fin</label>
+              <input type="date" value={form.end_date} min={form.start_date}
+                onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
+            </div>
+          </div>
+
+          {form.days && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-700 flex items-center gap-2">
+              <CalendarDays className="h-4 w-4" />
+              Durée calculée : {form.days} jour(s) calendaires
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Motif</label>
+            <textarea value={form.motif} onChange={(e) => setForm((f) => ({ ...f, motif: e.target.value }))}
+              rows={3} placeholder="Motif de la demande…"
+              className="w-full border border-slate-200 rounded-xl p-3 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 resize-none transition" />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose}
+              className="flex-1 border border-slate-200 text-slate-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition">
+              Annuler
+            </button>
+            <button onClick={handleSubmit} disabled={loading}
+              className="flex-[2] bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-bold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
+              {loading ? <ImSpinner2 className="animate-spin" size={14} /> : <Send className="h-4 w-4" />}
+              Soumettre la demande
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 
