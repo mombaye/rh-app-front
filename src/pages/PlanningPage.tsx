@@ -307,15 +307,20 @@ export default function PlanningPage() {
         ...(nameChanged && { new_employee_name: newName }),
         new_employee_matricule:  newMat || null,
       });
-      setEntries(prev => prev.map(e =>
-        e.date === editModal.date &&
-        e.shift_type === editModal.shift_type &&
-        e.employee_name === editModal.employee_name
-          ? { ...e,
-              employee_name:      result.employee_name,
-              employee_matricule: result.employee_matricule || null }
-          : e
-      ));
+      const oldName = editModal.employee_name;
+      const updatedMat = result.employee_matricule || null;
+      // Mettre à jour l'entrée modifiée + propager le matricule
+      // à TOUTES les occurrences du même nom dans le state local
+      setEntries(prev => prev.map(e => {
+        if (e.date === editModal.date && e.shift_type === editModal.shift_type && e.employee_name === oldName) {
+          return { ...e, employee_name: result.employee_name, employee_matricule: updatedMat };
+        }
+        // Propager le matricule sur toutes les autres entrées du même nom
+        if (updatedMat && e.employee_name === oldName) {
+          return { ...e, employee_matricule: updatedMat };
+        }
+        return e;
+      }));
       toast.success("Planning mis à jour");
       setEditModal(null);
       setEditName("");
@@ -468,7 +473,7 @@ export default function PlanningPage() {
                                     dragState?.shift_type === entry.shift_type &&
                                     dragState?.employee_name === entry.employee_name
                                   }
-                                  matricule={nameToMatricule.get(entry.employee_name.trim().toLowerCase()) ?? entry.employee_matricule ?? null}
+                                  matricule={entry.employee_matricule || nameToMatricule.get(entry.employee_name.trim().toLowerCase().replace(/\s+/g, " ")) || null}
                                   onDragStart={handleDragStart}
                                   onDragEnd={handleDragEnd}
                                   onDelete={handleDelete}
