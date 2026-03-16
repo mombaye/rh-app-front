@@ -20,6 +20,8 @@ import type {
 } from "@/types/attendance";
 import type { Employee, ContractType } from "@/types/employee";
 import type { BulletinMonthSummary } from "@/services/employeeService";
+import { leaveRequestService } from "@/services/leaveService";
+import type { LeaveSummary, LeaveRequest } from "@/types/leave";
 import {
   getEmployees, getEmployeesByContractType, fetchBulletinsSummary,
 } from "@/services/employeeService";
@@ -870,27 +872,177 @@ function TopPresentList({ records }: { records: DailyRecord[] }) {
   );
 }
 
-// ─── Section Congés (placeholder) ────────────────────────────────────────────
-function CongesSection({ monthLabel }: { monthLabel: string }) {
+// ─── Section Congés ───────────────────────────────────────────────────────────
+const LEAVE_PIE_COLORS: Record<string, string> = {
+  APPROVED:        "#22c55e",
+  PENDING:         "#f59e0b",
+  PENDING_SECOND:  "#f59e0b",
+  REJECTED:        "#ef4444",
+  CANCELLED:       "#94a3b8",
+  REVOKED:         "#8b5cf6",
+};
+const LEAVE_STATUS_LABELS: Record<string, string> = {
+  APPROVED:        "Approuvés",
+  PENDING:         "En attente",
+  PENDING_SECOND:  "Attente 2e valid.",
+  REJECTED:        "Refusés",
+  CANCELLED:       "Annulés",
+  REVOKED:         "Révoqués",
+};
+
+function CongesSection({
+  monthLabel, summary, requests, loading,
+}: {
+  monthLabel: string;
+  summary:   LeaveSummary | null;
+  requests:  LeaveRequest[];
+  loading:   boolean;
+}) {
+  // Build pie data from the period-filtered requests
+  const statusCounts: Record<string, number> = {};
+  requests.forEach((r) => {
+    const key = r.status === "PENDING_SECOND" ? "PENDING" : r.status;
+    statusCounts[key] = (statusCounts[key] ?? 0) + 1;
+  });
+  const pieData = Object.entries(statusCounts)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => ({
+      name:  LEAVE_STATUS_LABELS[k] ?? k,
+      value: v,
+      fill:  LEAVE_PIE_COLORS[k] ?? "#94a3b8",
+    }));
+
+  // Pending requests to show in list (top 5)
+  const pendingList = requests
+    .filter((r) => r.status === "PENDING" || r.status === "PENDING_SECOND")
+    .slice(0, 5);
+
+  // Leave types distribution
+  const typeMap: Record<string, number> = {};
+  requests.forEach((r) => {
+    const label = r.leave_type?.label ?? "Autre";
+    typeMap[label] = (typeMap[label] ?? 0) + 1;
+  });
+  const typeData = Object.entries(typeMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([name, value]) => ({ name, value }));
+
+  const totalPeriod   = requests.length;
+  const approvedPeriod = requests.filter((r) => r.status === "APPROVED").length;
+  const pendingPeriod  = requests.filter((r) => r.status === "PENDING" || r.status === "PENDING_SECOND").length;
+  const rejectedPeriod = requests.filter((r) => r.status === "REJECTED").length;
+  const approvedDays   = requests
+    .filter((r) => r.status === "APPROVED")
+    .reduce((s, r) => s + parseFloat(r.days || "0"), 0);
+
+  const fmtVal = (n: number) => loading ? "…" : String(n);
+
   return (
     <Section title="Congés" icon={Calendar} delay={0.05}
       action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
     >
+      {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-        <KPICard icon={Calendar}    label="Demandes"   value="—" sub="Ce mois"    color="blue"  delay={0.08} />
-        <KPICard icon={CheckCircle} label="Approuvés"  value="—" sub="Ce mois"    color="green" delay={0.12} />
-        <KPICard icon={Clock}       label="En attente" value="—" sub="À traiter"  color="amber" delay={0.16} />
-        <KPICard icon={UserX}       label="Refusés"    value="—" sub="Ce mois"    color="red"   delay={0.20} />
+        <KPICard icon={Calendar}    label="Demandes"       value={fmtVal(totalPeriod)}    sub="Sur la période"  color="blue"  delay={0.08} loading={loading} />
+        <KPICard icon={CheckCircle} label="Approuvés"      value={fmtVal(approvedPeriod)} sub={`${approvedDays.toFixed(1)} jours`} color="green" delay={0.12} loading={loading} />
+        <KPICard icon={Clock}       label="En attente"     value={fmtVal(pendingPeriod)}  sub="À traiter"       color="amber" delay={0.16} loading={loading} />
+        <KPICard icon={UserX}       label="Refusés"        value={fmtVal(rejectedPeriod)} sub="Sur la période"  color="red"   delay={0.20} loading={loading} />
       </div>
-      <div className="flex flex-col items-center justify-center bg-white rounded-2xl border border-dashed border-slate-200 shadow-sm py-20 gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center">
-          <Calendar className="h-7 w-7 text-camublue-900 opacity-30" />
-        </div>
-        <div className="text-center">
-          <p className="text-sm font-semibold text-slate-600">Module Congés</p>
-          <p className="text-xs text-slate-400 mt-1">La gestion des congés sera disponible prochainement.</p>
-        </div>
+
+      {/* Charts row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Pie — répartition statuts */}
+        <ChartCard title="Répartition par statut" sub="Sur la période" loading={loading} minH={220}>
+          {pieData.length === 0
+            ? <p className="text-xs text-slate-400 text-center pt-16">Aucune demande sur la période</p>
+            : (
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                    innerRadius={55} outerRadius={85} paddingAngle={3}
+                  >
+                    {pieData.map((d, i) => (
+                      <Cell key={i} fill={d.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number, n: string) => [v, n]} />
+                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 10 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            )
+          }
+        </ChartCard>
+
+        {/* Bar — types de congés */}
+        <ChartCard title="Types de congés" sub="Sur la période" loading={loading} minH={220}>
+          {typeData.length === 0
+            ? <p className="text-xs text-slate-400 text-center pt-16">Aucune donnée</p>
+            : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={typeData} layout="vertical" margin={{ left: 8, right: 16 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <YAxis dataKey="name" type="category" tick={{ fontSize: 9 }} width={90} />
+                  <Tooltip />
+                  <Bar dataKey="value" name="Demandes" fill="#2563eb" radius={[0, 4, 4, 0]} maxBarSize={18} />
+                </BarChart>
+              </ResponsiveContainer>
+            )
+          }
+        </ChartCard>
+
+        {/* List — demandes en attente */}
+        <ChartCard title="En attente de validation" sub={`${pendingPeriod} demande(s)`} loading={loading} minH={220}>
+          {pendingList.length === 0
+            ? (
+              <div className="flex flex-col items-center justify-center h-full py-10 gap-2">
+                <CheckCircle className="h-8 w-8 text-green-400" />
+                <p className="text-xs text-slate-400 text-center">Aucune demande en attente</p>
+              </div>
+            )
+            : (
+              <ul className="divide-y divide-slate-100">
+                {pendingList.map((r) => (
+                  <li key={r.id} className="py-2 flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                      <Clock className="h-3.5 w-3.5 text-amber-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-slate-700 truncate">{r.employee?.full_name ?? "—"}</p>
+                      <p className="text-[10px] text-slate-400 truncate">
+                        {r.leave_type?.label} · {r.start_date} → {r.end_date}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded shrink-0">
+                      {r.days}j
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )
+          }
+        </ChartCard>
       </div>
+
+      {/* Global summary strip (from /stats/summary/ — all-time) */}
+      {summary && (
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          {[
+            { label: "Total global",  value: summary.total,              color: "text-slate-700" },
+            { label: "Approuvés",     value: summary.approved,           color: "text-green-600" },
+            { label: "En attente",    value: summary.pending,            color: "text-amber-600" },
+            { label: "Refusés",       value: summary.rejected,           color: "text-red-600"   },
+            { label: "Annulés",       value: summary.cancelled,          color: "text-slate-400" },
+            { label: "Jours approv.", value: Math.round(summary.total_days_approved), color: "text-blue-600" },
+          ].map((s) => (
+            <div key={s.label} className="bg-white rounded-xl border border-slate-100 p-3 text-center shadow-sm">
+              <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </Section>
   );
 }
@@ -916,6 +1068,8 @@ export default function DashboardPage() {
   const [weekly,     setWeekly]     = useState<WeeklyStatsResponse | null>(null);
   const [monthly,    setMonthly]    = useState<MonthlyStatsResponse | null>(null);
   const [bulletins, setBulletins] = useState<BulletinMonthSummary[]>([]);
+  const [leaveSummary,  setLeaveSummary]  = useState<LeaveSummary | null>(null);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
 
   const [loadEmp,        setLoadEmp]        = useState(true);
   const [loadDaily,      setLoadDaily]      = useState(true);
@@ -923,6 +1077,7 @@ export default function DashboardPage() {
   const [loadWeekly,     setLoadWeekly]     = useState(true);
   const [loadMonthly,    setLoadMonthly]    = useState(true);
   const [loadBulletin,   setLoadBulletin]   = useState(true);
+  const [loadLeave,      setLoadLeave]      = useState(true);
 
   const fetchEmployees = useCallback(async (filter: EmpFilter) => {
     setLoadEmp(true);
@@ -941,7 +1096,7 @@ export default function DashboardPage() {
     const weekStr = isoWeekFromDate(new Date());   // semaine courante réelle
     const ymStr   = start.slice(0, 7);             // mois sélectionné pour les stats mensuelles
 
-    setLoadDaily(true); setLoadShiftDaily(true); setLoadWeekly(true); setLoadMonthly(true); setLoadBulletin(true);
+    setLoadDaily(true); setLoadShiftDaily(true); setLoadWeekly(true); setLoadMonthly(true); setLoadBulletin(true); setLoadLeave(true);
     await Promise.allSettled([
       getDailyStats(today)               .then(setDaily)      .finally(() => setLoadDaily(false)),
       getShiftDailyStats({ date: today }).then(setShiftDaily) .finally(() => setLoadShiftDaily(false)),
@@ -949,6 +1104,10 @@ export default function DashboardPage() {
       getMonthlyStats(ymStr)             .then(setMonthly)    .finally(() => setLoadMonthly(false)),
       fetchBulletinsSummary({ start, end })
         .then(setBulletins).finally(() => setLoadBulletin(false)),
+      leaveRequestService.getSummary()
+        .then(setLeaveSummary).catch(() => {}),
+      leaveRequestService.getAll({ start_date: start, end_date: end })
+        .then(setLeaveRequests).catch(() => {}).finally(() => setLoadLeave(false)),
     ]);
   }, []);
 
@@ -1457,7 +1616,12 @@ export default function DashboardPage() {
                   initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <CongesSection monthLabel={monthLabel} />
+                  <CongesSection
+                    monthLabel={monthLabel}
+                    summary={leaveSummary}
+                    requests={leaveRequests}
+                    loading={loadLeave}
+                  />
                 </motion.div>
               )}
 
