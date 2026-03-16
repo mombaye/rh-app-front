@@ -98,35 +98,29 @@ export default function EmployeesStatsHeader({
 
   // ── Détail des sortis par contrat (employés internes uniquement) ──────────
   let exitFooter: React.ReactNode = null;
-  if (showExitsByContract && exitedCount > 0) {
+  if (showExitsByContract) {
     const cdi   = data.filter((e) => e.status === "EXITED" && e.type_contrat === "CDI").length;
     const cdd   = data.filter((e) => e.status === "EXITED" && e.type_contrat === "CDD").length;
     const stage = data.filter((e) => e.status === "EXITED" && e.type_contrat === "STAGE").length;
-    const pct   = (n: number) => Math.round((n / exitedCount) * 100);
+    const pct   = (n: number) => exitedCount > 0 ? Math.round((n / exitedCount) * 100) : 0;
 
     exitFooter = (
       <div className="flex flex-wrap gap-1">
-        {cdi > 0 && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
-            CDI
-            <strong className="text-slate-900">{cdi}</strong>
-            <span className="text-slate-400">· {pct(cdi)}%</span>
-          </span>
-        )}
-        {cdd > 0 && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-orange-50 text-orange-700 border border-orange-200">
-            CDD
-            <strong className="text-orange-900">{cdd}</strong>
-            <span className="text-orange-400">· {pct(cdd)}%</span>
-          </span>
-        )}
-        {stage > 0 && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
-            Stage
-            <strong className="text-purple-900">{stage}</strong>
-            <span className="text-purple-400">· {pct(stage)}%</span>
-          </span>
-        )}
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+          CDI
+          <strong className="text-slate-900">{cdi}</strong>
+          <span className="text-slate-400">· {pct(cdi)}%</span>
+        </span>
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-orange-50 text-orange-700 border border-orange-200">
+          CDD
+          <strong className="text-orange-900">{cdd}</strong>
+          <span className="text-orange-400">· {pct(cdd)}%</span>
+        </span>
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+          Stage
+          <strong className="text-purple-900">{stage}</strong>
+          <span className="text-purple-400">· {pct(stage)}%</span>
+        </span>
       </div>
     );
   }
