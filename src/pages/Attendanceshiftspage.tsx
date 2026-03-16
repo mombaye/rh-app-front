@@ -1601,11 +1601,11 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
   return (
     <>
       <tr className={`hidden md:table-row border-b border-slate-100 transition-colors text-sm ${rowBg}`}>
-        <td className="px-4 py-3"><div className="flex justify-center font-mono text-slate-500 text-xs">{r.matricule || "—"}</div></td>
-        <td className="px-4 py-3">
+        <td className="px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center font-mono text-slate-500 text-xs">{r.matricule || "—"}</div></td>
+        <td className="px-2 py-2 lg:px-4 lg:py-3">
           <div className="flex flex-col items-center gap-0.5">
             <div className="flex items-center gap-1.5">
-              <span className="font-medium text-slate-800">{r.full_name}</span>
+              <span className="font-medium text-slate-800 text-xs lg:text-sm">{r.full_name}</span>
             </div>
             {r.replaced_by && (
               <span className="text-[10px] text-purple-600 font-semibold flex items-center gap-1">
@@ -1614,19 +1614,19 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
             )}
           </div>
         </td>
-        <td className="px-4 py-3 text-xs"><span className="font-semibold text-camublue-900 text-xs">{r.project !== "—" ? r.project : "—"}</span></td>
-        <td className="px-4 py-3 text-xs"><span className="font-semibold text-camublue-900 text-xs">{r.department !== "—" ? r.department : "—"}</span></td>
-        <td className="px-4 py-3">
+        <td className="px-2 py-2 lg:px-4 lg:py-3 text-xs"><span className="font-semibold text-camublue-900 text-xs">{r.project !== "—" ? r.project : "—"}</span></td>
+        <td className="hidden lg:table-cell px-2 py-2 lg:px-4 lg:py-3 text-xs"><span className="font-semibold text-camublue-900 text-xs">{r.department !== "—" ? r.department : "—"}</span></td>
+        <td className="px-2 py-2 lg:px-4 lg:py-3">
           <div className="flex flex-col items-center gap-0.5">
             <ShiftTeamPill teamKey={r.shift_team} />
             {r.is_scheduled && r.shift_team && (
-              <span className="text-[9px] text-slate-400 font-mono">
+              <span className="text-[9px] text-slate-400 font-mono hidden lg:block">
                 {r.shift_team === "jour" ? "08h→16h" : r.shift_team === "soir1" ? "16h→22h" : "22h→08h"}
               </span>
             )}
           </div>
         </td>
-        <td className="px-4 py-3">
+        <td className="px-2 py-2 lg:px-4 lg:py-3">
           <div className="flex justify-center">
             {r.not_scheduled_rest ? <RestDayBadge />
               : r.is_shift_pending ? <StatusPill status="pending" />
@@ -1634,8 +1634,8 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
                   : <StatusPill status={r.status} />}
           </div>
         </td>
-        <td className="px-4 py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
-        <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.is_shift_pending ? "text-blue-400" : r.status === "absent" ? "text-red-400" : r.computed_late_minutes > 0 ? "text-orange-500 font-semibold" : "text-slate-700"}`}>
+        <td className="px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
+        <td className={`px-2 py-2 lg:px-4 lg:py-3 tabular-nums font-mono text-xs lg:text-sm ${r.is_shift_pending ? "text-blue-400" : r.status === "absent" ? "text-red-400" : r.computed_late_minutes > 0 ? "text-orange-500 font-semibold" : "text-slate-700"}`}>
           <div className="flex justify-center">
             {r.in_time ? formatTime(r.in_time)
               : r.is_shift_pending ? <span className="text-[10px] text-blue-400 font-medium">En attente</span>
@@ -1643,17 +1643,20 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
                   : "—"}
           </div>
         </td>
-        <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.overtime_minutes > 0 ? "text-emerald-600 font-semibold" : "text-slate-700"}`}><div className="flex justify-center">{formatTime(r.out_time)}</div></td>
-        <td className="px-4 py-3"><div className="flex justify-center"><WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} /></div></td>
-        <td className="px-4 py-3"><div className="flex justify-center"><OvertimeBadge minutes={r.overtime_minutes} /></div></td>
-        <td className="px-4 py-3"><div className="flex justify-center"><CompensationCell c={r.compensation} /></div></td>
-        <td className="px-4 py-3">
-          <div className="flex gap-2 justify-center">
+        <td className={`px-2 py-2 lg:px-4 lg:py-3 tabular-nums font-mono text-xs lg:text-sm ${r.overtime_minutes > 0 ? "text-emerald-600 font-semibold" : "text-slate-700"}`}><div className="flex justify-center">{formatTime(r.out_time)}</div></td>
+        <td className="px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center"><WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} /></div></td>
+        <td className="hidden xl:table-cell px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center"><OvertimeBadge minutes={r.overtime_minutes} /></div></td>
+        <td className="hidden xl:table-cell px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center"><CompensationCell c={r.compensation} /></div></td>
+        <td className="px-2 py-2 lg:px-4 lg:py-3">
+          <div className="flex gap-1 lg:gap-2 justify-center">
             <button onClick={onAlert} disabled={r.status !== "absent" || !r.email || r.not_scheduled_rest}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email && !r.not_scheduled_rest ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
-              <Bell className="h-3 w-3" />Alerter
+              title="Alerter"
+              className={`inline-flex items-center gap-1 px-2 py-1.5 lg:px-3 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email && !r.not_scheduled_rest ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
+              <Bell className="h-3 w-3" /><span className="hidden xl:inline">Alerter</span>
             </button>
-            <button onClick={onDetail} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">Détail</button>
+            <button onClick={onDetail} title="Détail" className="inline-flex items-center gap-1 px-2 py-1.5 lg:px-3 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
+              <span className="hidden xl:inline">Détail</span><span className="xl:hidden">···</span>
+            </button>
           </div>
         </td>
       </tr>
@@ -2379,7 +2382,22 @@ export default function AttendanceShiftsPage() {
   };
 
   const activeTeamCfg = SHIFT_TEAMS.find((t) => t.key === selectedTeam);
-  const tableHeaders = ["Matricule", "Nom", "Projet/Département", "Service", "Équipe", "Statut", "Retard", "Entrée", "Sortie", "Heure travaillée", "HS (>départ)", "Compensation", "Actions"];
+  // label + classes responsive (hidden sur certains breakpoints)
+  const tableHeaders: { label: string; cls?: string }[] = [
+    { label: "Matricule" },
+    { label: "Nom" },
+    { label: "Projet/Dép." },
+    { label: "Service",        cls: "hidden lg:table-cell" },
+    { label: "Équipe" },
+    { label: "Statut" },
+    { label: "Retard" },
+    { label: "Entrée" },
+    { label: "Sortie" },
+    { label: "H. Travaillée" },
+    { label: "HS (>dép.)",     cls: "hidden xl:table-cell" },
+    { label: "Compensation",   cls: "hidden xl:table-cell" },
+    { label: "Actions" },
+  ];
 
   return (
     <AppLayout>
@@ -2517,7 +2535,7 @@ export default function AttendanceShiftsPage() {
                 <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
                   <table className="min-w-full bg-white">
                     <thead className={`sticky top-0 z-10 text-white hidden md:table-header-group ${activeTeamCfg?.headerBg ?? "bg-camublue-900"}`}>
-                      <tr>{tableHeaders.map((h) => <th key={h} className="px-4 py-3 text-center border-b border-white/20 text-sm font-semibold whitespace-nowrap">{h}</th>)}</tr>
+                      <tr>{tableHeaders.map((h) => <th key={h.label} className={`px-2 py-2 lg:px-4 lg:py-3 text-center border-b border-white/20 text-xs lg:text-sm font-semibold whitespace-nowrap ${h.cls ?? ""}`}>{h.label}</th>)}</tr>
                     </thead>
                     <thead className={`sticky top-0 z-10 text-white md:hidden ${activeTeamCfg?.headerBg ?? "bg-camublue-900"}`}>
                       <tr><th className="px-3 py-3 text-left text-sm font-semibold" colSpan={12}>{activeTeamCfg ? activeTeamCfg.short : "Toutes les équipes"} — {filtered.length} employé{filtered.length > 1 ? "s" : ""}</th></tr>
@@ -2526,7 +2544,7 @@ export default function AttendanceShiftsPage() {
                       {loading
                         ? [...Array(5)].map((_, i) => (
                           <tr key={i} className="border-b border-slate-100">
-                            {[...Array(tableHeaders.length)].map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>)}
+                            {tableHeaders.map((h, j) => <td key={j} className={`px-2 py-2 lg:px-4 lg:py-3 ${h.cls ?? ""}`}><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>)}
                           </tr>
                         ))
                         : pageData.length
@@ -2536,7 +2554,7 @@ export default function AttendanceShiftsPage() {
                               onDetail={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
                               onEdit={() => { setEditRecord(r); setEditModalOpen(true); }} />
                           ))
-                          : <tr><td colSpan={tableHeaders.length} className="text-center py-16 text-slate-400 text-sm">
+                          : <tr><td colSpan={13} className="text-center py-16 text-slate-400 text-sm">
                             {noPlanningToday && statusFilter === "all" && !selectedTeam ? (
                               <div className="flex flex-col items-center gap-3">
                                 <CalendarRange className="h-12 w-12 text-slate-200" />
