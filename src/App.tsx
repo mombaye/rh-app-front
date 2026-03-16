@@ -12,8 +12,20 @@ import InterneEmployeesPage from "./pages/InterneEmployeesPage";
 import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
 import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
 import PlanningPage from "@/pages/PlanningPage";
-import AdminPage from "@/pages/AdminPage";
 import { useAuth } from "@/contexts/useAuth";
+import { AdminAuthProvider } from "@/admin/contexts/AdminAuthContext";
+import AdminLoginPage from "@/admin/pages/AdminLoginPage";
+import AdminDashboardPage from "@/admin/pages/AdminDashboardPage";
+import AdminEmployeesPage from "@/admin/pages/AdminEmployeesPage";
+import AdminRHPage from "@/admin/pages/AdminRHPage";
+import AdminManagersPage from "@/admin/pages/AdminManagersPage";
+import { useAdminAuth } from "@/admin/contexts/AdminAuthContext";
+
+function AdminProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, loading } = useAdminAuth();
+  if (loading) return null;
+  return isAuthenticated ? <>{children}</> : <Navigate to="/admin/login" replace />;
+}
 
 /** Redirige les gestionnaires de planning vers /planning */
 function PlanningManagerRedirect({ children }: { children: React.ReactNode }) {
@@ -35,9 +47,18 @@ function NonPlanningRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <>
+    <AdminAuthProvider>
       <Toaster position="top-right" reverseOrder={false} />
       <Routes>
+        {/* ── Admin Platform ─────────────────────────────── */}
+        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route path="/admin/dashboard" element={<AdminProtectedRoute><AdminDashboardPage /></AdminProtectedRoute>} />
+        <Route path="/admin/employees" element={<AdminProtectedRoute><AdminEmployeesPage /></AdminProtectedRoute>} />
+        <Route path="/admin/rh" element={<AdminProtectedRoute><AdminRHPage /></AdminProtectedRoute>} />
+        <Route path="/admin/managers" element={<AdminProtectedRoute><AdminManagersPage /></AdminProtectedRoute>} />
+        <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
+
+        {/* ── Main App ───────────────────────────────────── */}
         <Route path="/login" element={<LoginPage />} />
 
         {/* Changement de mot de passe toujours accessible si first_login */}
@@ -159,23 +180,10 @@ function App() {
           }
         />
 
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute>
-              <FirstLoginGuard>
-                <NonPlanningRoute>
-                  <AdminPage />
-                </NonPlanningRoute>
-              </FirstLoginGuard>
-            </ProtectedRoute>
-          }
-        />
-
         {/* Redirection par défaut */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    </>
+    </AdminAuthProvider>
   );
 }
 
