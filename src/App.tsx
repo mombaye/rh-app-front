@@ -1,5 +1,8 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "@/pages/LoginPage";
+import AdminLoginPage from "@/pages/admin/AdminLoginPage";
+import AdminDashboardPage from "@/pages/admin/AdminDashboardPage";
+import AdminProtectedRoute from "@/components/admin/AdminProtectedRoute";
 import DashboardPage from "@/pages/DashboardPage";
 import PayslipPage from "@/pages/PayslipPage";
 import LeavePage from "@/pages/LeavePage";
@@ -37,6 +40,17 @@ function App() {
     <>
       <Toaster position="top-right" reverseOrder={false} />
       <Routes>
+        {/* ── Admin Portal ───────────────────────────────── */}
+        <Route path="/admin" element={<AdminLoginPage />} />
+        <Route
+          path="/admin/dashboard"
+          element={
+            <AdminProtectedRoute>
+              <AdminDashboardPage />
+            </AdminProtectedRoute>
+          }
+        />
+
         {/* ── Main App ───────────────────────────────────── */}
         <Route path="/login" element={<LoginPage />} />
 
