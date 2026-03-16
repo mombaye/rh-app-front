@@ -6,6 +6,7 @@ type User = {
   username: string;
   email: string;
   is_global_admin?: boolean;
+  is_staff?: boolean;
   is_planning_manager?: boolean;
   country?: any;
   first_login?: boolean;
@@ -15,7 +16,7 @@ type AuthContextType = {
   user: User | null;
   loading: boolean;
   error: string | null;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<User>;
   logout: () => void;
   isAuthenticated: boolean;
   setUser: (user: User | null) => void; // <--- Ajout
@@ -55,6 +56,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // fetch le profil ici si tu veux auto-remplir user après login
       const profile = await getProfile();
       setUser(profile);
+      return profile;
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Erreur de connexion.");
       setUser(null);
