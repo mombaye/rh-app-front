@@ -1,5 +1,7 @@
 import adminApi from "@/api/adminAxios";
-import api from "@/api/axios";
+import axios from "axios";
+
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
 
 export type AdminUser = {
   id: number;
@@ -41,8 +43,9 @@ export type UpdateUserPayload = Partial<Omit<CreateUserPayload, "password">> & {
   password?: string;
 };
 
+// Use plain axios (no interceptors) so a 401 propagates as-is to the caller
 export const adminLogin = async (username: string, password: string) => {
-  const res = await api.post("/api/auth/login/", { username, password });
+  const res = await axios.post(`${BASE_URL}/api/auth/login/`, { username, password });
   return res.data;
 };
 
