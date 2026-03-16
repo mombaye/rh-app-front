@@ -5,7 +5,7 @@ import { Briefcase } from "lucide-react";
 export default function AdminEmployeesPage() {
   return (
     <AdminLayout>
-      <div className="space-y-5 max-w-6xl">
+      <div className="space-y-5 w-full">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center">
             <Briefcase size={20} />

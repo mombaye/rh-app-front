@@ -60,15 +60,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 min-w-0">
-        <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
+      <div className="flex-1 min-w-0 flex flex-col">
+        <header className="bg-white border-b px-6 py-4 flex items-center justify-between">
           <div>
             <h2 className="text-sm text-gray-500">Plateforme d'administration</h2>
             <p className="text-xs text-gray-400">{navItems.find(n => n.path === location.pathname)?.label}</p>
           </div>
           <span className="text-xs text-gray-400">Connecté : <strong>{admin?.username}</strong></span>
         </header>
-        <main className="p-8">{children}</main>
+        <main className="flex-1 p-6 lg:p-8 w-full">{children}</main>
       </div>
 
       {/* Logout modal */}

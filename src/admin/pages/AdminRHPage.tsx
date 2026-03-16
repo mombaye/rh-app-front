@@ -5,7 +5,7 @@ import { UserCog } from "lucide-react";
 export default function AdminRHPage() {
   return (
     <AdminLayout>
-      <div className="space-y-5 max-w-6xl">
+      <div className="space-y-5 w-full">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
             <UserCog size={20} />

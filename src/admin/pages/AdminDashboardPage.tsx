@@ -69,14 +69,14 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-8 max-w-5xl">
+      <div className="space-y-8 w-full">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Tableau de bord</h1>
           <p className="text-sm text-gray-500 mt-1">Vue d'ensemble des comptes utilisateurs</p>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
           {loading
             ? Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="h-28 rounded-2xl bg-gray-100 animate-pulse" />
@@ -116,7 +116,7 @@ export default function AdminDashboardPage() {
         {/* Shortcuts */}
         <div>
           <h2 className="text-base font-semibold text-gray-700 mb-3">Accès rapide</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {shortcuts.map((s) => (
               <Link
                 key={s.path}
