@@ -898,9 +898,21 @@ function CongesSection({
   requests:  LeaveRequest[];
   loading:   boolean;
 }) {
+  const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null);
+
+  // Unique leave types present in the dataset
+  const leaveTypes = Array.from(
+    new Map(requests.map((r) => [r.leave_type?.id, r.leave_type]).filter(([id]) => id != null)).values()
+  ) as LeaveRequest["leave_type"][];
+
+  // Apply leave type filter
+  const filtered = selectedTypeId == null
+    ? requests
+    : requests.filter((r) => r.leave_type?.id === selectedTypeId);
+
   // Build pie data from the period-filtered requests
   const statusCounts: Record<string, number> = {};
-  requests.forEach((r) => {
+  filtered.forEach((r) => {
     const key = r.status === "PENDING_SECOND" ? "PENDING" : r.status;
     statusCounts[key] = (statusCounts[key] ?? 0) + 1;
   });
@@ -913,11 +925,11 @@ function CongesSection({
     }));
 
   // Pending requests to show in list (top 5)
-  const pendingList = requests
+  const pendingList = filtered
     .filter((r) => r.status === "PENDING" || r.status === "PENDING_SECOND")
     .slice(0, 5);
 
-  // Leave types distribution
+  // Leave types distribution (always from all requests, not filtered)
   const typeMap: Record<string, number> = {};
   requests.forEach((r) => {
     const label = r.leave_type?.label ?? "Autre";
@@ -928,11 +940,11 @@ function CongesSection({
     .slice(0, 6)
     .map(([name, value]) => ({ name, value }));
 
-  const totalPeriod   = requests.length;
-  const approvedPeriod = requests.filter((r) => r.status === "APPROVED").length;
-  const pendingPeriod  = requests.filter((r) => r.status === "PENDING" || r.status === "PENDING_SECOND").length;
-  const rejectedPeriod = requests.filter((r) => r.status === "REJECTED").length;
-  const approvedDays   = requests
+  const totalPeriod    = filtered.length;
+  const approvedPeriod = filtered.filter((r) => r.status === "APPROVED").length;
+  const pendingPeriod  = filtered.filter((r) => r.status === "PENDING" || r.status === "PENDING_SECOND").length;
+  const rejectedPeriod = filtered.filter((r) => r.status === "REJECTED").length;
+  const approvedDays   = filtered
     .filter((r) => r.status === "APPROVED")
     .reduce((s, r) => s + parseFloat(r.days || "0"), 0);
 
@@ -942,6 +954,34 @@ function CongesSection({
     <Section title="Congés" icon={Calendar} delay={0.05}
       action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
     >
+      {/* ── Filtre par type de congé ── */}
+      {!loading && leaveTypes.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setSelectedTypeId(null)}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${
+              selectedTypeId == null
+                ? "bg-camublue-900 text-white border-camublue-900 shadow-sm"
+                : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"
+            }`}
+          >
+            Tous les types
+          </button>
+          {leaveTypes.map((lt) => (
+            <button
+              key={lt.id}
+              onClick={() => setSelectedTypeId(lt.id === selectedTypeId ? null : lt.id)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${
+                selectedTypeId === lt.id
+                  ? "bg-camublue-900 text-white border-camublue-900 shadow-sm"
+                  : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"
+              }`}
+            >
+              {lt.label}
+            </button>
+          ))}
+        </div>
+      )}
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard icon={Calendar}    label="Demandes"       value={fmtVal(totalPeriod)}    sub="Sur la période"  color="blue"  delay={0.08} loading={loading} />
