@@ -11,6 +11,7 @@ import {
   X,
   Menu,
   CalendarRange,
+  ShieldCheck,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -164,9 +165,13 @@ export default function Sidebar() {
   };
 
   // Navigation filtrée selon le rôle de l'utilisateur
+  const adminNavItem = (user?.is_global_admin || user?.is_staff)
+    ? [{ label: "Administration", path: "/admin", icon: <ShieldCheck size={20} /> }]
+    : [];
+
   const visibleNavItems = user?.is_planning_manager
     ? [{ label: "Planning Shifts", path: "/planning", icon: <CalendarRange size={20} /> }]
-    : navItems;
+    : [...navItems, ...adminNavItem];
 
   const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
     <>

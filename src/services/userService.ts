@@ -19,7 +19,6 @@ export const register = async (username: string, email: string, password: string
   return res.data;
 };
 
-// ... Tu ajoutes d'autres services liés à l'utilisateur ici si besoin
 export const changePassword = async (
   old_password: string,
   new_password: string,
@@ -30,5 +29,23 @@ export const changePassword = async (
     new_password,
     confirm_password,
   });
+  return res.data;
+};
+
+export const getAdminStats = async () => {
+  const res = await api.get("/api/users/admin/stats/");
+  return res.data;
+};
+
+export const getAdminUsers = async (params?: { search?: string; country?: string }) => {
+  const res = await api.get("/api/users/admin/users/", { params });
+  return res.data;
+};
+
+export const updateAdminUser = async (
+  userId: number,
+  data: { is_global_admin?: boolean; is_planning_manager?: boolean; is_active?: boolean }
+) => {
+  const res = await api.patch(`/api/users/admin/users/${userId}/`, data);
   return res.data;
 };

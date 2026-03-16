@@ -12,7 +12,6 @@ import InterneEmployeesPage from "./pages/InterneEmployeesPage";
 import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
 import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
 import PlanningPage from "@/pages/PlanningPage";
-import AdminLoginPage from "@/pages/AdminLoginPage";
 import AdminPage from "@/pages/AdminPage";
 import { useAuth } from "@/contexts/useAuth";
 
@@ -160,13 +159,15 @@ function App() {
           }
         />
 
-        {/* ── Admin platform ── */}
-        <Route path="/admin" element={<AdminLoginPage />} />
         <Route
-          path="/admin/dashboard"
+          path="/admin"
           element={
             <ProtectedRoute>
-              <AdminPage />
+              <FirstLoginGuard>
+                <NonPlanningRoute>
+                  <AdminPage />
+                </NonPlanningRoute>
+              </FirstLoginGuard>
             </ProtectedRoute>
           }
         />
