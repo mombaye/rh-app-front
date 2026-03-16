@@ -299,4 +299,17 @@ export const leaveRequestService = {
     );
     return res.data;
   },
+
+  /**
+   * POST /api/leaves/requests/trigger-monthly-credit/
+   * Déclenche le crédit mensuel (+2j) pour tous les employés actifs.
+   */
+  triggerMonthlyCredit: async (): Promise<{ message: string; employees_credited: number }> => {
+    const res = await axios.post(
+      `${API}/requests/trigger-monthly-credit/`,
+      {},
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
 };

@@ -1,22 +1,22 @@
 // src/pages/LeavePage.tsx
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";
 import LeaveRequestForm from "@/components/leaves/LeaveRequestForm";
 import LeaveCalendar from "@/components/leaves/LeaveCalendar";
 import LeaveTypeManagement from "@/components/leaves/LeaveTypeManagement";
-import { leaveRequestService, leaveTypeService } from "@/services/leaveService";
+import { leaveRequestService, leaveTypeService, leaveBalanceService } from "@/services/leaveService";
 import { getEmployees } from "@/services/employeeService";
 import { Employee } from "@/types/employee";
 import {
   ContractType, LeaveRequest, LeaveStatus, LeaveSummary, LeaveType,
-  ApprovePayload, RevokePayload,
+  ApprovePayload, RevokePayload, LeaveBalance,
 } from "@/types/leave";
 import {
   CalendarDays, RefreshCw, Plus, X, CheckCircle2, XCircle,
   Ban, RotateCcw, ChevronDown, Table2, CalendarRange,
   Download, Loader2, AlertTriangle, Clock, Pencil, Paperclip,
-  FileCheck, Upload, ExternalLink, Users, Settings2,
+  FileCheck, Upload, ExternalLink, Users, Settings2, Wallet,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
@@ -34,12 +34,13 @@ const STATUS_CFG: Record<
   REVOKED:        { label: "Révoqué (urgence)",   color: "#b45309", bg: "#fff7ed", border: "#fed7aa", dot: "bg-orange-500"  },
 };
 
-type TabId        = "requests" | "calendar";
+type TabId        = "requests" | "calendar" | "balances";
 type StatusFilter = "ALL" | LeaveStatus;
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
   { id: "requests", label: "Demandes",   Icon: Table2       },
   { id: "calendar", label: "Calendrier", Icon: CalendarRange },
+  { id: "balances", label: "Soldes",     Icon: Wallet       },
 ];
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
@@ -436,6 +437,8 @@ export default function LeavePage() {
           )}
 
           {tab === "calendar" && <LeaveCalendar />}
+
+          {tab === "balances" && <BalancesTab contractType={contractType} />}
         </div>
       </div>
 
@@ -511,6 +514,236 @@ export default function LeavePage() {
         )}
       </AnimatePresence>
     </AppLayout>
+  );
+}
+
+// ─── Onglet Soldes de congés ──────────────────────────────────────────────────
+function BalancesTab({ contractType }: { contractType: ContractType }) {
+  const [balances,     setBalances]     = useState<LeaveBalance[]>([]);
+  const [employees,    setEmployees]    = useState<Employee[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [crediting,    setCrediting]    = useState(false);
+  const [adjustTarget, setAdjustTarget] = useState<LeaveBalance | null>(null);
+  const currentYear = new Date().getFullYear();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [bals, emps] = await Promise.all([
+        leaveBalanceService.getAll(currentYear),
+        getEmployees({ status: "ACTIVE" }),
+      ]);
+      setBalances(bals);
+      setEmployees(emps);
+    } catch { toast.error("Erreur lors du chargement des soldes"); }
+    finally { setLoading(false); }
+  }, [currentYear]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const empMap = useMemo(() => {
+    const m = new Map<number, Employee>();
+    for (const e of employees) m.set(e.id, e);
+    return m;
+  }, [employees]);
+
+  const filtered = useMemo(() => {
+    return balances.filter((b) => {
+      const emp = empMap.get(b.employee);
+      if (!emp) return false;
+      if (contractType === "INTERIM") return emp.attendance_status === "SHIFT";
+      return emp.attendance_status !== "SHIFT";
+    });
+  }, [balances, empMap, contractType]);
+
+  const handleCredit = async () => {
+    setCrediting(true);
+    try {
+      const res = await leaveRequestService.triggerMonthlyCredit();
+      const count = res.employees_credited ?? 0;
+      toast.success(`Crédit mensuel appliqué — ${count} employé(s) crédité(s) ✓`);
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors du crédit mensuel");
+    } finally { setCrediting(false); }
+  };
+
+  if (loading)
+    return (
+      <div className="p-10 flex justify-center">
+        <ImSpinner2 className="animate-spin text-camublue-900" size={24} />
+      </div>
+    );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="font-bold text-slate-800">Soldes de congés — {currentYear}</p>
+          <p className="text-xs text-slate-400">{filtered.length} enregistrement(s)</p>
+        </div>
+        <button onClick={handleCredit} disabled={crediting}
+          className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition disabled:opacity-50">
+          {crediting ? <ImSpinner2 className="animate-spin" size={13} /> : <RefreshCw className="h-4 w-4" />}
+          Créditer le mois (+2j)
+        </button>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Employé</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Type de congé</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Acquis</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Pris</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Ajust.</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Solde</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
+                    Aucun solde trouvé pour ce type d'employé
+                  </td>
+                </tr>
+              )}
+              {filtered.map((b) => {
+                const remaining = parseFloat(b.remaining);
+                const adjusted  = parseFloat(b.adjusted);
+                const isLow     = remaining <= 2;
+                const emp       = empMap.get(b.employee);
+                return (
+                  <tr key={b.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-slate-800">{b.employee_name}</p>
+                      {emp && (
+                        <p className="text-[10px] text-slate-400">
+                          {emp.matricule}{emp.fonction ? ` · ${emp.fonction}` : ""}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold"
+                        style={{ backgroundColor: (b.leave_type.color ?? "#6b7280") + "20", color: b.leave_type.color ?? "#6b7280" }}>
+                        {b.leave_type.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center font-semibold text-slate-700">{b.acquired}j</td>
+                    <td className="px-4 py-3 text-center font-semibold text-red-500">{b.taken}j</td>
+                    <td className="px-4 py-3 text-center font-semibold text-blue-500">
+                      {adjusted !== 0 ? `${adjusted > 0 ? "+" : ""}${b.adjusted}j` : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`font-black tabular-nums text-base ${isLow ? "text-red-500" : "text-emerald-600"}`}>
+                        {b.remaining}j
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button onClick={() => setAdjustTarget(b)}
+                        className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition">
+                        Ajuster
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {adjustTarget && (
+          <AdjustBalanceModal
+            balance={adjustTarget}
+            onClose={() => setAdjustTarget(null)}
+            onDone={() => { setAdjustTarget(null); load(); }}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Modal Ajustement de solde ────────────────────────────────────────────────
+function AdjustBalanceModal({ balance: b, onClose, onDone }: {
+  balance: LeaveBalance; onClose: () => void; onDone: () => void;
+}) {
+  const [value,   setValue]   = useState(b.adjusted);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      await leaveBalanceService.adjust(b.id, { adjusted: parseFloat(value) });
+      toast.success("Ajustement enregistré ✓");
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors de l'ajustement");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 20 }} transition={{ duration: 0.2 }}
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-[400px]"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <p className="font-black text-slate-800">Ajuster le solde</p>
+            <p className="text-xs text-slate-400">{b.employee_name} · {b.leave_type.label}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 transition">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Acquis</p>
+              <p className="font-bold text-slate-700">{b.acquired}j</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Pris</p>
+              <p className="font-bold text-red-500">{b.taken}j</p>
+            </div>
+            <div className="bg-emerald-50 rounded-xl p-3">
+              <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Solde</p>
+              <p className="font-black text-emerald-600">{b.remaining}j</p>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">
+              Ajustement (±jours)
+            </label>
+            <input type="number" step="0.5" value={value}
+              onChange={(e) => setValue(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
+            <p className="text-xs text-slate-400 mt-1.5">
+              Valeur positive pour ajouter, négative pour retirer. Cette valeur remplace l'ajustement actuel.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={onClose}
+              className="flex-1 border border-slate-200 text-slate-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition">
+              Annuler
+            </button>
+            <button onClick={handleSubmit} disabled={loading || value === ""}
+              className="flex-[2] bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-bold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
+              {loading ? <ImSpinner2 className="animate-spin" size={14} /> : <CheckCircle2 className="h-4 w-4" />}
+              Enregistrer l'ajustement
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 
@@ -742,10 +975,21 @@ function DetailModal({ request: r, onClose, onDone }: {
   const handleCancel = () =>
     run(() => leaveRequestService.cancel(r.id).then(() => {}), "Demande annulée");
 
-  const handleRevoke = () => {
+  const handleRevoke = async () => {
     if (!revokeReason.trim()) { toast.error("Le motif de révocation est obligatoire."); return; }
-    const payload: RevokePayload = { revoke_reason: revokeReason, recall_date: recallDate };
-    run(() => leaveRequestService.revoke(r.id, payload).then(() => {}), "Congé révoqué — jours restitués ✓");
+    setActionLoading(true);
+    try {
+      const payload: RevokePayload = { revoke_reason: revokeReason, recall_date: recallDate };
+      const res = await leaveRequestService.revoke(r.id, payload);
+      const daysRestored = res.days_restored ?? res.days_remaining_at_revocation;
+      const msg = daysRestored && parseFloat(String(daysRestored)) > 0
+        ? `Congé révoqué — ${daysRestored}j restitués dans le solde ✓`
+        : "Congé révoqué ✓";
+      toast.success(msg);
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors de la révocation");
+    } finally { setActionLoading(false); }
   };
 
   const handleUploadDoc = async () => {
