@@ -511,12 +511,16 @@ export default function LeavePage() {
 }
 
 // ─── Onglet Soldes de congés ──────────────────────────────────────────────────
+const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
+
 function BalancesTab({ contractType }: { contractType: ContractType }) {
   const [balances,     setBalances]     = useState<LeaveBalance[]>([]);
   const [employees,    setEmployees]    = useState<Employee[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [historyEmp,   setHistoryEmp]   = useState<{ id: number; name: string } | null>(null);
   const [searchQuery,  setSearchQuery]  = useState("");
+  const [page,         setPage]         = useState(1);
+  const [pageSize,     setPageSize]     = useState<typeof PAGE_SIZE_OPTIONS[number]>(20);
   const currentYear = new Date().getFullYear();
   const todayDay    = new Date().getDate();
   const isMonthStart = todayDay <= 5;
@@ -545,8 +549,9 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return balances.filter((b) => {
-      // Soldes : uniquement les congés payés (les autres types s'affichent dans l'Historique)
-      if (!b.leave_type.is_paid) return false;
+      // Soldes : uniquement les types avec accrual mensuel (Congé Payé).
+      // Les autres (Congé Mariage, Maladie…) s'affichent uniquement dans l'Historique.
+      if (parseFloat(b.leave_type.monthly_accrual) <= 0) return false;
       const emp = empMap.get(b.employee);
       if (!emp) return false;
       if (contractType === "INTERIM" ? emp.attendance_status !== "SHIFT" : emp.attendance_status === "SHIFT") return false;
@@ -556,6 +561,12 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
       return name.includes(q) || mat.includes(q);
     });
   }, [balances, empMap, contractType, searchQuery]);
+
+  // Reset to page 1 whenever the filtered list changes
+  useEffect(() => { setPage(1); }, [filtered.length, searchQuery, contractType]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated  = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   if (loading)
     return (
@@ -581,7 +592,10 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1">
           <p className="font-bold text-slate-800">Soldes de congés — {currentYear}</p>
-          <p className="text-xs text-slate-400">{filtered.length} enregistrement(s)</p>
+          <p className="text-xs text-slate-400">
+            {filtered.length} enregistrement(s)
+            {filtered.length > pageSize && ` · page ${page}/${totalPages}`}
+          </p>
         </div>
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
@@ -616,14 +630,14 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 && (
+              {paginated.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
                     {searchQuery ? "Aucun résultat pour cette recherche" : "Aucun solde trouvé pour ce type d'employé"}
                   </td>
                 </tr>
               )}
-              {filtered.map((b) => {
+              {paginated.map((b) => {
                 const remaining = parseFloat(b.remaining);
                 const adjusted  = parseFloat(b.adjusted);
                 const isLow     = remaining <= 2;
@@ -668,6 +682,75 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
           </table>
         </div>
       </div>
+
+      {/* ── Pagination ──────────────────────────────────────────────────── */}
+      {filtered.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-1">
+          {/* Info + taille de page */}
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            <span>
+              {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} sur {filtered.length}
+            </span>
+            <span className="text-slate-300">|</span>
+            <span>Lignes par page :</span>
+            {PAGE_SIZE_OPTIONS.map((s) => (
+              <button key={s} onClick={() => { setPageSize(s); setPage(1); }}
+                className={`px-2 py-0.5 rounded-lg font-semibold transition ${
+                  pageSize === s
+                    ? "bg-camublue-900 text-white"
+                    : "hover:bg-slate-100 text-slate-500"
+                }`}>
+                {s}
+              </button>
+            ))}
+          </div>
+
+          {/* Contrôles page */}
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(1)} disabled={page === 1}
+              className="px-2 py-1 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition">
+              «
+            </button>
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition">
+              ‹
+            </button>
+
+            {/* Pages proches */}
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+              .reduce<(number | "…")[]>((acc, p, i, arr) => {
+                if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("…");
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((p, i) =>
+                p === "…" ? (
+                  <span key={`e${i}`} className="px-1 text-slate-400 text-xs">…</span>
+                ) : (
+                  <button key={p} onClick={() => setPage(p as number)}
+                    className={`w-7 h-7 rounded-lg text-xs font-bold transition ${
+                      page === p
+                        ? "bg-camublue-900 text-white"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}>
+                    {p}
+                  </button>
+                )
+              )
+            }
+
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition">
+              ›
+            </button>
+            <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+              className="px-2 py-1 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition">
+              »
+            </button>
+          </div>
+        </div>
+      )}
 
       <AnimatePresence>
         {historyEmp && (
