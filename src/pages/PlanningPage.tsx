@@ -118,10 +118,10 @@ export default function PlanningPage() {
     try {
       const [data, emps] = await Promise.all([
         getShiftPlanning(weekDates[0], weekDates[6]),
-        employees.length > 0 ? Promise.resolve(employees) : getEmployees({ status: "ACTIVE" }),
+        getEmployees({ status: "ACTIVE" }),
       ]);
       setEntries(data);
-      if (employees.length === 0) setEmployees(emps);
+      setEmployees(emps);
     } catch {
       toast.error("Erreur lors du chargement du planning");
     } finally {
