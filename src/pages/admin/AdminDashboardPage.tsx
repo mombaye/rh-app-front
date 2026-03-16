@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAdminAuth } from "@/contexts/useAdminAuth";
+import AdminLayout from "@/layouts/AdminLayout";
 import {
   getAdminStats,
   getAdminAccounts,
@@ -19,7 +21,6 @@ import {
   Users,
   UserCheck,
   ShieldCheck,
-  LogOut,
   Search,
   Plus,
   Pencil,
@@ -29,12 +30,10 @@ import {
   ToggleRight,
   ChevronDown,
 } from "lucide-react";
-import logo from "@/assets/images/logo-camusat.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Tab = "employee" | "rh" | "manager";
-type ManagerFilter = "all" | "manager1" | "manager2";
 
 type UserForm = {
   username: string;
@@ -51,13 +50,6 @@ const EMPTY_FORM: UserForm = {
   role: "employee",
   is_active: true,
 };
-
-function roleLabel(user: AdminUser): string {
-  if (user.is_staff) return "RH";
-  if (user.manager_level === 1) return "Manager N1";
-  if (user.manager_level === 2) return "Manager N2";
-  return "Employé";
-}
 
 function formToPayload(form: UserForm) {
   const base: Record<string, unknown> = {
@@ -91,9 +83,7 @@ function StatCard({
         <div className={`p-3 rounded-xl ${color}`}>{icon}</div>
         <div>
           <p className="text-xs text-gray-500 font-medium">{label}</p>
-          <p className="text-2xl font-bold text-camublue-900">
-            {value ?? "—"}
-          </p>
+          <p className="text-2xl font-bold text-camublue-900">{value ?? "—"}</p>
         </div>
       </CardContent>
     </Card>
@@ -154,10 +144,9 @@ function UserModal({
       onSave();
       onClose();
     } catch (err: any) {
-      const msg =
-        err?.response?.data
-          ? Object.values(err.response.data).flat().join(" ")
-          : "Erreur lors de l'enregistrement.";
+      const msg = err?.response?.data
+        ? Object.values(err.response.data).flat().join(" ")
+        : "Erreur lors de l'enregistrement.";
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -194,7 +183,12 @@ function UserModal({
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">
-              Mot de passe {mode === "edit" && <span className="text-gray-400">(laisser vide pour ne pas changer)</span>}
+              Mot de passe{" "}
+              {mode === "edit" && (
+                <span className="text-gray-400 font-normal">
+                  (laisser vide pour ne pas changer)
+                </span>
+              )}
             </label>
             <Input
               type="password"
@@ -289,7 +283,9 @@ function ResetPasswordModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <h2 className="text-lg font-bold text-camublue-900 mb-1">Réinitialiser le mot de passe</h2>
+        <h2 className="text-lg font-bold text-camublue-900 mb-1">
+          Réinitialiser le mot de passe
+        </h2>
         <p className="text-sm text-gray-500 mb-5">
           Compte : <span className="font-medium text-gray-700">{user.username}</span>
         </p>
@@ -399,9 +395,7 @@ function UserTable({
 }) {
   if (users.length === 0) {
     return (
-      <div className="text-center py-16 text-gray-400 text-sm">
-        Aucun compte trouvé.
-      </div>
+      <div className="text-center py-16 text-gray-400 text-sm">Aucun compte trouvé.</div>
     );
   }
 
@@ -424,10 +418,7 @@ function UserTable({
         </thead>
         <tbody>
           {users.map((u) => (
-            <tr
-              key={u.id}
-              className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
-            >
+            <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
               <td className="px-4 py-3 font-medium text-gray-800">{u.username}</td>
               <td className="px-4 py-3 text-gray-600">{u.email || "—"}</td>
               {tab === "employee" && (
@@ -449,9 +440,7 @@ function UserTable({
               <td className="px-4 py-3">
                 <span
                   className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                    u.is_active
-                      ? "bg-green-100 text-green-700"
-                      : "bg-red-100 text-red-600"
+                    u.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
                   }`}
                 >
                   {u.is_active ? "Actif" : "Inactif"}
@@ -504,11 +493,19 @@ function UserTable({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
-  const { adminUser, logout } = useAdminAuth();
+  useAdminAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Derive tab and manager level from URL
+  const tabParam = searchParams.get("tab") as Tab | null;
+  const levelParam = searchParams.get("level");
+  const activeTab: Tab = tabParam && ["employee", "rh", "manager"].includes(tabParam)
+    ? tabParam
+    : "employee";
+  const managerLevel = levelParam === "1" ? "manager1" : levelParam === "2" ? "manager2" : "all";
+
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [activeTab, setActiveTab] = useState<Tab>("employee");
-  const [managerFilter, setManagerFilter] = useState<ManagerFilter>("all");
   const [search, setSearch] = useState("");
   const [loadingUsers, setLoadingUsers] = useState(false);
 
@@ -518,14 +515,12 @@ export default function AdminDashboardPage() {
   const [resetUser, setResetUser] = useState<AdminUser | null>(null);
   const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
 
-  // Fetch stats once
   useEffect(() => {
     getAdminStats()
       .then(setStats)
       .catch(() => toast.error("Erreur lors du chargement des statistiques."));
   }, []);
 
-  // Fetch users when tab/filter/search changes
   const fetchUsers = useCallback(async () => {
     setLoadingUsers(true);
     try {
@@ -533,9 +528,9 @@ export default function AdminDashboardPage() {
       if (activeTab === "employee") role = "employee";
       else if (activeTab === "rh") role = "rh";
       else if (activeTab === "manager") {
-        if (managerFilter === "manager1") role = "manager1";
-        else if (managerFilter === "manager2") role = "manager2";
-        else role = "manager";
+        role = managerLevel === "manager1" ? "manager1"
+             : managerLevel === "manager2" ? "manager2"
+             : "manager";
       }
       const data = await getAdminAccounts({ role, search: search || undefined });
       setUsers(data);
@@ -544,12 +539,17 @@ export default function AdminDashboardPage() {
     } finally {
       setLoadingUsers(false);
     }
-  }, [activeTab, managerFilter, search]);
+  }, [activeTab, managerLevel, search]);
 
   useEffect(() => {
     const timer = setTimeout(fetchUsers, search ? 400 : 0);
     return () => clearTimeout(timer);
   }, [fetchUsers, search]);
+
+  // Reset search when tab changes
+  useEffect(() => {
+    setSearch("");
+  }, [activeTab]);
 
   const handleToggle = async (u: AdminUser) => {
     try {
@@ -561,13 +561,18 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const setTab = (tab: Tab) => {
+    setSearchParams(tab === "employee" ? {} : { tab });
+  };
+
+  const setLevel = (level: string) => {
+    if (level === "all") setSearchParams({ tab: "manager" });
+    else setSearchParams({ tab: "manager", level });
+  };
+
   const tabBtn = (tab: Tab, label: string) => (
     <button
-      onClick={() => {
-        setActiveTab(tab);
-        setSearch("");
-        setManagerFilter("all");
-      }}
+      onClick={() => setTab(tab)}
       className={`px-5 py-2.5 text-sm font-semibold rounded-xl transition-all ${
         activeTab === tab
           ? "bg-camublue-900 text-white shadow-sm"
@@ -578,13 +583,13 @@ export default function AdminDashboardPage() {
     </button>
   );
 
-  const filterBtn = (f: ManagerFilter, label: string) => (
+  const filterBtn = (level: string, label: string) => (
     <button
-      onClick={() => setManagerFilter(f)}
-      className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-        managerFilter === f
-          ? "bg-camublue-900/10 text-camublue-900 border border-camublue-900/20"
-          : "text-gray-500 hover:bg-gray-100 border border-transparent"
+      onClick={() => setLevel(level)}
+      className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all border ${
+        managerLevel === level
+          ? "bg-camublue-900/10 text-camublue-900 border-camublue-900/20"
+          : "text-gray-500 hover:bg-gray-100 border-transparent"
       }`}
     >
       {label}
@@ -592,34 +597,18 @@ export default function AdminDashboardPage() {
   );
 
   return (
-    <div className="min-h-screen bg-camugray-100">
+    <AdminLayout>
       <Toaster position="top-right" />
 
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
-        <div className="flex items-center gap-3">
-          <img src={logo} alt="Camusat" className="h-10 object-contain" />
-          <div className="h-6 w-px bg-gray-200" />
-          <div className="flex items-center gap-2 text-camublue-900">
-            <ShieldCheck size={18} />
-            <span className="font-bold text-base">Administration</span>
-          </div>
+      <div className="space-y-6">
+        {/* Page title */}
+        <div>
+          <h1 className="text-2xl font-bold text-camublue-900">Gestion des comptes</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Administrez les accès à la plateforme RH.
+          </p>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-500">
-            Connecté : <span className="font-medium text-gray-700">{adminUser?.username}</span>
-          </span>
-          <button
-            onClick={logout}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition"
-          >
-            <LogOut size={16} />
-            Déconnexion
-          </button>
-        </div>
-      </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <StatCard
@@ -652,7 +641,7 @@ export default function AdminDashboardPage() {
         <Card className="shadow-sm border-0">
           <CardContent className="p-0">
             {/* Tabs */}
-            <div className="px-6 pt-5 pb-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-100">
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100">
               <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
                 {tabBtn("employee", "Employés")}
                 {tabBtn("rh", "Comptes RH")}
@@ -661,7 +650,7 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="px-6 py-4 space-y-4">
-              {/* Manager sub-filter */}
+              {/* Manager level filter */}
               {activeTab === "manager" && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500 font-medium mr-1">Niveau :</span>
@@ -694,12 +683,10 @@ export default function AdminDashboardPage() {
                 </Button>
               </div>
 
-              {/* Count */}
               <p className="text-xs text-gray-400">
                 {loadingUsers ? "Chargement..." : `${users.length} compte(s) trouvé(s)`}
               </p>
 
-              {/* Table */}
               {loadingUsers ? (
                 <div className="py-16 flex justify-center">
                   <div className="w-8 h-8 border-4 border-camublue-900 border-t-transparent rounded-full animate-spin" />
@@ -750,6 +737,6 @@ export default function AdminDashboardPage() {
           onConfirm={fetchUsers}
         />
       )}
-    </div>
+    </AdminLayout>
   );
 }
