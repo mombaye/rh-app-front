@@ -1886,6 +1886,23 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", delay = 0, lo
 }
 
 // ─── Modal filtre ─────────────────────────────────────────────────────────────
+function buildWeekendShortcuts(): { label: string; d: string }[] {
+  const now   = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const yest  = new Date(now); yest.setDate(now.getDate() - 1);
+  const dow   = now.getDay();
+  const sat   = new Date(now);
+  if (dow === 6) { /* today */ } else if (dow === 0) sat.setDate(now.getDate() - 1); else sat.setDate(now.getDate() - dow - 1);
+  const sun   = new Date(now);
+  if (dow === 0) { /* today */ } else sun.setDate(now.getDate() - dow);
+  return [
+    { label: "Aujourd'hui", d: today },
+    { label: "Hier",        d: yest.toISOString().slice(0, 10) },
+    { label: "Samedi",      d: sat.toISOString().slice(0, 10) },
+    { label: "Dimanche",    d: sun.toISOString().slice(0, 10) },
+  ];
+}
+
 function FilterModal({
   open, onClose, viewMode, setViewMode, date, setDate, week, setWeek,
   month, setMonth, statusFilter, setStatusFilter, onApply,
@@ -1895,6 +1912,8 @@ function FilterModal({
   month: string; setMonth: (v: string) => void; statusFilter: StatusFilter;
   setStatusFilter: (v: StatusFilter) => void; onApply: () => void;
 }) {
+  const weekendShortcuts = buildWeekendShortcuts();
+
   return (
     <AnimatePresence>
       {open && (
@@ -1936,6 +1955,27 @@ function FilterModal({
                 {viewMode === "weekly"  && <input value={week} onChange={(e) => setWeek(e.target.value)} placeholder="2026-W09" className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
                 {viewMode === "monthly" && <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
               </div>
+              {/* Weekend / accès rapide (vue journalière uniquement) */}
+              {viewMode === "daily" && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Accès rapide</p>
+                  <div className="flex flex-wrap gap-2">
+                    {weekendShortcuts.map((s) => (
+                      <button key={s.label} onClick={() => setDate(s.d)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                          date === s.d
+                            ? "bg-camublue-900 text-white border-transparent"
+                            : (s.label === "Samedi" || s.label === "Dimanche")
+                              ? "bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400"
+                              : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Statut / Type</p>
                 <div className="flex flex-wrap gap-2">

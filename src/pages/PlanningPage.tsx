@@ -37,10 +37,10 @@ const SHIFT_LABELS: Record<string, string> = {
   soir2: "Soir2 22H – 08H",
 };
 
-const SHIFT_COLORS: Record<string, { bg: string; text: string; border: string; header: string }> = {
-  jour:  { bg: "bg-sky-50",    text: "text-sky-800",    border: "border-sky-200",    header: "bg-sky-600"   },
-  soir1: { bg: "bg-amber-50",  text: "text-amber-800",  border: "border-amber-200",  header: "bg-amber-600" },
-  soir2: { bg: "bg-violet-50", text: "text-violet-800", border: "border-violet-200", header: "bg-violet-700"},
+const SHIFT_COLORS: Record<string, { bg: string; text: string; border: string; header: string; rowBg: string }> = {
+  jour:  { bg: "bg-yellow-100", text: "text-yellow-900", border: "border-yellow-300", header: "bg-yellow-400",  rowBg: "#FFFDE7" },
+  soir1: { bg: "bg-green-100",  text: "text-green-900",  border: "border-green-300",  header: "bg-green-500",   rowBg: "#E8F5E9" },
+  soir2: { bg: "bg-red-100",    text: "text-red-900",    border: "border-red-300",    header: "bg-red-500",     rowBg: "#FFEBEE" },
 };
 
 const SHIFT_ORDER = ["jour", "soir1", "soir2"];
@@ -489,29 +489,37 @@ export default function PlanningPage() {
           })()}
         </div>
 
-        {/* ── Grille planning ── */}
+        {/* ── Grille planning (vue calendrier) ── */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <RefreshCw size={28} className="animate-spin text-camublue-900 opacity-40" />
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
-            <table className="w-full border-collapse" style={{ minWidth: "900px" }}>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+            <table className="w-full border-collapse" style={{ minWidth: "860px" }}>
               <thead>
                 <tr>
-                  <th className="w-28 px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100 bg-slate-50">
-                    Shift
-                  </th>
+                  {/* narrow indicator column */}
+                  <th className="w-4 bg-gray-800 border-b border-gray-700" />
                   {weekDates.map(date => {
-                    const { day, num, month } = fmtDay(date);
-                    const isToday = date === toISO(new Date());
+                    const d    = new Date(date + "T00:00:00");
+                    const days = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+                    const dd   = String(d.getDate()).padStart(2, "0");
+                    const mm   = String(d.getMonth() + 1).padStart(2, "0");
+                    const yyyy = d.getFullYear();
+                    const isToday   = date === toISO(new Date());
+                    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                     return (
-                      <th key={date} className={`px-3 py-3 text-center border-b border-slate-100 ${isToday ? "bg-camublue-900/5" : "bg-slate-50"}`}>
-                        <div className="text-xs text-slate-400 font-medium">{day}</div>
-                        <div className={`text-base font-bold ${isToday ? "text-camublue-900" : "text-slate-700"}`}>
-                          {num}
+                      <th key={date}
+                        className={`px-2 py-2 text-center border-b border-l border-gray-700 ${
+                          isToday ? "bg-camublue-900" : isWeekend ? "bg-gray-600" : "bg-gray-800"
+                        }`}
+                        style={{ minWidth: "120px" }}
+                      >
+                        <div className="text-[10px] text-gray-300 font-normal">{days[d.getDay()]}</div>
+                        <div className="text-xs font-bold text-white leading-tight">
+                          {dd}/{mm}/{yyyy}
                         </div>
-                        <div className="text-xs text-slate-400">{month}</div>
                       </th>
                     );
                   })}
@@ -520,67 +528,102 @@ export default function PlanningPage() {
               <tbody>
                 {SHIFT_ORDER.map(shiftKey => {
                   const cfg = SHIFT_COLORS[shiftKey];
+
+                  /* Build per-slot rows for this shift */
+                  const slotMap = new Map<number, Map<string, PlanningEntry>>();
+                  for (const date of weekDates) {
+                    const dayEntries = (planMap[date]?.[shiftKey] ?? [])
+                      .sort((a, b) => (a.row_slot ?? 0) - (b.row_slot ?? 0));
+                    dayEntries.forEach((entry, idx) => {
+                      const slot = entry.row_slot ?? idx;
+                      if (!slotMap.has(slot)) slotMap.set(slot, new Map());
+                      slotMap.get(slot)!.set(date, entry);
+                    });
+                  }
+                  if (slotMap.size === 0) return null;
+                  const slots = [...slotMap.keys()].sort((a, b) => a - b);
+
                   return (
-                    <tr key={shiftKey} className="border-b border-slate-100 last:border-0">
-                      {/* Colonne shift */}
-                      <td className={`px-3 py-2 ${cfg.bg} ${cfg.border} border-r`}>
-                        <div className={`text-xs font-bold ${cfg.text}`}>
+                    <React.Fragment key={shiftKey}>
+                      {/* Shift group header row */}
+                      <tr>
+                        <td colSpan={8}
+                          className={`px-3 py-1 text-xs font-bold text-white border-t-2 border-b ${cfg.header} ${cfg.border}`}
+                        >
                           {SHIFT_LABELS[shiftKey] ?? shiftKey}
-                        </div>
-                      </td>
+                        </td>
+                      </tr>
 
-                      {/* Colonnes jours */}
-                      {weekDates.map(date => {
-                        const cellEntries = planMap[date]?.[shiftKey] ?? [];
-                        const isDropTarget = dropTarget?.date === date && dropTarget?.shift_type === shiftKey;
-                        const isDraggingOver = isDropTarget && !!dragState;
-
+                      {/* One row per employee slot */}
+                      {slots.map((slot) => {
+                        const dateMap = slotMap.get(slot)!;
                         return (
-                          <td
-                            key={date}
-                            className={`px-2 py-2 align-top border-r border-slate-50 transition-colors duration-150 min-w-[110px] ${
-                              isDraggingOver
-                                ? `${cfg.bg} ring-2 ring-inset ring-camublue-900/40`
-                                : "hover:bg-slate-50/60"
-                            }`}
-                            onDragOver={e => handleDragOver(e, date, shiftKey)}
-                            onDragLeave={handleDragLeave}
-                            onDrop={e => handleDrop(e, date, shiftKey)}
-                          >
-                            <div className="flex flex-col gap-1 min-h-[40px]">
-                              {cellEntries.map(entry => (
-                                <DraggableEmployee
-                                  key={`${entry.date}-${entry.shift_type}-${entry.employee_name}`}
-                                  entry={entry}
-                                  cfg={cfg}
-                                  isDragging={
-                                    dragState?.date === entry.date &&
-                                    dragState?.shift_type === entry.shift_type &&
-                                    dragState?.employee_name === entry.employee_name
-                                  }
-                                  matricule={resolveMatricule(entry.employee_name, entry.employee_matricule)}
-                                  onDragStart={handleDragStart}
-                                  onDragEnd={handleDragEnd}
-                                  onDelete={handleDelete}
-                                  onEdit={(e) => { setEditModal(e); setEditName(e.employee_name); setEditMatricule(e.employee_matricule ?? ""); }}
-                                />
-                              ))}
-
-                              {/* Bouton + pour ajouter */}
-                              <button
-                                onClick={() => { setAddModal({ date, shift_type: shiftKey }); setAddName(""); }}
-                                className="mt-1 flex items-center justify-center gap-1 py-1 px-2 rounded text-xs text-slate-300 hover:text-slate-500 hover:bg-slate-100 transition w-full opacity-0 group-hover:opacity-100"
-                                title="Ajouter un employé"
-                                style={{ opacity: cellEntries.length === 0 ? 1 : undefined }}
-                              >
-                                <Plus size={11} />
-                                <span className="text-[10px]">Ajouter</span>
-                              </button>
-                            </div>
-                          </td>
+                          <tr key={slot}>
+                            {/* narrow indicator */}
+                            <td className="w-4 border-t border-gray-200" style={{ backgroundColor: cfg.rowBg }} />
+                            {weekDates.map(date => {
+                              const entry = dateMap.get(date) ?? null;
+                              const isDropTarget    = dropTarget?.date === date && dropTarget?.shift_type === shiftKey;
+                              const isDraggingOver  = isDropTarget && !!dragState;
+                              return (
+                                <td
+                                  key={date}
+                                  className={`border-t border-l border-gray-200 px-0.5 py-px align-middle transition-colors ${
+                                    isDraggingOver ? "ring-2 ring-inset ring-camublue-900/50" : ""
+                                  }`}
+                                  style={{ backgroundColor: cfg.rowBg, minWidth: "120px" }}
+                                  onDragOver={e => handleDragOver(e, date, shiftKey)}
+                                  onDragLeave={handleDragLeave}
+                                  onDrop={e => handleDrop(e, date, shiftKey)}
+                                >
+                                  {entry ? (
+                                    <FlatEmployee
+                                      entry={entry}
+                                      cfg={cfg}
+                                      isDragging={
+                                        dragState?.date === entry.date &&
+                                        dragState?.shift_type === entry.shift_type &&
+                                        dragState?.employee_name === entry.employee_name
+                                      }
+                                      matricule={resolveMatricule(entry.employee_name, entry.employee_matricule)}
+                                      onDragStart={handleDragStart}
+                                      onDragEnd={handleDragEnd}
+                                      onDelete={handleDelete}
+                                      onEdit={(e) => { setEditModal(e); setEditName(e.employee_name); setEditMatricule(e.employee_matricule ?? ""); }}
+                                    />
+                                  ) : (
+                                    <button
+                                      onClick={() => { setAddModal({ date, shift_type: shiftKey }); setAddName(""); }}
+                                      className={`w-full h-5 flex items-center justify-center opacity-0 hover:opacity-60 transition ${cfg.text}`}
+                                    >
+                                      <Plus size={10} />
+                                    </button>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
                         );
                       })}
-                    </tr>
+
+                      {/* "Ajouter" row at bottom of each shift group */}
+                      <tr>
+                        <td className="w-4 border-t border-b-2 border-gray-200" style={{ backgroundColor: cfg.rowBg }} />
+                        {weekDates.map(date => (
+                          <td key={date}
+                            className="border-t border-l border-b-2 border-gray-200 px-0.5 py-px"
+                            style={{ backgroundColor: cfg.rowBg }}
+                          >
+                            <button
+                              onClick={() => { setAddModal({ date, shift_type: shiftKey }); setAddName(""); }}
+                              className={`w-full flex items-center justify-center gap-0.5 py-0.5 text-[10px] font-medium ${cfg.text} opacity-30 hover:opacity-80 transition`}
+                            >
+                              <Plus size={9} /> Ajouter
+                            </button>
+                          </td>
+                        ))}
+                      </tr>
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -590,21 +633,17 @@ export default function PlanningPage() {
 
         {/* ── Légende ── */}
         <div className="flex items-center gap-4 text-xs text-slate-400 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <GripVertical size={11} />
-            Glisser-déposer pour changer de shift ou de date
+          {Object.entries(SHIFT_COLORS).map(([key, cfg]) => (
+            <div key={key} className="flex items-center gap-1.5">
+              <span className={`w-3 h-3 rounded-sm border ${cfg.border}`} style={{ backgroundColor: cfg.rowBg }} />
+              {SHIFT_LABELS[key]}
+            </div>
+          ))}
+          <div className="flex items-center gap-1.5 ml-4">
+            <GripVertical size={11} /> Glisser-déposer pour déplacer
           </div>
           <div className="flex items-center gap-1.5">
-            <Pencil size={11} className="text-amber-500" />
-            Double-clic sur une carte pour modifier l'employé
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Trash2 size={11} />
-            Survoler une carte pour supprimer
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Plus size={11} />
-            Cliquer &laquo; Ajouter &raquo; en bas de cellule pour insérer
+            <Pencil size={11} className="text-slate-500" /> Double-clic pour modifier
           </div>
         </div>
       </div>
@@ -773,6 +812,51 @@ interface DraggableEmployeeProps {
   onEdit: (entry: PlanningEntry) => void;
 }
 
+// ── Flat employee cell (nouveau design calendrier) ────────────────────────────
+function FlatEmployee({
+  entry, cfg, isDragging, onDragStart, onDragEnd, onDelete, onEdit,
+}: DraggableEmployeeProps) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      draggable
+      onDragStart={e => onDragStart(e, entry)}
+      onDragEnd={onDragEnd}
+      onDoubleClick={e => { e.stopPropagation(); onEdit(entry); }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={`relative flex items-center justify-between px-1.5 py-px cursor-grab select-none w-full transition-opacity ${
+        isDragging ? "opacity-30" : "opacity-100"
+      }`}
+      title="Double-clic pour modifier · Glisser pour déplacer"
+    >
+      <span className={`text-xs font-semibold truncate leading-tight ${cfg.text}`}>
+        {entry.employee_name}
+      </span>
+      {hovered && (
+        <div className="flex items-center gap-0.5 ml-1 shrink-0">
+          <button
+            title="Modifier"
+            onClick={e => { e.stopPropagation(); onEdit(entry); }}
+            className={`p-0.5 rounded hover:bg-black/10 transition ${cfg.text}`}
+          >
+            <Pencil size={9} />
+          </button>
+          <button
+            title="Supprimer"
+            onClick={e => { e.stopPropagation(); onDelete(entry); }}
+            className="p-0.5 rounded hover:bg-red-200 transition text-red-600"
+          >
+            <Trash2 size={9} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── DraggableEmployee (conservé pour référence) ───────────────────────────────
 function DraggableEmployee({
   entry, cfg, isDragging, matricule, onDragStart, onDragEnd, onDelete, onEdit,
 }: DraggableEmployeeProps) {
