@@ -209,13 +209,13 @@ function DateRangePicker({
 }) {
   const maxDate = new Date().toISOString().split("T")[0];
   return (
-    <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm">
+    <div className="flex flex-wrap items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm">
       <input
         type="date"
         value={draft.start}
         max={draft.end}
         onChange={(e) => onDraftChange({ ...draft, start: e.target.value })}
-        className="text-sm font-medium text-slate-700 bg-transparent outline-none cursor-pointer w-32"
+        className="text-sm font-medium text-slate-700 bg-transparent outline-none cursor-pointer w-28 sm:w-32"
       />
       <span className="text-slate-400 text-xs font-medium">→</span>
       <input
@@ -224,7 +224,7 @@ function DateRangePicker({
         min={draft.start}
         max={maxDate}
         onChange={(e) => onDraftChange({ ...draft, end: e.target.value })}
-        className="text-sm font-medium text-slate-700 bg-transparent outline-none cursor-pointer w-32"
+        className="text-sm font-medium text-slate-700 bg-transparent outline-none cursor-pointer w-28 sm:w-32"
       />
       <button
         onClick={onApply}
@@ -410,7 +410,7 @@ function ExportModal({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 8, scale: 0.97 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
-        className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden"
+        className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden max-h-[calc(100vh-2rem)] flex flex-col"
       >
         {/* ── Header ── */}
         <div className="bg-gradient-to-r from-camublue-900 to-blue-700 px-5 py-4 flex items-start justify-between">
@@ -435,7 +435,7 @@ function ExportModal({
         </div>
 
         {/* ── Body ── */}
-        <div className="p-5">
+        <div className="p-5 overflow-y-auto flex-1">
           {/* Select all row */}
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold text-slate-600">
@@ -505,7 +505,7 @@ function ExportModal({
         </div>
 
         {/* ── Footer ── */}
-        <div className="px-5 pb-5 flex items-center gap-2.5">
+        <div className="px-5 pb-5 flex flex-wrap items-center gap-2.5">
           {/* Counter */}
           <div className="flex-1">
             <span className="text-[11px] text-slate-400">
@@ -702,7 +702,7 @@ function ProgressBar({ value, max, color = "#1e3a5f", label, valueLabel }: {
 // ─── Skeleton grid ────────────────────────────────────────────────────────────
 function SkeletonGrid({ count = 4 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="bg-white rounded-2xl border border-slate-100 p-4 h-24 animate-pulse">
           <div className="w-8 h-8 rounded-xl bg-slate-100 mb-3" />
@@ -876,7 +876,7 @@ function CongesSection({ monthLabel }: { monthLabel: string }) {
     <Section title="Congés" icon={Calendar} delay={0.05}
       action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
     >
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard icon={Calendar}    label="Demandes"   value="—" sub="Ce mois"    color="blue"  delay={0.08} />
         <KPICard icon={CheckCircle} label="Approuvés"  value="—" sub="Ce mois"    color="green" delay={0.12} />
         <KPICard icon={Clock}       label="En attente" value="—" sub="À traiter"  color="amber" delay={0.16} />
@@ -1143,7 +1143,7 @@ export default function DashboardPage() {
                     action={<EmpFilterToggle filter={empFilter} onChange={setEmpFilter} />}
                   >
                     {loadEmp ? <SkeletonGrid count={4} /> : (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                         <KPICard icon={Users}      label="Effectif total" value={fmt(total)}    sub="Tous statuts"                              color="blue"  delay={0.08} />
                         <KPICard icon={UserCheck}  label="Actifs"         value={fmt(actifs)}   delta={nouveaux} deltaLabel={`+${nouveaux} ce mois`} color="green" delay={0.12} />
                         <KPICard icon={UserX}      label="Sortis"         value={fmt(sortis)}   sub="Total cumulé"                             color="red"   delay={0.16} />
@@ -1420,7 +1420,7 @@ export default function DashboardPage() {
                   <Section title="Bulletins de salaire" icon={FileText} delay={0.05}
                     action={<span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-medium">{monthLabel}</span>}
                   >
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                       <KPICard icon={FileText}      label="Générés"      value={totalBulletins}                     color="blue"  delay={0.08} loading={loadBulletin} sub={monthLabel} />
                       <KPICard icon={CheckCircle}   label="Envoyés"      value={totalEnvoyes}                       color="green" delay={0.11} loading={loadBulletin} sub="Ce mois" />
                       <KPICard icon={AlertTriangle} label="Non envoyés"  value={Math.max(0, actifs - totalEnvoyes)} color="amber" delay={0.14} loading={loadBulletin || loadEmp} sub="Actifs sans bulletin" />

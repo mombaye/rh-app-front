@@ -400,7 +400,7 @@ export default function PayslipPage() {
 
           {/* ── Pagination ── */}
           {summary.length > 0 && (
-            <div className="flex items-center justify-between px-1 shrink-0">
+            <div className="flex flex-wrap items-center justify-between px-1 gap-2 shrink-0">
               <div className="flex items-center gap-3 text-sm text-slate-500">
                 <span>
                   {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, summary.length)} sur{" "}

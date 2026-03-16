@@ -241,7 +241,7 @@ function BulkMatriculeModal({
       <motion.div
         initial={{ opacity: 0, scale: 0.97, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 10 }} transition={{ duration: 0.2 }}
-        className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]"
+        className="w-full max-w-full sm:max-w-3xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
@@ -280,7 +280,8 @@ function BulkMatriculeModal({
           )}
         </div>
         <div className="flex-1 overflow-y-auto px-6 pb-2 min-h-0">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[500px]">
             <thead className="sticky top-0 bg-white z-10">
               <tr className="border-b border-gray-200">
                 <th className="text-left py-3 pr-4 font-semibold text-gray-600 w-1/4">Employé</th>
@@ -328,14 +329,15 @@ function BulkMatriculeModal({
               {filteredRows.length === 0 && <tr><td colSpan={4} className="text-center py-8 text-gray-400 text-sm">Aucun employé trouvé.</td></tr>}
             </tbody>
           </table>
+          </div>
         </div>
-        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between shrink-0 gap-3">
+        <div className="px-6 py-4 border-t border-gray-100 flex flex-wrap items-center justify-between shrink-0 gap-3">
           <p className="text-xs text-gray-400">
             {employees.length} employé(s) au total
             {changedCount > 0 && ` · ${changedCount} modification(s) en attente`}
             {conflictCount > 0 && <span className="text-red-500"> · {conflictCount} conflit(s) à résoudre</span>}
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button onClick={() => excelInputRef.current?.click()} disabled={isPreviewing || isSubmitting}
               className="px-4 py-2 rounded-lg border border-gray-300 hover:border-camublue-900 hover:bg-blue-50 text-gray-600 hover:text-camublue-900 text-sm font-medium flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
               title="Colonnes attendues : ANCIEN_MATRICULE / NOUVEAU_MATRICULE">

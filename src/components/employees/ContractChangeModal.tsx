@@ -158,7 +158,7 @@ export default function ContractChangeModal({ open, employee, onClose, onSuccess
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
               {/* Type + Date sur la même ligne */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-slate-500 mb-1 font-medium">Type de mutation *</label>
                   <select
@@ -184,7 +184,7 @@ export default function ContractChangeModal({ open, employee, onClose, onSuccess
 
               {/* Champs dynamiques */}
               {visibleFields.length > 0 && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {visibleFields.map(field => (
                     <div key={field}>
                       <label className="block text-xs text-slate-500 mb-1 font-medium">

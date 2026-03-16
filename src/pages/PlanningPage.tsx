@@ -131,6 +131,24 @@ export default function PlanningPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // ── Polling temps réel : rafraîchissement silencieux toutes les 30s ───────
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const [data, emps] = await Promise.all([
+          getShiftPlanning(weekDates[0], weekDates[6]),
+          getEmployees({ status: "ACTIVE" }),
+        ]);
+        setEntries(data);
+        setEmployees(emps);
+      } catch {
+        // Silencieux : ne pas afficher d'erreur lors du polling
+      }
+    };
+    const interval = setInterval(poll, 30_000);
+    return () => clearInterval(interval);
+  }, [weekDates]);
+
   // ── Map : date + shift → entrées ──────────────────────────────────────────
   const planMap = useMemo(() => {
     const m: Record<string, Record<string, PlanningEntry[]>> = {};
@@ -337,7 +355,7 @@ export default function PlanningPage() {
   // ── Rendu ─────────────────────────────────────────────────────────────────
   return (
     <AppLayout>
-      <div className="flex flex-col gap-4 min-h-0">
+      <div className="flex flex-col gap-4 min-h-0 px-4 pb-4 md:px-0 md:pb-0">
         {/* ── En-tête ── */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -368,7 +386,7 @@ export default function PlanningPage() {
         </div>
 
         {/* ── Navigation semaine ── */}
-        <div className="flex items-center gap-3 bg-white rounded-xl border border-slate-100 px-4 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-slate-100 px-4 py-3 shadow-sm">
           <button onClick={prevWeek} className="p-2 rounded-lg hover:bg-slate-100 transition">
             <ChevronLeft size={18} className="text-slate-600" />
           </button>
@@ -504,7 +522,7 @@ export default function PlanningPage() {
       {/* ── Modal: ajouter une entrée ── */}
       {addModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAddModal(null)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-slate-800 mb-1">Ajouter un employé</h3>
             <p className="text-xs text-slate-400 mb-4">
               {fmtDay(addModal.date).day} {fmtDay(addModal.date).num} — {SHIFT_LABELS[addModal.shift_type]}
@@ -542,7 +560,7 @@ export default function PlanningPage() {
       {/* ── Modal: modifier l'employé ── */}
       {editModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setEditModal(null); }}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
               <Pencil size={15} className="text-camublue-900" />
               Modifier l'employé
@@ -611,7 +629,7 @@ export default function PlanningPage() {
       {/* ── Modal: import Excel ── */}
       {importOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setImportOpen(false)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
               <Upload size={16} className="text-camublue-900" />
               Importer un planning Excel

@@ -730,12 +730,12 @@ function WorkScheduleModal({
         <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-          <motion.div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden z-10"
+          <motion.div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden z-10 max-h-[90vh] flex flex-col"
             initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 40, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
 
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-2">
                 {(view === "form" || view === "period") && (
                   <button onClick={() => setView("list")} className="p-1 rounded-lg hover:bg-slate-100 transition mr-1">
@@ -757,7 +757,7 @@ function WorkScheduleModal({
 
             {view === "list" && (
               <>
-                <div className="px-6 py-5 space-y-3 max-h-[65vh] overflow-y-auto">
+                <div className="px-6 py-5 space-y-3 max-h-[70vh] sm:max-h-[65vh] overflow-y-auto">
                   {isLocked && active && (
                     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                       <Lock className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
@@ -810,14 +810,14 @@ function WorkScheduleModal({
                     })}
                   </div>
                 </div>
-                <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
-                  <button onClick={() => openForm()} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">
-                    <Plus className="h-4 w-4" />Nouveau
+                <div className="px-6 py-4 border-t border-gray-100 flex flex-wrap gap-2 sm:gap-3 shrink-0">
+                  <button onClick={() => openForm()} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition shrink-0">
+                    <Plus className="h-4 w-4" /><span className="hidden xs:inline">Nouveau</span>
                   </button>
-                  <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Fermer</button>
+                  <button onClick={onClose} className="flex-1 min-w-[80px] rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Fermer</button>
                   <button onClick={() => setView("period")} disabled={presets.length === 0}
-                    className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-                    <CalendarDays className="h-4 w-4" />Assigner une période
+                    className="flex-1 min-w-[120px] rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-3 py-2 text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <CalendarDays className="h-4 w-4" /><span className="truncate">Assigner une période</span>
                   </button>
                 </div>
               </>
@@ -825,7 +825,7 @@ function WorkScheduleModal({
 
             {view === "period" && (
               <>
-                <div className="px-6 py-5 space-y-5 max-h-[65vh] overflow-y-auto">
+                <div className="px-6 py-5 space-y-5 max-h-[70vh] sm:max-h-[65vh] overflow-y-auto">
                   {isLocked && active && (
                     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                       <Lock className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
@@ -837,7 +837,7 @@ function WorkScheduleModal({
                   )}
                   <div>
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Contexte horaire</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {presets.map((preset) => {
                         const isSel = selectedPreset?.context === preset.context;
                         return (
@@ -858,7 +858,7 @@ function WorkScheduleModal({
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                       <CalendarDays className="inline h-3.5 w-3.5 mr-1 mb-0.5" />Période de validité
                     </p>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <label className="text-xs text-slate-500 font-medium">Date de début</label>
                         <input type="date" value={dateStart}
@@ -891,7 +891,7 @@ function WorkScheduleModal({
                     </div>
                   )}
                 </div>
-                <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                <div className="px-6 py-4 border-t border-gray-100 flex gap-3 shrink-0">
                   <button onClick={() => setView("list")} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
                   <button onClick={handleSavePeriod} disabled={!selectedPreset || dateStart > dateEnd}
                     className={`flex-1 rounded-2xl px-4 py-2 text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${saved ? "bg-emerald-500 text-white" : "bg-camublue-900 hover:bg-camublue-800 text-white"}`}>
@@ -903,7 +903,7 @@ function WorkScheduleModal({
 
             {view === "form" && (
               <>
-                <div className="px-6 py-5 space-y-4 max-h-[65vh] overflow-y-auto">
+                <div className="px-6 py-5 space-y-4 max-h-[70vh] sm:max-h-[65vh] overflow-y-auto">
                   <div className="space-y-1">
                     <label className="text-xs text-slate-500 font-medium uppercase tracking-wider">Nom du contexte</label>
                     <input value={fContext} onChange={(e) => setFContext(e.target.value)} placeholder="Ex: Été, Nuit, Hiver…"
@@ -911,7 +911,7 @@ function WorkScheduleModal({
                   </div>
                   <div>
                     <label className="text-xs text-slate-500 font-medium uppercase tracking-wider">Horaires</label>
-                    <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
                       {[
                         { label: "Heure d'entrée", H: fStartH, M: fStartM, setH: setFStartH, setM: setFStartM },
                         { label: "Heure de sortie", H: fEndH, M: fEndM, setH: setFEndH, setM: setFEndM },
@@ -962,7 +962,7 @@ function WorkScheduleModal({
                   </div>
                   {fError && <p className="text-xs text-red-500 font-medium">⚠️ {fError}</p>}
                 </div>
-                <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                <div className="px-6 py-4 border-t border-gray-100 flex gap-3 shrink-0">
                   <button onClick={() => { setView("list"); setFError(""); }} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
                   <button onClick={handleSavePreset} disabled={formEffMin <= 0 || !fContext.trim()}
                     className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -1266,13 +1266,13 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 px-5 pt-3 shrink-0">
+            <div className="flex gap-1 px-5 pt-3 shrink-0 overflow-x-auto">
               {([
                 { id: "view", icon: Table2, label: "Vue du planning" },
                 { id: "import", icon: Upload, label: "Importer Excel" },
               ] as const).map(({ id, icon: Icon, label }) => (
                 <button key={id} onClick={() => setTab(id)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${tab === id ? "bg-camublue-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"}`}>
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap shrink-0 ${tab === id ? "bg-camublue-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"}`}>
                   <Icon className="h-3.5 w-3.5" />{label}
                 </button>
               ))}
@@ -1452,7 +1452,7 @@ function AlertModal({ open, onClose, employee, onConfirm, sending }: {
                   ? <span className="text-sm font-mono text-slate-700 truncate">{employee.email}</span>
                   : <span className="text-sm text-red-500 font-medium flex items-center gap-1.5"><XCircle className="h-3.5 w-3.5" />Aucun email</span>}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 {[
                   { id: "absent", icon: <UserMinus className="h-4 w-4" />, label: "Absence", border: "border-red-400 bg-red-50 text-red-700" },
                   { id: "not_pointing", icon: <AlertTriangle className="h-4 w-4" />, label: "Non pointage", border: "border-amber-400 bg-amber-50 text-amber-700" },
@@ -1653,9 +1653,6 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email && !r.not_scheduled_rest ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
               <Bell className="h-3 w-3" />Alerter
             </button>
-            <button onClick={onEdit} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 ring-1 ring-amber-200 transition">
-              <Pencil className="h-3 w-3" />Modifier
-            </button>
             <button onClick={onDetail} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">Détail</button>
           </div>
         </td>
@@ -1675,6 +1672,25 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
               <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
             </div>
           </div>
+          {expanded && (
+            <div className="mt-2 pt-2 border-t border-slate-100 space-y-1.5">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+                <span><span className="text-slate-400">Shift :</span> <ShiftTeamPill teamKey={r.shift_team} /></span>
+                <span><span className="text-slate-400">Entrée :</span> {r.in_time ? formatTime(r.in_time) : "—"}</span>
+                <span><span className="text-slate-400">Sortie :</span> {formatTime(r.out_time)}</span>
+                {r.computed_late_minutes > 0 && <LateBadge minutes={r.computed_late_minutes} />}
+                {r.worked_minutes > 0 && <WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} />}
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button onClick={onAlert} disabled={r.status !== "absent" || !r.email || r.not_scheduled_rest}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email && !r.not_scheduled_rest ? "bg-red-50 hover:bg-red-100 text-red-700" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
+                  <Bell className="h-3 w-3" />Alerter
+                </button>
+                <button onClick={onDetail} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">Détail</button>
+                <button onClick={onEdit} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-50 text-slate-700 hover:bg-slate-100 ring-1 ring-slate-200 transition"><Pencil className="h-3 w-3" />Modifier</button>
+              </div>
+            </div>
+          )}
         </td>
       </tr>
     </>
@@ -1692,24 +1708,24 @@ function WeekDayBar({ byDay }: { byDay: WeeklyDayEntry[] }) {
   if (!byDay.length) return null;
   const sorted = [...byDay].sort((a, b) => a.date.localeCompare(b.date));
   return (
-    <div className="grid grid-cols-7 gap-1 shrink-0 mb-1">
+    <div className="grid grid-cols-7 gap-0.5 sm:gap-1 shrink-0 mb-1">
       {sorted.map(d => {
         const total = d.ok_count + d.absent_count + d.incomplete_count + d.anomaly_count;
         const dateObj = new Date(d.date + "T00:00:00");
         const dayLabel = DAY_SHORT[dateObj.getDay()];
         const dayNum = String(dateObj.getDate()).padStart(2, "0");
         return (
-          <div key={d.date} className="bg-white border border-slate-100 rounded-xl p-2 shadow-sm flex flex-col gap-1 min-w-0">
-            <div className="flex items-baseline gap-1">
-              <span className="text-[10px] font-semibold text-slate-500 uppercase">{dayLabel}</span>
-              <span className="text-xs font-bold text-camublue-900">{dayNum}</span>
+          <div key={d.date} className="bg-white border border-slate-100 rounded-xl p-1 sm:p-2 shadow-sm flex flex-col gap-0.5 sm:gap-1 min-w-0">
+            <div className="flex items-baseline gap-0.5 sm:gap-1">
+              <span className="text-[8px] sm:text-[10px] font-semibold text-slate-500 uppercase">{dayLabel}</span>
+              <span className="text-[10px] sm:text-xs font-bold text-camublue-900">{dayNum}</span>
             </div>
-            <div className="flex flex-col gap-0.5 text-[10px]">
-              <span className="text-emerald-600 font-semibold">{d.ok_count} prés.</span>
-              {d.absent_count > 0 && <span className="text-red-500 font-semibold">{d.absent_count} abs.</span>}
-              {d.late_count > 0 && <span className="text-orange-500">{d.late_count} retard</span>}
-              {d.anomaly_count > 0 && <span className="text-violet-500">{d.anomaly_count} anom.</span>}
-              {total > 0 && <span className="text-slate-300 text-[9px] mt-0.5">{total} total</span>}
+            <div className="flex flex-col gap-0.5 text-[8px] sm:text-[10px]">
+              <span className="text-emerald-600 font-semibold">{d.ok_count} <span className="hidden sm:inline">prés.</span></span>
+              {d.absent_count > 0 && <span className="text-red-500 font-semibold">{d.absent_count} <span className="hidden sm:inline">abs.</span></span>}
+              {d.late_count > 0 && <span className="text-orange-500">{d.late_count} <span className="hidden sm:inline">retard</span></span>}
+              {d.anomaly_count > 0 && <span className="text-violet-500">{d.anomaly_count} <span className="hidden sm:inline">anom.</span></span>}
+              {total > 0 && <span className="text-slate-300 text-[7px] sm:text-[9px] mt-0.5">{total}</span>}
             </div>
           </div>
         );
@@ -1732,7 +1748,7 @@ function SummaryTable({ rows, mode, isLoading, byDay, onDetail }: {
       {mode === "weekly" && byDay && byDay.length > 0 && (
         <WeekDayBar byDay={byDay} />
       )}
-      <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto rounded-xl border border-slate-200 shadow-sm">
         <table className="min-w-full bg-white">
           <thead className="sticky top-0 z-10 bg-camublue-900 text-white">
             <tr>{headers.map(h => <th key={h} className="px-3 py-3 text-center border-b border-white/20 text-xs font-semibold whitespace-nowrap">{h}</th>)}</tr>
@@ -1876,18 +1892,18 @@ function FilterModal({
         <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-          <motion.div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10"
+          <motion.div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10 max-h-[90vh] flex flex-col"
             initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 40, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gray-600" />
                 <span className="font-semibold text-gray-900">Filtres & Période</span>
               </div>
               <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-gray-100 transition"><X className="h-4 w-4 text-gray-500" /></button>
             </div>
-            <div className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
+            <div className="px-6 py-5 space-y-6 max-h-[80vh] sm:max-h-[70vh] overflow-y-auto">
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Affichage</p>
                 <div className="grid grid-cols-3 gap-2">
@@ -1925,7 +1941,7 @@ function FilterModal({
                 </div>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 shrink-0">
               <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
               <button onClick={() => { onApply(); onClose(); }} className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-medium transition">Appliquer</button>
             </div>
@@ -2390,7 +2406,7 @@ export default function AttendanceShiftsPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
             <div className="relative w-full sm:w-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <input value={searchQ} onChange={(e) => { setSearchQ(e.target.value); setPage(1); }} placeholder="Nom, matricule, équipe…"
@@ -2462,7 +2478,7 @@ export default function AttendanceShiftsPage() {
         </div>
 
         {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 shrink-0">
           <AbsentsCard total={kpis.total} absent={kpis.absent} loading={loading} delay={0.05} />
           <StatCard icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
             active={statusFilter === "late"} sub="Cliquer pour filtrer"

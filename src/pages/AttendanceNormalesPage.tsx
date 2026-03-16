@@ -263,7 +263,7 @@ function WeekProgressBar({ minutes, maxMinutes }: { minutes: number; maxMinutes:
   const bgColor = pct >= 100 ? "bg-emerald-100" : pct >= 75 ? "bg-blue-100" : pct >= 50 ? "bg-amber-100" : "bg-red-100";
   const textColor = pct >= 100 ? "text-emerald-700" : pct >= 75 ? "text-blue-700" : pct >= 50 ? "text-amber-700" : "text-red-600";
   return (
-    <div className="flex items-center gap-2.5 min-w-[180px]">
+    <div className="flex items-center gap-2.5 min-w-[120px] sm:min-w-[180px]">
       <div className={`relative flex-1 h-2 rounded-full overflow-hidden ${bgColor}`}>
         <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }}
           transition={{ duration: 0.5, ease: "easeOut" }}
@@ -316,7 +316,7 @@ function SummaryTable({
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0">
       {stats && (
-        <div className="grid grid-cols-3 gap-3 shrink-0">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
           {[
             { icon: <Clock className="h-4 w-4"/>, label: "Moy. heures/employé", value: formatMinutes(stats.avg), color: "text-blue-600 bg-blue-50" },
             { icon: <CheckCircle className="h-4 w-4"/>, label: "Quota atteint", value: `${stats.complet}/${stats.effectif}`, color: "text-emerald-600 bg-emerald-50" },
@@ -333,7 +333,7 @@ function SummaryTable({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0 bg-white">
+      <div className="flex-1 overflow-x-auto rounded-xl border border-slate-200 shadow-sm min-h-0 bg-white">
         <table className="min-w-full text-sm">
           <thead className="bg-camublue-900 text-white sticky top-0 z-10">
             <tr>
@@ -527,13 +527,13 @@ function WorkScheduleModal({
         <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-          <motion.div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden z-10"
+          <motion.div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden z-10 max-h-[90vh] flex flex-col"
             initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 40, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
 
             {/* ── Header ── */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-2">
                 {(view === "form" || view === "period") && (
                   <button onClick={() => setView("list")} className="p-1 rounded-lg hover:bg-slate-100 transition mr-1">
@@ -560,7 +560,7 @@ function WorkScheduleModal({
             {/* ── Vue : Liste des contextes ── */}
             {view === "list" && (
               <>
-                <div className="px-6 py-5 space-y-3 max-h-[65vh] overflow-y-auto">
+                <div className="px-4 sm:px-6 py-5 space-y-3 overflow-y-auto flex-1">
                   {isLocked && active && (
                     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                       <Lock className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
@@ -632,11 +632,11 @@ function WorkScheduleModal({
                 </div>
 
                 <button onClick={() => openForm()}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-camublue-900 hover:text-camublue-900 transition-all text-sm font-medium">
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-camublue-900 hover:text-camublue-900 transition-all text-sm font-medium mx-0">
                   <Plus className="h-4 w-4" />Ajouter un contexte
                 </button>
 
-                <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                <div className="px-4 sm:px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
                   <button onClick={onClose}
                     className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">
                     Fermer
@@ -652,7 +652,7 @@ function WorkScheduleModal({
             {/* ── Vue : Assigner une période ── */}
             {view === "period" && (
               <>
-                <div className="px-6 py-5 space-y-5 max-h-[65vh] overflow-y-auto">
+                <div className="px-4 sm:px-6 py-5 space-y-5 overflow-y-auto flex-1">
                   {isLocked && active && (
                     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                       <Lock className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
@@ -665,7 +665,7 @@ function WorkScheduleModal({
 
                   <div>
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Contexte horaire</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {presets.map((preset) => {
                         const isSel = selectedPreset?.context === preset.context;
                         return (
@@ -693,7 +693,7 @@ function WorkScheduleModal({
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                       <CalendarDays className="inline h-3.5 w-3.5 mr-1 mb-0.5" />Période de validité
                     </p>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div className="space-y-1">
                         <label className="text-xs text-slate-500 font-medium">Date de début</label>
                         <input type="date" value={dateStart}
@@ -728,7 +728,7 @@ function WorkScheduleModal({
                   )}
                 </div>
 
-                <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                <div className="px-4 sm:px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
                   <button onClick={() => setView("list")}
                     className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
                   <button onClick={handleSavePeriod} disabled={!selectedPreset || dateStart > dateEnd}
@@ -744,7 +744,7 @@ function WorkScheduleModal({
             {/* ── Vue : Formulaire preset ── */}
             {view === "form" && (
               <>
-                <div className="px-6 py-5 space-y-4 max-h-[65vh] overflow-y-auto">
+                <div className="px-4 sm:px-6 py-5 space-y-4 overflow-y-auto flex-1">
                   <div className="space-y-1">
                     <label className="text-xs text-slate-500 font-medium uppercase tracking-wider">Nom du contexte</label>
                     <input value={fContext} onChange={(e) => setFContext(e.target.value)} placeholder="Ex: Été, Nuit, Hiver…"
@@ -783,11 +783,11 @@ function WorkScheduleModal({
 
                   <div className="space-y-1">
                     <label className="text-xs text-slate-500 font-medium uppercase tracking-wider">Pause (minutes)</label>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                       <input type="number" min={0} max={120} value={fBreakMin}
                         onChange={(e) => setFBreakMin(Math.min(120, Math.max(0, +e.target.value)))}
-                        className="w-28 rounded-xl border border-gray-200 px-3 py-2 text-sm text-center font-mono focus:border-camublue-900 focus:ring-2 focus:outline-none" />
-                      <div className="flex gap-2">
+                        className="w-24 sm:w-28 rounded-xl border border-gray-200 px-3 py-2 text-sm text-center font-mono focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                      <div className="flex flex-wrap gap-1.5 sm:gap-2">
                         {[0, 30, 45, 60].map((v) => (
                           <button key={v} onClick={() => setFBreakMin(v)}
                             className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${fBreakMin === v ? "bg-camublue-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
@@ -817,7 +817,7 @@ function WorkScheduleModal({
                   {fError && <p className="text-xs text-red-500 font-medium">⚠️ {fError}</p>}
                 </div>
 
-                <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                <div className="px-4 sm:px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
                   <button onClick={() => { setView("list"); setFError(""); }}
                     className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
                   <button onClick={handleSavePreset} disabled={formEffMin <= 0 || !fContext.trim()}
@@ -852,18 +852,18 @@ function FilterModal({
         <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-          <motion.div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10"
+          <motion.div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10 max-h-[90vh] flex flex-col"
             initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 40, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gray-600" />
                 <span className="font-semibold text-gray-900">Filtres & Période</span>
               </div>
               <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-gray-100 transition"><X className="h-4 w-4 text-gray-500" /></button>
             </div>
-            <div className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
+            <div className="px-4 sm:px-6 py-5 space-y-6 overflow-y-auto flex-1">
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Affichage</p>
                 <div className="grid grid-cols-3 gap-2">
@@ -901,7 +901,7 @@ function FilterModal({
                 </div>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+            <div className="px-4 sm:px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
               <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
               <button onClick={() => { onApply(); onClose(); }} className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-medium transition">Appliquer</button>
             </div>
@@ -1098,18 +1098,18 @@ function AlertModal({ open, onClose, employee, onConfirm, sending }: {
         <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !sending && onClose()}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <motion.div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden z-10"
+          <motion.div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden z-10 max-h-[90vh] flex flex-col"
             initial={{ y: 40, scale: 0.97, opacity: 0 }} animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 40, scale: 0.97, opacity: 0 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100 shrink-0">
               <div>
                 <div className="font-bold text-slate-800">Envoyer une alerte</div>
                 <div className="text-xs text-slate-400 mt-0.5 truncate max-w-[230px]">{employee.full_name}</div>
               </div>
               <button onClick={onClose} disabled={sending} className="p-1.5 rounded-xl hover:bg-slate-100 transition disabled:opacity-40"><X className="h-4 w-4 text-slate-400" /></button>
             </div>
-            <div className="px-6 py-5 space-y-5">
+            <div className="px-4 sm:px-6 py-5 space-y-5 overflow-y-auto flex-1">
               <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${employee.email ? "bg-slate-50" : "bg-red-50 border border-red-100"}`}>
                 <Mail className={`h-4 w-4 shrink-0 ${employee.email ? "text-slate-400" : "text-red-400"}`} />
                 {employee.email ? <span className="text-sm font-mono text-slate-700 truncate">{employee.email}</span>
@@ -1129,7 +1129,7 @@ function AlertModal({ open, onClose, employee, onConfirm, sending }: {
                 </div>
               </div>
             </div>
-            <div className="px-6 pb-6 flex gap-3">
+            <div className="px-4 sm:px-6 pb-5 sm:pb-6 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
               <button onClick={onClose} disabled={sending} className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50">Annuler</button>
               <button onClick={() => onConfirm(motif)} disabled={sending || !employee.email}
                 className={`flex-1 py-2.5 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-60 ${
@@ -1217,6 +1217,28 @@ function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
               <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
             </div>
           </div>
+          {expanded && (
+            <div className="mt-2 pt-2 border-t border-slate-100 space-y-2">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+                <span><span className="font-semibold text-slate-400">Entrée:</span> {formatTime(r.in_time)}</span>
+                <span><span className="font-semibold text-slate-400">Sortie:</span> {formatTime(r.out_time)}</span>
+                <span><span className="font-semibold text-slate-400">Travaillé:</span> {r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—"}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <LateBadge minutes={r.computed_late_minutes} />
+                <OvertimeBadge minutes={r.overtime_minutes} />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={onAlert} disabled={r.status !== "absent" || !r.email}
+                  className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email ? "bg-red-50 hover:bg-red-100 text-red-700" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
+                  <Bell className="h-3 w-3" />Alerter
+                </button>
+                <button onClick={onDetail} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
+                  Détail
+                </button>
+              </div>
+            </div>
+          )}
         </td>
       </tr>
     </>
@@ -1723,10 +1745,10 @@ export default function AttendanceNormalesPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1">
                     <button onClick={() => setPage(1)} disabled={page===1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleLeft size={12} /></button>
                     <button onClick={() => setPage((p) => Math.max(p-1,1))} disabled={page===1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-4 w-4" /></button>
-                    <div className="flex items-center gap-0.5 mx-1">
+                    <div className="flex flex-wrap items-center gap-0.5 mx-1">
                       {getPageNumbers().map((p, i) =>
                         p === "..." ? <span key={`e-${i}`} className="px-1 text-slate-400 text-sm">…</span>
                           : <button key={p} onClick={() => setPage(p as number)}

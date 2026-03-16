@@ -61,7 +61,7 @@ export default function EmployeesStatsHeader({
   if (loading)
     return (
       <div className="space-y-4 mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="h-24 animate-pulse bg-gray-100 rounded-2xl" />
           ))}
@@ -128,7 +128,7 @@ export default function EmployeesStatsHeader({
       transition={{ duration: 0.6 }}
       className="space-y-4 mb-6"
     >
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         <StatCard
           icon={<FaUsers size={28} className="text-camublue-900" />}
           value={total}
