@@ -94,3 +94,17 @@ export const toggleAdminActive = async (id: number) => {
   const res = await adminApi.post(`/api/auth/admin/accounts/${id}/toggle_active/`);
   return res.data;
 };
+
+export type AccountHistoryEntry = {
+  id: number;
+  action: string;
+  action_label: string;
+  details: Record<string, any>;
+  timestamp: string;
+  changed_by_username: string;
+};
+
+export const getAccountHistory = async (id: number): Promise<AccountHistoryEntry[]> => {
+  const res = await adminApi.get(`/api/auth/admin/accounts/${id}/history/`);
+  return res.data;
+};

@@ -10,8 +10,10 @@ import {
   deleteAdminAccount,
   resetAdminPassword,
   toggleAdminActive,
+  getAccountHistory,
   type AdminUser,
   type AdminStats,
+  type AccountHistoryEntry,
 } from "@/services/adminService";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,7 @@ import {
   X,
   Download,
   Activity,
+  History,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -451,6 +454,125 @@ function ConfirmDeleteModal({ user, onClose, onConfirm }: { user: AdminUser; onC
   );
 }
 
+// ─── History Modal ────────────────────────────────────────────────────────────
+
+const ACTION_COLORS: Record<string, string> = {
+  created:        "bg-green-100 text-green-700",
+  updated:        "bg-blue-100 text-blue-700",
+  password_reset: "bg-amber-100 text-amber-700",
+  activated:      "bg-emerald-100 text-emerald-700",
+  deactivated:    "bg-red-100 text-red-600",
+  deleted:        "bg-gray-100 text-gray-600",
+};
+
+function HistoryModal({
+  user,
+  onClose,
+}: {
+  user: AdminUser;
+  onClose: () => void;
+}) {
+  const [entries, setEntries] = useState<AccountHistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getAccountHistory(user.id)
+      .then(setEntries)
+      .catch(() => toast.error("Impossible de charger l'historique."))
+      .finally(() => setLoading(false));
+  }, [user.id]);
+
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString("fr-FR", {
+      day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 12 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        className="w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col max-h-[80vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+          <div>
+            <div className="flex items-center gap-2 text-camublue-900">
+              <History size={17} />
+              <h2 className="text-base font-bold">Historique du compte</h2>
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5">{user.username}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 transition">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 px-6 py-4">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <div className="w-7 h-7 border-4 border-camublue-900 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : entries.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 text-sm">
+              Aucun historique disponible.
+            </div>
+          ) : (
+            <ol className="relative border-l border-gray-200 ml-2 space-y-0">
+              {entries.map((entry) => (
+                <li key={entry.id} className="mb-6 ml-5">
+                  {/* Timeline dot */}
+                  <span className="absolute -left-2 flex items-center justify-center w-4 h-4 bg-white border-2 border-camublue-900/30 rounded-full mt-1" />
+
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${ACTION_COLORS[entry.action] ?? "bg-gray-100 text-gray-600"}`}>
+                      {entry.action_label}
+                    </span>
+                    <span className="text-xs text-gray-400">{fmtDate(entry.timestamp)}</span>
+                  </div>
+
+                  <p className="text-xs text-gray-500">
+                    Par <span className="font-medium text-gray-700">{entry.changed_by_username}</span>
+                  </p>
+
+                  {/* Details */}
+                  {entry.details && Object.keys(entry.details).length > 0 && (
+                    <div className="mt-2 bg-gray-50 rounded-lg px-3 py-2 text-xs space-y-1">
+                      {entry.details.modifications ? (
+                        Object.entries(entry.details.modifications).map(([field, diff]: [string, any]) => (
+                          <div key={field} className="flex items-start gap-1 text-gray-600">
+                            <span className="font-medium shrink-0">{field} :</span>
+                            <span className="line-through text-red-400">{diff.avant}</span>
+                            <span className="text-gray-400">→</span>
+                            <span className="text-green-600">{diff.après}</span>
+                          </div>
+                        ))
+                      ) : (
+                        Object.entries(entry.details).map(([k, v]) => (
+                          <div key={k} className="text-gray-600">
+                            <span className="font-medium">{k} :</span> {String(v)}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Gérer Modal ──────────────────────────────────────────────────────────────
 
 function GererModal({
@@ -460,6 +582,7 @@ function GererModal({
   onResetPwd,
   onDelete,
   onToggle,
+  onHistory,
 }: {
   user: AdminUser;
   onClose: () => void;
@@ -467,8 +590,16 @@ function GererModal({
   onResetPwd: (u: AdminUser) => void;
   onDelete: (u: AdminUser) => void;
   onToggle: (u: AdminUser) => void;
+  onHistory: (u: AdminUser) => void;
 }) {
   const actions = [
+    {
+      id: "history",
+      icon: <History size={15} />,
+      label: "Voir l'historique",
+      color: "text-indigo-600",
+      onClick: () => { onHistory(user); onClose(); },
+    },
     {
       id: "edit",
       icon: <Pencil size={15} />,
@@ -817,6 +948,7 @@ export default function AdminDashboardPage() {
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [resetUser, setResetUser] = useState<AdminUser | null>(null);
   const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
+  const [historyUser, setHistoryUser] = useState<AdminUser | null>(null);
 
   useEffect(() => {
     getAdminStats()
@@ -923,6 +1055,16 @@ export default function AdminDashboardPage() {
             onResetPwd={(u) => setResetUser(u)}
             onDelete={(u) => setDeleteUser(u)}
             onToggle={handleToggle}
+            onHistory={(u) => setHistoryUser(u)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {historyUser && (
+          <HistoryModal
+            user={historyUser}
+            onClose={() => setHistoryUser(null)}
           />
         )}
       </AnimatePresence>
