@@ -63,14 +63,19 @@ export default function AdminSidebar() {
     setOpenMenus((prev) => ({ ...prev, [path]: !prev[path] }));
 
   const fullPath = location.pathname + location.search;
+  // "Vue d'ensemble" has no ?tab param
+  const overviewActive = location.pathname === "/admin/dashboard" && !location.search;
 
-  const isActive = (path: string) => fullPath === path;
+  const isActive = (path: string) => {
+    if (path === "/admin/dashboard" && !path.includes("?")) return overviewActive;
+    return fullPath === path;
+  };
 
   const isParentActive = (item: (typeof navItems)[0]) => {
     if (item.subItems) {
       return item.subItems.some((s) => fullPath === s.path);
     }
-    return fullPath === item.path;
+    return isActive(item.path);
   };
 
   const NavContent = ({ onClose }: { onClose?: () => void }) => (
