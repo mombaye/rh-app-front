@@ -25,7 +25,7 @@ export default function AdminManagersPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-5 max-w-6xl">
+      <div className="space-y-5 w-full">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
