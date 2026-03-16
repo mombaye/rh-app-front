@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import logo from "@/assets/images/logo-camusat.png";
 import welcome from "@/assets/illustrations/hr-welcome.svg";
 import axios from "@/api/axios";
 import { motion } from "framer-motion";
