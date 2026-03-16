@@ -12,6 +12,7 @@ import InterneEmployeesPage from "./pages/InterneEmployeesPage";
 import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
 import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
 import PlanningPage from "@/pages/PlanningPage";
+import AdminPage from "@/pages/AdminPage";
 import { useAuth } from "@/contexts/useAuth";
 
 /** Redirige les gestionnaires de planning vers /planning */
@@ -152,6 +153,19 @@ function App() {
               <FirstLoginGuard>
                 <NonPlanningRoute>
                   <LeavePage />
+                </NonPlanningRoute>
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <NonPlanningRoute>
+                  <AdminPage />
                 </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
