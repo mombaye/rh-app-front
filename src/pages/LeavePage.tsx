@@ -397,28 +397,23 @@ export default function LeavePage() {
 
                                 {/* Actions */}
                                 <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex gap-1.5 flex-wrap">
+                                  <div className="flex flex-col gap-1.5">
                                     {isPending && (
                                       <>
-                                        <QuickApproveBtn request={r} onDone={fetchAll} onOpenDetail={() => openDetail(r)} />
-                                        <button onClick={() => openDetail(r)}
-                                          className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap">
-                                          Rejeter
-                                        </button>
-                                        <button onClick={(e) => { e.stopPropagation(); setEditTarget(r); }}
-                                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
-                                          <Pencil className="h-3 w-3" /> Modifier
-                                        </button>
+                                        {/* Indicateur d'étapes */}
+                                        <ApprovalStepIndicator request={r} />
+                                        {/* Approuver + Modifier uniquement */}
+                                        <div className="flex gap-1.5 flex-wrap">
+                                          <QuickApproveBtn request={r} onDone={fetchAll} onOpenDetail={() => openDetail(r)} />
+                                          <button onClick={(e) => { e.stopPropagation(); setEditTarget(r); }}
+                                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+                                            <Pencil className="h-3 w-3" /> Modifier
+                                          </button>
+                                        </div>
                                       </>
                                     )}
                                     {r.status === "APPROVED" && (
                                       <QuickRevokeBtn request={r} onDone={fetchAll} />
-                                    )}
-                                    {r.leave_type?.requires_justification && !r.justification_document && (
-                                      <button onClick={() => openDetail(r)}
-                                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
-                                        <Upload className="h-3 w-3" /> Doc
-                                      </button>
                                     )}
                                   </div>
                                 </td>
@@ -941,7 +936,78 @@ function QuickRevokeModal({ request: r, onClose, onDone }: {
   );
 }
 
-// ─── Bouton d'approbation rapide ──────────────────────────────────────────────
+// ─── Calcul des étapes d'approbation ─────────────────────────────────────────
+/**
+ * Étapes du workflow :
+ *   1. Justificatif   (si leave_type.requires_justification)
+ *   2. Approbation N+1 (toujours)
+ *   3. Approbation N+2  (si employee.requires_two_approvals)
+ *
+ * Retourne : { steps, currentStep, blocked, blockReason }
+ */
+function useApprovalSteps(r: LeaveRequest) {
+  const requiresDoc  = r.leave_type?.requires_justification ?? false;
+  const hasDoc       = !!r.justification_document;
+  const needsTwo     = r.employee?.requires_two_approvals ?? false;
+  const isSecond     = r.status === "PENDING_SECOND";
+
+  // Build step list
+  const steps: Array<{ label: string; done: boolean; current: boolean }> = [];
+
+  // Step: justificatif
+  if (requiresDoc) {
+    const docDone = hasDoc;
+    steps.push({ label: "Justificatif", done: docDone, current: !docDone });
+  }
+
+  // Step: N+1
+  const n1Done = isSecond || false;
+  const n1Current = !isSecond && (requiresDoc ? hasDoc : true);
+  steps.push({ label: needsTwo ? "N+1" : "Approbation", done: n1Done, current: n1Current });
+
+  // Step: N+2
+  if (needsTwo) {
+    steps.push({ label: "N+2", done: false, current: isSecond });
+  }
+
+  // Is approval blocked?
+  const blocked     = requiresDoc && !hasDoc;
+  const blockReason = blocked ? "Justificatif manquant — l'employé doit fournir le document avant approbation" : "";
+
+  const currentStepNum = steps.findIndex((s) => s.current) + 1;
+  const totalSteps     = steps.length;
+
+  return { steps, currentStepNum, totalSteps, blocked, blockReason, needsTwo, isSecond };
+}
+
+// ─── Indicateur d'étapes (affiché au-dessus des boutons) ─────────────────────
+function ApprovalStepIndicator({ request: r }: { request: LeaveRequest }) {
+  const { steps, currentStepNum, totalSteps, blocked } = useApprovalSteps(r);
+  if (steps.length <= 1 && !blocked) return null;
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {steps.map((s, i) => (
+        <span key={i}
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold leading-none ${
+            s.done    ? "bg-emerald-100 text-emerald-700" :
+            s.current ? (blocked && i === 0 ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700") :
+                        "bg-slate-100 text-slate-400"
+          }`}>
+          {s.done ? "✓" : s.current ? (i + 1) : "·"}
+          {" "}{s.label}
+        </span>
+      ))}
+      {totalSteps > 1 && (
+        <span className="text-[10px] text-slate-400 font-medium ml-0.5">
+          {currentStepNum}/{totalSteps}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Bouton d'approbation (étape-aware, grisé si prérequis non remplis) ───────
 function QuickApproveBtn({
   request,
   onDone,
@@ -952,41 +1018,48 @@ function QuickApproveBtn({
   onOpenDetail: () => void;
 }) {
   const [loading, setLoading] = useState(false);
+  const { blocked, blockReason, needsTwo, isSecond } = useApprovalSteps(request);
 
   const handle = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Si l'employé requiert 2 validations → ouvrir le modal détail
-    if (request.employee?.requires_two_approvals) {
+    if (blocked) return;
+    // Flux 2 niveaux au 1er passage → ouvrir le modal détail pour choisir le N+2
+    if (needsTwo && !isSecond) {
       onOpenDetail();
       return;
     }
     setLoading(true);
     try {
       await leaveRequestService.approve(request.id);
-      toast.success("Demande approuvée ✓");
+      toast.success(isSecond ? "2ème validation effectuée ✓" : "Demande approuvée ✓");
       onDone();
     } catch (err: any) {
       toast.error(err?.response?.data?.error ?? "Erreur lors de l'approbation");
     } finally { setLoading(false); }
   };
 
-  // Deux variantes visuelles : flux 1 niveau vs 2 niveaux
-  const needsTwo = request.employee?.requires_two_approvals;
+  const label = needsTwo && !isSecond ? "Valider N+1" : isSecond ? "Valider N+2" : "Approuver";
+  const Icon  = needsTwo && !isSecond ? Users : CheckCircle2;
+
   return (
-    <button onClick={handle} disabled={loading}
-      title={needsTwo ? "Cet employé nécessite 2 validations — cliquez pour ouvrir le détail" : "Approuver"}
-      className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition disabled:opacity-50 whitespace-nowrap flex items-center gap-1 ${
-        needsTwo
-          ? "bg-violet-50 hover:bg-violet-100 text-violet-700"
-          : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700"
+    <button
+      onClick={handle}
+      disabled={loading || blocked}
+      title={blocked ? blockReason : label}
+      className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1 ${
+        blocked
+          ? "bg-slate-100 text-slate-400 cursor-not-allowed opacity-60"
+          : needsTwo && !isSecond
+            ? "bg-violet-50 hover:bg-violet-100 text-violet-700"
+            : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700"
       }`}>
       {loading
         ? <ImSpinner2 className="animate-spin" size={11} />
-        : needsTwo
-          ? <Users className="h-3 w-3" />
-          : <CheckCircle2 className="h-3 w-3" />
+        : blocked
+          ? <AlertTriangle className="h-3 w-3" />
+          : <Icon className="h-3 w-3" />
       }
-      {needsTwo ? "Valider (N+2)" : "Approuver"}
+      {blocked ? "En attente" : label}
     </button>
   );
 }
