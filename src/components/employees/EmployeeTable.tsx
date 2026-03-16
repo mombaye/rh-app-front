@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import { Menu, Transition } from "@headlessui/react";
-import { motion, AnimatePresence } from "framer-motion";
 import EmployeePayslipResendModal from "@/components/employees/EmployeePayslipResendModal";
 import EmployeeHistoryModal from "@/components/employees/EmployeeHistoryModal";
 import CareerHistoryModal from "@/components/employees/CareerHistoryModal";
