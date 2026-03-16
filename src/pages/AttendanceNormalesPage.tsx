@@ -186,6 +186,12 @@ function exportXLSX(filename: string, rows: Record<string, any>[]) {
   XLSX.writeFile(wb, `${filename}_${isoToday()}.xlsx`);
 }
 
+// ─── Colonnes export personnalisé ─────────────────────────────────────────────
+const NORM_DAILY_COLS = ["Matricule","Nom","Projet","Service","Statut","Retard","Entrée","Sortie","Heure travaillée","Compensation","Email"] as const;
+const NORM_SUMM_COLS  = ["Matricule","Nom","Projet","Service","Nb jours","Heures travaillées","% quota (40h)"] as const;
+type NormDailyCol = typeof NORM_DAILY_COLS[number];
+type NormSummCol  = typeof NORM_SUMM_COLS[number];
+
 async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ success: boolean }> {
   await new Promise((r) => setTimeout(r, 500));
   return { success: !!emp.email };
@@ -1327,6 +1333,10 @@ export default function AttendanceNormalesPage() {
   const [searchQ,      setSearchQ]      = useState("");
   const [page,         setPage]         = useState(1);
   const [pageSize,     setPageSize]     = useState(10);
+  const [showExportDlg,    setShowExportDlg]    = useState(false);
+  const [exportDailyCols,  setExportDailyCols]  = useState<NormDailyCol[]>([...NORM_DAILY_COLS]);
+  const [exportSummaryCols,setExportSummaryCols]= useState<NormSummCol[]>([...NORM_SUMM_COLS]);
+
   const [emailMap,      setEmailMap]      = useState<Map<string,string>>(new Map());
   const [departmentMap, setDepartmentMap] = useState<Map<string,string>>(new Map());
   const [projectMap,    setProjectMap]    = useState<Map<string,string>>(new Map());
@@ -1557,24 +1567,42 @@ export default function AttendanceNormalesPage() {
     setAlertModalOpen(false); setSelectedEmployee(null);
   };
 
-  const handleExport = () => {
+  const handleExport = () => setShowExportDlg(true);
+
+  const doExport = () => {
     if (viewMode === "daily") {
-      exportXLSX("pointage_normaux_journalier", filtered.map((r) => ({
-        Matricule: r.matricule, Nom: r.full_name, Projet: r.project !== "—" ? r.project : "", Service: r.department, Statut: r.status,
-        Retard: r.computed_late_minutes > 0 ? `RETARD · ${formatMinutes(r.computed_late_minutes)}` : "Non",
-        Entrée: formatTime(r.in_time), Sortie: formatTime(r.out_time),
-        "Heure travaillée": r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
-        "Compensation": r.compensation.is_compensated ? "Oui" : r.compensation.late_min > 0 ? "Non" : "—",
-        Email: r.email ?? "Manquant",
-      })));
+      const ALL: Record<NormDailyCol, (r: FlatRecord) => any> = {
+        "Matricule":        (r) => r.matricule,
+        "Nom":              (r) => r.full_name,
+        "Projet":           (r) => r.project !== "—" ? r.project : "",
+        "Service":          (r) => r.department,
+        "Statut":           (r) => r.status,
+        "Retard":           (r) => r.computed_late_minutes > 0 ? `RETARD · ${formatMinutes(r.computed_late_minutes)}` : "Non",
+        "Entrée":           (r) => formatTime(r.in_time),
+        "Sortie":           (r) => formatTime(r.out_time),
+        "Heure travaillée": (r) => r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
+        "Compensation":     (r) => r.compensation.is_compensated ? "Oui" : r.compensation.late_min > 0 ? "Non" : "—",
+        "Email":            (r) => r.email ?? "Manquant",
+      };
+      exportXLSX("pointage_normaux_journalier",
+        filtered.map((r) => Object.fromEntries(exportDailyCols.map((k) => [k, ALL[k](r)])))
+      );
     } else {
-      exportXLSX(`pointage_normaux_${viewMode === "weekly" ? "hebdo" : "mensuel"}`, summaryRecords.map((r) => ({
-        Matricule: r.matricule, Nom: r.full_name, Projet: r.project !== "—" ? r.project : "", Service: r.department,
-        "Nb jours": r.nb_jours,
-        "Heures travaillées": formatMinutes(r.worked_minutes) || "0h",
-        "% quota (40h)": `${Math.min(100, Math.round((r.worked_minutes / (viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WORKDAY_MIN*4.33))) * 100))}%`,
-      })));
+      const MAX_MIN = viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WORKDAY_MIN * 4.33);
+      const ALL: Record<NormSummCol, (r: any) => any> = {
+        "Matricule":          (r) => r.matricule,
+        "Nom":                (r) => r.full_name,
+        "Projet":             (r) => r.project !== "—" ? r.project : "",
+        "Service":            (r) => r.department,
+        "Nb jours":           (r) => r.nb_jours,
+        "Heures travaillées": (r) => formatMinutes(r.worked_minutes) || "0h",
+        "% quota (40h)":      (r) => `${Math.min(100, Math.round((r.worked_minutes / MAX_MIN) * 100))}%`,
+      };
+      exportXLSX(`pointage_normaux_${viewMode === "weekly" ? "hebdo" : "mensuel"}`,
+        summaryRecords.map((r) => Object.fromEntries(exportSummaryCols.map((k) => [k, ALL[k](r)])))
+      );
     }
+    setShowExportDlg(false);
   };
 
   const tableHeaders = ["Matricule","Nom","Projet/Département","Service","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
@@ -1790,6 +1818,85 @@ export default function AttendanceNormalesPage() {
           employeeId={selectedEmployeeId} initialWeek={week} />
         <AlertModal open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
           employee={selectedEmployee} onConfirm={handleSendAlert} sending={sendingAlert} />
+
+        {/* ── Export Dialog ── */}
+        <AnimatePresence>
+          {showExportDlg && (() => {
+            const isDailyMode = viewMode === "daily";
+            const availCols   = isDailyMode ? NORM_DAILY_COLS : NORM_SUMM_COLS;
+            const selCols     = isDailyMode ? exportDailyCols  : exportSummaryCols;
+            const setSelCols  = isDailyMode
+              ? (v: NormDailyCol[]) => setExportDailyCols(v)
+              : (v: NormSummCol[])  => setExportSummaryCols(v);
+            return (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4">
+                <motion.div
+                  initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+                  className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                    <div>
+                      <h2 className="font-black text-camublue-900 text-base">Export personnalisé</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {isDailyMode ? "Vue journalière" : viewMode === "weekly" ? "Vue hebdomadaire" : "Vue mensuelle"}
+                        {" · "}Sélectionnez les colonnes à inclure
+                      </p>
+                    </div>
+                    <button onClick={() => setShowExportDlg(false)}
+                      className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="px-5 py-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <p className="text-xs font-semibold text-slate-500">
+                        {selCols.length}/{availCols.length} colonnes sélectionnées
+                      </p>
+                      <div className="flex gap-2">
+                        <button onClick={() => setSelCols([...availCols] as any)}
+                          className="text-xs text-camublue-700 hover:underline font-medium">Tout</button>
+                        <span className="text-slate-300">|</span>
+                        <button onClick={() => setSelCols([] as any)}
+                          className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                      {availCols.map((col) => {
+                        const checked = (selCols as string[]).includes(col);
+                        return (
+                          <label key={col}
+                            className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer border transition text-sm ${
+                              checked ? "bg-camublue-50 border-camublue-200 text-camublue-800" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                            }`}>
+                            <input type="checkbox" checked={checked} onChange={() => {
+                              const next = checked
+                                ? (selCols as string[]).filter((k) => k !== col)
+                                : [...(selCols as string[]), col];
+                              setSelCols(next as any);
+                            }} className="accent-camublue-700 w-3.5 h-3.5" />
+                            <span className="font-medium">{col}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                    <button onClick={() => setShowExportDlg(false)}
+                      className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
+                      Annuler
+                    </button>
+                    <button onClick={doExport} disabled={selCols.length === 0}
+                      className="flex items-center gap-2 px-5 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Télécharger
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
       </motion.div>
     </AppLayout>
   );

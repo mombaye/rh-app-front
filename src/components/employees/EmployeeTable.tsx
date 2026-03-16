@@ -7,8 +7,10 @@ import {
 } from "react-icons/fa";
 import { TbLogout } from "react-icons/tb";
 import { AiOutlineRollback } from "react-icons/ai";
+import { motion, AnimatePresence } from "framer-motion";
 import { Employee } from "@/types/employee";
-import { createAccountFromEmployee, sendAccessCodes, exportEmployeesExcel } from "@/services/employeeService";
+import { createAccountFromEmployee, sendAccessCodes } from "@/services/employeeService";
+import * as XLSX from "xlsx";
 import { Input } from "@/components/ui/input";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
@@ -33,6 +35,75 @@ interface Props {
 type SortKey = "matricule" | "nom" | "prenom" | "fonction" | "service";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+// ─── Colonnes export personnalisé employés ────────────────────────────────────
+const EMP_EXPORT_COLS = [
+  { key: "Matricule",     label: "Matricule"        },
+  { key: "Nom",           label: "Nom"              },
+  { key: "Prénom",        label: "Prénom"           },
+  { key: "Email",         label: "Email"            },
+  { key: "Téléphone",     label: "Téléphone"        },
+  { key: "Genre",         label: "Genre"            },
+  { key: "Fonction",      label: "Fonction"         },
+  { key: "Service",       label: "Service"          },
+  { key: "Type contrat",  label: "Type de contrat"  },
+  { key: "Statut",        label: "Statut"           },
+  { key: "Date embauche", label: "Date d'embauche"  },
+  { key: "Date sortie",   label: "Date de sortie"   },
+  { key: "Motif sortie",  label: "Motif de sortie"  },
+  { key: "Manager",       label: "Manager"          },
+  { key: "Ancienneté",    label: "Ancienneté (ans)" },
+] as const;
+type EmpExportColKey = typeof EMP_EXPORT_COLS[number]["key"];
+const EMP_DEFAULT_COLS: EmpExportColKey[] = [
+  "Matricule","Nom","Prénom","Email","Fonction","Service","Type contrat","Statut","Date embauche",
+];
+
+// ─── Export XLSX client-side employés ─────────────────────────────────────────
+function exportEmployeesXLSX(employees: Employee[], selectedCols: EmpExportColKey[]) {
+  if (!employees.length || !selectedCols.length) return;
+  const fmtDate = (d?: string | null) => {
+    if (!d) return "—";
+    try { return new Date(d).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" }); }
+    catch { return d; }
+  };
+  // resolveService is defined below — call via inline logic here
+  const getSvc = (e: Employee) =>
+    String((e as any).service ?? (e as any).departement ?? (e as any).department ?? "").toUpperCase() || "—";
+
+  const buildRow = (e: Employee): Record<EmpExportColKey, any> => ({
+    "Matricule":     e.matricule ?? "—",
+    "Nom":           e.nom ?? "—",
+    "Prénom":        e.prenom ?? "—",
+    "Email":         e.email ?? "—",
+    "Téléphone":     e.telephone ?? "—",
+    "Genre":         e.sexe ?? "—",
+    "Fonction":      e.fonction ?? "—",
+    "Service":       getSvc(e),
+    "Type contrat":  e.type_contrat ?? "—",
+    "Statut":        e.status === "ACTIVE" ? "Actif" : e.status === "EXITED" ? "Sorti" : e.status === "SUSPENDED" ? "Suspendu" : e.status ?? "—",
+    "Date embauche": fmtDate(e.date_embauche),
+    "Date sortie":   fmtDate(e.date_sortie),
+    "Motif sortie":  e.motif_sortie ?? "—",
+    "Manager":       e.manager ?? "—",
+    "Ancienneté":    e.anciennete != null ? String(e.anciennete) : "—",
+  });
+  const rows = employees.map((e) =>
+    Object.fromEntries(selectedCols.map((k) => [k, buildRow(e)[k]]))
+  );
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cell = XLSX.utils.encode_cell({ r: 0, c });
+    if (ws[cell]) ws[cell].s = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "1E3A5F" } }, alignment: { horizontal: "center" } };
+  }
+  ws["!cols"] = selectedCols.map((k) => ({
+    wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 2,
+  }));
+  XLSX.utils.book_append_sheet(wb, ws, "Employés");
+  XLSX.writeFile(wb, `employes_export_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
 
 // ─── Résolution robuste du service ───────────────────────────────────────────
 // Inspecte tous les noms de champs possibles que le backend peut renvoyer,
@@ -65,6 +136,9 @@ export default function EmployeesTable({
   const [accountLoading, setAccountLoading] = useState<number | null>(null);
   const [userFilter, setUserFilter] = useState<"all" | "with" | "without">("all");
   const [isExporting, setIsExporting] = useState(false);
+  const [showExportDlg, setShowExportDlg] = useState(false);
+  const [exportCols,    setExportCols]    = useState<EmpExportColKey[]>([...EMP_DEFAULT_COLS]);
+  const [exportStatus,  setExportStatus]  = useState<"ACTIVE" | "EXITED" | "ALL">("ALL");
   const [payslipOpen, setPayslipOpen] = useState(false);
   const [payslipEmp, setPayslipEmp] = useState<Employee | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -261,18 +335,13 @@ export default function EmployeesTable({
     }
   };
 
-  const handleExport = async (status: "ACTIVE" | "EXITED" | "ALL") => {
-    if (isExporting) return;
-    setIsExporting(true);
-    const toastId = toast.loading("Export en cours...");
-    try {
-      await exportEmployeesExcel({ status });
-      toast.success("Export terminé", { id: toastId });
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error || "Erreur lors de l'export", { id: toastId });
-    } finally {
-      setIsExporting(false);
-    }
+  const doExport = () => {
+    const toExport = exportStatus === "ALL"
+      ? filtered
+      : filtered.filter((e) => e.status === exportStatus);
+    exportEmployeesXLSX(toExport, exportCols);
+    setShowExportDlg(false);
+    toast.success(`${toExport.length} employé(s) exporté(s) ✓`);
   };
 
   const StatusBadge = ({ e }: { e: Employee }) => {
@@ -462,43 +531,13 @@ export default function EmployeesTable({
 
         <div className="h-6 w-px bg-slate-200 shrink-0" />
 
-        <Menu as="div" className="relative inline-block text-left">
-          <Menu.Button
-            disabled={isExporting}
-            className="bg-white border border-slate-300 text-slate-700 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2 transition shadow-sm"
-          >
-            {isExporting
-              ? <ImSpinner2 className="animate-spin" size={13} />
-              : <FaFileExcel className="text-green-600" size={14} />}
-            {isExporting ? "Export..." : "Exporter"}
-          </Menu.Button>
-          <Transition
-            as={Fragment}
-            enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100"
-            leave="transition ease-in duration-75"  leaveFrom="transform opacity-100 scale-100" leaveTo="transform opacity-0 scale-95"
-          >
-            <Menu.Items className="absolute right-0 mt-2 w-52 origin-top-right rounded-xl bg-white shadow-lg ring-1 ring-black/5 focus:outline-none overflow-hidden z-20">
-              <div className="py-1">
-                {[
-                  ["ACTIVE", "Exporter les actifs"],
-                  ["EXITED", "Exporter les sortis"],
-                  ["ALL",    "Exporter tous"],
-                ].map(([status, label]) => (
-                  <Menu.Item key={status}>
-                    {({ active }) => (
-                      <button
-                        onClick={() => handleExport(status as any)}
-                        className={`w-full text-left px-4 py-2.5 text-sm ${active ? "bg-slate-50" : ""}`}
-                      >
-                        {label}
-                      </button>
-                    )}
-                  </Menu.Item>
-                ))}
-              </div>
-            </Menu.Items>
-          </Transition>
-        </Menu>
+        <button
+          onClick={() => setShowExportDlg(true)}
+          className="bg-white border border-slate-300 text-slate-700 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 inline-flex items-center gap-2 transition shadow-sm"
+        >
+          <FaFileExcel className="text-green-600" size={14} />
+          Exporter
+        </button>
       </div>
 
       {/* ── Tableau — min-w-max + overflow-auto pour la responsivité ── */}
@@ -792,6 +831,95 @@ export default function EmployeesTable({
           if (onEmployeeUpdated) onEmployeeUpdated(updatedEmp);
         }}
       />
+
+      {/* ── Export Dialog ── */}
+      <AnimatePresence>
+        {showExportDlg && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4">
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div>
+                  <h2 className="font-black text-camublue-900 text-base">Export personnalisé</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Sélectionnez le périmètre et les colonnes à inclure</p>
+                </div>
+                <button onClick={() => setShowExportDlg(false)}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
+                  <FaTimes size={14} />
+                </button>
+              </div>
+
+              {/* Périmètre */}
+              <div className="px-5 pt-4 pb-2">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Périmètre</p>
+                <div className="flex gap-2">
+                  {([["ALL","Tous"],["ACTIVE","Actifs"],["EXITED","Sortis"]] as const).map(([s, l]) => (
+                    <button key={s} onClick={() => setExportStatus(s)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
+                        exportStatus === s
+                          ? "bg-camublue-900 text-white border-camublue-900"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Colonnes */}
+              <div className="px-5 py-4">
+                <div className="flex justify-between items-center mb-3">
+                  <p className="text-xs font-semibold text-slate-500">
+                    {exportCols.length}/{EMP_EXPORT_COLS.length} colonnes sélectionnées
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setExportCols(EMP_EXPORT_COLS.map((c) => c.key))}
+                      className="text-xs text-camublue-700 hover:underline font-medium">Tout</button>
+                    <span className="text-slate-300">|</span>
+                    <button onClick={() => setExportCols([])}
+                      className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                  {EMP_EXPORT_COLS.map((col) => {
+                    const checked = exportCols.includes(col.key);
+                    return (
+                      <label key={col.key}
+                        className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer border transition text-sm ${
+                          checked ? "bg-camublue-50 border-camublue-200 text-camublue-800" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}>
+                        <input type="checkbox" checked={checked} onChange={() => {
+                          setExportCols((prev) =>
+                            prev.includes(col.key) ? prev.filter((k) => k !== col.key) : [...prev, col.key]
+                          );
+                        }} className="accent-camublue-700 w-3.5 h-3.5" />
+                        <span className="font-medium">{col.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                <button onClick={() => setShowExportDlg(false)}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
+                  Annuler
+                </button>
+                <button onClick={doExport} disabled={exportCols.length === 0}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
+                  <FaFileExcel className="text-green-300" size={13} />
+                  Télécharger
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
