@@ -1056,8 +1056,15 @@ function useApprovalSteps(r: LeaveRequest) {
   }
 
   // Is approval blocked?
-  const blocked     = requiresDoc && !hasDoc;
-  const blockReason = blocked ? "Justificatif manquant — l'employé doit fournir le document avant approbation" : "";
+  // Blocked when: doc required but missing, OR 2-level flow but N+1 not yet done
+  const blockedByDoc  = requiresDoc && !hasDoc;
+  const blockedByN1   = needsTwo && !isSecond;   // N+1 must validate first
+  const blocked       = blockedByDoc || blockedByN1;
+  const blockReason   = blockedByDoc
+    ? "Justificatif manquant — l'employé doit fournir le document avant approbation"
+    : blockedByN1
+      ? "En attente de validation N+1 — la hiérarchie doit valider avant que le RH puisse agir"
+      : "";
 
   const currentStepNum = steps.findIndex((s) => s.current) + 1;
   const totalSteps     = steps.length;
@@ -1360,6 +1367,9 @@ function DetailModal({ request: r, onClose, onDone }: {
   const lc        = r.leave_type?.color ?? "#6b7280";
   const needsDoc  = r.leave_type?.requires_justification;
 
+  // Hiérarchie validée ? Utilise la même logique que les boutons du tableau
+  const { blocked: approvalBlocked, blockReason: approvalBlockReason } = useApprovalSteps(r);
+
   const infoRows: [string, string][] = [
     ["Employé",   r.employee?.full_name ?? "—"],
     ["Matricule", r.employee?.matricule ?? "—"],
@@ -1514,14 +1524,24 @@ function DetailModal({ request: r, onClose, onDone }: {
           {/* ── Actions PENDING / PENDING_SECOND ──────────────────────────────── */}
           {isPending && (
             <div className="space-y-3 pt-2 border-t border-slate-100">
+
+              {/* Bandeau bloquant : hiérarchie pas encore validée */}
+              {approvalBlocked && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 font-semibold">{approvalBlockReason}</p>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">
                   Motif de rejet{" "}
                   <span className="normal-case font-normal text-slate-400">(requis pour rejeter)</span>
                 </label>
                 <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
+                  disabled={approvalBlocked}
                   placeholder="Expliquez la raison du rejet…" rows={2}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 resize-none transition" />
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 resize-none transition disabled:opacity-40 disabled:bg-slate-50" />
               </div>
 
               {r.status === "PENDING" && (
@@ -1634,13 +1654,16 @@ function DetailModal({ request: r, onClose, onDone }: {
               )}
 
               <div className="flex gap-2">
-                <button disabled={actionLoading || !rejectReason.trim()} onClick={handleReject}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-xl transition disabled:opacity-50">
+                <button
+                  disabled={actionLoading || approvalBlocked || !rejectReason.trim()}
+                  onClick={handleReject}
+                  title={approvalBlocked ? approvalBlockReason : "Rejeter la demande"}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed">
                   {actionLoading ? <ImSpinner2 className="animate-spin" size={13} /> : <XCircle className="h-4 w-4" />}
                   Rejeter
                 </button>
 
-                {r.status === "PENDING" && secondApproverId.trim() && (
+                {r.status === "PENDING" && secondApproverId.trim() && !approvalBlocked && (
                   <button disabled={actionLoading}
                     onClick={() => handleApprove({ second_approver_id: parseInt(secondApproverId, 10) })}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold rounded-xl transition disabled:opacity-50">
@@ -1649,8 +1672,11 @@ function DetailModal({ request: r, onClose, onDone }: {
                   </button>
                 )}
 
-                <button disabled={actionLoading} onClick={() => handleApprove()}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl transition disabled:opacity-50">
+                <button
+                  disabled={actionLoading || approvalBlocked}
+                  onClick={() => handleApprove()}
+                  title={approvalBlocked ? approvalBlockReason : "Approuver la demande"}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed">
                   {actionLoading ? <ImSpinner2 className="animate-spin" size={13} /> : <CheckCircle2 className="h-4 w-4" />}
                   Approuver
                 </button>
