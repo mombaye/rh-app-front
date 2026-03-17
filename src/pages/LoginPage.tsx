@@ -17,6 +17,12 @@ const ROLE_META: Record<string, { label: string; Icon: React.ElementType }> = {
   rh:      { label: "RH",       Icon: ShieldCheck },
 };
 
+function getUserRole(profile: { is_global_admin?: boolean; is_planning_manager?: boolean }): string {
+  if (profile.is_global_admin)      return "rh";
+  if (profile.is_planning_manager)  return "manager";
+  return "employe";
+}
+
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -24,7 +30,7 @@ export default function LoginPage() {
   const [error,    setError]    = useState("");
   const navigate      = useNavigate();
   const [params]      = useSearchParams();
-  const { login }     = useAuth();
+  const { login, setUser } = useAuth();
 
   const roleId   = params.get("role") ?? "";
   const roleMeta = ROLE_META[roleId];
@@ -34,7 +40,21 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      await login(username, password);
+      const profile = await login(username, password);
+      const actualRole = getUserRole(profile);
+
+      if (roleId && actualRole !== roleId) {
+        // Rôle incorrect — déconnexion immédiate
+        setUser(null);
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        const expected = ROLE_META[actualRole]?.label ?? actualRole;
+        const msg = `Ce compte n'est pas un compte ${ROLE_META[roleId].label}. Veuillez utiliser l'espace ${expected}.`;
+        setError(msg);
+        toast.error(msg);
+        return;
+      }
+
       navigate("/dashboard");
     } catch (err: any) {
       const msg =

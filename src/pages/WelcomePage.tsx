@@ -31,14 +31,6 @@ export default function WelcomePage() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
 
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <header className="flex items-center justify-between px-8 py-5 border-b border-slate-100">
-        <img src={logo} alt="Camusat" className="h-8 w-auto" draggable={false} />
-        <span className="text-xs text-slate-400 font-medium tracking-wide">
-          Plateforme RH interne
-        </span>
-      </header>
-
       {/* ── Contenu principal ────────────────────────────────────────────────── */}
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-16">
 
@@ -49,6 +41,12 @@ export default function WelcomePage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
+          <img
+            src={logo}
+            alt="Camusat"
+            className="h-10 w-auto mx-auto mb-8"
+            draggable={false}
+          />
           <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
             Plateforme RH
             <span className="text-camublue-900"> Camusat</span>
