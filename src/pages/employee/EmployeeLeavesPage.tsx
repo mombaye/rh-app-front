@@ -506,7 +506,32 @@ export default function EmployeeLeavesPage() {
         </motion.div>
       </div>
 
-      {/* Modales */}
+      {/* Modal: compte non lié à un employé */}
+      {showForm && !employeeId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6"
+          >
+            <h3 className="text-lg font-semibold text-camublue-900 mb-3">Compte non lié</h3>
+            <p className="text-gray-600 text-sm mb-5">
+              Votre compte utilisateur n'est pas encore associé à un dossier employé.
+              Veuillez contacter l'administrateur RH pour lier votre compte à votre fiche employé.
+            </p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowForm(false)}
+                className="px-4 py-2 rounded-lg bg-camublue-900 text-white text-sm hover:bg-camublue-900/90 transition"
+              >
+                Compris
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Modal: formulaire de demande */}
       {showForm && employeeId && (
         <LeaveFormModal
           mode={editTarget ? "edit" : "create"}
