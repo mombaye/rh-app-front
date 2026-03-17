@@ -48,12 +48,12 @@ export default function WelcomePage() {
             draggable={false}
           />
           <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
-            Plateforme RH
-            <span className="text-camublue-900"> Camusat</span>
+            Tout
+            <span className="text-camublue-900"> Camusat</span>,<br />en un seul endroit
           </h1>
-          <p className="mt-4 text-base text-slate-500 max-w-md mx-auto leading-relaxed">
-            Gérez vos ressources humaines simplement et efficacement,
-            depuis une interface unifiée.
+          <p className="mt-4 text-base text-slate-500 max-w-lg mx-auto leading-relaxed">
+            Congés, bulletins de paie, gestion d'équipe, administration —
+            accédez à votre espace en quelques secondes.
           </p>
         </motion.div>
 
