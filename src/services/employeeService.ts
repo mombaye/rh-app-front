@@ -304,9 +304,9 @@ export const startPreviewPayslipPdf = async (formData: FormData) => {
 export const fetchPayslipPreviewProgress = async (taskId: string) =>
   (await api.get(`/api/employees/preview-progress/${taskId}/`)).data;
 
-/** GET /api/employees/bulletins-progress/<taskId>/ */
+/** GET /api/employees/progress/<taskId>/ */
 export const fetchBulletinProgress = async (taskId: string) =>
-  (await api.get(`/api/employees/bulletins-progress/${taskId}/`)).data;
+  (await api.get(`/api/employees/progress/${taskId}/`)).data;
 
 /** POST /api/employees/send-bulletins-selected/ */
 export const sendBulletinsSelected = async (payload: {
