@@ -1,4 +1,5 @@
 import api from "@/api/axios";
+import adminApi from "@/api/adminAxios";
 import { Employee, ContractType, EmployeeHistoryEntry } from "@/types/employee";
 
 // ══════════════════════════════════════════════════════
@@ -167,8 +168,12 @@ export const exportEmployeesExcel = async (opts?: {
   window.URL.revokeObjectURL(url);
 };
 
-export const createAccountFromEmployee = async (employeeId: number) =>
-  (await api.post(`/api/employees/${employeeId}/create-account/`)).data;
+export const createAccountFromEmployee = async (employeeId: number) => {
+  // Utilise admin_access_token si disponible (portail admin),
+  // sinon fallback sur access_token (interface RH classique)
+  const axiosInstance = localStorage.getItem("admin_access_token") ? adminApi : api;
+  return (await axiosInstance.post(`/api/employees/${employeeId}/create-account/`)).data;
+};
 
 export const sendAccessCodes = async (
   matricules: string[]
