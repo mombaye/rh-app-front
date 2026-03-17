@@ -16,9 +16,9 @@ const ROLE_META: Record<string, { label: string; Icon: React.ElementType }> = {
   rh:      { label: "RH",       Icon: ShieldCheck },
 };
 
-function getUserRole(profile: { is_global_admin?: boolean; is_planning_manager?: boolean }): string {
-  if (profile.is_global_admin)      return "rh";
-  if (profile.is_planning_manager)  return "manager";
+function getUserRole(profile: { is_staff?: boolean; manager_level?: number | null }): string {
+  if (profile.is_staff)                return "rh";
+  if (profile.manager_level != null)   return "manager";
   return "employe";
 }
 

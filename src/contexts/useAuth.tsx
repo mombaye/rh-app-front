@@ -8,6 +8,7 @@ type User = {
   is_global_admin?: boolean;
   is_staff?: boolean;
   is_planning_manager?: boolean;
+  manager_level?: number | null;
   country?: any;
   first_login?: boolean;
 };
