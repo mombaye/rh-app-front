@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Calendar, CheckCircle2, Clock, XCircle,
   AlertCircle, Pencil, FileDown, ChevronDown, ChevronUp,
-  Loader2, ChevronLeft, ChevronRight,
+  Loader2, ChevronLeft, ChevronRight, TrendingUp, Filter,
 } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const PAGE_SIZE = 8;
 import { useAuth } from "@/contexts/useAuth";
@@ -14,22 +16,30 @@ import { LeaveBalance, LeaveRequest, LeaveRequestCreate, LeaveType } from "@/typ
 import toast from "react-hot-toast";
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string; Icon: React.ElementType }> = {
-  PENDING:        { label: "En attente",      color: "text-amber-700",  bg: "bg-amber-50 border-amber-200",   dot: "bg-amber-400",  Icon: Clock         },
-  PENDING_SECOND: { label: "2ème validation", color: "text-orange-700", bg: "bg-orange-50 border-orange-200", dot: "bg-orange-400", Icon: Clock         },
-  APPROVED:       { label: "Approuvé",        color: "text-green-700",  bg: "bg-green-50 border-green-200",   dot: "bg-green-500",  Icon: CheckCircle2  },
-  REJECTED:       { label: "Rejeté",          color: "text-red-700",    bg: "bg-red-50 border-red-200",       dot: "bg-red-500",    Icon: XCircle       },
-  CANCELLED:      { label: "Annulé",          color: "text-gray-500",   bg: "bg-gray-50 border-gray-200",     dot: "bg-gray-400",   Icon: XCircle       },
-  REVOKED:        { label: "Révoqué",         color: "text-purple-700", bg: "bg-purple-50 border-purple-200", dot: "bg-purple-500", Icon: AlertCircle   },
+const STATUS_CONFIG: Record<string, {
+  label: string; color: string; bg: string; dot: string;
+  Icon: React.ElementType; textColor: string; borderColor: string;
+}> = {
+  PENDING:        { label: "En attente",      color: "#d97706", bg: "#fffbeb", dot: "bg-amber-400",   Icon: Clock,        textColor: "text-amber-700",  borderColor: "border-amber-200"  },
+  PENDING_SECOND: { label: "2ème validation", color: "#ea580c", bg: "#fff7ed", dot: "bg-orange-400",  Icon: Clock,        textColor: "text-orange-700", borderColor: "border-orange-200" },
+  APPROVED:       { label: "Approuvé",        color: "#059669", bg: "#f0fdf4", dot: "bg-green-500",   Icon: CheckCircle2, textColor: "text-green-700",  borderColor: "border-green-200"  },
+  REJECTED:       { label: "Rejeté",          color: "#dc2626", bg: "#fef2f2", dot: "bg-red-500",     Icon: XCircle,      textColor: "text-red-700",    borderColor: "border-red-200"    },
+  CANCELLED:      { label: "Annulé",          color: "#64748b", bg: "#f8fafc", dot: "bg-gray-400",    Icon: XCircle,      textColor: "text-gray-500",   borderColor: "border-gray-200"   },
+  REVOKED:        { label: "Révoqué",         color: "#7c3aed", bg: "#f5f3ff", dot: "bg-purple-500",  Icon: AlertCircle,  textColor: "text-purple-700", borderColor: "border-purple-200" },
 };
 
 const MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+
 const fmt = (d: string) => {
   const dt = new Date(d);
   return `${dt.getDate()} ${MONTHS_FR[dt.getMonth()]} ${dt.getFullYear()}`;
 };
+const fmtShort = (d: string) => {
+  const dt = new Date(d);
+  return `${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}/${dt.getFullYear()}`;
+};
 
-// ── PDF export ─────────────────────────────────────────────────────────────────
+// ── PDF export with jsPDF (real download) ──────────────────────────────────────
 function exportLeavesPDF(
   requests: LeaveRequest[],
   employeeName: string,
@@ -38,51 +48,64 @@ function exportLeavesPDF(
 ) {
   const colDefs: Record<string, { label: string; get: (r: LeaveRequest) => string }> = {
     type:       { label: "Type de congé",   get: r => r.leave_type.label },
-    debut:      { label: "Date début",      get: r => fmt(r.start_date) },
-    fin:        { label: "Date fin",        get: r => fmt(r.end_date) },
-    jours:      { label: "Jours",           get: r => r.days },
+    debut:      { label: "Date début",      get: r => fmtShort(r.start_date) },
+    fin:        { label: "Date fin",        get: r => fmtShort(r.end_date) },
+    jours:      { label: "Jours",           get: r => String(r.days) },
     statut:     { label: "Statut",          get: r => STATUS_CONFIG[r.status]?.label ?? r.status },
     motif:      { label: "Motif",           get: r => r.motif || "—" },
     validateur: { label: "Validé par",      get: r => r.reviewed_by?.full_name || "—" },
   };
 
   const selectedCols = columns.map(k => colDefs[k]).filter(Boolean);
-  const colW = Math.floor(100 / selectedCols.length);
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
 
-  const rows = requests.map(r =>
-    `<tr>${selectedCols.map(c =>
-      `<td style="padding:7px 10px;border:1px solid #e2e8f0;font-size:12px">${c.get(r)}</td>`
-    ).join("")}</tr>`
-  ).join("");
+  // ── En-tête ──
+  doc.setFillColor(0, 60, 113);
+  doc.rect(0, 0, 297, 28, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.text("Rapport de Congés", 14, 12);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.text(`${employeeName}  |  Matricule : ${matricule}`, 14, 20);
+  doc.text(`Exporté le ${new Date().toLocaleDateString("fr-FR")}`, 270, 20, { align: "right" });
 
-  const html = `
-  <html><head><meta charset="utf-8">
-  <style>
-    body { font-family: Arial, sans-serif; margin: 30px; color: #1e293b; }
-    h1 { color: #003c71; font-size: 20px; }
-    .meta { color: #64748b; font-size: 13px; margin-bottom: 24px; }
-    table { width: 100%; border-collapse: collapse; }
-    th { background: #003c71; color: white; padding: 9px 10px; font-size: 12px; text-align: left; }
-    tr:nth-child(even) td { background: #f8fafc; }
-    .footer { margin-top: 24px; font-size: 11px; color: #94a3b8; text-align: right; }
-  </style>
-  </head><body>
-  <h1>Congés — ${employeeName}</h1>
-  <div class="meta">Matricule : ${matricule} &nbsp;|&nbsp; Exporté le ${new Date().toLocaleDateString("fr-FR")}</div>
-  <table>
-    <thead><tr>${selectedCols.map(c => `<th style="width:${colW}%">${c.label}</th>`).join("")}</tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <div class="footer">Camusat Sénégal RH — Document généré automatiquement</div>
-  </body></html>`;
+  // ── Tableau ──
+  const headers = selectedCols.map(c => c.label);
+  const rows = requests.map(r => selectedCols.map(c => c.get(r)));
 
-  const w = window.open("", "_blank");
-  if (!w) return;
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  w.print();
-  w.close();
+  autoTable(doc, {
+    head: [headers],
+    body: rows,
+    startY: 34,
+    headStyles: {
+      fillColor: [0, 60, 113],
+      textColor: 255,
+      fontStyle: "bold",
+      fontSize: 9,
+    },
+    bodyStyles: { fontSize: 9 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    styles: { cellPadding: 4 },
+    margin: { left: 14, right: 14 },
+  });
+
+  // ── Pied de page ──
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text(
+      `Camusat Sénégal RH — Document généré automatiquement — Page ${i}/${pageCount}`,
+      148.5,
+      207,
+      { align: "center" }
+    );
+  }
+
+  doc.save(`conges_${(employeeName || "employe").replace(/\s+/g, "_")}_${new Date().toISOString().slice(0,10)}.pdf`);
 }
 
 // ── Modal de demande / modification ────────────────────────────────────────────
@@ -107,7 +130,6 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
   });
   const [saving, setSaving] = useState(false);
 
-  // Auto-calc jours
   useEffect(() => {
     if (form.start_date && form.end_date && form.end_date >= form.start_date) {
       const s = new Date(form.start_date);
@@ -145,82 +167,97 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6"
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
       >
-        <h3 className="text-lg font-semibold text-camublue-900 mb-5">
-          {mode === "create" ? "Nouvelle demande de congé" : "Modifier la demande"}
-        </h3>
-        <div className="space-y-4">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#003c71] to-[#0055a4] px-6 py-5">
+          <h3 className="text-white font-semibold text-lg">
+            {mode === "create" ? "Nouvelle demande de congé" : "Modifier la demande"}
+          </h3>
+          <p className="text-blue-200 text-xs mt-0.5">
+            {mode === "create" ? "Remplissez le formulaire ci-dessous" : "Modifiez les informations de votre demande"}
+          </p>
+        </div>
+
+        <div className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Type de congé *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Type de congé <span className="text-red-400">*</span>
+            </label>
             <select
               value={form.leave_type_id ?? ""}
               onChange={e => setForm(p => ({ ...p, leave_type_id: Number(e.target.value) }))}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
             >
-              <option value="">-- Sélectionner --</option>
+              <option value="">-- Sélectionner un type --</option>
               {leaveTypes.map(lt => (
                 <option key={lt.id} value={lt.id}>{lt.label}</option>
               ))}
             </select>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date début *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Date début <span className="text-red-400">*</span>
+              </label>
               <input
                 type="date"
                 value={form.start_date ?? ""}
                 onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date fin *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Date fin <span className="text-red-400">*</span>
+              </label>
               <input
                 type="date"
                 value={form.end_date ?? ""}
                 onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
               />
             </div>
           </div>
+
+          {form.days && form.days > 0 && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 flex items-center gap-2">
+              <Calendar size={16} className="text-blue-500 shrink-0" />
+              <span className="text-sm text-blue-700 font-medium">
+                {form.days} jour{form.days > 1 ? "s" : ""} de congé calculé{form.days > 1 ? "s" : ""}
+              </span>
+            </div>
+          )}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de jours</label>
-            <input
-              type="number"
-              min={1}
-              value={form.days ?? ""}
-              onChange={e => setForm(p => ({ ...p, days: Number(e.target.value) }))}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Motif</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Motif</label>
             <textarea
               rows={3}
               value={form.motif ?? ""}
               onChange={e => setForm(p => ({ ...p, motif: e.target.value }))}
               placeholder="Motif optionnel…"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-camublue-900/30"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
             />
           </div>
         </div>
-        <div className="flex justify-end gap-3 mt-6">
+
+        <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-100">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm transition"
+            className="px-5 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm transition font-medium"
           >
             Annuler
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-5 py-2 rounded-lg bg-camublue-900 text-white text-sm hover:bg-camublue-900/90 transition flex items-center gap-2 disabled:opacity-60"
+            className="px-6 py-2 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition flex items-center gap-2 disabled:opacity-60 font-medium shadow-sm"
           >
             {saving && <Loader2 size={15} className="animate-spin" />}
-            {mode === "create" ? "Envoyer" : "Enregistrer"}
+            {mode === "create" ? "Envoyer la demande" : "Enregistrer"}
           </button>
         </div>
       </motion.div>
@@ -247,29 +284,44 @@ const ALL_COLUMNS = [
 ];
 
 function ExportModal({ requests, employeeName, matricule, onClose }: ExportModalProps) {
-  const [selected, setSelected] = useState<string[]>(["type","debut","fin","jours","statut"]);
+  const [selected, setSelected]     = useState<string[]>(["type","debut","fin","jours","statut"]);
   const [filterStatus, setFilterStatus] = useState("ALL");
 
   const filtered = filterStatus === "ALL" ? requests : requests.filter(r => r.status === filterStatus);
-
-  const toggle = (k: string) =>
+  const toggle   = (k: string) =>
     setSelected(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6"
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
       >
-        <h3 className="text-lg font-semibold text-camublue-900 mb-5">Exporter en PDF</h3>
-        <div className="space-y-4">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#003c71] to-[#0055a4] px-6 py-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+              <FileDown size={20} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold text-base">Exporter en PDF</h3>
+              <p className="text-blue-200 text-xs">Le fichier sera téléchargé automatiquement</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {/* Filtre statut */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Filtrer par statut</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <Filter size={14} className="inline mr-1.5 text-gray-400" />
+              Filtrer par statut
+            </label>
             <select
               value={filterStatus}
               onChange={e => setFilterStatus(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-gray-50"
             >
               <option value="ALL">Tous les statuts ({requests.length})</option>
               {Object.entries(STATUS_CONFIG).map(([k, v]) => (
@@ -277,28 +329,53 @@ function ExportModal({ requests, employeeName, matricule, onClose }: ExportModal
               ))}
             </select>
           </div>
+
+          {/* Colonnes */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Colonnes à inclure</label>
             <div className="grid grid-cols-2 gap-2">
               {ALL_COLUMNS.map(col => (
-                <label key={col.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <label
+                  key={col.key}
+                  className={`flex items-center gap-2 text-sm cursor-pointer px-3 py-2 rounded-xl border transition ${
+                    selected.includes(col.key)
+                      ? "border-[#003c71]/40 bg-blue-50 text-[#003c71] font-medium"
+                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
                   <input
                     type="checkbox"
                     checked={selected.includes(col.key)}
                     onChange={() => toggle(col.key)}
-                    className="accent-camublue-900"
+                    className="accent-[#003c71]"
                   />
                   {col.label}
                 </label>
               ))}
             </div>
           </div>
-          <p className="text-xs text-gray-400">{filtered.length} demande(s) seront exportées.</p>
+
+          {/* Résumé */}
+          <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm ${
+            filtered.length > 0 ? "bg-green-50 border border-green-100 text-green-700" : "bg-red-50 border border-red-100 text-red-600"
+          }`}>
+            {filtered.length > 0 ? (
+              <CheckCircle2 size={16} className="shrink-0" />
+            ) : (
+              <XCircle size={16} className="shrink-0" />
+            )}
+            <span>
+              {filtered.length > 0
+                ? `${filtered.length} demande(s) seront incluses dans le PDF`
+                : "Aucune demande pour ce filtre"}
+            </span>
+          </div>
         </div>
-        <div className="flex justify-end gap-3 mt-6">
+
+        <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-100">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm transition"
+            className="px-5 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm transition font-medium"
           >
             Annuler
           </button>
@@ -307,11 +384,12 @@ function ExportModal({ requests, employeeName, matricule, onClose }: ExportModal
             onClick={() => {
               exportLeavesPDF(filtered, employeeName, matricule, selected);
               onClose();
+              toast.success("PDF téléchargé avec succès !");
             }}
-            className="px-5 py-2 rounded-lg bg-camublue-900 text-white text-sm hover:bg-camublue-900/90 transition flex items-center gap-2 disabled:opacity-50"
+            className="px-5 py-2 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition flex items-center gap-2 disabled:opacity-50 font-medium shadow-sm"
           >
             <FileDown size={15} />
-            Générer PDF
+            Télécharger le PDF
           </button>
         </div>
       </motion.div>
@@ -319,21 +397,117 @@ function ExportModal({ requests, employeeName, matricule, onClose }: ExportModal
   );
 }
 
+// ── Carte de demande ───────────────────────────────────────────────────────────
+interface RequestCardProps {
+  req: LeaveRequest;
+  onEdit: () => void;
+}
+
+function RequestCard({ req, onEdit }: RequestCardProps) {
+  const cfg     = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
+  const Icon    = cfg.Icon;
+  const canEdit = req.status === "PENDING" || req.status === "PENDING_SECOND";
+  const days    = parseFloat(req.days) || 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="group relative bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition-all duration-200 overflow-hidden"
+    >
+      {/* Bande de couleur statut */}
+      <div
+        className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl"
+        style={{ backgroundColor: cfg.color }}
+      />
+
+      <div className="pl-5 pr-4 py-4">
+        <div className="flex items-start justify-between gap-3">
+          {/* Infos principales */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+              <span className="font-semibold text-gray-800 text-sm">{req.leave_type.label}</span>
+              <span
+                className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.textColor} ${cfg.borderColor}`}
+                style={{ backgroundColor: cfg.bg }}
+              >
+                <Icon size={10} />
+                {cfg.label}
+              </span>
+            </div>
+
+            {/* Période */}
+            <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+              <Calendar size={12} className="text-gray-400 shrink-0" />
+              <span>{fmt(req.start_date)}</span>
+              <span className="text-gray-300">→</span>
+              <span>{fmt(req.end_date)}</span>
+              <span className="ml-1 font-semibold text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded-md">
+                {days} j
+              </span>
+            </div>
+
+            {/* Motif */}
+            {req.motif && (
+              <p className="text-xs text-gray-400 italic truncate max-w-sm mt-0.5">"{req.motif}"</p>
+            )}
+
+            {/* Motif de rejet */}
+            {req.reject_reason && (
+              <div className="flex items-start gap-1.5 mt-1">
+                <XCircle size={11} className="text-red-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-red-500">{req.reject_reason}</p>
+              </div>
+            )}
+
+            {/* Validateur */}
+            {req.reviewed_by && req.status === "APPROVED" && (
+              <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
+                <CheckCircle2 size={11} />
+                Approuvé par {req.reviewed_by.full_name}
+              </p>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Badge jours - grand display */}
+            <div className="hidden sm:flex flex-col items-center justify-center w-12 h-12 rounded-xl border-2 border-gray-100 bg-gray-50">
+              <span className="text-lg font-bold text-gray-700 leading-none">{days}</span>
+              <span className="text-[9px] text-gray-400 uppercase tracking-wide">jours</span>
+            </div>
+
+            {canEdit && (
+              <button
+                onClick={onEdit}
+                className="flex items-center gap-1.5 text-xs text-[#003c71] hover:bg-[#003c71]/10 px-3 py-1.5 rounded-lg transition font-medium border border-[#003c71]/20 hover:border-[#003c71]/40"
+              >
+                <Pencil size={12} />
+                Modifier
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function EmployeeLeavesPage() {
-  const { user } = useAuth();
-  const employeeId = user?.employee_id;
+  const { user }    = useAuth();
+  const employeeId  = user?.employee_id;
 
-  const [balances, setBalances]       = useState<LeaveBalance[]>([]);
-  const [requests, setRequests]       = useState<LeaveRequest[]>([]);
-  const [leaveTypes, setLeaveTypes]   = useState<LeaveType[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [showForm, setShowForm]       = useState(false);
-  const [editTarget, setEditTarget]   = useState<LeaveRequest | null>(null);
-  const [showExport, setShowExport]   = useState(false);
+  const [balances,     setBalances]     = useState<LeaveBalance[]>([]);
+  const [requests,     setRequests]     = useState<LeaveRequest[]>([]);
+  const [leaveTypes,   setLeaveTypes]   = useState<LeaveType[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [showForm,     setShowForm]     = useState(false);
+  const [editTarget,   setEditTarget]   = useState<LeaveRequest | null>(null);
+  const [showExport,   setShowExport]   = useState(false);
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [showBalances, setShowBalances] = useState(true);
-  const [currentPage, setCurrentPage]   = useState(1);
+  const [currentPage,  setCurrentPage]  = useState(1);
 
   const refresh = useCallback(() => {
     if (!employeeId) return;
@@ -357,38 +531,45 @@ export default function EmployeeLeavesPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  // Reset to page 1 when filter changes
   const handleFilterChange = (status: string) => {
     setFilterStatus(status);
     setCurrentPage(1);
   };
 
-  const canEdit = (r: LeaveRequest) => r.status === "PENDING" || r.status === "PENDING_SECOND";
+  // Stats rapides
+  const statsData = [
+    { label: "Total",     count: requests.length,                                   color: "text-gray-700",   bg: "bg-gray-50",   border: "border-gray-200" },
+    { label: "En attente", count: requests.filter(r => r.status.startsWith("PENDING")).length, color: "text-amber-700", bg: "bg-amber-50",  border: "border-amber-200" },
+    { label: "Approuvées", count: requests.filter(r => r.status === "APPROVED").length,         color: "text-green-700", bg: "bg-green-50",  border: "border-green-200" },
+    { label: "Rejetées",   count: requests.filter(r => r.status === "REJECTED").length,         color: "text-red-700",   bg: "bg-red-50",    border: "border-red-200"   },
+  ];
 
   return (
     <EmployeeLayout>
-      <div className="max-w-4xl mx-auto px-4 md:px-0">
-        {/* Header */}
+      <div className="max-w-4xl mx-auto px-4 md:px-0 pb-10">
+
+        {/* ── Header ── */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-between mb-6 flex-wrap gap-3"
         >
           <div>
-            <h1 className="text-2xl font-bold text-camublue-900">Mes Congés</h1>
-            <p className="text-gray-500 text-sm mt-0.5">Gérez vos demandes de congés</p>
+            <h1 className="text-2xl font-bold text-[#003c71]">Mes Congés</h1>
+            <p className="text-gray-500 text-sm mt-0.5">Gérez et suivez vos demandes de congés</p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowExport(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 transition"
+              disabled={requests.length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition disabled:opacity-40 disabled:cursor-not-allowed font-medium"
             >
               <FileDown size={16} />
               Exporter PDF
             </button>
             <button
               onClick={() => { setEditTarget(null); setShowForm(true); }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm hover:bg-camublue-900/90 transition shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition shadow-sm font-medium"
             >
               <Plus size={16} />
               Nouvelle demande
@@ -396,7 +577,37 @@ export default function EmployeeLeavesPage() {
           </div>
         </motion.div>
 
-        {/* Soldes */}
+        {/* ── Stats rapides ── */}
+        {!loading && requests.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6"
+          >
+            {statsData.map(s => (
+              <button
+                key={s.label}
+                onClick={() => handleFilterChange(
+                  s.label === "Total"      ? "ALL"      :
+                  s.label === "En attente" ? "PENDING"  :
+                  s.label === "Approuvées" ? "APPROVED" : "REJECTED"
+                )}
+                className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition hover:shadow-sm ${s.bg} ${s.border} ${
+                  (filterStatus === (
+                    s.label === "Total"      ? "ALL"      :
+                    s.label === "En attente" ? "PENDING"  :
+                    s.label === "Approuvées" ? "APPROVED" : "REJECTED"
+                  )) ? "ring-2 ring-offset-1 ring-current" : ""
+                }`}
+              >
+                <span className={`text-2xl font-bold ${s.color}`}>{s.count}</span>
+                <span className={`text-xs mt-0.5 font-medium ${s.color} opacity-80`}>{s.label}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+
+        {/* ── Soldes ── */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -407,126 +618,143 @@ export default function EmployeeLeavesPage() {
             className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition"
           >
             <span className="font-semibold text-gray-800 flex items-center gap-2">
-              <Calendar size={18} className="text-camublue-900" />
+              <TrendingUp size={17} className="text-[#003c71]" />
               Mes soldes {new Date().getFullYear()}
             </span>
-            {showBalances ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+            {showBalances
+              ? <ChevronUp size={17} className="text-gray-400" />
+              : <ChevronDown size={17} className="text-gray-400" />
+            }
           </button>
-          {showBalances && (
-            <div className="px-5 pb-5">
-              {loading ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}
+
+          <AnimatePresence>
+            {showBalances && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="px-5 pb-5">
+                  {loading ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}
+                    </div>
+                  ) : balances.length === 0 ? (
+                    <p className="text-gray-400 text-sm py-2">Aucun solde disponible.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {balances.map(b => {
+                        const rem = parseFloat(b.remaining || "0");
+                        const acq = parseFloat(b.acquired  || "0");
+                        const pct = acq > 0 ? Math.round((rem / acq) * 100) : 0;
+                        return (
+                          <div key={b.id} className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-100 hover:border-gray-200 transition">
+                            <div className="text-xs text-gray-500 font-medium mb-2 truncate">{b.leave_type.label}</div>
+                            <div className="flex items-end gap-1 mb-2">
+                              <span className="text-2xl font-bold text-[#003c71]">{rem.toFixed(1)}</span>
+                              <span className="text-sm text-gray-400 mb-0.5">/ {acq.toFixed(1)} j</span>
+                            </div>
+                            {/* Barre de progression */}
+                            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${pct}%`,
+                                  backgroundColor: pct > 50 ? "#059669" : pct > 20 ? "#d97706" : "#dc2626",
+                                }}
+                              />
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1.5">
+                              Pris : {parseFloat(b.taken || "0").toFixed(1)} j · {pct}% restant
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              ) : balances.length === 0 ? (
-                <p className="text-gray-400 text-sm py-2">Aucun solde disponible.</p>
-              ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {balances.map(b => {
-                    const rem = parseFloat(b.remaining || "0");
-                    return (
-                      <div key={b.id} className="bg-camugray-100 rounded-xl p-3 border border-gray-100">
-                        <div className="text-xs text-gray-500 mb-1">{b.leave_type.label}</div>
-                        <div className="text-xl font-bold text-camublue-900">{rem.toFixed(1)} j</div>
-                        <div className="text-xs text-gray-400 mt-0.5">
-                          Acquis {parseFloat(b.acquired || "0").toFixed(1)} · Pris {parseFloat(b.taken || "0").toFixed(1)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
 
-        {/* Filtre + liste */}
+        {/* ── Liste des demandes ── */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
           className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
         >
+          {/* Toolbar */}
           <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
             <span className="font-semibold text-gray-800">
               Mes demandes
               {!loading && filtered.length > 0 && (
                 <span className="ml-2 text-xs font-normal text-gray-400">
-                  ({filtered.length} au total)
+                  ({filtered.length} résultat{filtered.length > 1 ? "s" : ""})
                 </span>
               )}
             </span>
             <div className="flex-1" />
-            <select
-              value={filterStatus}
-              onChange={e => handleFilterChange(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30"
-            >
-              <option value="ALL">Tous ({requests.length})</option>
-              {Object.entries(STATUS_CONFIG).map(([k, v]) => (
-                <option key={k} value={k}>{v.label} ({requests.filter(r => r.status === k).length})</option>
-              ))}
-            </select>
+            <div className="relative">
+              <Filter size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <select
+                value={filterStatus}
+                onChange={e => handleFilterChange(e.target.value)}
+                className="pl-7 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white"
+              >
+                <option value="ALL">Tous ({requests.length})</option>
+                {Object.entries(STATUS_CONFIG).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label} ({requests.filter(r => r.status === k).length})</option>
+                ))}
+              </select>
+            </div>
           </div>
 
+          {/* Contenu */}
           {loading ? (
             <div className="p-5 space-y-3">
-              {[1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}
+              {[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-2xl animate-pulse" />)}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <Calendar size={36} className="mx-auto mb-3 opacity-40" />
-              <p className="text-sm">Aucune demande{filterStatus !== "ALL" ? " pour ce statut" : ""}</p>
+            <div className="text-center py-16 text-gray-400">
+              <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                <Calendar size={28} className="opacity-40" />
+              </div>
+              <p className="text-sm font-medium text-gray-500">Aucune demande trouvée</p>
+              <p className="text-xs mt-1 text-gray-400">
+                {filterStatus !== "ALL"
+                  ? `Aucune demande pour le statut "${STATUS_CONFIG[filterStatus]?.label ?? filterStatus}"`
+                  : "Créez votre première demande de congé"}
+              </p>
+              {filterStatus === "ALL" && (
+                <button
+                  onClick={() => { setEditTarget(null); setShowForm(true); }}
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition font-medium"
+                >
+                  <Plus size={15} /> Nouvelle demande
+                </button>
+              )}
             </div>
           ) : (
             <>
-              <div className="divide-y divide-gray-50">
-                {paginated.map(req => {
-                  const cfg = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
-                  const Icon = cfg.Icon;
-                  const editable = canEdit(req);
-                  return (
-                    <div key={req.id} className="px-5 py-4 flex items-start justify-between gap-4 hover:bg-gray-50/50 transition">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-gray-800 text-sm">{req.leave_type.label}</span>
-                            <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color}`}>
-                              <Icon size={11} />
-                              {cfg.label}
-                            </span>
-                          </div>
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {fmt(req.start_date)} → {fmt(req.end_date)} · <b>{req.days} jour(s)</b>
-                          </div>
-                          {req.motif && (
-                            <div className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{req.motif}</div>
-                          )}
-                          {req.reject_reason && (
-                            <div className="text-xs text-red-500 mt-0.5">Motif rejet : {req.reject_reason}</div>
-                          )}
-                        </div>
-                      </div>
-                      {editable && (
-                        <button
-                          onClick={() => { setEditTarget(req); setShowForm(true); }}
-                          className="shrink-0 flex items-center gap-1.5 text-xs text-camublue-900 hover:bg-camublue-900/10 px-2.5 py-1.5 rounded-lg transition"
-                        >
-                          <Pencil size={13} />
-                          Modifier
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="p-4 space-y-3">
+                {paginated.map(req => (
+                  <RequestCard
+                    key={req.id}
+                    req={req}
+                    onEdit={() => { setEditTarget(req); setShowForm(true); }}
+                  />
+                ))}
               </div>
 
-              {/* ── Pagination ── */}
+              {/* Pagination */}
               {totalPages > 1 && (
                 <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-xs text-gray-400">
-                    Page {currentPage} sur {totalPages} · {filtered.length} demande(s)
+                    Page {currentPage} / {totalPages} · {filtered.length} demande(s)
                   </span>
                   <div className="flex items-center gap-1">
                     <button
@@ -542,7 +770,7 @@ export default function EmployeeLeavesPage() {
                         onClick={() => setCurrentPage(page)}
                         className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-medium transition ${
                           page === currentPage
-                            ? "bg-camublue-900 text-white shadow-sm"
+                            ? "bg-[#003c71] text-white shadow-sm"
                             : "border border-gray-200 text-gray-600 hover:bg-gray-50"
                         }`}
                       >
@@ -564,7 +792,7 @@ export default function EmployeeLeavesPage() {
         </motion.div>
       </div>
 
-      {/* Modal: compte non lié à un employé */}
+      {/* ── Modal compte non lié ── */}
       {showForm && !employeeId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <motion.div
@@ -572,15 +800,18 @@ export default function EmployeeLeavesPage() {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6"
           >
-            <h3 className="text-lg font-semibold text-camublue-900 mb-3">Compte non lié</h3>
-            <p className="text-gray-600 text-sm mb-5">
-              Votre compte utilisateur n'est pas encore associé à un dossier employé.
-              Veuillez contacter l'administrateur RH pour lier votre compte à votre fiche employé.
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-4">
+              <AlertCircle size={24} className="text-amber-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 text-center">Compte non lié</h3>
+            <p className="text-gray-500 text-sm mb-5 text-center">
+              Votre compte n'est pas encore associé à un dossier employé.
+              Contactez l'administrateur RH pour lier votre compte.
             </p>
-            <div className="flex justify-end">
+            <div className="flex justify-center">
               <button
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2 rounded-lg bg-camublue-900 text-white text-sm hover:bg-camublue-900/90 transition"
+                className="px-5 py-2 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition font-medium"
               >
                 Compris
               </button>
@@ -589,17 +820,17 @@ export default function EmployeeLeavesPage() {
         </div>
       )}
 
-      {/* Modal: formulaire de demande */}
+      {/* ── Modal formulaire ── */}
       {showForm && employeeId && (
         <LeaveFormModal
           mode={editTarget ? "edit" : "create"}
           initial={editTarget ? {
-            id: editTarget.id,
+            id:            editTarget.id,
             leave_type_id: editTarget.leave_type.id,
-            start_date: editTarget.start_date,
-            end_date: editTarget.end_date,
-            days: parseFloat(editTarget.days),
-            motif: editTarget.motif,
+            start_date:    editTarget.start_date,
+            end_date:      editTarget.end_date,
+            days:          parseFloat(editTarget.days),
+            motif:         editTarget.motif,
           } : undefined}
           leaveTypes={leaveTypes}
           employeeId={employeeId}
@@ -608,6 +839,7 @@ export default function EmployeeLeavesPage() {
         />
       )}
 
+      {/* ── Modal export ── */}
       {showExport && (
         <ExportModal
           requests={requests}
