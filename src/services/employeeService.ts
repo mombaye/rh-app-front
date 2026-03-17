@@ -170,7 +170,9 @@ export const exportEmployeesExcel = async (opts?: {
 export const createAccountFromEmployee = async (employeeId: number) =>
   (await api.post(`/api/employees/${employeeId}/create-account/`)).data;
 
-export const sendAccessCodes = async (matricules: string[]) =>
+export const sendAccessCodes = async (
+  matricules: string[]
+): Promise<{ sent: number; failed: number; errors: string[] }> =>
   (await api.post("/api/employees/send-access-codes/", { matricules })).data;
 
 // ══════════════════════════════════════════════════════
@@ -397,13 +399,6 @@ export const exportBulletinsLogs = async (opts?: {
   window.URL.revokeObjectURL(url);
 };
 
-/** POST /api/employees/send-access-codes/ — envoi des codes d'accès par email */
-export const sendAccessCodes = async (payload: {
-  matricules: string[];
-}): Promise<{ sent: number; failed: number; errors: string[] }> => {
-  const res = await api.post("/api/employees/send-access-codes/", payload);
-  return res.data;
-};
 
 export const deleteBulletinLog = async (id: number) =>
   await api.delete(`/api/employees/bulletin-log/${id}/`);

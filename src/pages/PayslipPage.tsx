@@ -343,7 +343,7 @@ function AccessCodesModal({ open, onClose }: { open: boolean; onClose: () => voi
     setSending(true);
     const t = toast.loading(`Envoi des codes à ${matricules.length} employé(s)…`);
     try {
-      const res = await sendAccessCodes({ matricules });
+      const res = await sendAccessCodes(matricules);
       setResult(res);
       toast.success(`${res.sent} code(s) envoyé(s).`, { id: t });
     } catch (e: any) {
