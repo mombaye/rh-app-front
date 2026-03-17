@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -21,21 +21,17 @@ const navItems = [
 ];
 
 export default function EmployeeTopNav() {
-  const location  = useLocation();
+  const location = useLocation();
   const { user, logout } = useAuth();
   const [mobileOpen,      setMobileOpen]      = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location.pathname]);
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
   useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 768) setMobileOpen(false);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    const onResize = () => { if (window.innerWidth >= 768) setMobileOpen(false); };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const displayName = user?.employee_name || user?.username || user?.email;
@@ -44,27 +40,24 @@ export default function EmployeeTopNav() {
     <>
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-4">
-          {/* Logo */}
-          <Link to="/employee/dashboard" className="shrink-0">
-            <img src={logo} alt="Camusat" className="h-9 object-contain" />
-          </Link>
+        {/* Desktop: 3-column grid — Logo | Nav centered | Logout right */}
+        <div className="hidden md:grid grid-cols-3 items-center px-6 h-24">
+          {/* Col 1 – Logo */}
+          <div className="flex items-center">
+            <Link to="/employee/dashboard">
+              <img src={logo} alt="Camusat" className="h-16 object-contain" />
+            </Link>
+          </div>
 
-          {/* Badge espace */}
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-camublue-900/10 text-camublue-900 text-xs font-semibold shrink-0">
-            <UserCircle2 size={13} />
-            Espace Employé
-          </span>
-
-          {/* Nav links – desktop */}
-          <nav className="hidden md:flex items-center gap-1 flex-1 ml-2">
+          {/* Col 2 – Nav links centered */}
+          <nav className="flex items-center justify-center gap-1">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                     isActive
                       ? "bg-camublue-900 text-white shadow-sm"
                       : "text-gray-600 hover:bg-camublue-900/10 hover:text-camublue-900"
@@ -77,26 +70,34 @@ export default function EmployeeTopNav() {
             })}
           </nav>
 
-          {/* Spacer on mobile */}
-          <div className="flex-1 md:hidden" />
+          {/* Col 3 – Logout right */}
+          <div className="flex items-center justify-end">
+            <button
+              onClick={() => setShowLogoutModal(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition"
+            >
+              <UserCircle2 size={18} className="text-camublue-900" />
+              <span className="max-w-[140px] truncate font-medium">{displayName}</span>
+              <LogOut size={15} className="text-gray-400" />
+            </button>
+          </div>
+        </div>
 
-          {/* User + logout – desktop */}
+        {/* Mobile bar */}
+        <div className="md:hidden flex items-center px-4 h-16">
+          <Link to="/employee/dashboard">
+            <img src={logo} alt="Camusat" className="h-10 object-contain" />
+          </Link>
+          <div className="flex-1" />
           <button
-            onClick={() => setShowLogoutModal(true)}
-            className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-camublue-900/10 hover:text-camublue-900 transition shrink-0"
-          >
-            <UserCircle2 size={18} className="text-camublue-900" />
-            <span className="max-w-[140px] truncate font-medium">{displayName}</span>
-            <LogOut size={15} className="text-gray-400 ml-1" />
-          </button>
-
-          {/* Hamburger – mobile */}
-          <button
-            className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition"
+            className="p-2 rounded-lg hover:bg-gray-100 transition"
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Menu"
           >
-            {mobileOpen ? <X size={22} className="text-camublue-900" /> : <Menu size={22} className="text-camublue-900" />}
+            {mobileOpen
+              ? <X size={22} className="text-camublue-900" />
+              : <Menu size={22} className="text-camublue-900" />
+            }
           </button>
         </div>
 

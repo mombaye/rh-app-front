@@ -3,8 +3,10 @@ import { motion } from "framer-motion";
 import {
   Plus, Calendar, CheckCircle2, Clock, XCircle,
   AlertCircle, Pencil, FileDown, ChevronDown, ChevronUp,
-  Loader2,
+  Loader2, ChevronLeft, ChevronRight,
 } from "lucide-react";
+
+const PAGE_SIZE = 8;
 import { useAuth } from "@/contexts/useAuth";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
 import { leaveBalanceService, leaveRequestService, leaveTypeService } from "@/services/leaveService";
@@ -331,6 +333,7 @@ export default function EmployeeLeavesPage() {
   const [showExport, setShowExport]   = useState(false);
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [showBalances, setShowBalances] = useState(true);
+  const [currentPage, setCurrentPage]   = useState(1);
 
   const refresh = useCallback(() => {
     if (!employeeId) return;
@@ -350,7 +353,15 @@ export default function EmployeeLeavesPage() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const filtered = filterStatus === "ALL" ? requests : requests.filter(r => r.status === filterStatus);
+  const filtered   = filterStatus === "ALL" ? requests : requests.filter(r => r.status === filterStatus);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated  = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Reset to page 1 when filter changes
+  const handleFilterChange = (status: string) => {
+    setFilterStatus(status);
+    setCurrentPage(1);
+  };
 
   const canEdit = (r: LeaveRequest) => r.status === "PENDING" || r.status === "PENDING_SECOND";
 
@@ -437,11 +448,18 @@ export default function EmployeeLeavesPage() {
           className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
         >
           <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
-            <span className="font-semibold text-gray-800">Mes demandes</span>
+            <span className="font-semibold text-gray-800">
+              Mes demandes
+              {!loading && filtered.length > 0 && (
+                <span className="ml-2 text-xs font-normal text-gray-400">
+                  ({filtered.length} au total)
+                </span>
+              )}
+            </span>
             <div className="flex-1" />
             <select
               value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
+              onChange={e => handleFilterChange(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30"
             >
               <option value="ALL">Tous ({requests.length})</option>
@@ -461,47 +479,87 @@ export default function EmployeeLeavesPage() {
               <p className="text-sm">Aucune demande{filterStatus !== "ALL" ? " pour ce statut" : ""}</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
-              {filtered.map(req => {
-                const cfg = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
-                const Icon = cfg.Icon;
-                const editable = canEdit(req);
-                return (
-                  <div key={req.id} className="px-5 py-4 flex items-start justify-between gap-4 hover:bg-gray-50/50 transition">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-gray-800 text-sm">{req.leave_type.label}</span>
-                          <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color}`}>
-                            <Icon size={11} />
-                            {cfg.label}
-                          </span>
+            <>
+              <div className="divide-y divide-gray-50">
+                {paginated.map(req => {
+                  const cfg = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
+                  const Icon = cfg.Icon;
+                  const editable = canEdit(req);
+                  return (
+                    <div key={req.id} className="px-5 py-4 flex items-start justify-between gap-4 hover:bg-gray-50/50 transition">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-gray-800 text-sm">{req.leave_type.label}</span>
+                            <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color}`}>
+                              <Icon size={11} />
+                              {cfg.label}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {fmt(req.start_date)} → {fmt(req.end_date)} · <b>{req.days} jour(s)</b>
+                          </div>
+                          {req.motif && (
+                            <div className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{req.motif}</div>
+                          )}
+                          {req.reject_reason && (
+                            <div className="text-xs text-red-500 mt-0.5">Motif rejet : {req.reject_reason}</div>
+                          )}
                         </div>
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          {fmt(req.start_date)} → {fmt(req.end_date)} · <b>{req.days} jour(s)</b>
-                        </div>
-                        {req.motif && (
-                          <div className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{req.motif}</div>
-                        )}
-                        {req.reject_reason && (
-                          <div className="text-xs text-red-500 mt-0.5">Motif rejet : {req.reject_reason}</div>
-                        )}
                       </div>
+                      {editable && (
+                        <button
+                          onClick={() => { setEditTarget(req); setShowForm(true); }}
+                          className="shrink-0 flex items-center gap-1.5 text-xs text-camublue-900 hover:bg-camublue-900/10 px-2.5 py-1.5 rounded-lg transition"
+                        >
+                          <Pencil size={13} />
+                          Modifier
+                        </button>
+                      )}
                     </div>
-                    {editable && (
+                  );
+                })}
+              </div>
+
+              {/* ── Pagination ── */}
+              {totalPages > 1 && (
+                <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-xs text-gray-400">
+                    Page {currentPage} sur {totalPages} · {filtered.length} demande(s)
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      <ChevronLeft size={15} />
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                       <button
-                        onClick={() => { setEditTarget(req); setShowForm(true); }}
-                        className="shrink-0 flex items-center gap-1.5 text-xs text-camublue-900 hover:bg-camublue-900/10 px-2.5 py-1.5 rounded-lg transition"
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-medium transition ${
+                          page === currentPage
+                            ? "bg-camublue-900 text-white shadow-sm"
+                            : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                        }`}
                       >
-                        <Pencil size={13} />
-                        Modifier
+                        {page}
                       </button>
-                    )}
+                    ))}
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      <ChevronRight size={15} />
+                    </button>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              )}
+            </>
           )}
         </motion.div>
       </div>
