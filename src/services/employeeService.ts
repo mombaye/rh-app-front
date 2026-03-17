@@ -259,6 +259,19 @@ export type BulletinEnvoiLog = {
   error?: string;
 };
 
+// Type utilisé par BulletinsLogsModal (retour de l'API paginée)
+export type BulletinLogItem = {
+  id: number;
+  matricule: string;
+  email: string | null;
+  status: "sent" | "failed" | "pending";
+  sent_at: string;
+  statut: string;
+  message: string | null;
+  year: number | null;
+  month: number | null;
+};
+
 export type BulletinMonthSummary = {
   year: number;
   month: number;
@@ -314,48 +327,82 @@ export const fetchAvailableBulletins = async (matricule: string) =>
     await api.get(`/api/employees/${matricule}/available-bulletins/`)
   ).data as { year: number; month: number }[];
 
+/** GET /api/employees/bulletins/logs/summary/ — agrégation par mois côté serveur */
 export const fetchBulletinsSummary = async (opts?: {
   start?: string;
   end?: string;
 }): Promise<BulletinMonthSummary[]> => {
-  const res  = await api.get("/api/employees/bulletins-envoyes-recents/");
-  const logs: BulletinEnvoiLog[] = res.data;
-  const filtered = logs.filter((log) => {
-    if (opts?.start && log.date_envoi < opts.start) return false;
-    if (opts?.end   && log.date_envoi > opts.end + "T23:59:59") return false;
-    return true;
-  });
-  const map = new Map<string, BulletinMonthSummary>();
-  for (const log of filtered) {
-    const key = `${log.year}-${log.month}`;
-    if (!map.has(key))
-      map.set(key, { year: log.year, month: log.month, total: 0, sent: 0, failed: 0 });
-    const entry = map.get(key)!;
-    entry.total += 1;
-    if (log.status === "sent")   entry.sent   += 1;
-    if (log.status === "failed") entry.failed += 1;
-  }
-  return Array.from(map.values()).sort((a, b) =>
+  const params: Record<string, string> = {};
+  if (opts?.start) params.start = opts.start;
+  if (opts?.end)   params.end   = opts.end;
+  const res = await api.get("/api/employees/bulletins/logs/summary/", { params });
+  // trier du plus récent au plus ancien
+  return (res.data as BulletinMonthSummary[]).sort((a, b) =>
     b.year !== a.year ? b.year - a.year : b.month - a.month
   );
 };
 
+/** GET /api/employees/bulletins/logs/ — liste paginée côté serveur */
 export const fetchBulletinsLogs = async (opts?: {
   year?: number;
   month?: number;
   status?: "sent" | "failed" | "pending";
   start?: string;
   end?: string;
-}): Promise<BulletinEnvoiLog[]> => {
-  const res = await api.get("/api/employees/bulletins-envoyes-recents/");
-  let logs: BulletinEnvoiLog[] = res.data;
-  if (opts?.year)   logs = logs.filter((l) => l.year  === opts.year);
-  if (opts?.month)  logs = logs.filter((l) => l.month === opts.month);
-  if (opts?.status && opts.status !== "pending")
-    logs = logs.filter((l) => l.status === opts.status);
-  if (opts?.start)  logs = logs.filter((l) => l.date_envoi >= opts.start!);
-  if (opts?.end)    logs = logs.filter((l) => l.date_envoi <= opts.end! + "T23:59:59");
-  return logs;
+  search?: string;
+  page?: number;
+  page_size?: number;
+}): Promise<{ count: number; results: BulletinLogItem[] }> => {
+  const params: Record<string, string> = {};
+  if (opts?.year)      params.year      = String(opts.year);
+  if (opts?.month)     params.month     = String(opts.month);
+  if (opts?.status)    params.status    = opts.status;
+  if (opts?.start)     params.start     = opts.start;
+  if (opts?.end)       params.end       = opts.end;
+  if (opts?.search)    params.search    = opts.search;
+  if (opts?.page)      params.page      = String(opts.page);
+  if (opts?.page_size) params.page_size = String(opts.page_size);
+  const res = await api.get("/api/employees/bulletins/logs/", { params });
+  return res.data;
+};
+
+/** GET /api/employees/bulletins/logs/export/ — téléchargement CSV */
+export const exportBulletinsLogs = async (opts?: {
+  year?: number;
+  month?: number;
+  status?: "sent" | "failed" | "pending";
+  start?: string;
+  end?: string;
+  search?: string;
+}): Promise<void> => {
+  const params: Record<string, string> = {};
+  if (opts?.year)   params.year   = String(opts.year);
+  if (opts?.month)  params.month  = String(opts.month);
+  if (opts?.status) params.status = opts.status;
+  if (opts?.start)  params.start  = opts.start;
+  if (opts?.end)    params.end    = opts.end;
+  if (opts?.search) params.search = opts.search;
+  const res = await api.get("/api/employees/bulletins/logs/export/", {
+    params,
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "text/csv;charset=utf-8-sig" });
+  const url  = window.URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = "bulletins_logs.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+/** POST /api/employees/send-access-codes/ — envoi des codes d'accès par email */
+export const sendAccessCodes = async (payload: {
+  matricules: string[];
+}): Promise<{ sent: number; failed: number; errors: string[] }> => {
+  const res = await api.post("/api/employees/send-access-codes/", payload);
+  return res.data;
 };
 
 export const deleteBulletinLog = async (id: number) =>
