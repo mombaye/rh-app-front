@@ -153,6 +153,7 @@ export default function EmployeesTable({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sendScope, setSendScope] = useState<"selected" | "filtered" | "all">("selected");
   const [createAccountConfirmEmp, setCreateAccountConfirmEmp] = useState<Employee | null>(null);
+  const [createdCredentials, setCreatedCredentials] = useState<{ username: string; password: string; empName: string } | null>(null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -336,7 +337,12 @@ export default function EmployeesTable({
       const res = await createAccountFromEmployee(emp.id);
       if (res.warning) {
         toast.success(`Compte créé pour ${emp.prenom} ${emp.nom}`);
-        toast.error(`Attention : ${res.warning}`, { duration: 6000 });
+        // Email échoué : afficher les identifiants dans une modale pour communication manuelle
+        if (res.password) {
+          setCreatedCredentials({ username: res.username, password: res.password, empName: `${emp.prenom} ${emp.nom}` });
+        } else {
+          toast.error(`Attention : ${res.warning}`, { duration: 6000 });
+        }
       } else {
         toast.success(`Compte créé et identifiants envoyés à ${emp.email} !`);
       }
@@ -912,6 +918,60 @@ export default function EmployeesTable({
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── Credentials Dialog (email failed) ── */}
+        {createdCredentials && (
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[80] p-4"
+            onClick={() => setCreatedCredentials(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.15 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500 shrink-0">
+                  <FaUserPlus className="text-white" size={16} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-base">Compte créé — email non envoyé</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">{createdCredentials.empName}</p>
+                </div>
+              </div>
+              <div className="px-6 py-5 space-y-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                  <p className="text-xs text-amber-700 leading-relaxed">
+                    L'email n'a pas pu être envoyé. Communiquez ces identifiants à l'employé par un autre moyen.
+                  </p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500 font-medium">Identifiant</span>
+                    <span className="font-mono font-semibold text-camublue-900 text-sm">{createdCredentials.username}</span>
+                  </div>
+                  <div className="h-px bg-slate-200" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500 font-medium">Mot de passe provisoire</span>
+                    <span className="font-mono font-bold text-camublue-900 bg-white border border-slate-300 rounded px-2 py-0.5 text-sm tracking-wider">{createdCredentials.password}</span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-400">L'employé devra changer son mot de passe à la première connexion.</p>
+              </div>
+              <div className="px-6 pb-5">
+                <button
+                  onClick={() => setCreatedCredentials(null)}
+                  className="w-full py-2.5 bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-bold rounded-xl transition"
+                >
+                  Compris, fermer
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
 
       {/* ── Export Dialog ── */}
       <AnimatePresence>
