@@ -233,6 +233,8 @@ export interface ShiftRecord {
   early_leave_minutes: number;
   status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working";
   flags: Record<string, any>;
+  is_replacement: boolean;
+  replaced_by: string | null;
 }
 
 export interface ShiftDailyStatsResponse {

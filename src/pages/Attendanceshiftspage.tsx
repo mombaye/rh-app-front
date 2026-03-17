@@ -2225,11 +2225,11 @@ export default function AttendanceShiftsPage() {
         shift_team: r.shift_team,
         shift_team_label: SHIFT_TEAMS.find(t => t.key === r.shift_team)?.label ?? "",
         is_scheduled: r.is_planned,
-        is_replacement: false,
+        is_replacement: (r as any).is_replacement ?? false,
         not_scheduled_rest: !r.is_planned && r.status === "not_working",
         is_shift_pending: r.status === "absent" && shiftNotStarted(r.shift_team),
         team_id: (r as any).team_id ?? "",
-        replaced_by: null,
+        replaced_by: (r as any).replaced_by ?? null,
       };
     }).sort((a, b) => {
       const sa = shiftOrder[a.shift_team ?? ""] ?? 3;
