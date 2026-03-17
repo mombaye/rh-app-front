@@ -11,7 +11,7 @@ import {
 import {
   Upload, X, Zap, ListChecks, History,
   CheckCircle, XCircle, Clock, RefreshCw, ChevronDown,
-  Download, Trash2,
+  Download, Trash2, Send,
 } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 
@@ -19,6 +19,7 @@ import BulletinSendProgress from "@/components/payslips/BulletinSendProgress";
 import PayslipStatsCards    from "@/components/payslips/PayslipStatsCards";
 import BulletinsLogsModal   from "@/components/payslips/BulletinsLogsModal";
 import PayslipTargetsModal  from "@/components/payslips/PayslipTargetsModal";
+import { BulletinResendModal } from "@/components/payslips/BulletinResendModal";
 
 import {
   uploadPayslipPdf,
@@ -506,6 +507,7 @@ export default function PayslipPage() {
   // Sélection de lignes + export
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [exportOpen,   setExportOpen]   = useState(false);
+  const [resendOpen,   setResendOpen]   = useState(false);
 
   const toggleRowSelect = (key: string) =>
     setSelectedRows((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
@@ -852,6 +854,13 @@ export default function PayslipPage() {
                             <History className="h-3 w-3" /> Détails
                           </button>
                           <button
+                            onClick={() => setResendOpen(true)}
+                            className="inline-flex items-center gap-1 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-purple-200 transition"
+                            title="Renvoyer un bulletin à un employé"
+                          >
+                            <Send className="h-3 w-3" /> Renvoyer
+                          </button>
+                          <button
                             onClick={() => doDeleteMonth(row.year, row.month)}
                             className="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 transition"
                             title={`Supprimer tous les logs de ${MONTH_NAMES[row.month]} ${row.year}`}
@@ -1006,6 +1015,11 @@ export default function PayslipPage() {
           />
         )}
       </AnimatePresence>
+
+      <BulletinResendModal
+        open={resendOpen}
+        onClose={() => setResendOpen(false)}
+      />
 
     </AppLayout>
   );
