@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import WelcomePage from "@/pages/WelcomePage";
 import LoginPage from "@/pages/LoginPage";
 import AdminLoginPage from "@/pages/admin/AdminLoginPage";
 import AdminDashboardPage from "@/pages/admin/AdminDashboardPage";
@@ -50,6 +51,9 @@ function App() {
             </AdminProtectedRoute>
           }
         />
+
+        {/* ── Welcome / Accueil ──────────────────────────── */}
+        <Route path="/" element={<WelcomePage />} />
 
         {/* ── Main App ───────────────────────────────────── */}
         <Route path="/login" element={<LoginPage />} />
@@ -174,7 +178,7 @@ function App() {
         />
 
         {/* Redirection par défaut */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );
