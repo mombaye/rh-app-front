@@ -33,7 +33,7 @@ import * as XLSX from "xlsx";
 // TYPES ET INTERFACES
 // ============================================================================
 
-type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" | "deficit" | "pending";
+type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" | "deficit" | "pending" | "replacement";
 type MotifType = "absent" | "not_pointing";
 type AssignmentMap = Record<string, ShiftTeamKey | null>;
 type ViewMode = "daily" | "weekly" | "monthly";
@@ -153,7 +153,8 @@ const QUICK_FILTERS = [
   { key: "incomplete" as StatusFilter, label: "Incomplets",   dotColor: "bg-amber-400",  activeText: "text-amber-800",   activeBg: "bg-amber-50",   activeDot: "bg-amber-500"    },
   { key: "anomaly"    as StatusFilter, label: "Anomalies",    dotColor: "bg-violet-400", activeText: "text-violet-700",  activeBg: "bg-violet-50",  activeDot: "bg-violet-500"   },
   { key: "deficit"    as StatusFilter, label: "Heures moins", dotColor: "bg-rose-400",   activeText: "text-rose-700",    activeBg: "bg-rose-50",    activeDot: "bg-rose-500"     },
-  { key: "pending"    as StatusFilter, label: "En attente",   dotColor: "bg-blue-400",   activeText: "text-blue-700",    activeBg: "bg-blue-50",    activeDot: "bg-blue-500"     },
+  { key: "pending"     as StatusFilter, label: "En attente",   dotColor: "bg-blue-400",   activeText: "text-blue-700",    activeBg: "bg-blue-50",     activeDot: "bg-blue-500"     },
+  { key: "replacement" as StatusFilter, label: "Remplaçants",  dotColor: "bg-purple-400", activeText: "text-purple-700",  activeBg: "bg-purple-50",  activeDot: "bg-purple-500"   },
 ];
 
 const DAYS_FR = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
@@ -2299,6 +2300,7 @@ export default function AttendanceShiftsPage() {
       if (statusFilter === "deficit") return r.deficit_minutes > 0;
       if (statusFilter === "absent") return r.status === "absent" && !r.not_scheduled_rest;
       if (statusFilter === "pending") return r.status === "pending" || r.is_shift_pending;
+      if (statusFilter === "replacement") return r.is_replacement;
       if (statusFilter !== "all") return r.status === statusFilter;
       return true;
     });
@@ -2371,6 +2373,7 @@ export default function AttendanceShiftsPage() {
     if (key === "deficit") return base.filter((r) => r.deficit_minutes > 0).length;
     if (key === "absent") return base.filter((r) => r.status === "absent" && !r.not_scheduled_rest).length;
     if (key === "pending") return base.filter((r) => r.status === "pending" || r.is_shift_pending).length;
+    if (key === "replacement") return base.filter((r) => r.is_replacement).length;
     return base.filter((r) => r.status === key).length;
   };
 
