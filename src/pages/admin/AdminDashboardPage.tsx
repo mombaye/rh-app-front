@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import toast, { Toaster } from "react-hot-toast";
 import { AnimatePresence, motion } from "framer-motion";
 import * as XLSX from "xlsx";
+import SharedConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 import {
   Users,
   UserCheck,
@@ -599,46 +600,6 @@ function ResetPasswordModal({ user, onClose, onSave }: { user: AdminUser; onClos
   );
 }
 
-// ─── Confirm Delete Modal ─────────────────────────────────────────────────────
-
-function ConfirmDeleteModal({ user, onClose, onConfirm }: { user: AdminUser; onClose: () => void; onConfirm: () => void }) {
-  const [loading, setLoading] = useState(false);
-
-  const handleDelete = async () => {
-    setLoading(true);
-    try {
-      await deleteAdminAccount(user.id);
-      toast.success("Compte supprimé.");
-      onConfirm();
-      onClose();
-    } catch {
-      toast.error("Erreur lors de la suppression.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-bold text-camublue-900">Supprimer le compte</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 transition"><X size={18} /></button>
-        </div>
-        <p className="text-sm text-gray-600 mb-6">
-          Voulez-vous vraiment supprimer le compte <span className="font-semibold text-gray-800">{user.username}</span> ? Cette action est irréversible.
-        </p>
-        <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm transition">Annuler</button>
-          <button onClick={handleDelete} disabled={loading} className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm transition disabled:opacity-60">
-            {loading ? "Suppression..." : "Supprimer"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── History Modal ────────────────────────────────────────────────────────────
 
 const ACTION_COLORS: Record<string, string> = {
@@ -1161,8 +1122,24 @@ export default function AdminDashboardPage() {
   const [gererUser, setGererUser] = useState<AdminUser | null>(null);
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [resetUser, setResetUser] = useState<AdminUser | null>(null);
-  const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
+  const [deleteUser, setDeleteUser]     = useState<AdminUser | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [historyUser, setHistoryUser] = useState<AdminUser | null>(null);
+
+  const handleDeleteAdmin = async () => {
+    if (!deleteUser) return;
+    setDeleteLoading(true);
+    try {
+      await deleteAdminAccount(deleteUser.id);
+      toast.success("Compte supprimé.");
+      setDeleteUser(null);
+      fetchUsers();
+    } catch {
+      toast.error("Erreur lors de la suppression.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   useEffect(() => {
     getAdminStats()
@@ -1262,9 +1239,18 @@ export default function AdminDashboardPage() {
         <ResetPasswordModal user={resetUser} onClose={() => setResetUser(null)} onSave={fetchUsers} />
       )}
 
-      {deleteUser && (
-        <ConfirmDeleteModal user={deleteUser} onClose={() => setDeleteUser(null)} onConfirm={fetchUsers} />
-      )}
+      <SharedConfirmDeleteModal
+        open={deleteUser !== null}
+        title="Supprimer ce compte admin ?"
+        message={
+          deleteUser
+            ? <>Le compte <strong>{deleteUser.username}</strong> sera <strong>définitivement supprimé</strong>. Cette action est irréversible.</>
+            : null
+        }
+        onClose={() => !deleteLoading && setDeleteUser(null)}
+        onConfirm={handleDeleteAdmin}
+        loading={deleteLoading}
+      />
 
       <AnimatePresence>
         {gererUser && (

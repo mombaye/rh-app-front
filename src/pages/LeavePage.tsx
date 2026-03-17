@@ -22,6 +22,7 @@ import {
 import { ExportColumnKey, ExportColumnDef } from "@/types/leave";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
+import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 
 // ─── Config statuts ───────────────────────────────────────────────────────────
 const STATUS_CFG: Record<
@@ -836,16 +837,18 @@ export default function LeavePage() {
       </AnimatePresence>
 
       {/* Modal Suppression (Annulé) */}
-      <AnimatePresence>
-        {confirmDeleteId !== null && (
-          <DeleteConfirmModal
-            requestId={confirmDeleteId}
-            onClose={() => setConfirmDeleteId(null)}
-            onConfirm={handleDelete}
-            loading={deleteLoading}
-          />
-        )}
-      </AnimatePresence>
+      <ConfirmDeleteModal
+        open={confirmDeleteId !== null}
+        title="Supprimer cette demande ?"
+        message={
+          confirmDeleteId !== null
+            ? <>La demande <strong>#{confirmDeleteId}</strong> sera <strong>définitivement supprimée</strong>. Cette action est irréversible.</>
+            : null
+        }
+        onClose={() => !deleteLoading && setConfirmDeleteId(null)}
+        onConfirm={handleDelete}
+        loading={deleteLoading}
+      />
 
       {/* Modal Relancer (Révoqué) */}
       <AnimatePresence>
@@ -1561,45 +1564,6 @@ function QuickApproveBtn({
       }
       {blocked ? "En attente" : label}
     </button>
-  );
-}
-
-// ─── Modal Suppression (CANCELLED only) ──────────────────────────────────────
-function DeleteConfirmModal({ requestId, onClose, onConfirm, loading }: {
-  requestId: number; onClose: () => void; onConfirm: () => void; loading: boolean;
-}) {
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
-      onClick={onClose}>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.15 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
-        onClick={(e) => e.stopPropagation()}>
-
-        <div className="px-6 pt-6 pb-5 text-center">
-          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Trash2 className="h-5 w-5 text-red-600" />
-          </div>
-          <h3 className="font-black text-slate-800 text-base">Supprimer la demande ?</h3>
-          <p className="text-sm text-slate-500 mt-2">
-            Cette action est <strong>irréversible</strong>. La demande #{requestId} sera définitivement supprimée.
-          </p>
-        </div>
-
-        <div className="px-6 pb-6 flex gap-3">
-          <button onClick={onClose}
-            className="flex-1 border border-slate-200 text-slate-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition">
-            Annuler
-          </button>
-          <button onClick={onConfirm} disabled={loading}
-            className="flex-1 bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
-            {loading ? <ImSpinner2 className="animate-spin" size={13} /> : <Trash2 className="h-4 w-4" />}
-            Supprimer
-          </button>
-        </div>
-      </motion.div>
-    </div>
   );
 }
 

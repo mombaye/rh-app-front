@@ -21,6 +21,7 @@ import PayslipStatsCards    from "@/components/payslips/PayslipStatsCards";
 import BulletinsLogsModal   from "@/components/payslips/BulletinsLogsModal";
 import PayslipTargetsModal  from "@/components/payslips/PayslipTargetsModal";
 import { BulletinResendModal } from "@/components/payslips/BulletinResendModal";
+import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 
 import {
   uploadPayslipPdf,
@@ -495,6 +496,10 @@ export default function PayslipPage() {
   const sent   = useMemo(() => summary.reduce((a, x) => a + (x.sent  || 0), 0), [summary]);
   const failed = useMemo(() => summary.reduce((a, x) => a + (x.failed || 0), 0), [summary]);
 
+  // Delete month modal
+  const [deleteMonthTarget, setDeleteMonthTarget] = useState<{ year: number; month: number } | null>(null);
+  const [deleteMonthLoading, setDeleteMonthLoading] = useState(false);
+
   // Logs modal
   const [logsOpen,  setLogsOpen]  = useState(false);
   const [logsTitle, setLogsTitle] = useState("Historique");
@@ -527,16 +532,21 @@ export default function PayslipPage() {
     );
   };
 
-  const doDeleteMonth = async (year: number, month: number) => {
+  const doDeleteMonth = async () => {
+    if (!deleteMonthTarget) return;
+    const { year, month } = deleteMonthTarget;
     const label = `${MONTH_NAMES[month]} ${year}`;
-    if (!window.confirm(`Supprimer tous les logs de ${label} ?`)) return;
+    setDeleteMonthLoading(true);
     const t = toast.loading(`Suppression de ${label}…`);
     try {
       const res = await deleteBulletinsByMonth(year, month);
       toast.success(`${res.deleted} log(s) supprimé(s).`, { id: t });
+      setDeleteMonthTarget(null);
       loadSummary();
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors de la suppression.", { id: t });
+    } finally {
+      setDeleteMonthLoading(false);
     }
   };
 
@@ -869,7 +879,7 @@ export default function PayslipPage() {
                             <Send className="h-3 w-3" /> Renvoyer
                           </button>
                           <button
-                            onClick={() => doDeleteMonth(row.year, row.month)}
+                            onClick={() => setDeleteMonthTarget({ year: row.year, month: row.month })}
                             className="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 transition"
                             title={`Supprimer tous les logs de ${MONTH_NAMES[row.month]} ${row.year}`}
                           >
@@ -1027,6 +1037,19 @@ export default function PayslipPage() {
       <BulletinResendModal
         open={resendOpen}
         onClose={() => setResendOpen(false)}
+      />
+
+      <ConfirmDeleteModal
+        open={deleteMonthTarget !== null}
+        title="Supprimer tous les logs de ce mois ?"
+        message={
+          deleteMonthTarget
+            ? <>Vous allez supprimer <strong>tous les logs de {MONTH_NAMES[deleteMonthTarget.month]} {deleteMonthTarget.year}</strong>. Cette action est <strong>irréversible</strong>.</>
+            : null
+        }
+        onClose={() => !deleteMonthLoading && setDeleteMonthTarget(null)}
+        onConfirm={doDeleteMonth}
+        loading={deleteMonthLoading}
       />
 
     </AppLayout>

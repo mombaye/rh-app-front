@@ -29,6 +29,7 @@ import {
   ChevronLeft, ChevronRight, Upload, Plus, Trash2, RefreshCw,
   Calendar, Users, Download, GripVertical, AlertTriangle, Pencil, Check, X, Search,
 } from "lucide-react";
+import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const SHIFT_LABELS: Record<string, string> = {
@@ -93,6 +94,8 @@ export default function PlanningPage() {
 
   // Modal: ajouter une entrée manuelle
   const [addModal, setAddModal] = useState<{ date: string; shift_type: string } | null>(null);
+  const [deleteTarget, setDeleteTarget]   = useState<PlanningEntry | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [addName, setAddName] = useState("");
   const [addLoading, setAddLoading] = useState(false);
 
@@ -296,16 +299,25 @@ export default function PlanningPage() {
   };
 
   // ── Supprimer une entrée ──────────────────────────────────────────────────
-  const handleDelete = async (entry: PlanningEntry) => {
+  const handleDelete = (entry: PlanningEntry) => {
+    setDeleteTarget(entry);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
     setEntries(prev => prev.filter(e =>
-      !(e.date === entry.date && e.shift_type === entry.shift_type && e.employee_name === entry.employee_name)
+      !(e.date === deleteTarget.date && e.shift_type === deleteTarget.shift_type && e.employee_name === deleteTarget.employee_name)
     ));
     try {
-      await deleteSinglePlanningEntry(entry.date, entry.shift_type, entry.employee_name);
+      await deleteSinglePlanningEntry(deleteTarget.date, deleteTarget.shift_type, deleteTarget.employee_name);
       toast.success("Entrée supprimée");
+      setDeleteTarget(null);
     } catch {
       toast.error("Erreur lors de la suppression");
       await load();
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -757,6 +769,18 @@ export default function PlanningPage() {
           </div>
         </div>
       )}
+      <ConfirmDeleteModal
+        open={deleteTarget !== null}
+        title="Supprimer cette entrée de planning ?"
+        message={
+          deleteTarget
+            ? <><strong>{deleteTarget.employee_name}</strong> sera retiré du shift <strong>{deleteTarget.shift_type}</strong> du <strong>{deleteTarget.date}</strong>. Cette action est irréversible.</>
+            : null
+        }
+        onClose={() => !deleteLoading && setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        loading={deleteLoading}
+      />
     </AppLayout>
   );
 }

@@ -28,6 +28,7 @@ import type {
 } from "@/types/attendance";
 import type { Employee } from "@/types/employee";
 import * as XLSX from "xlsx";
+import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 
 // ============================================================================
 // TYPES ET INTERFACES
@@ -798,19 +799,9 @@ function WorkScheduleModal({
                             </p>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
-                            {deleteConfirm === preset.context ? (
-                              <div className="flex items-center gap-1.5 bg-red-50 rounded-xl px-3 py-1.5 border border-red-200">
-                                <span className="text-xs text-red-600 font-medium">Confirmer ?</span>
-                                <button onClick={() => handleDeletePreset(preset.context)} className="text-xs font-bold text-white bg-red-500 hover:bg-red-600 px-2 py-0.5 rounded-lg transition">Oui</button>
-                                <button onClick={() => setDeleteConfirm(null)} className="text-xs font-medium text-slate-500 hover:text-slate-700 px-1">Non</button>
-                              </div>
-                            ) : (
-                              <>
-                                <button onClick={() => openForm(preset)} title="Modifier" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-camublue-900 transition"><Pencil className="h-3.5 w-3.5" /></button>
-                                <button onClick={() => setDeleteConfirm(preset.context)} title="Supprimer" disabled={isActive}
-                                  className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition disabled:opacity-30 disabled:cursor-not-allowed"><Trash2 className="h-3.5 w-3.5" /></button>
-                              </>
-                            )}
+                            <button onClick={() => openForm(preset)} title="Modifier" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-camublue-900 transition"><Pencil className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => setDeleteConfirm(preset.context)} title="Supprimer" disabled={isActive}
+                              className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition disabled:opacity-30 disabled:cursor-not-allowed"><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>
                         </div>
                       );
@@ -982,6 +973,18 @@ function WorkScheduleModal({
         </motion.div>
       )}
     </AnimatePresence>
+
+    <ConfirmDeleteModal
+      open={deleteConfirm !== null}
+      title="Supprimer ce preset ?"
+      message={
+        deleteConfirm
+          ? <>Le preset <strong>{deleteConfirm}</strong> sera <strong>définitivement supprimé</strong>. Cette action est irréversible.</>
+          : null
+      }
+      onClose={() => setDeleteConfirm(null)}
+      onConfirm={() => deleteConfirm && handleDeletePreset(deleteConfirm)}
+    />
   );
 }
 

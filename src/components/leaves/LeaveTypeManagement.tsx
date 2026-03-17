@@ -8,6 +8,7 @@ import { LeaveType } from "@/types/leave";
 import { ImSpinner2 } from "react-icons/im";
 import { FiPlus, FiEdit2, FiTrash2, FiX, FiAlertCircle, FiRefreshCw, FiZap } from "react-icons/fi";
 import toast from "react-hot-toast";
+import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 
 const EMPTY_FORM = {
   code:                   "",
@@ -430,50 +431,18 @@ export default function LeaveTypeManagement() {
       </AnimatePresence>
 
       {/* ── Modal Suppression ─────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {deleteTarget && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => !deleteLoading && setDeleteTarget(null)}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.15 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-[380px] overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-                    <FiTrash2 size={18} className="text-red-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-gray-900">Supprimer le type</h3>
-                    <p className="text-sm text-gray-500">{deleteTarget.label} ({deleteTarget.code})</p>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600">
-                  Cette action est irréversible. Les demandes existantes référençant ce type ne seront pas supprimées.
-                </p>
-                <div className="flex gap-3">
-                  <button onClick={() => setDeleteTarget(null)} disabled={deleteLoading}
-                    className="flex-1 border border-gray-200 text-gray-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition"
-                  >
-                    Annuler
-                  </button>
-                  <button onClick={handleDelete} disabled={deleteLoading}
-                    className="flex-[2] flex items-center justify-center gap-2 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50"
-                  >
-                    {deleteLoading
-                      ? <><ImSpinner2 className="animate-spin" size={13} /> Suppression…</>
-                      : "Confirmer la suppression"
-                    }
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <ConfirmDeleteModal
+        open={deleteTarget !== null}
+        title="Supprimer ce type de congé ?"
+        message={
+          deleteTarget
+            ? <><strong>{deleteTarget.label}</strong> ({deleteTarget.code}) sera supprimé. Les demandes existantes référençant ce type ne seront <strong>pas</strong> supprimées. Cette action est irréversible.</>
+            : null
+        }
+        onClose={() => !deleteLoading && setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        loading={deleteLoading}
+      />
     </div>
   );
 }

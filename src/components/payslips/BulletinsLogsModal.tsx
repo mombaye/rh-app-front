@@ -12,6 +12,7 @@ import {
   deleteBulletinLog,
   type BulletinLogItem,
 } from "@/services/employeeService";
+import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 
 dayjs.locale("fr");
 
@@ -82,6 +83,8 @@ export default function BulletinsLogsModal({
 
   const [count, setCount] = useState(0);
   const [rows, setRows]   = useState<BulletinLogItem[]>([]);
+  const [deleteTargetId, setDeleteTargetId]   = useState<number | null>(null);
+  const [deleteLoading,  setDeleteLoading]    = useState(false);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(count / PAGE_SIZE)), [count]);
 
@@ -139,12 +142,14 @@ export default function BulletinsLogsModal({
     return () => clearInterval(id);
   }, [open, autoRefresh, status, debouncedSearch, page]);
 
-  const doDelete = async (id: number) => {
-    if (!window.confirm("Supprimer ce log d'envoi ?")) return;
+  const doDelete = async () => {
+    if (!deleteTargetId) return;
+    setDeleteLoading(true);
     const t = toast.loading("Suppression…");
     try {
-      await deleteBulletinLog(id);
+      await deleteBulletinLog(deleteTargetId);
       toast.success("Supprimé.", { id: t });
+      setDeleteTargetId(null);
       const newCount = Math.max(0, count - 1);
       const newTotalPages = Math.max(1, Math.ceil(newCount / PAGE_SIZE));
       if (page > newTotalPages) setPage(newTotalPages);
@@ -152,6 +157,8 @@ export default function BulletinsLogsModal({
       await load(true);
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Suppression impossible", { id: t });
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -310,7 +317,7 @@ export default function BulletinsLogsModal({
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     <button
-                      onClick={() => doDelete(r.id)}
+                      onClick={() => setDeleteTargetId(r.id)}
                       className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-red-600 hover:bg-red-50 border border-red-200 hover:border-red-300 transition"
                       title="Supprimer ce log"
                     >
@@ -363,5 +370,14 @@ export default function BulletinsLogsModal({
         </div>
       </div>
     </div>
+
+    <ConfirmDeleteModal
+      open={deleteTargetId !== null}
+      title="Supprimer ce log d'envoi ?"
+      message={<>Ce log sera <strong>définitivement supprimé</strong>. Cette action est irréversible.</>}
+      onClose={() => !deleteLoading && setDeleteTargetId(null)}
+      onConfirm={doDelete}
+      loading={deleteLoading}
+    />
   );
 }
