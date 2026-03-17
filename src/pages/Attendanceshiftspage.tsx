@@ -733,6 +733,7 @@ function WorkScheduleModal({
   const formEffMin = (fEndH * 60 + fEndM) - (fStartH * 60 + fStartM) - fBreakMin;
 
   return (
+    <>
     <AnimatePresence>
       {open && (
         <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
@@ -985,6 +986,7 @@ function WorkScheduleModal({
       onClose={() => setDeleteConfirm(null)}
       onConfirm={() => deleteConfirm && handleDeletePreset(deleteConfirm)}
     />
+    </>
   );
 }
 

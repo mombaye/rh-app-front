@@ -188,6 +188,7 @@ export default function BulletinsLogsModal({
   const failedCount  = rows.filter((r) => r.status === "failed").length;
 
   return (
+    <>
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-5xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden border border-slate-200 max-h-[95vh] sm:max-h-[90vh] flex flex-col">
 
@@ -379,5 +380,6 @@ export default function BulletinsLogsModal({
       onConfirm={doDelete}
       loading={deleteLoading}
     />
+    </>
   );
 }
