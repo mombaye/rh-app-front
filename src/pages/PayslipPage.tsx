@@ -9,8 +9,8 @@ import {
   FaChevronLeft, FaChevronRight, FaAngleDoubleLeft, FaAngleDoubleRight,
 } from "react-icons/fa";
 import {
-  Upload, X, Zap, ListChecks, KeyRound, History,
-  CheckCircle, XCircle, Clock, Send, RefreshCw, ChevronDown,
+  Upload, X, Zap, ListChecks, History,
+  CheckCircle, XCircle, Clock, RefreshCw, ChevronDown,
 } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 
@@ -25,7 +25,6 @@ import {
   startPreviewPayslipPdf,
   fetchPayslipPreviewProgress,
   fetchBulletinsSummary,
-  sendAccessCodes,
 } from "@/services/employeeService";
 import type { PayslipPreviewResponse, BulletinMonthSummary } from "@/services/employeeService";
 
@@ -322,128 +321,6 @@ function ImportModal({
   );
 }
 
-// ─── Modale envoi des codes d'accès ──────────────────────────────────────────
-
-function AccessCodesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [result, setResult]   = useState<{ sent: number; failed: number; errors: string[] } | null>(null);
-
-  useEffect(() => {
-    if (open) { setInput(""); setResult(null); }
-  }, [open]);
-
-  const matricules = useMemo(
-    () => input.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean),
-    [input],
-  );
-
-  const handleSend = async () => {
-    if (matricules.length === 0) return toast.error("Saisissez au moins un matricule.");
-    setSending(true);
-    const t = toast.loading(`Envoi des codes à ${matricules.length} employé(s)…`);
-    try {
-      const res = await sendAccessCodes(matricules);
-      setResult(res);
-      toast.success(`${res.sent} code(s) envoyé(s).`, { id: t });
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error || "Erreur lors de l'envoi des codes.", { id: t });
-    } finally {
-      setSending(false);
-    }
-  };
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200"
-      >
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-500">
-              <KeyRound className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-slate-800">Envoyer les codes d'accès</h3>
-              <p className="text-xs text-slate-500">Code permanent basé sur le matricule</p>
-            </div>
-          </div>
-          <button onClick={onClose} disabled={sending} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 disabled:opacity-40 transition">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-4">
-          {!result ? (
-            <>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1.5 block">
-                  Matricules des employés
-                </label>
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder={"345\n369\n413\n(un matricule par ligne, ou séparés par virgule)"}
-                  rows={6}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
-                />
-                <p className="text-xs text-slate-400 mt-1">
-                  {matricules.length} matricule(s) saisi(s) · Laissez vide pour envoyer à tous les employés actifs
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
-                <span className="font-semibold">Comment ça marche :</span> chaque employé reçoit un email avec son code d'accès personnel.
-                Ce code est requis pour ouvrir son bulletin de salaire PDF chiffré.
-              </div>
-
-              <button
-                disabled={sending}
-                onClick={handleSend}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition disabled:opacity-50"
-              >
-                {sending ? <ImSpinner2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
-                Envoyer les codes
-              </button>
-            </>
-          ) : (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-center">
-                  <p className="text-2xl font-bold text-emerald-700">{result.sent}</p>
-                  <p className="text-xs text-emerald-600 font-medium mt-1">Codes envoyés</p>
-                </div>
-                <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-center">
-                  <p className="text-2xl font-bold text-red-700">{result.failed}</p>
-                  <p className="text-xs text-red-600 font-medium mt-1">Échecs</p>
-                </div>
-              </div>
-              {result.errors.length > 0 && (
-                <details className="text-xs text-red-600 rounded-xl border border-red-200 bg-red-50 p-3">
-                  <summary className="cursor-pointer font-medium">Voir les erreurs ({result.errors.length})</summary>
-                  <ul className="mt-2 space-y-0.5 pl-3">
-                    {result.errors.map((e, i) => <li key={i}>• {e}</li>)}
-                  </ul>
-                </details>
-              )}
-              <button
-                onClick={onClose}
-                className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition"
-              >
-                Fermer
-              </button>
-            </div>
-          )}
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
 // ─── Page principale ──────────────────────────────────────────────────────────
 
 export default function PayslipPage() {
@@ -474,9 +351,6 @@ export default function PayslipPage() {
   const [preview, setPreview]         = useState<PayslipPreviewResponse | null>(null);
   const [targetsOpen, setTargetsOpen] = useState(false);
   const [sendingSelected, setSendingSelected] = useState(false);
-
-  // Access codes modal
-  const [accessCodesOpen, setAccessCodesOpen] = useState(false);
 
   // Table sort + pagination
   type SortKey = "year" | "month" | "total" | "sent" | "failed";
@@ -635,14 +509,6 @@ export default function PayslipPage() {
               >
                 <History className="h-4 w-4 text-slate-500" />
                 <span className="hidden sm:inline">Historique</span>
-              </button>
-
-              <button
-                onClick={() => setAccessCodesOpen(true)}
-                className="flex items-center gap-2 bg-amber-50 border border-amber-300 text-amber-700 rounded-xl px-3 py-2 text-sm hover:bg-amber-100 transition font-semibold"
-              >
-                <KeyRound className="h-4 w-4" />
-                <span className="hidden sm:inline">Codes d'accès</span>
               </button>
 
               <button
@@ -902,10 +768,6 @@ export default function PayslipPage() {
         onChanged={loadSummary}
       />
 
-      <AccessCodesModal
-        open={accessCodesOpen}
-        onClose={() => setAccessCodesOpen(false)}
-      />
     </AppLayout>
   );
 }
