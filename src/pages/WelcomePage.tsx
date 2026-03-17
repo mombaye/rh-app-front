@@ -10,27 +10,18 @@ const ROLES = [
     label: "Employé",
     description: "Bulletins de paie, congés\net informations personnelles",
     icon: UserRound,
-    color: "#1e78c2",
-    light: "#dbeeff",
-    gradient: "linear-gradient(135deg, #1e78c2 0%, #2f8de0 100%)",
   },
   {
     id: "manager",
     label: "Manager",
     description: "Gestion d'équipe, planning\net suivi des absences",
     icon: Users,
-    color: "#0d5393",
-    light: "#d0e4f7",
-    gradient: "linear-gradient(135deg, #0d5393 0%, #1b6bbf 100%)",
   },
   {
     id: "rh",
     label: "RH",
     description: "Administration, rapports\net gestion du personnel",
     icon: ShieldCheck,
-    color: "#003c71",
-    light: "#c5ddf0",
-    gradient: "linear-gradient(135deg, #003c71 0%, #0a5090 100%)",
   },
 ] as const;
 
@@ -53,7 +44,7 @@ export default function WelcomePage() {
           <img
             src={logo}
             alt="Camusat"
-            className="h-10 w-auto mx-auto mb-8"
+            className="h-16 w-auto mx-auto mb-8"
             draggable={false}
           />
           <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight whitespace-nowrap">
@@ -75,7 +66,7 @@ export default function WelcomePage() {
           Choisissez votre espace
         </motion.p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 w-full max-w-2xl">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
           {ROLES.map((role, i) => {
             const Icon = role.icon;
             return (
@@ -84,48 +75,25 @@ export default function WelcomePage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.25 + i * 0.08, duration: 0.4 }}
-                whileHover={{ y: -4, boxShadow: `0 16px 40px 0 ${role.color}30` }}
+                whileHover={{ y: -3, boxShadow: "0 12px 32px 0 rgba(0,60,113,0.13)" }}
                 whileTap={{ scale: 0.97 }}
                 onClick={() => navigate(`/login?role=${role.id}`)}
-                className="group flex flex-col items-center gap-4 px-6 py-8 rounded-2xl border border-slate-200 bg-white transition-all duration-200 text-center cursor-pointer overflow-hidden relative"
+                className="group flex flex-col items-center gap-3 px-6 py-8 rounded-2xl border-2 border-slate-200 bg-white hover:border-camublue-900/60 hover:bg-slate-50 transition-all duration-200 text-center cursor-pointer"
               >
-                {/* Barre colorée en haut */}
-                <div
-                  className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl"
-                  style={{ background: role.gradient }}
-                />
-
-                {/* Icône avec fond coloré */}
-                <div
-                  className="p-3.5 rounded-xl transition-transform duration-200 group-hover:scale-110"
-                  style={{ backgroundColor: role.light }}
-                >
+                <div className="p-3 rounded-xl bg-slate-100 group-hover:bg-camublue-900/10 transition-colors duration-200">
                   <Icon
-                    className="h-6 w-6"
-                    style={{ color: role.color }}
+                    className="h-6 w-6 text-slate-500 group-hover:text-camublue-900 transition-colors duration-200"
                     strokeWidth={1.8}
                   />
                 </div>
-
                 <div>
-                  <p
-                    className="font-bold text-base"
-                    style={{ color: role.color }}
-                  >
+                  <p className="font-bold text-slate-800 text-base group-hover:text-camublue-900 transition-colors duration-200">
                     {role.label}
                   </p>
                   <p className="text-xs text-slate-400 mt-1 leading-snug whitespace-pre-line">
                     {role.description}
                   </p>
                 </div>
-
-                {/* Flèche au hover */}
-                <span
-                  className="text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mt-1"
-                  style={{ color: role.color }}
-                >
-                  Accéder →
-                </span>
               </motion.button>
             );
           })}
