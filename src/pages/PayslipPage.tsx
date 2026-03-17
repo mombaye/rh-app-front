@@ -11,6 +11,7 @@ import {
 import {
   Upload, X, Zap, ListChecks, History,
   CheckCircle, XCircle, Clock, RefreshCw, ChevronDown,
+  Download, Trash2,
 } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 
@@ -25,6 +26,7 @@ import {
   startPreviewPayslipPdf,
   fetchPayslipPreviewProgress,
   fetchBulletinsSummary,
+  deleteBulletinsByMonth,
 } from "@/services/employeeService";
 import type { PayslipPreviewResponse, BulletinMonthSummary } from "@/services/employeeService";
 
@@ -321,6 +323,155 @@ function ImportModal({
   );
 }
 
+// ─── Colonnes disponibles pour l'export ──────────────────────────────────────
+
+type ColKey = "mois" | "annee" | "total" | "envoyes" | "echecs" | "taux";
+const ALL_COLS: { key: ColKey; label: string }[] = [
+  { key: "mois",    label: "Mois"             },
+  { key: "annee",   label: "Année"            },
+  { key: "total",   label: "Total"            },
+  { key: "envoyes", label: "Envoyés"          },
+  { key: "echecs",  label: "Échecs"           },
+  { key: "taux",    label: "Taux de réussite" },
+];
+
+function ExportModal({
+  open,
+  onClose,
+  rows,
+  selectedKeys,
+}: {
+  open: boolean;
+  onClose: () => void;
+  rows: BulletinMonthSummary[];
+  selectedKeys: Set<string>;   // clés "year-month" des lignes cochées dans la table
+}) {
+  const [cols, setCols] = useState<Set<ColKey>>(new Set(ALL_COLS.map((c) => c.key)));
+  const [scope, setScope] = useState<"all" | "selected">("all");
+
+  useEffect(() => {
+    if (open) { setCols(new Set(ALL_COLS.map((c) => c.key))); setScope("all"); }
+  }, [open]);
+
+  const toggleCol = (k: ColKey) =>
+    setCols((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+
+  const doExport = () => {
+    const data = scope === "selected" && selectedKeys.size > 0
+      ? rows.filter((r) => selectedKeys.has(`${r.year}-${r.month}`))
+      : rows;
+
+    const activeCols = ALL_COLS.filter((c) => cols.has(c.key));
+    const header = activeCols.map((c) => `"${c.label}"`).join(",");
+
+    const csvRows = data.map((r) => {
+      const rate = r.total ? Math.round((r.sent / r.total) * 100) : 0;
+      return activeCols.map(({ key }) => {
+        switch (key) {
+          case "mois":    return `"${MONTH_NAMES[r.month]}"`;
+          case "annee":   return r.year;
+          case "total":   return r.total;
+          case "envoyes": return r.sent;
+          case "echecs":  return r.failed;
+          case "taux":    return `"${rate}%"`;
+        }
+      }).join(",");
+    });
+
+    const csv = "\ufeff" + [header, ...csvRows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8-sig" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = "bulletins_résumé.csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    onClose();
+    toast.success("Export téléchargé.");
+  };
+
+  if (!open) return null;
+
+  const exportCount = scope === "selected" && selectedKeys.size > 0
+    ? selectedKeys.size
+    : rows.length;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200"
+      >
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-emerald-600">
+              <Download className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-800">Export personnalisé</h3>
+              <p className="text-xs text-slate-500">Choisissez les données à exporter</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 transition">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          {/* Périmètre */}
+          <div>
+            <p className="text-sm font-semibold text-slate-700 mb-2">Périmètre</p>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { val: "all",      label: `Tous les mois (${rows.length})` },
+                { val: "selected", label: `Sélection (${selectedKeys.size})`, disabled: selectedKeys.size === 0 },
+              ] as const).map(({ val, label, disabled }) => (
+                <button
+                  key={val}
+                  disabled={disabled}
+                  onClick={() => setScope(val)}
+                  className={`px-3 py-2 rounded-xl border text-sm font-medium transition
+                    ${scope === val ? "bg-camublue-900 text-white border-transparent" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}
+                    ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Colonnes */}
+          <div>
+            <p className="text-sm font-semibold text-slate-700 mb-2">Colonnes à inclure</p>
+            <div className="grid grid-cols-2 gap-2">
+              {ALL_COLS.map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition select-none">
+                  <input
+                    type="checkbox"
+                    checked={cols.has(key)}
+                    onChange={() => toggleCol(key)}
+                    className="accent-camublue-900 h-3.5 w-3.5"
+                  />
+                  <span className="text-sm text-slate-700">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <button
+            disabled={cols.size === 0 || exportCount === 0}
+            onClick={doExport}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm transition disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            Exporter {exportCount} ligne{exportCount > 1 ? "s" : ""} en CSV
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Page principale ──────────────────────────────────────────────────────────
 
 export default function PayslipPage() {
@@ -351,6 +502,33 @@ export default function PayslipPage() {
   const [preview, setPreview]         = useState<PayslipPreviewResponse | null>(null);
   const [targetsOpen, setTargetsOpen] = useState(false);
   const [sendingSelected, setSendingSelected] = useState(false);
+
+  // Sélection de lignes + export
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [exportOpen,   setExportOpen]   = useState(false);
+
+  const toggleRowSelect = (key: string) =>
+    setSelectedRows((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+
+  const toggleSelectAll = () => {
+    const allKeys = sortedSummary.map((r) => `${r.year}-${r.month}`);
+    setSelectedRows((prev) =>
+      allKeys.every((k) => prev.has(k)) ? new Set() : new Set(allKeys)
+    );
+  };
+
+  const doDeleteMonth = async (year: number, month: number) => {
+    const label = `${MONTH_NAMES[month]} ${year}`;
+    if (!window.confirm(`Supprimer tous les logs de ${label} ?`)) return;
+    const t = toast.loading(`Suppression de ${label}…`);
+    try {
+      const res = await deleteBulletinsByMonth(year, month);
+      toast.success(`${res.deleted} log(s) supprimé(s).`, { id: t });
+      loadSummary();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors de la suppression.", { id: t });
+    }
+  };
 
   // Table sort + pagination
   type SortKey = "year" | "month" | "total" | "sent" | "failed";
@@ -552,24 +730,46 @@ export default function PayslipPage() {
 
         {/* ── Tableau résumé ── */}
         <div className="flex-1 min-h-0 flex flex-col gap-3">
-          <div className="flex items-center justify-between shrink-0">
+          <div className="flex items-center justify-between gap-2 shrink-0">
             <h2 className="text-base font-semibold text-slate-700">
               Récapitulatif par mois
               {summary.length > 0 && (
                 <span className="ml-2 text-xs font-normal text-slate-400">
-                  — taux global de réussite : <span className={`font-semibold ${taux >= 90 ? "text-emerald-600" : taux >= 70 ? "text-amber-600" : "text-red-600"}`}>{taux}%</span>
+                  — taux global : <span className={`font-semibold ${taux >= 90 ? "text-emerald-600" : taux >= 70 ? "text-amber-600" : "text-red-600"}`}>{taux}%</span>
                 </span>
               )}
             </h2>
-            <button onClick={loadSummary} disabled={summaryLoading} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition disabled:opacity-40">
-              <RefreshCw className={`h-4 w-4 ${summaryLoading ? "animate-spin" : ""}`} />
-            </button>
+            <div className="flex items-center gap-2">
+              {selectedRows.size > 0 && (
+                <span className="text-xs text-slate-500 font-medium">
+                  {selectedRows.size} sélectionné{selectedRows.size > 1 ? "s" : ""}
+                </span>
+              )}
+              <button
+                onClick={() => setExportOpen(true)}
+                disabled={summary.length === 0}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition disabled:opacity-40"
+              >
+                <Download className="h-3.5 w-3.5" /> Exporter
+              </button>
+              <button onClick={loadSummary} disabled={summaryLoading} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition disabled:opacity-40">
+                <RefreshCw className={`h-4 w-4 ${summaryLoading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-auto rounded-2xl border border-slate-200 shadow-sm min-h-0">
             <table className="min-w-full bg-white">
               <thead className="bg-camublue-900 text-white sticky top-0 z-10">
                 <tr>
+                  <th className="pl-4 pr-2 py-3 border-b border-camublue-800 w-8">
+                    <input
+                      type="checkbox"
+                      className="accent-white h-3.5 w-3.5 cursor-pointer"
+                      checked={sortedSummary.length > 0 && sortedSummary.every((r) => selectedRows.has(`${r.year}-${r.month}`))}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-sm font-semibold border-b border-camublue-800">
                     <button type="button" onClick={() => handleSort("month")} className="flex items-center gap-1.5 hover:opacity-80 transition">
                       Mois {renderSortIcon("month")}
@@ -596,9 +796,21 @@ export default function PayslipPage() {
               </thead>
               <tbody>
                 {paginatedSummary.map((row) => {
+                  const key  = `${row.year}-${row.month}`;
                   const rate = row.total ? Math.round((row.sent / row.total) * 100) : 0;
                   return (
-                    <tr key={`${row.year}-${row.month}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <tr
+                      key={key}
+                      className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${selectedRows.has(key) ? "bg-camublue-50/40" : ""}`}
+                    >
+                      <td className="pl-4 pr-2 py-3">
+                        <input
+                          type="checkbox"
+                          className="accent-camublue-900 h-3.5 w-3.5 cursor-pointer"
+                          checked={selectedRows.has(key)}
+                          onChange={() => toggleRowSelect(key)}
+                        />
+                      </td>
                       <td className="px-4 py-3 font-semibold text-slate-800 capitalize text-sm">
                         {MONTH_NAMES[row.month]} {row.year}
                       </td>
@@ -625,19 +837,28 @@ export default function PayslipPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => openMonth(row.year, row.month)}
-                          className="inline-flex items-center gap-1.5 bg-camublue-50 hover:bg-camublue-100 text-camublue-900 text-xs font-semibold px-3 py-1.5 rounded-lg border border-camublue-200 transition"
-                        >
-                          <History className="h-3 w-3" /> Détails
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => openMonth(row.year, row.month)}
+                            className="inline-flex items-center gap-1 bg-camublue-50 hover:bg-camublue-100 text-camublue-900 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-camublue-200 transition"
+                          >
+                            <History className="h-3 w-3" /> Détails
+                          </button>
+                          <button
+                            onClick={() => doDeleteMonth(row.year, row.month)}
+                            className="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 transition"
+                            title={`Supprimer tous les logs de ${MONTH_NAMES[row.month]} ${row.year}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
                 {paginatedSummary.length === 0 && !summaryLoading && (
                   <tr>
-                    <td colSpan={6} className="text-center py-16 text-slate-400">
+                    <td colSpan={7} className="text-center py-16 text-slate-400">
                       <div className="flex flex-col items-center gap-2">
                         <FaFilePdf className="h-8 w-8 text-slate-200" />
                         <p className="text-sm">Aucun bulletin sur cette période.</p>
@@ -650,7 +871,7 @@ export default function PayslipPage() {
                 )}
                 {summaryLoading && (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-slate-400">
+                    <td colSpan={7} className="text-center py-12 text-slate-400">
                       <ImSpinner2 className="animate-spin h-6 w-6 mx-auto text-camublue-900" />
                     </td>
                   </tr>
@@ -767,6 +988,17 @@ export default function PayslipPage() {
         onClose={() => { setLogsOpen(false); setLogsAutoRefresh(false); }}
         onChanged={loadSummary}
       />
+
+      <AnimatePresence>
+        {exportOpen && (
+          <ExportModal
+            open={exportOpen}
+            onClose={() => setExportOpen(false)}
+            rows={sortedSummary}
+            selectedKeys={selectedRows}
+          />
+        )}
+      </AnimatePresence>
 
     </AppLayout>
   );

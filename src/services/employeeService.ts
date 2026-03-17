@@ -300,9 +300,9 @@ export const startPreviewPayslipPdf = async (formData: FormData) => {
   return res.data;
 };
 
-/** GET /api/employees/bulletins-preview-progress/<taskId>/ */
+/** GET /api/employees/preview-progress/<taskId>/ */
 export const fetchPayslipPreviewProgress = async (taskId: string) =>
-  (await api.get(`/api/employees/bulletins-preview-progress/${taskId}/`)).data;
+  (await api.get(`/api/employees/preview-progress/${taskId}/`)).data;
 
 /** GET /api/employees/bulletins-progress/<taskId>/ */
 export const fetchBulletinProgress = async (taskId: string) =>
@@ -402,6 +402,13 @@ export const exportBulletinsLogs = async (opts?: {
 
 export const deleteBulletinLog = async (id: number) =>
   await api.delete(`/api/employees/bulletin-log/${id}/`);
+
+/** DELETE /api/employees/bulletins/logs/by-month/?year=&month= */
+export const deleteBulletinsByMonth = async (
+  year: number,
+  month: number,
+): Promise<{ deleted: number }> =>
+  (await api.delete("/api/employees/bulletins/logs/by-month/", { params: { year, month } })).data;
 
 // ══════════════════════════════════════════════════════
 //  DOCUMENTS RH — dossiers personnels NAS
