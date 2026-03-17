@@ -152,6 +152,7 @@ export default function EmployeesTable({
   const [isSendingCodes, setIsSendingCodes] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sendScope, setSendScope] = useState<"selected" | "filtered" | "all">("selected");
+  const [createAccountConfirmEmp, setCreateAccountConfirmEmp] = useState<Employee | null>(null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -319,15 +320,27 @@ export default function EmployeesTable({
     }
   };
 
-  const handleCreateAccount = async (emp: Employee) => {
+  const handleCreateAccount = (emp: Employee) => {
     if (!emp.email) return toast.error("L'employé n'a pas d'email !");
     if (emp.status === "EXITED")
       return toast.error("Employé sorti : création de compte non autorisée.");
+    if (emp.has_user)
+      return toast.error("Un compte utilisateur existe déjà pour cet employé.");
+    setRowOpen(false);
+    setCreateAccountConfirmEmp(emp);
+  };
+
+  const doCreateAccount = async (emp: Employee) => {
     setAccountLoading(emp.id);
     try {
-      await createAccountFromEmployee(emp.id);
-      toast.success(`Compte créé pour ${emp.prenom} ${emp.nom}`);
-      setRowOpen(false);
+      const res = await createAccountFromEmployee(emp.id);
+      if (res.warning) {
+        toast.success(`Compte créé pour ${emp.prenom} ${emp.nom}`);
+        toast.error(`Attention : ${res.warning}`, { duration: 6000 });
+      } else {
+        toast.success(`Compte créé et identifiants envoyés à ${emp.email} !`);
+      }
+      setCreateAccountConfirmEmp(null);
     } catch (err: any) {
       toast.error(err?.response?.data?.error || "Erreur lors de la création du compte");
     } finally {
@@ -389,7 +402,7 @@ export default function EmployeesTable({
       { id: "career",          icon: <FaBriefcase size={15} />,       label: "Parcours de carrière",         color: "text-teal-600",     show: true },
       { id: "history",         icon: <FaHistory size={15} />,         label: "Voir l'historique des modifs", color: "text-indigo-600",   show: true },
       { id: "send-code",       icon: <FaPaperPlane size={15} />,      label: "Envoyer le code d'accès",      color: "text-emerald-600",  show: true },
-      { id: "create-account",  icon: <FaUserPlus size={15} />,        label: "Créer un accès utilisateur",   color: "text-blue-600",     show: !isExited },
+      { id: "create-account",  icon: <FaUserPlus size={15} />,        label: rowEmp.has_user ? "Compte utilisateur existant" : "Créer un accès utilisateur",   color: rowEmp.has_user ? "text-slate-400" : "text-blue-600",     show: !isExited },
       { id: "exit",            icon: <TbLogout size={15} />,          label: "Enregistrer la sortie",        color: "text-red-600",      show: !isExited },
       { id: "reinstate",       icon: <AiOutlineRollback size={15} />, label: "Réintégrer l'employé",         color: "text-camublue-900", show: isExited },
       { id: "payslip",         icon: <FaFilePdf size={15} />,         label: "Renvoyer un bulletin de paie", color: "text-purple-600",   show: true },
@@ -831,6 +844,74 @@ export default function EmployeesTable({
           if (onEmployeeUpdated) onEmployeeUpdated(updatedEmp);
         }}
       />
+
+      {/* ── Confirmation création de compte utilisateur ── */}
+      <AnimatePresence>
+        {createAccountConfirmEmp && (
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[70] p-4"
+            onClick={() => setCreateAccountConfirmEmp(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.15 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-blue-600 shrink-0">
+                  <FaUserPlus className="text-white" size={16} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-base">Créer un accès utilisateur</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {createAccountConfirmEmp.prenom} {createAccountConfirmEmp.nom} · {createAccountConfirmEmp.matricule}
+                  </p>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="px-6 py-5 space-y-4">
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Un compte de connexion va être créé pour cet employé. Les identifiants générés seront envoyés automatiquement à :
+                </p>
+                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                  <span className="text-blue-700 font-mono font-semibold text-sm">{createAccountConfirmEmp.email}</span>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                  <p className="text-xs text-amber-700 leading-relaxed">
+                    <strong>Email envoyé :</strong> Bienvenue sur la plateforme + identifiant + mot de passe provisoire.<br />
+                    L'employé devra changer son mot de passe à la première connexion.
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 pb-5 flex gap-3">
+                <button
+                  onClick={() => setCreateAccountConfirmEmp(null)}
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-50 transition"
+                >
+                  Annuler
+                </button>
+                <button
+                  disabled={accountLoading === createAccountConfirmEmp.id}
+                  onClick={() => doCreateAccount(createAccountConfirmEmp)}
+                  className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2.5 rounded-xl transition disabled:opacity-60"
+                >
+                  {accountLoading === createAccountConfirmEmp.id
+                    ? <><ImSpinner2 className="animate-spin" size={14} /> Création…</>
+                    : <><FaUserPlus size={13} /> Créer & envoyer</>
+                  }
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ── Export Dialog ── */}
       <AnimatePresence>
