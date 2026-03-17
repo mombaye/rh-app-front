@@ -17,8 +17,10 @@ import {
   Ban, RotateCcw, ChevronDown, Table2, CalendarRange,
   Download, Loader2, AlertTriangle, Clock, Pencil, Paperclip,
   FileCheck, Upload, ExternalLink, Users, Settings2, Wallet,
-  Search, History, Info, Filter, Trash2, Send,
+  Search, History, Info, Filter, Trash2, Send, FileSpreadsheet,
+  CheckCircle, XOctagon,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { ExportColumnKey, ExportColumnDef } from "@/types/leave";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
@@ -932,6 +934,7 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
   const [searchQuery,  setSearchQuery]  = useState("");
   const [page,         setPage]         = useState(1);
   const [pageSize,     setPageSize]     = useState<typeof PAGE_SIZE_OPTIONS[number]>(20);
+  const [importOpen,   setImportOpen]   = useState(false);
   const currentYear = new Date().getFullYear();
   const todayDay    = new Date().getDate();
   const isMonthStart = todayDay <= 5;
@@ -1008,21 +1011,30 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
             {filtered.length > pageSize && ` · page ${page}/${totalPages}`}
           </p>
         </div>
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Rechercher un employé…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition bg-white"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition shadow-sm"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Importer Excel
+          </button>
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Rechercher un employé…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition bg-white"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1035,7 +1047,6 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Type de congé</th>
                 <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Acquis</th>
                 <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Pris</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Ajust.</th>
                 <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Solde</th>
                 <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -1043,14 +1054,13 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
             <tbody>
               {paginated.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
                     {searchQuery ? "Aucun résultat pour cette recherche" : "Aucun solde trouvé pour ce type d'employé"}
                   </td>
                 </tr>
               )}
               {paginated.map((b) => {
                 const remaining = parseFloat(b.remaining);
-                const adjusted  = parseFloat(b.adjusted);
                 const isLow     = remaining <= 2;
                 const emp       = empMap.get(b.employee);
                 return (
@@ -1071,9 +1081,6 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
                     </td>
                     <td className="px-4 py-3 text-center font-semibold text-slate-700">{b.acquired}j</td>
                     <td className="px-4 py-3 text-center font-semibold text-red-500">{b.taken}j</td>
-                    <td className="px-4 py-3 text-center font-semibold text-blue-500">
-                      {adjusted !== 0 ? `${adjusted > 0 ? "+" : ""}${b.adjusted}j` : "—"}
-                    </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`font-black tabular-nums text-base ${isLow ? "text-red-500" : "text-emerald-600"}`}>
                         {b.remaining}j
@@ -1172,6 +1179,182 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {importOpen && (
+          <ImportBalancesModal
+            onClose={() => setImportOpen(false)}
+            onImported={() => { setImportOpen(false); load(); }}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Modal Import Excel Soldes ────────────────────────────────────────────────
+function ImportBalancesModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [file,       setFile]       = useState<File | null>(null);
+  const [uploading,  setUploading]  = useState(false);
+  const [result,     setResult]     = useState<{ created: number; updated: number; errors: { row: number; matricule: string; message: string }[] } | null>(null);
+
+  const handleFile = (f: File | undefined) => {
+    if (!f) return;
+    if (!f.name.match(/\.(xlsx|xls)$/i)) { toast.error("Fichier Excel (.xlsx / .xls) requis."); return; }
+    setFile(f);
+    setResult(null);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const res = await leaveBalanceService.bulkImport(file);
+      setResult(res);
+      if (res.errors.length === 0) {
+        toast.success(`Import réussi — ${res.created} créé(s), ${res.updated} mis à jour.`);
+        onImported();
+      } else {
+        toast.success(`Import terminé — ${res.created + res.updated} traité(s), ${res.errors.length} erreur(s).`);
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors de l'import.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["MATRICULE", "TYPE_CONGE", "ACQUIS"],
+      ["EMP001", "CONGE_PAYE", 24],
+      ["EMP002", "CONGE_PAYE", 18],
+    ]);
+    ws["!cols"] = [{ wch: 16 }, { wch: 20 }, { wch: 10 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Soldes");
+    XLSX.writeFile(wb, "template_soldes_conges.xlsx");
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 8 }}
+        transition={{ duration: 0.15 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-emerald-600">
+              <FileSpreadsheet className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800">Importer les soldes acquis</h3>
+              <p className="text-xs text-slate-500">Fichier Excel avec MATRICULE, TYPE_CONGE, ACQUIS</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 transition">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Zone de dépôt / sélection */}
+          <div
+            className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50 transition"
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}
+          >
+            <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+            {file ? (
+              <div className="flex items-center justify-center gap-3">
+                <FileSpreadsheet className="h-8 w-8 text-emerald-600" />
+                <div className="text-left">
+                  <p className="font-semibold text-slate-800 text-sm">{file.name}</p>
+                  <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} Ko</p>
+                </div>
+                <button className="ml-2 text-slate-400 hover:text-red-500 transition" onClick={(e) => { e.stopPropagation(); setFile(null); setResult(null); }}>
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div>
+                <Upload className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-600">Glissez un fichier Excel ici</p>
+                <p className="text-xs text-slate-400 mt-1">ou cliquez pour parcourir (.xlsx, .xls)</p>
+              </div>
+            )}
+          </div>
+
+          {/* Format attendu */}
+          <div className="bg-slate-50 rounded-xl p-3 space-y-1.5">
+            <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">Format attendu</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead><tr className="text-slate-500">
+                  <th className="text-left pr-4 py-1 font-semibold">MATRICULE</th>
+                  <th className="text-left pr-4 py-1 font-semibold">TYPE_CONGE</th>
+                  <th className="text-left py-1 font-semibold">ACQUIS</th>
+                </tr></thead>
+                <tbody className="text-slate-700 font-mono">
+                  <tr><td className="pr-4">EMP001</td><td className="pr-4">CONGE_PAYE</td><td>24</td></tr>
+                  <tr><td className="pr-4">EMP002</td><td className="pr-4">CONGE_PAYE</td><td>18.5</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-slate-400">TYPE_CONGE correspond au <strong>code</strong> du type de congé.</p>
+          </div>
+
+          {/* Résultats */}
+          {result && (
+            <div className="space-y-2">
+              <div className="flex gap-3">
+                <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-black text-emerald-700">{result.created + result.updated}</p>
+                  <p className="text-xs text-emerald-600 font-semibold mt-0.5">Traités ({result.created} créés, {result.updated} mis à jour)</p>
+                </div>
+                {result.errors.length > 0 && (
+                  <div className="flex-1 bg-red-50 border border-red-200 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-black text-red-600">{result.errors.length}</p>
+                    <p className="text-xs text-red-500 font-semibold mt-0.5">Erreur(s)</p>
+                  </div>
+                )}
+              </div>
+              {result.errors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 max-h-36 overflow-y-auto space-y-1">
+                  {result.errors.map((err, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs">
+                      <XOctagon className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
+                      <span className="text-red-700"><strong>Ligne {err.row}</strong>{err.matricule ? ` (${err.matricule})` : ""} — {err.message}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 flex gap-3">
+          <button onClick={downloadTemplate} className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-50 transition">
+            <Download className="h-4 w-4" /> Télécharger le modèle
+          </button>
+          <button
+            onClick={handleUpload}
+            disabled={!file || uploading}
+            className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold py-2 rounded-xl transition disabled:opacity-50"
+          >
+            {uploading ? <ImSpinner2 className="animate-spin" size={14} /> : <Upload className="h-4 w-4" />}
+            {uploading ? "Import en cours…" : "Importer"}
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 }

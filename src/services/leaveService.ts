@@ -112,6 +112,21 @@ export const leaveBalanceService = {
     });
     return res.data;
   },
+
+  /**
+   * POST /api/leaves/balances/bulk_import/
+   * Multipart form : { file: File (.xlsx) }
+   * Colonnes attendues : MATRICULE | TYPE_CONGE | ACQUIS
+   * Retourne : { created: number, updated: number, errors: ImportError[] }
+   */
+  bulkImport: async (file: File): Promise<{ created: number; updated: number; errors: { row: number; matricule: string; message: string }[] }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await axios.post(`${API}/balances/bulk_import/`, form, {
+      headers: { ...getAuthHeaders(), "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
