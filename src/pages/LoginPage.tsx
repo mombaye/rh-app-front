@@ -9,7 +9,6 @@ import toast, { Toaster } from "react-hot-toast";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/useAuth";
 import { ArrowLeft, UserRound, Users, ShieldCheck } from "lucide-react";
-import logo from "@/assets/images/logo-camusat.png";
 
 const ROLE_META: Record<string, { label: string; Icon: React.ElementType }> = {
   employe: { label: "Employé",  Icon: UserRound   },
@@ -68,32 +67,25 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex items-center justify-center bg-white px-4 py-12">
+      <Toaster position="top-right" />
 
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <header className="flex items-center justify-between px-8 py-5 border-b border-slate-100">
-        <img src={logo} alt="Camusat" className="h-8 w-auto" draggable={false} />
-        <Link
-          to="/"
-          className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-camublue-900 transition-colors group"
-        >
-          <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
-          Retour à l'accueil
-        </Link>
-      </header>
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45 }}
+        className="w-full max-w-sm"
+      >
+        <Card className="shadow-md rounded-2xl border border-slate-200">
+          <CardContent className="p-7 sm:p-8 flex flex-col items-center relative">
 
-      {/* ── Formulaire centré ───────────────────────────────────────────── */}
-      <div className="flex-1 flex items-center justify-center px-4 py-12">
-        <Toaster position="top-right" />
-
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45 }}
-          className="w-full max-w-sm"
-        >
-          <Card className="shadow-md rounded-2xl border border-slate-200">
-            <CardContent className="p-7 sm:p-8 flex flex-col items-center">
+              {/* Bouton retour */}
+              <Link
+                to="/"
+                className="absolute top-5 left-5 p-1.5 rounded-lg text-slate-400 hover:text-camublue-900 hover:bg-slate-100 transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
 
               {/* Illustration */}
               <img
@@ -170,8 +162,6 @@ export default function LoginPage() {
             </CardContent>
           </Card>
         </motion.div>
-      </div>
-
     </div>
   );
 }
