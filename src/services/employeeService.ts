@@ -412,3 +412,38 @@ export const downloadEmployeeDocument = async (
   a.remove();
   window.URL.revokeObjectURL(url);
 };
+
+// ══════════════════════════════════════════════════════
+//  DOCUMENTS RH — import ZIP (dossiers de tous les employés)
+// ══════════════════════════════════════════════════════
+export type ZipImportFolderResult = {
+  folder: string;
+  dest: string;
+  status: "created" | "merged";
+  files: number;
+};
+
+export type ZipImportResult = {
+  processed: number;
+  total_files: number;
+  results: ZipImportFolderResult[];
+  errors: { folder: string; error: string }[];
+};
+
+/** POST /api/employees/upload-zip-dossiers/ */
+export const uploadDossierZip = async (
+  file: File,
+  onUploadProgress?: (percent: number) => void
+): Promise<ZipImportResult> => {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post("/api/employees/upload-zip-dossiers/", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: onUploadProgress
+      ? (e) => {
+          if (e.total) onUploadProgress(Math.round((e.loaded * 100) / e.total));
+        }
+      : undefined,
+  });
+  return res.data;
+};

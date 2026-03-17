@@ -16,9 +16,11 @@ import {
   previewMatriculeChanges,
   getEmployeeDocuments,
   downloadEmployeeDocument,
+  uploadDossierZip,
   MatriculeUpdate,
   MatriculeChange,
   EmployeeDocumentsResult,
+  ZipImportResult,
 } from "@/services/employeeService";
 import { FaPlus, FaUserCheck, FaUserTimes, FaUsers } from "react-icons/fa";
 import {
@@ -27,6 +29,7 @@ import {
   FiX,
   FiEdit3,
   FiUploadCloud,
+  FiUpload,
   FiArrowRight,
   FiChevronDown,
   FiFolder,
@@ -598,6 +601,268 @@ function BulkMatriculeModal({
   );
 }
 
+// ─── ZIP Upload Modal ─────────────────────────────────────────────────────────
+function ZipUploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [result, setResult] = useState<ZipImportResult | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleFile = (f: File) => {
+    if (!f.name.toLowerCase().endsWith(".zip")) {
+      toast.error("Veuillez sélectionner un fichier .zip");
+      return;
+    }
+    setFile(f);
+    setResult(null);
+    setUploadProgress(0);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) handleFile(dropped);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      const res = await uploadDossierZip(file, setUploadProgress);
+      setResult(res);
+      if (res.processed > 0) onDone();
+      toast.success(`${res.processed} dossier(s) importé(s) — ${res.total_files} fichier(s)`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.error ?? "Erreur lors de l'import.";
+      toast.error(msg);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 10 }}
+        transition={{ duration: 0.18 }}
+        className="w-full max-w-xl bg-white rounded-2xl shadow-2xl flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-camublue-900/10 flex items-center justify-center">
+              <FiUpload className="text-camublue-900" size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Importer un ZIP de dossiers</h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Un dossier par employé, sous-dossiers : ABSENCES, BULLETINS, CONTRATS…
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition"
+          >
+            <FiX size={18} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* Expected structure info */}
+          <div className="bg-camublue-900/5 rounded-xl p-3.5 text-xs text-gray-600 font-mono leading-relaxed">
+            <p className="font-semibold text-camublue-900 mb-1.5 not-italic font-sans text-xs">Structure attendue du ZIP :</p>
+            <div className="space-y-0.5 text-gray-500">
+              <p>📦 archive.zip</p>
+              <p className="pl-3">📁 M88 SAMBA DIOUM/</p>
+              <p className="pl-6">📁 ABSENCES/</p>
+              <p className="pl-6">📁 BULLETINS/</p>
+              <p className="pl-6">📁 CONTRATS/ …</p>
+              <p className="pl-3">📁 M64 BABACAR DIOP/</p>
+              <p className="pl-6">📁 DIPLOMES/ …</p>
+            </div>
+          </div>
+
+          {/* Drop zone */}
+          {!result && (
+            <>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".zip"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+              />
+              <div
+                onClick={() => fileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+                className={`cursor-pointer border-2 border-dashed rounded-xl py-8 flex flex-col items-center gap-2.5 transition-colors ${
+                  dragOver
+                    ? "border-camublue-900 bg-camublue-900/5"
+                    : file
+                    ? "border-green-400 bg-green-50"
+                    : "border-gray-200 hover:border-camublue-900/40 hover:bg-gray-50"
+                }`}
+              >
+                {file ? (
+                  <>
+                    <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                      <FiCheckCircle className="text-green-500" size={22} />
+                    </div>
+                    <p className="text-sm font-medium text-gray-700">{file.name}</p>
+                    <p className="text-xs text-gray-400">
+                      {(file.size / 1024 / 1024).toFixed(1)} Mo — cliquer pour changer
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center">
+                      <FiUpload className="text-gray-400" size={22} />
+                    </div>
+                    <p className="text-sm font-medium text-gray-600">
+                      Glisser-déposer ou cliquer pour sélectionner
+                    </p>
+                    <p className="text-xs text-gray-400">Fichier .zip uniquement</p>
+                  </>
+                )}
+              </div>
+
+              {/* Upload progress */}
+              {uploading && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>Envoi en cours…</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-camublue-900 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Results */}
+          {result && (
+            <div className="space-y-3">
+              {/* Summary */}
+              <div className="flex gap-3 flex-wrap">
+                <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-xl">
+                  <FiCheckCircle className="text-green-500" size={16} />
+                  <div>
+                    <p className="text-xs text-gray-500">Dossiers traités</p>
+                    <p className="text-lg font-bold text-green-700">{result.processed}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2 bg-camublue-900/5 rounded-xl">
+                  <FiFile className="text-camublue-900" size={16} />
+                  <div>
+                    <p className="text-xs text-gray-500">Fichiers importés</p>
+                    <p className="text-lg font-bold text-camublue-900">{result.total_files}</p>
+                  </div>
+                </div>
+                {result.errors.length > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-xl">
+                    <FiAlertTriangle className="text-red-400" size={16} />
+                    <div>
+                      <p className="text-xs text-gray-500">Erreurs</p>
+                      <p className="text-lg font-bold text-red-600">{result.errors.length}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Per-folder results */}
+              {result.results.length > 0 && (
+                <div className="max-h-44 overflow-y-auto border border-gray-100 rounded-xl">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100">
+                        <th className="px-3 py-2 text-left font-semibold text-gray-500">Dossier</th>
+                        <th className="px-3 py-2 text-center font-semibold text-gray-500">Statut</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-500">Fichiers</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.results.map((r, i) => (
+                        <tr key={i} className="border-b border-gray-50 last:border-0">
+                          <td className="px-3 py-2 text-gray-700 font-medium truncate max-w-[200px]">
+                            {r.dest}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                              r.status === "merged"
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-green-100 text-green-700"
+                            }`}>
+                              {r.status === "merged" ? "Fusionné" : "Créé"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-500 font-mono">{r.files}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Errors */}
+              {result.errors.length > 0 && (
+                <div className="max-h-28 overflow-y-auto bg-red-50 rounded-xl p-3 space-y-1">
+                  {result.errors.map((e, i) => (
+                    <p key={i} className="text-xs text-red-600">
+                      <span className="font-semibold">{e.folder}</span> : {e.error}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm transition"
+          >
+            {result ? "Fermer" : "Annuler"}
+          </button>
+          {!result && (
+            <button
+              onClick={handleUpload}
+              disabled={uploading || !file}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-camublue-900 text-white hover:bg-camublue-900/90 text-sm transition disabled:opacity-60"
+            >
+              {uploading ? (
+                <ImSpinner2 className="animate-spin" size={14} />
+              ) : (
+                <FiUpload size={14} />
+              )}
+              {uploading ? "Import en cours…" : "Importer"}
+            </button>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Employee Documents Modal ─────────────────────────────────────────────────
 function EmployeeDocumentsModal({
   employees,
@@ -612,6 +877,7 @@ function EmployeeDocumentsModal({
   const [documents, setDocuments]             = useState<EmployeeDocumentsResult | null>(null);
   const [isLoading, setIsLoading]             = useState(false);
   const [downloadingFile, setDownloadingFile] = useState<string | null>(null);
+  const [showZipUpload, setShowZipUpload]     = useState(false);
 
   const filteredEmps = employees.filter((e) => {
     if (!empSearch) return true;
@@ -715,13 +981,37 @@ function EmployeeDocumentsModal({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition p-1.5 rounded-lg hover:bg-gray-100"
-          >
-            <FiX size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowZipUpload(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-camublue-900 text-white text-xs font-semibold hover:bg-camublue-900/90 transition shadow-sm"
+              title="Importer un ZIP de dossiers"
+            >
+              <FiUpload size={13} />
+              Importer ZIP
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition p-1.5 rounded-lg hover:bg-gray-100"
+            >
+              <FiX size={18} />
+            </button>
+          </div>
         </div>
+
+        {/* ZIP Upload Sub-Modal */}
+        <AnimatePresence>
+          {showZipUpload && (
+            <ZipUploadModal
+              onClose={() => setShowZipUpload(false)}
+              onDone={() => {
+                setShowZipUpload(false);
+                // Reload current employee's documents if one is selected
+                if (selectedEmp) loadDocuments(selectedEmp, currentPath);
+              }}
+            />
+          )}
+        </AnimatePresence>
 
         {/* Body */}
         <div className="flex flex-col sm:flex-row flex-1 min-h-0 overflow-hidden">
