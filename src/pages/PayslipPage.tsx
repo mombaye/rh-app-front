@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import dayjs from "dayjs";
 import "dayjs/locale/fr";
 import AppLayout from "@/layouts/AppLayout";
@@ -363,31 +364,38 @@ function ExportModal({
       : rows;
 
     const activeCols = ALL_COLS.filter((c) => cols.has(c.key));
-    const header = activeCols.map((c) => `"${c.label}"`).join(",");
 
-    const csvRows = data.map((r) => {
+    const sheetRows = data.map((r) => {
       const rate = r.total ? Math.round((r.sent / r.total) * 100) : 0;
-      return activeCols.map(({ key }) => {
+      const obj: Record<string, any> = {};
+      activeCols.forEach(({ key, label }) => {
         switch (key) {
-          case "mois":    return `"${MONTH_NAMES[r.month]}"`;
-          case "annee":   return r.year;
-          case "total":   return r.total;
-          case "envoyes": return r.sent;
-          case "echecs":  return r.failed;
-          case "taux":    return `"${rate}%"`;
+          case "mois":    obj[label] = MONTH_NAMES[r.month]; break;
+          case "annee":   obj[label] = r.year;               break;
+          case "total":   obj[label] = r.total;              break;
+          case "envoyes": obj[label] = r.sent;               break;
+          case "echecs":  obj[label] = r.failed;             break;
+          case "taux":    obj[label] = `${rate}%`;           break;
         }
-      }).join(",");
+      });
+      return obj;
     });
 
-    const csv = "\ufeff" + [header, ...csvRows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8-sig" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url; a.download = "bulletins_résumé.csv";
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+    const ws = XLSX.utils.json_to_sheet(sheetRows);
+
+    // Largeurs de colonnes
+    ws["!cols"] = activeCols.map(({ label }) => ({
+      wch: Math.max(label.length, ...sheetRows.map((r) => String(r[label] ?? "").length)) + 3,
+    }));
+
+    // Gel de la première ligne
+    (ws as any)["!freeze"] = { xSplit: 0, ySplit: 1 };
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bulletins");
+    XLSX.writeFile(wb, `bulletins_résumé_${new Date().toISOString().slice(0, 10)}.xlsx`);
     onClose();
-    toast.success("Export téléchargé.");
+    toast.success("Export XLSX téléchargé.");
   };
 
   if (!open) return null;

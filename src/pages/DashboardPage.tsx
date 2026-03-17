@@ -270,6 +270,17 @@ function ExportModal({
     setSelected(allSelected ? new Set() : new Set(availableKeys));
   };
 
+  const addSheetWithWidths = (wb: XLSX.WorkBook, rows: Record<string, any>[], sheetName: string) => {
+    if (!rows.length) return;
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const keys = Object.keys(rows[0]);
+    ws["!cols"] = keys.map((k) => ({
+      wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 3,
+    }));
+    (ws as any)["!freeze"] = { xSplit: 0, ySplit: 1 };
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  };
+
   const handleExport = () => {
     const wb = XLSX.utils.book_new();
 
@@ -277,66 +288,65 @@ function ExportModal({
       const rows = employees.map((e) => ({
         Matricule:       e.matricule ?? "",
         "Nom complet":   `${e.prenom ?? ""} ${e.nom ?? ""}`.trim(),
-        Statut:          e.status ?? "",
+        Statut:          e.status === "ACTIVE" ? "Actif" : e.status === "EXITED" ? "Sorti" : e.status ?? "",
         "Type contrat":  e.type_contrat ?? "",
         Département:     (e as any).departement ?? (e as any).service ?? "",
         Genre:           e.sexe === "H" ? "Homme" : e.sexe === "F" ? "Femme" : "",
-        "Date embauche": e.date_embauche ?? "",
+        "Date embauche": e.date_embauche ? new Date(e.date_embauche).toLocaleDateString("fr-FR") : "",
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Employés");
+      addSheetWithWidths(wb, rows, "Employés");
     }
 
     if (selected.has("pointages_jour") && daily) {
       const rows = (daily.records ?? []).map((r) => ({
-        "Nom complet":     r.full_name,
-        Département:       r.department ?? "",
-        Date:              r.work_date,
-        Statut:            r.status,
-        Entrée:            r.in_time ?? "",
-        Sortie:            r.out_time ?? "",
-        "Min travaillés":  r.worked_minutes,
-        "Min attendus":    r.expected_minutes,
-        "Retard (min)":    r.late_minutes,
-        "En retard":       r.is_late ? "Oui" : "Non",
+        "Nom complet":    r.full_name,
+        Département:      r.department ?? "",
+        Date:             r.work_date,
+        Statut:           r.status,
+        Entrée:           r.in_time ?? "—",
+        Sortie:           r.out_time ?? "—",
+        "H travaillées":  r.worked_minutes ? `${Math.floor(r.worked_minutes / 60)}h${String(r.worked_minutes % 60).padStart(2, "0")}` : "—",
+        "H attendues":    r.expected_minutes ? `${Math.floor(r.expected_minutes / 60)}h${String(r.expected_minutes % 60).padStart(2, "0")}` : "—",
+        "Retard (min)":   r.late_minutes ?? 0,
+        "En retard":      r.is_late ? "Oui" : "Non",
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pointages Jour");
+      addSheetWithWidths(wb, rows, "Pointages Jour");
     }
 
     if (selected.has("pointages_semaine") && weekly) {
       const rows = (weekly.by_day ?? []).map((d) => ({
-        Date:               d.date,
-        Jour:               d.weekday_label,
-        Présents:           d.ok_count,
-        Absents:            d.absent_count,
-        Incomplets:         d.incomplete_count,
-        "En retard":        d.late_count,
-        "Min travaillés":   d.worked_minutes,
-        "Min attendus":     d.expected_minutes,
+        Date:             d.date,
+        Jour:             d.weekday_label,
+        Présents:         d.ok_count,
+        Absents:          d.absent_count,
+        Incomplets:       d.incomplete_count,
+        "En retard":      d.late_count,
+        "H travaillées":  Math.round(d.worked_minutes / 60),
+        "H attendues":    Math.round(d.expected_minutes / 60),
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pointages Semaine");
+      addSheetWithWidths(wb, rows, "Pointages Semaine");
     }
 
     if (selected.has("pointages_mois") && monthly) {
       const rows = (monthly.by_week ?? []).map((w) => ({
-        Semaine:            w.week,
-        "H travaillées":    Math.round(w.worked_minutes / 60),
-        "H attendues":      Math.round(w.expected_minutes / 60),
-        "Min travaillés":   w.worked_minutes,
-        "Min attendus":     w.expected_minutes,
-        "Nb retards":       w.late_count,
+        Semaine:          w.week,
+        "H travaillées":  Math.round(w.worked_minutes / 60),
+        "H attendues":    Math.round(w.expected_minutes / 60),
+        "Nb retards":     w.late_count,
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pointages Mois");
+      addSheetWithWidths(wb, rows, "Pointages Mois");
     }
 
     if (selected.has("bulletins") && bulletins.length > 0) {
       const rows = bulletins.map((b) => ({
-        Année:           b.year,
-        Mois:            MONTH_FULL[b.month],
-        Générés:         b.total,
-        Envoyés:         b.sent,
-        "Non envoyés":   Math.max(0, (b.total ?? 0) - (b.sent ?? 0)),
+        Année:          b.year,
+        Mois:           MONTH_FULL[b.month],
+        Générés:        b.total,
+        Envoyés:        b.sent,
+        "Non envoyés":  Math.max(0, (b.total ?? 0) - (b.sent ?? 0)),
+        "Taux envoi":   b.total ? `${Math.round((b.sent / b.total) * 100)}%` : "—",
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Bulletins");
+      addSheetWithWidths(wb, rows, "Bulletins");
     }
 
     if (wb.SheetNames.length === 0) return;

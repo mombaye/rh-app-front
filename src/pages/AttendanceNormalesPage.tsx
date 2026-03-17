@@ -167,21 +167,16 @@ function exportXLSX(filename: string, rows: Record<string, any>[]) {
   if (!rows.length) return;
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
-  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
-  for (let c = range.s.c; c <= range.e.c; c++) {
-    const cell = XLSX.utils.encode_cell({ r: 0, c });
-    if (ws[cell]) {
-      ws[cell].s = {
-        font: { bold: true, color: { rgb: "FFFFFF" } },
-        fill: { fgColor: { rgb: "1E3A5F" } },
-        alignment: { horizontal: "center" },
-      };
-    }
-  }
-  const colWidths = Object.keys(rows[0]).map((k) => ({
-    wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 2,
+
+  // Largeurs optimisées par contenu
+  const keys = Object.keys(rows[0]);
+  ws["!cols"] = keys.map((k) => ({
+    wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 3,
   }));
-  ws["!cols"] = colWidths;
+
+  // Gel de la première ligne d'en-tête
+  (ws as any)["!freeze"] = { xSplit: 0, ySplit: 1 };
+
   XLSX.utils.book_append_sheet(wb, ws, "Pointages");
   XLSX.writeFile(wb, `${filename}_${isoToday()}.xlsx`);
 }

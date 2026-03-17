@@ -92,14 +92,15 @@ function exportEmployeesXLSX(employees: Employee[], selectedCols: EmpExportColKe
   );
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
-  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
-  for (let c = range.s.c; c <= range.e.c; c++) {
-    const cell = XLSX.utils.encode_cell({ r: 0, c });
-    if (ws[cell]) ws[cell].s = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "1E3A5F" } }, alignment: { horizontal: "center" } };
-  }
+
+  // Largeurs optimisées par contenu
   ws["!cols"] = selectedCols.map((k) => ({
-    wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 2,
+    wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 3,
   }));
+
+  // Gel de la première ligne d'en-tête
+  (ws as any)["!freeze"] = { xSplit: 0, ySplit: 1 };
+
   XLSX.utils.book_append_sheet(wb, ws, "Employés");
   XLSX.writeFile(wb, `employes_export_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
