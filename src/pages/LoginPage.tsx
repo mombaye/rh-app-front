@@ -54,7 +54,11 @@ export default function LoginPage() {
         return;
       }
 
-      navigate("/dashboard");
+      if (actualRole === "employe") {
+        navigate("/employee/dashboard");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err: any) {
       const msg =
         err?.response?.data?.detail ||

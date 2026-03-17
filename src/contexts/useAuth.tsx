@@ -11,6 +11,9 @@ type User = {
   manager_level?: number | null;
   country?: any;
   first_login?: boolean;
+  employee_id?: number | null;
+  employee_matricule?: string | null;
+  employee_name?: string | null;
 };
 
 type AuthContextType = {

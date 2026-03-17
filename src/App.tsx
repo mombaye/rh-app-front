@@ -16,6 +16,10 @@ import InterneEmployeesPage from "./pages/InterneEmployeesPage";
 import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
 import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
 import PlanningPage from "@/pages/PlanningPage";
+import EmployeeDashboardPage from "@/pages/employee/EmployeeDashboardPage";
+import EmployeeLeavesPage from "@/pages/employee/EmployeeLeavesPage";
+import EmployeePayslipPage from "@/pages/employee/EmployeePayslipPage";
+import EmployeeDossierPage from "@/pages/employee/EmployeeDossierPage";
 import { useAuth } from "@/contexts/useAuth";
 
 /** Redirige les gestionnaires de planning vers /planning */
@@ -32,6 +36,24 @@ function NonPlanningRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   if (user?.is_planning_manager) {
     return <Navigate to="/planning" replace />;
+  }
+  return <>{children}</>;
+}
+
+/** Redirige les employés (sans is_staff ni manager_level) vers /employee/* */
+function RhOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user && !user.is_staff && !user.is_global_admin && user.manager_level == null) {
+    return <Navigate to="/employee/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
+/** Redirige les comptes RH/admin vers /dashboard (pas l'espace employé) */
+function EmployeeOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user && (user.is_staff || user.is_global_admin || user.manager_level != null)) {
+    return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
 }
@@ -68,7 +90,57 @@ function App() {
           }
         />
 
-        {/* Page dédiée au gestionnaire de planning */}
+        {/* ── Espace Employé ─────────────────────────────── */}
+        <Route
+          path="/employee/dashboard"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <EmployeeOnlyRoute>
+                  <EmployeeDashboardPage />
+                </EmployeeOnlyRoute>
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/employee/leaves"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <EmployeeOnlyRoute>
+                  <EmployeeLeavesPage />
+                </EmployeeOnlyRoute>
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/employee/payslips"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <EmployeeOnlyRoute>
+                  <EmployeePayslipPage />
+                </EmployeeOnlyRoute>
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/employee/dossier"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <EmployeeOnlyRoute>
+                  <EmployeeDossierPage />
+                </EmployeeOnlyRoute>
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ── Page dédiée au gestionnaire de planning ─────── */}
         <Route
           path="/planning"
           element={
@@ -80,14 +152,16 @@ function App() {
           }
         />
 
-        {/* Toutes les autres pages protégées — redirigées vers /planning pour planning managers */}
+        {/* ── Espace RH / Manager ────────────────────────── */}
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
               <FirstLoginGuard>
                 <NonPlanningRoute>
-                  <DashboardPage />
+                  <RhOnlyRoute>
+                    <DashboardPage />
+                  </RhOnlyRoute>
                 </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
@@ -100,7 +174,9 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <NonPlanningRoute>
-                  <InterneEmployeesPage />
+                  <RhOnlyRoute>
+                    <InterneEmployeesPage />
+                  </RhOnlyRoute>
                 </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
@@ -113,7 +189,9 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <NonPlanningRoute>
-                  <InterimEmployeesPage />
+                  <RhOnlyRoute>
+                    <InterimEmployeesPage />
+                  </RhOnlyRoute>
                 </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
@@ -126,7 +204,9 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <NonPlanningRoute>
-                  <PayslipPage />
+                  <RhOnlyRoute>
+                    <PayslipPage />
+                  </RhOnlyRoute>
                 </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
@@ -144,7 +224,9 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <NonPlanningRoute>
-                  <AttendanceNormalesPage />
+                  <RhOnlyRoute>
+                    <AttendanceNormalesPage />
+                  </RhOnlyRoute>
                 </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
@@ -157,7 +239,9 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <NonPlanningRoute>
-                  <AttendanceShiftsPage />
+                  <RhOnlyRoute>
+                    <AttendanceShiftsPage />
+                  </RhOnlyRoute>
                 </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
@@ -170,7 +254,9 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <NonPlanningRoute>
-                  <LeavePage />
+                  <RhOnlyRoute>
+                    <LeavePage />
+                  </RhOnlyRoute>
                 </NonPlanningRoute>
               </FirstLoginGuard>
             </ProtectedRoute>
