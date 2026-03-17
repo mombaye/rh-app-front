@@ -8,19 +8,19 @@ const ROLES = [
   {
     id: "employe",
     label: "Employé",
-    description: "Bulletins de paie, congés\net informations personnelles",
+    description: "Accès collaborateur",
     icon: UserRound,
   },
   {
     id: "manager",
     label: "Manager",
-    description: "Gestion d'équipe, planning\net suivi des absences",
+    description: "Accès encadrement",
     icon: Users,
   },
   {
     id: "rh",
     label: "RH",
-    description: "Administration, rapports\net gestion du personnel",
+    description: "Accès administration",
     icon: ShieldCheck,
   },
 ] as const;
@@ -44,15 +44,14 @@ export default function WelcomePage() {
           <img
             src={logo}
             alt="Camusat"
-            className="h-16 w-auto mx-auto mb-8"
+            className="h-28 w-auto mx-auto mb-8"
             draggable={false}
           />
           <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight whitespace-nowrap">
-            Tout <span className="text-camublue-900">Camusat</span>, en un seul endroit
+            Portail Collaborateur
           </h1>
           <p className="mt-4 text-base text-slate-500 max-w-lg mx-auto leading-relaxed">
-            Congés, bulletins de paie, gestion d'équipe, administration —
-            accédez à votre espace en quelques secondes.
+            Connectez-vous pour accéder à votre espace.
           </p>
         </motion.div>
 
@@ -63,7 +62,7 @@ export default function WelcomePage() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
         >
-          Choisissez votre espace
+          Sélectionnez votre espace
         </motion.p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
@@ -102,8 +101,8 @@ export default function WelcomePage() {
       </main>
 
       {/* ── Footer ──────────────────────────────────────────────────────────── */}
-      <footer className="py-5 text-center text-xs text-slate-300 border-t border-slate-100">
-        © {new Date().getFullYear()} Camusat Sénégal — Usage interne uniquement
+      <footer className="py-5 text-center text-xs text-slate-900 border-t border-slate-100">
+        © {new Date().getFullYear()} Camusat — Usage interne uniquement
       </footer>
 
     </div>
