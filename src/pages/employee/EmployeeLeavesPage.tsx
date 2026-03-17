@@ -4,6 +4,7 @@ import {
   Plus, Calendar, CheckCircle2, Clock, XCircle,
   AlertCircle, Pencil, FileDown, ChevronDown, ChevronUp,
   Loader2, ChevronLeft, ChevronRight, TrendingUp, Filter,
+  X, CalendarDays, User, Hash, MessageSquare, ShieldCheck,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -397,13 +398,171 @@ function ExportModal({ requests, employeeName, matricule, onClose }: ExportModal
   );
 }
 
-// ── Carte de demande ───────────────────────────────────────────────────────────
-interface RequestCardProps {
+// ── Modal de détail (lecture seule) ───────────────────────────────────────────
+interface LeaveDetailModalProps {
   req: LeaveRequest;
+  onClose: () => void;
   onEdit: () => void;
 }
 
-function RequestCard({ req, onEdit }: RequestCardProps) {
+function LeaveDetailModal({ req, onClose, onEdit }: LeaveDetailModalProps) {
+  const cfg     = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
+  const Icon    = cfg.Icon;
+  const canEdit = req.status === "PENDING" || req.status === "PENDING_SECOND";
+  const days    = parseFloat(req.days) || 0;
+
+  const fields: { icon: React.ElementType; label: string; value: string; highlight?: string }[] = [
+    { icon: CalendarDays, label: "Date de début",    value: fmt(req.start_date) },
+    { icon: CalendarDays, label: "Date de fin",      value: fmt(req.end_date)   },
+    { icon: Clock,        label: "Durée",            value: `${days} jour${days > 1 ? "s" : ""}` },
+    { icon: Calendar,     label: "Soumis le",        value: fmt(req.created_at?.slice(0, 10) ?? "") },
+    ...(req.reviewed_by
+      ? [{ icon: User as React.ElementType,        label: "Traité par",    value: req.reviewed_by.full_name }]
+      : []
+    ),
+    ...(req.reviewed_at
+      ? [{ icon: CalendarDays as React.ElementType, label: "Traité le",    value: fmt(req.reviewed_at.slice(0, 10)) }]
+      : []
+    ),
+  ];
+
+  return (
+    <AnimatePresence>
+      <div
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 30, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0,  scale: 1    }}
+          exit={{    opacity: 0, y: 30, scale: 0.97 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          onClick={e => e.stopPropagation()}
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+        >
+          {/* ── Header coloré selon statut ── */}
+          <div
+            className="relative px-6 py-5"
+            style={{ backgroundColor: cfg.color }}
+          >
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
+            >
+              <X size={16} className="text-white" />
+            </button>
+
+            {/* Icône + type */}
+            <div className="flex items-center gap-3 pr-10">
+              <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <Icon size={22} className="text-white" />
+              </div>
+              <div>
+                <p className="text-white/70 text-xs font-medium uppercase tracking-wide mb-0.5">
+                  Demande de congé
+                </p>
+                <h2 className="text-white font-bold text-lg leading-tight">
+                  {req.leave_type.label}
+                </h2>
+              </div>
+            </div>
+
+            {/* Badge statut */}
+            <div className="mt-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-white text-xs font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                {cfg.label}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Corps ── */}
+          <div className="px-6 py-5 space-y-4">
+
+            {/* Grille d'infos */}
+            <div className="grid grid-cols-2 gap-3">
+              {fields.map(f => (
+                <div key={f.label} className="bg-gray-50 rounded-xl p-3 flex items-start gap-2.5">
+                  <f.icon size={15} className="text-gray-400 mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wide mb-0.5">{f.label}</p>
+                    <p className="text-sm font-semibold text-gray-800 truncate">{f.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Motif */}
+            <div className="bg-gray-50 rounded-xl p-3 flex items-start gap-2.5">
+              <MessageSquare size={15} className="text-gray-400 mt-0.5 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wide mb-0.5">Motif</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                  {req.motif || <span className="italic text-gray-400">Aucun motif renseigné</span>}
+                </p>
+              </div>
+            </div>
+
+            {/* Motif de rejet */}
+            {req.reject_reason && (
+              <div className="bg-red-50 border border-red-100 rounded-xl p-3 flex items-start gap-2.5">
+                <XCircle size={15} className="text-red-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-[10px] text-red-400 uppercase font-semibold tracking-wide mb-0.5">Motif de rejet</p>
+                  <p className="text-sm text-red-700 whitespace-pre-wrap">{req.reject_reason}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Approbation */}
+            {req.status === "APPROVED" && req.reviewed_by && (
+              <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex items-center gap-2.5">
+                <ShieldCheck size={16} className="text-green-500 shrink-0" />
+                <p className="text-sm text-green-700 font-medium">
+                  Approuvé par <span className="font-bold">{req.reviewed_by.full_name}</span>
+                </p>
+              </div>
+            )}
+
+            {/* Référence */}
+            <div className="flex items-center gap-1.5 text-xs text-gray-400">
+              <Hash size={12} />
+              <span>Référence : <span className="font-semibold text-gray-500">#{req.id}</span></span>
+            </div>
+          </div>
+
+          {/* ── Footer ── */}
+          <div className="px-6 pb-6 flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
+            >
+              Fermer
+            </button>
+            {canEdit && (
+              <button
+                onClick={() => { onClose(); onEdit(); }}
+                className="flex-1 py-2.5 rounded-xl bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition flex items-center justify-center gap-2 shadow-sm"
+              >
+                <Pencil size={14} />
+                Modifier
+              </button>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}
+
+// ── Carte de demande ───────────────────────────────────────────────────────────
+interface RequestCardProps {
+  req: LeaveRequest;
+  onView: () => void;
+  onEdit: () => void;
+}
+
+function RequestCard({ req, onView, onEdit }: RequestCardProps) {
   const cfg     = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
   const Icon    = cfg.Icon;
   const canEdit = req.status === "PENDING" || req.status === "PENDING_SECOND";
@@ -413,7 +572,8 @@ function RequestCard({ req, onEdit }: RequestCardProps) {
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group relative bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition-all duration-200 overflow-hidden"
+      onClick={onView}
+      className="group relative bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition-all duration-200 overflow-hidden cursor-pointer"
     >
       {/* Bande de couleur statut */}
       <div
@@ -447,7 +607,7 @@ function RequestCard({ req, onEdit }: RequestCardProps) {
               </span>
             </div>
 
-            {/* Motif */}
+            {/* Motif (tronqué) */}
             {req.motif && (
               <p className="text-xs text-gray-400 italic truncate max-w-sm mt-0.5">"{req.motif}"</p>
             )}
@@ -456,7 +616,7 @@ function RequestCard({ req, onEdit }: RequestCardProps) {
             {req.reject_reason && (
               <div className="flex items-start gap-1.5 mt-1">
                 <XCircle size={11} className="text-red-400 mt-0.5 shrink-0" />
-                <p className="text-xs text-red-500">{req.reject_reason}</p>
+                <p className="text-xs text-red-500 truncate max-w-xs">{req.reject_reason}</p>
               </div>
             )}
 
@@ -471,7 +631,7 @@ function RequestCard({ req, onEdit }: RequestCardProps) {
 
           {/* Actions */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Badge jours - grand display */}
+            {/* Badge jours */}
             <div className="hidden sm:flex flex-col items-center justify-center w-12 h-12 rounded-xl border-2 border-gray-100 bg-gray-50">
               <span className="text-lg font-bold text-gray-700 leading-none">{days}</span>
               <span className="text-[9px] text-gray-400 uppercase tracking-wide">jours</span>
@@ -479,7 +639,7 @@ function RequestCard({ req, onEdit }: RequestCardProps) {
 
             {canEdit && (
               <button
-                onClick={onEdit}
+                onClick={e => { e.stopPropagation(); onEdit(); }}
                 className="flex items-center gap-1.5 text-xs text-[#003c71] hover:bg-[#003c71]/10 px-3 py-1.5 rounded-lg transition font-medium border border-[#003c71]/20 hover:border-[#003c71]/40"
               >
                 <Pencil size={12} />
@@ -498,16 +658,17 @@ export default function EmployeeLeavesPage() {
   const { user }    = useAuth();
   const employeeId  = user?.employee_id;
 
-  const [balances,     setBalances]     = useState<LeaveBalance[]>([]);
-  const [requests,     setRequests]     = useState<LeaveRequest[]>([]);
-  const [leaveTypes,   setLeaveTypes]   = useState<LeaveType[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [showForm,     setShowForm]     = useState(false);
-  const [editTarget,   setEditTarget]   = useState<LeaveRequest | null>(null);
-  const [showExport,   setShowExport]   = useState(false);
-  const [filterStatus, setFilterStatus] = useState("ALL");
-  const [showBalances, setShowBalances] = useState(true);
-  const [currentPage,  setCurrentPage]  = useState(1);
+  const [balances,      setBalances]     = useState<LeaveBalance[]>([]);
+  const [requests,      setRequests]     = useState<LeaveRequest[]>([]);
+  const [leaveTypes,    setLeaveTypes]   = useState<LeaveType[]>([]);
+  const [loading,       setLoading]      = useState(true);
+  const [showForm,      setShowForm]     = useState(false);
+  const [editTarget,    setEditTarget]   = useState<LeaveRequest | null>(null);
+  const [detailTarget,  setDetailTarget] = useState<LeaveRequest | null>(null);
+  const [showExport,    setShowExport]   = useState(false);
+  const [filterStatus,  setFilterStatus] = useState("ALL");
+  const [showBalances,  setShowBalances] = useState(true);
+  const [currentPage,   setCurrentPage]  = useState(1);
 
   const refresh = useCallback(() => {
     if (!employeeId) return;
@@ -745,17 +906,19 @@ export default function EmployeeLeavesPage() {
                   <RequestCard
                     key={req.id}
                     req={req}
+                    onView={() => setDetailTarget(req)}
                     onEdit={() => { setEditTarget(req); setShowForm(true); }}
                   />
                 ))}
               </div>
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
-                  <span className="text-xs text-gray-400">
-                    Page {currentPage} / {totalPages} · {filtered.length} demande(s)
-                  </span>
+              {/* Pagination — toujours visible */}
+              <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-xs text-gray-400">
+                  {filtered.length} demande{filtered.length > 1 ? "s" : ""}
+                  {totalPages > 1 && ` · Page ${currentPage} / ${totalPages}`}
+                </span>
+                {totalPages > 1 && (
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
@@ -785,8 +948,8 @@ export default function EmployeeLeavesPage() {
                       <ChevronRight size={15} />
                     </button>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </>
           )}
         </motion.div>
@@ -846,6 +1009,15 @@ export default function EmployeeLeavesPage() {
           employeeName={user?.employee_name || user?.username || ""}
           matricule={user?.employee_matricule || ""}
           onClose={() => setShowExport(false)}
+        />
+      )}
+
+      {/* ── Modal détail ── */}
+      {detailTarget && (
+        <LeaveDetailModal
+          req={detailTarget}
+          onClose={() => setDetailTarget(null)}
+          onEdit={() => { setDetailTarget(null); setEditTarget(detailTarget); setShowForm(true); }}
         />
       )}
     </EmployeeLayout>
