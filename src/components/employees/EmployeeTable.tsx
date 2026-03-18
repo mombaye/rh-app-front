@@ -3,13 +3,13 @@ import {
   FaEdit, FaFileExcel, FaUserPlus, FaPaperPlane,
   FaSort, FaSortUp, FaSortDown, FaFilePdf, FaHistory, FaBriefcase, FaExchangeAlt,
   FaSearch, FaTimes, FaChevronRight, FaArrowLeft, FaCheck,
-  FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight, FaUsers,
+  FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight, FaUsers, FaUserTimes, FaTrash,
 } from "react-icons/fa";
 import { TbLogout } from "react-icons/tb";
 import { AiOutlineRollback } from "react-icons/ai";
 import { motion, AnimatePresence } from "framer-motion";
 import { Employee } from "@/types/employee";
-import { createAccountFromEmployee, sendAccessCodes } from "@/services/employeeService";
+import { createAccountFromEmployee, deleteAccountFromEmployee, sendAccessCodes } from "@/services/employeeService";
 import * as XLSX from "xlsx";
 import { Input } from "@/components/ui/input";
 import toast from "react-hot-toast";
@@ -155,6 +155,8 @@ export default function EmployeesTable({
   const [createAccountConfirmEmp, setCreateAccountConfirmEmp] = useState<Employee | null>(null);
   const [createdCredentials, setCreatedCredentials] = useState<{ username: string; password: string; empName: string } | null>(null);
   const [selectedManagerLevel, setSelectedManagerLevel] = useState<0 | 1 | 2>(0);
+  const [deleteAccountConfirmEmp, setDeleteAccountConfirmEmp] = useState<Employee | null>(null);
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -363,6 +365,26 @@ export default function EmployeesTable({
     }
   };
 
+  const handleDeleteAccount = (emp: Employee) => {
+    if (!emp.has_user) return toast.error("Cet employé n'a pas de compte utilisateur.");
+    setRowOpen(false);
+    setDeleteAccountConfirmEmp(emp);
+  };
+
+  const doDeleteAccount = async (emp: Employee) => {
+    setDeleteAccountLoading(true);
+    try {
+      await deleteAccountFromEmployee(emp.id);
+      toast.success(`Compte supprimé pour ${emp.prenom} ${emp.nom}`);
+      setDeleteAccountConfirmEmp(null);
+      onEmployeeUpdated?.({ ...emp, has_user: false, user_id: null });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Erreur lors de la suppression du compte");
+    } finally {
+      setDeleteAccountLoading(false);
+    }
+  };
+
   const doExport = () => {
     const toExport = exportStatus === "ALL"
       ? filtered
@@ -417,7 +439,8 @@ export default function EmployeesTable({
       { id: "career",          icon: <FaBriefcase size={15} />,       label: "Parcours de carrière",         color: "text-teal-600",     show: true },
       { id: "history",         icon: <FaHistory size={15} />,         label: "Voir l'historique des modifs", color: "text-indigo-600",   show: true },
       { id: "send-code",       icon: <FaPaperPlane size={15} />,      label: "Envoyer le code d'accès",      color: "text-emerald-600",  show: true },
-      { id: "create-account",  icon: <FaUserPlus size={15} />,        label: rowEmp.has_user ? "Compte utilisateur existant" : "Créer un accès utilisateur",   color: rowEmp.has_user ? "text-slate-400" : "text-blue-600",     show: !isExited },
+      { id: "create-account",  icon: <FaUserPlus size={15} />,    label: "Créer un accès utilisateur",    color: "text-blue-600",  show: !isExited && !rowEmp.has_user },
+      { id: "delete-account",  icon: <FaUserTimes size={15} />,  label: "Supprimer le compte utilisateur", color: "text-red-500",  show: !!rowEmp.has_user },
       { id: "exit",            icon: <TbLogout size={15} />,          label: "Enregistrer la sortie",        color: "text-red-600",      show: !isExited },
       { id: "reinstate",       icon: <AiOutlineRollback size={15} />, label: "Réintégrer l'employé",         color: "text-camublue-900", show: isExited },
       { id: "payslip",         icon: <FaFilePdf size={15} />,         label: "Renvoyer un bulletin de paie", color: "text-purple-600",   show: true },
@@ -431,6 +454,7 @@ export default function EmployeesTable({
       else if (id === "history")         { setHistoryEmp(rowEmp); setHistoryOpen(true); setRowOpen(false); }
       else if (id === "send-code")       { doSendCodeSingle(rowEmp); }
       else if (id === "create-account")  { handleCreateAccount(rowEmp); }
+      else if (id === "delete-account")  { handleDeleteAccount(rowEmp); }
       else if (id === "exit")            { onExit(rowEmp); setRowOpen(false); }
       else if (id === "reinstate")       { onReinstate(rowEmp); setRowOpen(false); }
       else if (id === "payslip")         { setPayslipEmp(rowEmp); setPayslipOpen(true); setRowOpen(false); }
@@ -1063,6 +1087,76 @@ export default function EmployeesTable({
             </motion.div>
           </div>
         )}
+
+      {/* ── Confirmation suppression de compte utilisateur ── */}
+      <AnimatePresence>
+        {deleteAccountConfirmEmp && (
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[70] p-4"
+            onClick={() => !deleteAccountLoading && setDeleteAccountConfirmEmp(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.15 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-red-600 shrink-0">
+                  <FaUserTimes className="text-white" size={16} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-base">Supprimer le compte utilisateur</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {deleteAccountConfirmEmp.prenom} {deleteAccountConfirmEmp.nom} · {deleteAccountConfirmEmp.matricule}
+                  </p>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="px-6 py-5 space-y-4">
+                <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                  <FaTrash className="text-red-500 mt-0.5 shrink-0" size={13} />
+                  <p className="text-sm text-red-700 leading-relaxed">
+                    Cette action supprimera définitivement le compte de connexion de{" "}
+                    <strong>{deleteAccountConfirmEmp.prenom} {deleteAccountConfirmEmp.nom}</strong>.
+                    L'employé perdra tout accès à la plateforme.
+                  </p>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Les données de l'employé (fiche, contrat, historique) seront conservées. Seul l'accès utilisateur sera révoqué. Un nouveau compte pourra être recréé ultérieurement.
+                </p>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 pb-5 flex gap-3">
+                <button
+                  onClick={() => setDeleteAccountConfirmEmp(null)}
+                  disabled={deleteAccountLoading}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => doDeleteAccount(deleteAccountConfirmEmp)}
+                  disabled={deleteAccountLoading}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl transition disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {deleteAccountLoading ? (
+                    <ImSpinner2 className="animate-spin" size={15} />
+                  ) : (
+                    <FaTrash size={12} />
+                  )}
+                  {deleteAccountLoading ? "Suppression…" : "Supprimer le compte"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ── Export Dialog ── */}
       <AnimatePresence>

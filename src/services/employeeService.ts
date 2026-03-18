@@ -179,6 +179,11 @@ export const createAccountFromEmployee = async (
   return (await axiosInstance.post(`/api/employees/${employeeId}/create-account/`, payload)).data;
 };
 
+export const deleteAccountFromEmployee = async (employeeId: number) => {
+  const axiosInstance = localStorage.getItem("admin_access_token") ? adminApi : api;
+  return (await axiosInstance.delete(`/api/employees/${employeeId}/delete-account/`)).data;
+};
+
 export const sendAccessCodes = async (
   matricules: string[]
 ): Promise<{ sent: number; failed: number; errors: string[] }> =>
