@@ -11,9 +11,11 @@ import {
   resetAdminPassword,
   toggleAdminActive,
   getAccountHistory,
+  getEmployeesForAdmin,
   type AdminUser,
   type AdminStats,
   type AccountHistoryEntry,
+  type EmployeeMinimal,
 } from "@/services/adminService";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -51,6 +53,8 @@ type UserForm = {
   email: string;
   password: string;
   role: "employee" | "rh" | "manager1" | "manager2";
+  also_employee: boolean;   // double accès espace employé (pour manager/rh)
+  employee_id: number | ""; // fiche employé liée au double accès
   is_active: boolean;
 };
 
@@ -59,6 +63,8 @@ const EMPTY_FORM: UserForm = {
   email: "",
   password: "",
   role: "employee",
+  also_employee: false,
+  employee_id: "",
   is_active: true,
 };
 
@@ -72,6 +78,14 @@ function formToPayload(form: UserForm) {
     is_active: form.is_active,
   };
   if (form.password) base.password = form.password;
+  // Pour les rôles manager/rh : gérer le double accès employé
+  if (form.role !== "employee") {
+    if (form.also_employee && form.employee_id !== "") {
+      base.employee_id = Number(form.employee_id);
+    } else if (!form.also_employee) {
+      base.employee_id = null; // retirer l'accès employé si décoché
+    }
+  }
   return base;
 }
 
@@ -445,6 +459,7 @@ function UserModal({
 }) {
   const [form, setForm] = useState<UserForm>(() => {
     if (mode === "edit" && user) {
+      const isManagerOrRh = user.is_staff || !!user.manager_level;
       return {
         username: user.username,
         email: user.email,
@@ -456,20 +471,49 @@ function UserModal({
           : user.manager_level === 2
           ? "manager2"
           : "employee",
+        also_employee: isManagerOrRh && !!user.employee_id,
+        employee_id: (isManagerOrRh && user.employee_id) ? user.employee_id : "",
         is_active: user.is_active,
       };
     }
     return EMPTY_FORM;
   });
-  const [loading, setLoading] = useState(false);
+  const [loading,    setLoading]    = useState(false);
+  const [employees,  setEmployees]  = useState<EmployeeMinimal[]>([]);
+  const [empSearch,  setEmpSearch]  = useState("");
+
+  // Charger la liste des employés pour le double accès
+  useEffect(() => {
+    getEmployeesForAdmin()
+      .then(setEmployees)
+      .catch(() => {/* silently fail */});
+  }, []);
 
   const setField = <K extends keyof UserForm>(k: K, v: UserForm[K]) =>
     setForm((p) => ({ ...p, [k]: v }));
+
+  const filteredEmps = empSearch.trim()
+    ? employees
+        .filter((e) =>
+          `${e.prenom} ${e.nom} ${e.matricule}`
+            .toLowerCase()
+            .includes(empSearch.toLowerCase())
+        )
+        .slice(0, 8)
+    : [];
+
+  const selectedEmp = form.employee_id !== ""
+    ? employees.find((e) => e.id === form.employee_id) ?? null
+    : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (mode === "create" && !form.password) {
       toast.error("Le mot de passe est requis à la création.");
+      return;
+    }
+    if (form.role !== "employee" && form.also_employee && form.employee_id === "") {
+      toast.error("Veuillez sélectionner la fiche employé liée.");
       return;
     }
     setLoading(true);
@@ -531,7 +575,15 @@ function UserModal({
             <div className="relative">
               <select
                 value={form.role}
-                onChange={(e) => setField("role", e.target.value as UserForm["role"])}
+                onChange={(e) => {
+                  const role = e.target.value as UserForm["role"];
+                  if (role === "employee") {
+                    // réinitialiser le double accès si retour en mode employé simple
+                    setForm((p) => ({ ...p, role, also_employee: false, employee_id: "" }));
+                  } else {
+                    setField("role", role);
+                  }
+                }}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-sm appearance-none pr-8 focus:outline-none focus:ring-2 focus:ring-camublue-900"
               >
                 <option value="employee">Employé</option>
@@ -542,6 +594,102 @@ function UserModal({
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
           </div>
+
+          {/* ── Double accès Espace Employé (manager / rh uniquement) ── */}
+          {form.role !== "employee" && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 space-y-3">
+              {/* Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <UserCheck size={15} className="text-[#003c71]" />
+                  <span className="text-sm font-semibold text-gray-700">Double accès — Espace Employé</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setField("also_employee", !form.also_employee)}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
+                    form.also_employee ? "bg-[#003c71]" : "bg-gray-300"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${
+                      form.also_employee ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Permet à cet utilisateur d'accéder aussi à l'espace employé (congés, bulletins, pointages) avec les mêmes identifiants.
+              </p>
+
+              {/* Sélection de la fiche employé */}
+              {form.also_employee && (
+                <div className="space-y-2 pt-1">
+                  <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    Fiche employé liée
+                  </label>
+
+                  {/* Employé déjà sélectionné */}
+                  {selectedEmp ? (
+                    <div className="flex items-center justify-between px-3 py-2 bg-[#003c71]/8 border border-[#003c71]/20 rounded-lg">
+                      <div>
+                        <p className="text-sm font-semibold text-[#003c71]">
+                          {selectedEmp.prenom} {selectedEmp.nom}
+                        </p>
+                        <p className="text-xs text-gray-500">{selectedEmp.matricule}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setField("employee_id", ""); setEmpSearch(""); }}
+                        className="p-1 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : mode === "edit" && user?.employee_name && form.employee_id === "" ? (
+                    /* En mode édition, afficher le nom actuel si employee_id a été vidé manuellement */
+                    null
+                  ) : null}
+
+                  {/* Champ de recherche */}
+                  {!selectedEmp && (
+                    <div className="relative">
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        value={empSearch}
+                        onChange={(e) => setEmpSearch(e.target.value)}
+                        placeholder="Rechercher par nom ou matricule…"
+                        className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-camublue-900"
+                      />
+                    </div>
+                  )}
+
+                  {/* Résultats de recherche */}
+                  {!selectedEmp && filteredEmps.length > 0 && (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-50 max-h-40 overflow-y-auto">
+                      {filteredEmps.map((e) => (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => { setField("employee_id", e.id); setEmpSearch(""); }}
+                          className="w-full text-left px-3 py-2.5 hover:bg-blue-50 transition flex items-center justify-between gap-3"
+                        >
+                          <span className="text-sm font-medium text-gray-700">{e.prenom} {e.nom}</span>
+                          <span className="text-xs text-gray-400 shrink-0">{e.matricule}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {!selectedEmp && empSearch.trim() && filteredEmps.length === 0 && (
+                    <p className="text-xs text-gray-400 px-1">Aucun employé trouvé.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {mode === "edit" && (
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.is_active} onChange={(e) => setField("is_active", e.target.checked)} className="accent-camublue-900 w-4 h-4" />

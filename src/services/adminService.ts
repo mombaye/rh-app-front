@@ -15,6 +15,14 @@ export type AdminUser = {
   is_active: boolean;
   country: { id: number; name: string; code: string } | null;
   employee_name: string | null;
+  employee_id: number | null;
+};
+
+export type EmployeeMinimal = {
+  id: number;
+  nom: string;
+  prenom: string;
+  matricule: string;
 };
 
 export type AdminStats = {
@@ -107,4 +115,9 @@ export type AccountHistoryEntry = {
 export const getAccountHistory = async (id: number): Promise<AccountHistoryEntry[]> => {
   const res = await adminApi.get(`/api/auth/admin/accounts/${id}/history/`);
   return res.data;
+};
+
+export const getEmployeesForAdmin = async (): Promise<EmployeeMinimal[]> => {
+  const res = await adminApi.get("/api/employees/");
+  return Array.isArray(res.data) ? res.data : [];
 };
