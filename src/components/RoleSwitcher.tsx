@@ -24,7 +24,13 @@ export default function RoleSwitcher() {
   const handleSwitch = (role: UserRole) => {
     setOpen(false);
     switchRole(role);
-    navigate(dashboardForRole(role));
+    // Un manager qui bascule en mode "Employé" reste dans l'interface Manager
+    // (seul le bouton Approbations sera désactivé, pas besoin d'une 2e interface).
+    if (role === "employe" && (availableRoles.includes("manager1") || availableRoles.includes("manager2"))) {
+      navigate("/manager/dashboard");
+    } else {
+      navigate(dashboardForRole(role));
+    }
   };
 
   return (

@@ -13,6 +13,7 @@ interface NavItem {
   path: string;
   icon: React.ReactNode;
   badge?: number;
+  disabled?: boolean;
 }
 
 interface ManagerSidebarProps {
@@ -21,9 +22,11 @@ interface ManagerSidebarProps {
 
 export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps) {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, activeRole } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  const isManagerMode = activeRole === "manager1" || activeRole === "manager2";
 
   const navItems: NavItem[] = [
     { label: "Vue d'ensemble",  path: "/manager/dashboard",  icon: <LayoutDashboard size={20} /> },
@@ -31,10 +34,11 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
     { label: "Mes Bulletins",   path: "/manager/payslips",   icon: <BadgeDollarSign size={20} /> },
     { label: "Mon Dossier",     path: "/manager/dossier",    icon: <FolderOpen size={20} /> },
     {
-      label: "Approbations",
-      path:  "/manager/approvals",
-      icon:  <ClipboardCheck size={20} />,
-      badge: pendingCount > 0 ? pendingCount : undefined,
+      label:    "Approbations",
+      path:     "/manager/approvals",
+      icon:     <ClipboardCheck size={20} />,
+      badge:    isManagerMode && pendingCount > 0 ? pendingCount : undefined,
+      disabled: !isManagerMode,
     },
   ];
 
@@ -48,6 +52,19 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
 
   const NavLink = ({ item, onClose }: { item: NavItem; onClose?: () => void }) => {
     const isActive = location.pathname === item.path;
+
+    if (item.disabled) {
+      return (
+        <div
+          title="Passez en mode Manager pour accéder aux approbations"
+          className="flex items-center gap-3 px-4 py-3 rounded-lg font-medium cursor-not-allowed opacity-40 select-none text-gray-400"
+        >
+          {item.icon}
+          <span className="flex-1">{item.label}</span>
+        </div>
+      );
+    }
+
     return (
       <Link
         to={item.path}
@@ -71,10 +88,14 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
 
   const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
     <>
-      {/* Badge espace manager */}
-      <div className="mx-4 mt-4 px-3 py-2 rounded-lg bg-[#003c71]/10 text-[#003c71] text-xs font-semibold flex items-center gap-2">
+      {/* Badge espace */}
+      <div className={`mx-4 mt-4 px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors ${
+        isManagerMode
+          ? "bg-[#003c71]/10 text-[#003c71]"
+          : "bg-gray-100 text-gray-500"
+      }`}>
         <ClipboardCheck size={14} />
-        Espace Manager
+        {isManagerMode ? "Espace Manager" : "Espace Employé"}
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-1">
@@ -93,7 +114,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
           <div className="min-w-0">
             <p className="font-medium text-sm truncate">{displayName}</p>
             <p className="text-[10px] text-gray-400">
-              Niveau {user?.manager_level ?? "—"}
+              {isManagerMode ? `Niveau ${user?.manager_level ?? "—"}` : "Mode Employé"}
             </p>
           </div>
         </button>
