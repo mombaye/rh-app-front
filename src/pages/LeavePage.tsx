@@ -730,13 +730,10 @@ export default function LeavePage() {
                                       {isPending && (
                                         <>
                                           <ApprovalStepIndicator request={r} />
-                                          <div className="flex gap-1.5 flex-wrap">
-                                            <QuickApproveBtn request={r} onDone={fetchAll} onOpenDetail={() => openDetail(r)} />
-                                            <button onClick={(e) => { e.stopPropagation(); setEditTarget(r); }}
-                                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
-                                              <Pencil className="h-3 w-3" /> Modifier
-                                            </button>
-                                          </div>
+                                          <button onClick={(e) => { e.stopPropagation(); setEditTarget(r); }}
+                                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+                                            <Pencil className="h-3 w-3" /> Modifier
+                                          </button>
                                         </>
                                       )}
                                       {r.status === "APPROVED" && (
@@ -2101,8 +2098,7 @@ function DetailModal({ request: r, onClose, onDone }: {
   const lc        = r.leave_type?.color ?? "#6b7280";
   const needsDoc  = r.leave_type?.requires_justification;
 
-  // Hiérarchie validée ? Utilise la même logique que les boutons du tableau
-  const { blocked: approvalBlocked, blockReason: approvalBlockReason } = useApprovalSteps(r);
+  // (RH ne peut pas approuver — approbation réservée aux managers)
 
   const infoRows: [string, string][] = [
     ["Employé",   r.employee?.full_name ?? "—"],
@@ -2257,39 +2253,20 @@ function DetailModal({ request: r, onClose, onDone }: {
 
           {/* ── Actions PENDING / PENDING_SECOND ──────────────────────────────── */}
           {isPending && (
-            <div className="space-y-3 pt-2 border-t border-slate-100">
-
-              {/* Bandeau bloquant : hiérarchie pas encore validée */}
-              {approvalBlocked && (
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-800 font-semibold">{approvalBlockReason}</p>
+            <div className="pt-2 border-t border-slate-100">
+              <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                <Clock className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-blue-800">En attente de validation manager</p>
+                  <p className="text-xs text-blue-600 mt-0.5 leading-relaxed">
+                    Cette demande suit le circuit d'approbation des managers (N+1 puis N+2 si applicable).
+                    Le RH ne peut pas approuver ou rejeter — seul le manager concerné peut valider.
+                  </p>
                 </div>
-              )}
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">
-                  Motif de rejet{" "}
-                  <span className="normal-case font-normal text-slate-400">(requis pour rejeter)</span>
-                </label>
-                <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
-                  disabled={approvalBlocked}
-                  placeholder="Expliquez la raison du rejet…" rows={2}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 resize-none transition disabled:opacity-40 disabled:bg-slate-50" />
               </div>
 
               {r.status === "PENDING" && (
-                <div ref={approverRef}>
-                  {/* Bandeau d'info si l'employé nécessite 2 validations */}
-                  {r.employee?.requires_two_approvals && (
-                    <div className="flex items-start gap-2 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2.5 mb-2">
-                      <Users className="h-4 w-4 text-violet-600 shrink-0 mt-0.5" />
-                      <p className="text-xs text-violet-700 font-semibold">
-                        Cet employé est configuré avec un flux <span className="font-black">2 validations</span>.
-                        Veuillez sélectionner le Manager N+2 ci-dessous.
-                      </p>
-                    </div>
-                  )}
+                <div ref={approverRef} className="hidden">
 
                   <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">
                     2ème approbateur (N+2){" "}
@@ -2387,46 +2364,12 @@ function DetailModal({ request: r, onClose, onDone }: {
                 </div>
               )}
 
-              <div className="flex gap-2">
-                <button
-                  disabled={actionLoading || approvalBlocked || !rejectReason.trim()}
-                  onClick={handleReject}
-                  title={approvalBlocked ? approvalBlockReason : "Rejeter la demande"}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed">
-                  {actionLoading ? <ImSpinner2 className="animate-spin" size={13} /> : <XCircle className="h-4 w-4" />}
-                  Rejeter
-                </button>
-
-                {r.status === "PENDING" && secondApproverId.trim() && !approvalBlocked && (
-                  <button disabled={actionLoading}
-                    onClick={() => handleApprove({ second_approver_id: parseInt(secondApproverId, 10) })}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold rounded-xl transition disabled:opacity-50">
-                    {actionLoading ? <ImSpinner2 className="animate-spin" size={13} /> : <Clock className="h-4 w-4" />}
-                    Passer au N+2
-                  </button>
-                )}
-
-                <button
-                  disabled={actionLoading || approvalBlocked}
-                  onClick={() => handleApprove()}
-                  title={approvalBlocked ? approvalBlockReason : "Approuver la demande"}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed">
-                  {actionLoading ? <ImSpinner2 className="animate-spin" size={13} /> : <CheckCircle2 className="h-4 w-4" />}
-                  Approuver
-                </button>
-              </div>
             </div>
           )}
 
           {/* ── Actions APPROVED ───────────────────────────────────────────────── */}
           {r.status === "APPROVED" && (
             <div className="space-y-3 pt-2 border-t border-slate-100">
-              <button disabled={actionLoading} onClick={handleCancel}
-                className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold rounded-xl transition disabled:opacity-50">
-                {actionLoading ? <ImSpinner2 className="animate-spin" size={13} /> : <Ban className="h-4 w-4" />}
-                Annuler la demande
-              </button>
-
               <div className="rounded-2xl border-2 border-orange-200 bg-orange-50 p-4 space-y-3">
                 <button onClick={() => setShowRevoke((v) => !v)}
                   className="flex items-center gap-2 text-orange-700 font-bold text-sm w-full">
