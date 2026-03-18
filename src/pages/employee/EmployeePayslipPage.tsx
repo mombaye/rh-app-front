@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   BadgeDollarSign, Download, FileText, Loader2,
   ChevronDown, ChevronUp, Eye, X, Send, Clock,
-  CheckCircle2, AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
@@ -117,10 +117,9 @@ function PreviewModal({ matricule, year, month, onClose }: {
   );
 }
 
-// ─── Formulaire de demande ────────────────────────────────────────────────────
-function RequestForm({ onCancel, onSuccess }: { onCancel: () => void; onSuccess: () => void }) {
+// ─── Modal de demande ─────────────────────────────────────────────────────────
+function RequestModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const currentDate = new Date();
-  // Liste des mois passés (hors 3 derniers) : 12 mois pour la sélection
   const options: BulletinEntry[] = [];
   for (let i = DEFAULT_VISIBLE + 1; i <= DEFAULT_VISIBLE + 24; i++) {
     const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
@@ -135,8 +134,9 @@ function RequestForm({ onCancel, onSuccess }: { onCancel: () => void; onSuccess:
   const toggle = (entry: BulletinEntry) => {
     setSelected(prev => {
       const exists = prev.some(e => e.year === entry.year && e.month === entry.month);
-      return exists ? prev.filter(e => !(e.year === entry.year && e.month === entry.month))
-                    : [...prev, entry];
+      return exists
+        ? prev.filter(e => !(e.year === entry.year && e.month === entry.month))
+        : [...prev, entry];
     });
   };
 
@@ -154,85 +154,95 @@ function RequestForm({ onCancel, onSuccess }: { onCancel: () => void; onSuccess:
     }
   };
 
-  if (sent) {
-    return (
-      <div className="bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
-        <CheckCircle2 size={32} className="text-green-500 mx-auto mb-2" />
-        <p className="font-semibold text-green-800 mb-1">Demande envoyée avec succès</p>
-        <p className="text-sm text-green-600">Le service RH a été notifié et vous enverra les bulletins demandés.</p>
-        <button onClick={onCancel}
-          className="mt-4 px-4 py-2 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 transition">
-          Fermer
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-white rounded-2xl border border-[#003c71]/20 shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Send size={16} className="text-[#003c71]" />
-          <span className="font-semibold text-[#003c71] text-sm">Demander des bulletins antérieurs</span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+         onClick={onClose}>
+      <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }} transition={{ duration: 0.18 }}
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+        onClick={e => e.stopPropagation()}>
+
+        {/* En-tête */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-[#003c71]/10 flex items-center justify-center">
+              <Send size={15} className="text-[#003c71]" />
+            </div>
+            <span className="font-semibold text-[#003c71]">Demander des bulletins antérieurs</span>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition">
+            <X size={16} />
+          </button>
         </div>
-        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition">
-          <X size={18} />
-        </button>
-      </div>
 
-      <div className="p-5 space-y-4">
-        <p className="text-xs text-gray-500">
-          Sélectionnez les mois que vous souhaitez. Le service RH vous les enverra après traitement.
-        </p>
+        {/* Corps */}
+        {sent ? (
+          <div className="p-8 text-center">
+            <CheckCircle2 size={40} className="text-green-500 mx-auto mb-3" />
+            <p className="font-semibold text-gray-800 mb-1">Demande envoyée !</p>
+            <p className="text-sm text-gray-500">Le service RH a été notifié et vous enverra les bulletins demandés.</p>
+            <button onClick={onClose}
+              className="mt-5 px-5 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition">
+              Fermer
+            </button>
+          </div>
+        ) : (
+          <div className="p-5 space-y-4">
+            <p className="text-xs text-gray-500">
+              Sélectionnez les mois souhaités. Le service RH vous les enverra après traitement.
+            </p>
 
-        {/* Sélection des mois */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-52 overflow-y-auto pr-1">
-          {options.map(opt => {
-            const isSelected = selected.some(e => e.year === opt.year && e.month === opt.month);
-            return (
-              <button key={`${opt.year}-${opt.month}`} onClick={() => toggle(opt)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition text-left ${
-                  isSelected
-                    ? "bg-[#003c71] border-[#003c71] text-white font-medium"
-                    : "border-gray-200 text-gray-700 hover:border-[#003c71]/40 hover:bg-[#003c71]/5"
-                }`}>
-                <div className={`w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-                  isSelected ? "border-white bg-white" : "border-gray-400"
-                }`}>
-                  {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-[#003c71]" />}
-                </div>
-                <span className="truncate">{MONTHS_FR[opt.month - 1].slice(0, 3)} {opt.year}</span>
+            {/* Sélection des mois */}
+            <div className="grid grid-cols-3 gap-2 max-h-56 overflow-y-auto pr-1">
+              {options.map(opt => {
+                const isSelected = selected.some(e => e.year === opt.year && e.month === opt.month);
+                return (
+                  <button key={`${opt.year}-${opt.month}`} onClick={() => toggle(opt)}
+                    className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border text-xs transition text-left ${
+                      isSelected
+                        ? "bg-[#003c71] border-[#003c71] text-white font-medium"
+                        : "border-gray-200 text-gray-700 hover:border-[#003c71]/40 hover:bg-[#003c71]/5"
+                    }`}>
+                    <div className={`w-3 h-3 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      isSelected ? "border-white bg-white" : "border-gray-300"
+                    }`}>
+                      {isSelected && <div className="w-1 h-1 rounded-full bg-[#003c71]" />}
+                    </div>
+                    <span className="truncate">{MONTHS_FR[opt.month - 1].slice(0, 3)} {opt.year}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {selected.length > 0 && (
+              <p className="text-xs text-[#003c71] font-medium">
+                {selected.length} mois sélectionné{selected.length > 1 ? "s" : ""}
+              </p>
+            )}
+
+            {/* Message optionnel */}
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Message (optionnel)</label>
+              <textarea value={message} onChange={e => setMessage(e.target.value)}
+                rows={2} placeholder="Ex : Bulletins nécessaires pour un dossier de prêt"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#003c71]/30" />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2 justify-end pt-1">
+              <button onClick={onClose}
+                className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">
+                Annuler
               </button>
-            );
-          })}
-        </div>
-
-        {selected.length > 0 && (
-          <p className="text-xs text-[#003c71] font-medium">
-            {selected.length} mois sélectionné{selected.length > 1 ? "s" : ""}
-          </p>
+              <button onClick={handleSubmit} disabled={sending || selected.length === 0}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition disabled:opacity-50">
+                {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                Envoyer la demande
+              </button>
+            </div>
+          </div>
         )}
-
-        {/* Message optionnel */}
-        <div>
-          <label className="text-xs text-gray-500 mb-1 block">Message (optionnel)</label>
-          <textarea value={message} onChange={e => setMessage(e.target.value)}
-            rows={2} placeholder="Ex : Bulletins nécessaires pour un dossier de prêt"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#003c71]/30" />
-        </div>
-
-        <div className="flex gap-2 justify-end">
-          <button onClick={onCancel}
-            className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">
-            Annuler
-          </button>
-          <button onClick={handleSubmit} disabled={sending || selected.length === 0}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition disabled:opacity-50">
-            {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-            Envoyer la demande
-          </button>
-        </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -292,9 +302,8 @@ export default function EmployeePayslipPage({ layout: Layout = EmployeeLayout }:
 
   const [bulletins,    setBulletins]    = useState<BulletinEntry[]>([]);
   const [loading,      setLoading]      = useState(true);
-  const [openYear,     setOpenYear]     = useState<number | null>(null);
-  const [showRequest,  setShowRequest]  = useState(false);
-  const [requestSent,  setRequestSent]  = useState(false);
+  const [openYear,    setOpenYear]    = useState<number | null>(null);
+  const [showRequest, setShowRequest] = useState(false);
 
   const refresh = useCallback(() => {
     if (!matricule) { setLoading(false); return; }
@@ -326,11 +335,18 @@ export default function EmployeePayslipPage({ layout: Layout = EmployeeLayout }:
       <div className="max-w-3xl mx-auto px-4 md:px-0 pb-10">
 
         {/* ── Header ── */}
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-          <h1 className="text-2xl font-bold text-[#003c71]">Mes Bulletins de Salaire</h1>
-          <p className="text-gray-500 text-sm mt-0.5">
-            Les 3 derniers mois sont accessibles directement. Pour les bulletins antérieurs, faites une demande au service RH.
-          </p>
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+          className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-[#003c71]">Mes Bulletins de Salaire</h1>
+            <p className="text-gray-500 text-sm mt-0.5">
+              Les 3 derniers mois sont accessibles directement.
+            </p>
+          </div>
+          <button onClick={() => setShowRequest(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition shrink-0 mt-1">
+            <Send size={14} /> Faire une demande
+          </button>
         </motion.div>
 
         {/* ── Stats ── */}
@@ -416,43 +432,17 @@ export default function EmployeePayslipPage({ layout: Layout = EmployeeLayout }:
           </div>
         )}
 
-        {/* ── Zone demande bulletins antérieurs ── */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-          {showRequest ? (
-            <RequestForm
-              onCancel={() => setShowRequest(false)}
-              onSuccess={() => { setRequestSent(true); setShowRequest(false); }}
-            />
-          ) : (
-            <div className={`rounded-2xl border p-5 flex items-start gap-4 ${
-              requestSent ? "bg-green-50 border-green-200" : "bg-[#003c71]/5 border-[#003c71]/20"
-            }`}>
-              <div className={`p-2.5 rounded-xl shrink-0 ${requestSent ? "bg-green-100 text-green-600" : "bg-[#003c71]/10 text-[#003c71]"}`}>
-                {requestSent ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
-              </div>
-              <div className="flex-1 min-w-0">
-                {requestSent ? (
-                  <>
-                    <p className="font-semibold text-green-800 text-sm">Demande envoyée</p>
-                    <p className="text-xs text-green-600 mt-0.5">Le service RH a été notifié et vous enverra les bulletins demandés prochainement.</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="font-semibold text-[#003c71] text-sm">Bulletins antérieurs</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Besoin d'un bulletin de plus de 3 mois ? Faites une demande au service RH.
-                    </p>
-                    <button onClick={() => setShowRequest(true)}
-                      className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-xs font-medium hover:bg-[#003c71]/90 transition">
-                      <Send size={13} /> Faire une demande
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-        </motion.div>
       </div>
+
+      {/* ── Modal demande bulletins antérieurs ── */}
+      <AnimatePresence>
+        {showRequest && (
+          <RequestModal
+            onClose={() => setShowRequest(false)}
+            onSuccess={() => setShowRequest(false)}
+          />
+        )}
+      </AnimatePresence>
     </Layout>
   );
 }
