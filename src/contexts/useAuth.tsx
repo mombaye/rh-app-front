@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { getProfile, login as apiLogin } from "@/services/userService";
+import { useNavigate } from "react-router-dom";
+
+export type UserRole = "rh" | "manager1" | "manager2" | "employe" | "planning";
 
 type User = {
   id: number;
@@ -14,6 +17,7 @@ type User = {
   employee_id?: number | null;
   employee_matricule?: string | null;
   employee_name?: string | null;
+  roles?: UserRole[];
 };
 
 type AuthContextType = {
@@ -23,15 +27,37 @@ type AuthContextType = {
   login: (username: string, password: string) => Promise<User>;
   logout: () => void;
   isAuthenticated: boolean;
-  setUser: (user: User | null) => void; // <--- Ajout
+  setUser: (user: User | null) => void;
+  activeRole: UserRole | null;
+  availableRoles: UserRole[];
+  switchRole: (role: UserRole) => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+function computeRoles(profile: User): UserRole[] {
+  return (profile.roles as UserRole[]) ?? [];
+}
+
+function dashboardForRole(role: UserRole): string {
+  switch (role) {
+    case "rh":       return "/dashboard";
+    case "manager1":
+    case "manager2": return "/manager/dashboard";
+    case "planning": return "/planning";
+    case "employe":  return "/employee/dashboard";
+  }
+}
+
+export { dashboardForRole };
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeRole, setActiveRole] = useState<UserRole | null>(() => {
+    return (localStorage.getItem("active_role") as UserRole) || null;
+  });
 
   // Charge l'utilisateur courant au démarrage si token présent
   useEffect(() => {
@@ -41,6 +67,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         try {
           const data = await getProfile();
           setUser(data);
+          // Validate stored activeRole is still valid
+          const roles = computeRoles(data);
+          const stored = localStorage.getItem("active_role") as UserRole | null;
+          if (stored && roles.includes(stored)) {
+            setActiveRole(stored);
+          } else if (roles.length > 0) {
+            setActiveRole(roles[0]);
+            localStorage.setItem("active_role", roles[0]);
+          }
         } catch {
           setUser(null);
         }
@@ -50,6 +85,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     fetchUser();
   }, []);
 
+  const availableRoles: UserRole[] = user ? computeRoles(user) : [];
+
   const login = async (username: string, password: string) => {
     setLoading(true);
     setError(null);
@@ -57,7 +94,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const data = await apiLogin(username, password);
       localStorage.setItem("access_token", data.access);
       localStorage.setItem("refresh_token", data.refresh);
-      // fetch le profil ici si tu veux auto-remplir user après login
       const profile = await getProfile();
       setUser(profile);
       return profile;
@@ -66,16 +102,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(null);
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
+      throw err;
     } finally {
       setLoading(false);
     }
   };
 
+  const switchRole = (role: UserRole) => {
+    if (availableRoles.includes(role)) {
+      setActiveRole(role);
+      localStorage.setItem("active_role", role);
+    }
+  };
+
   const logout = () => {
     setUser(null);
+    setActiveRole(null);
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
-    window.location.href = "/login"; // Simple redirect, pas besoin de navigate ici
+    localStorage.removeItem("active_role");
+    window.location.href = "/login";
   };
 
   return (
@@ -88,6 +134,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         logout,
         isAuthenticated: !!user,
         setUser,
+        activeRole,
+        availableRoles,
+        switchRole,
       }}
     >
       {children}

@@ -28,49 +28,46 @@ import ManagerDossierPage    from "@/pages/manager/ManagerDossierPage";
 import ManagerApprovalsPage  from "@/pages/manager/ManagerApprovalsPage";
 import { useAuth } from "@/contexts/useAuth";
 
-// ── Helpers de rôles ─────────────────────────────────────────────────────────
-const isManager = (user: any) => user?.manager_level != null;
-const isRH      = (user: any) => user?.is_staff || user?.is_global_admin;
-const isPlanning = (user: any) => user?.is_planning_manager;
+// ── Helpers de rôles basés sur activeRole ────────────────────────────────────
 
-/** Redirige les gestionnaires de planning vers /planning */
 function PlanningManagerRedirect({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  if (isPlanning(user)) return <Navigate to="/planning" replace />;
+  const { activeRole } = useAuth();
+  if (activeRole === "planning") return <Navigate to="/planning" replace />;
   return <>{children}</>;
 }
 
 function NonPlanningRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  if (isPlanning(user)) return <Navigate to="/planning" replace />;
+  const { activeRole } = useAuth();
+  if (activeRole === "planning") return <Navigate to="/planning" replace />;
   return <>{children}</>;
 }
 
-/** RH/admin uniquement → redirige les autres vers leur espace */
+/** RH uniquement → redirige si activeRole n'est pas "rh" */
 function RhOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, activeRole } = useAuth();
   if (!user) return null;
-  if (isManager(user) && !isRH(user)) return <Navigate to="/manager/dashboard" replace />;
-  if (!isRH(user) && !isManager(user)) return <Navigate to="/employee/dashboard" replace />;
-  return <>{children}</>;
+  if (activeRole === "rh") return <>{children}</>;
+  if (activeRole === "manager1" || activeRole === "manager2") return <Navigate to="/manager/dashboard" replace />;
+  return <Navigate to="/employee/dashboard" replace />;
 }
 
-/** Employé uniquement → redirige RH et managers */
+/** Employé uniquement → redirige si activeRole n'est pas "employe" */
 function EmployeeOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, activeRole } = useAuth();
   if (!user) return null;
-  if (isRH(user))      return <Navigate to="/dashboard"          replace />;
-  if (isManager(user)) return <Navigate to="/manager/dashboard"  replace />;
-  return <>{children}</>;
+  if (activeRole === "employe") return <>{children}</>;
+  if (activeRole === "rh") return <Navigate to="/dashboard" replace />;
+  if (activeRole === "manager1" || activeRole === "manager2") return <Navigate to="/manager/dashboard" replace />;
+  return <Navigate to="/employee/dashboard" replace />;
 }
 
-/** Manager uniquement → redirige les autres */
+/** Manager uniquement → redirige si activeRole n'est pas manager */
 function ManagerOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, activeRole } = useAuth();
   if (!user) return null;
-  if (isRH(user))      return <Navigate to="/dashboard"          replace />;
-  if (!isManager(user)) return <Navigate to="/employee/dashboard" replace />;
-  return <>{children}</>;
+  if (activeRole === "manager1" || activeRole === "manager2") return <>{children}</>;
+  if (activeRole === "rh") return <Navigate to="/dashboard" replace />;
+  return <Navigate to="/employee/dashboard" replace />;
 }
 
 // ── Wrapper pour les routes Manager avec guard ────────────────────────────────

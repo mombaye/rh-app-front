@@ -51,6 +51,8 @@ type UserForm = {
   email: string;
   password: string;
   role: "employee" | "rh" | "manager1" | "manager2";
+  also_employee: boolean;  // Accès espace employé en plus du rôle principal
+  employee_id: string;     // ID de la fiche employé (si also_employee ou role=employee)
   is_active: boolean;
 };
 
@@ -59,10 +61,13 @@ const EMPTY_FORM: UserForm = {
   email: "",
   password: "",
   role: "employee",
+  also_employee: false,
+  employee_id: "",
   is_active: true,
 };
 
 function formToPayload(form: UserForm) {
+  const isMultiRole = form.also_employee && form.role !== "employee";
   const base: Record<string, unknown> = {
     username: form.username,
     email: form.email,
@@ -71,15 +76,23 @@ function formToPayload(form: UserForm) {
     manager_level: form.role === "manager1" ? 1 : form.role === "manager2" ? 2 : null,
     is_active: form.is_active,
   };
+  // Link employee record when role=employee or also_employee is checked
+  if (form.role === "employee" || isMultiRole) {
+    if (form.employee_id) base.employee_id = parseInt(form.employee_id, 10);
+    else base.employee_id = null;
+  }
   if (form.password) base.password = form.password;
   return base;
 }
 
 function roleLabel(u: AdminUser) {
-  if (u.is_staff) return "Compte RH";
-  if (u.manager_level === 1) return "Manager N1";
-  if (u.manager_level === 2) return "Manager N2";
-  return "Employé";
+  const parts: string[] = [];
+  if (u.is_staff) parts.push("RH");
+  if (u.manager_level === 1) parts.push("Manager N1");
+  if (u.manager_level === 2) parts.push("Manager N2");
+  if (u.employee_name && parts.length > 0) parts.push("Employé");
+  if (parts.length === 0) parts.push("Employé");
+  return parts.join(" + ");
 }
 
 // ─── Export columns definition ────────────────────────────────────────────────
@@ -441,6 +454,7 @@ function UserModal({
 }) {
   const [form, setForm] = useState<UserForm>(() => {
     if (mode === "edit" && user) {
+      const hasSecondaryRole = user.is_staff || user.manager_level != null;
       return {
         username: user.username,
         email: user.email,
@@ -452,6 +466,8 @@ function UserModal({
           : user.manager_level === 2
           ? "manager2"
           : "employee",
+        also_employee: hasSecondaryRole && user.employee_name != null,
+        employee_id: user.employee_id ? String(user.employee_id) : "",
         is_active: user.is_active,
       };
     }
@@ -523,11 +539,15 @@ function UserModal({
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-1 block">Rôle</label>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Rôle principal</label>
             <div className="relative">
               <select
                 value={form.role}
-                onChange={(e) => setField("role", e.target.value as UserForm["role"])}
+                onChange={(e) => {
+                  const newRole = e.target.value as UserForm["role"];
+                  setField("role", newRole);
+                  if (newRole === "employee") setField("also_employee", false);
+                }}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-sm appearance-none pr-8 focus:outline-none focus:ring-2 focus:ring-camublue-900"
               >
                 <option value="employee">Employé</option>
@@ -538,6 +558,52 @@ function UserModal({
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
           </div>
+
+          {/* Accès employé en plus (multi-rôle) */}
+          {form.role !== "employee" && (
+            <div className="rounded-lg border border-dashed border-camublue-900/30 bg-camublue-900/4 p-3 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.also_employee}
+                  onChange={(e) => setField("also_employee", e.target.checked)}
+                  className="accent-camublue-900 w-4 h-4"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Accès espace Employé également
+                </span>
+              </label>
+              {form.also_employee && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">ID de la fiche employé</label>
+                  <Input
+                    type="number"
+                    placeholder="ex: 42"
+                    value={form.employee_id}
+                    onChange={(e) => setField("employee_id", e.target.value)}
+                    className="text-sm"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Fiche employé pour les comptes purement employé */}
+          {form.role === "employee" && (
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                ID de la fiche employé <span className="text-gray-400 font-normal">(optionnel)</span>
+              </label>
+              <Input
+                type="number"
+                placeholder="ex: 42"
+                value={form.employee_id}
+                onChange={(e) => setField("employee_id", e.target.value)}
+                className="text-sm"
+              />
+            </div>
+          )}
+
           {mode === "edit" && (
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.is_active} onChange={(e) => setField("is_active", e.target.checked)} className="accent-camublue-900 w-4 h-4" />

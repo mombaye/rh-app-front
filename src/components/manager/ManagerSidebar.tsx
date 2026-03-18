@@ -6,6 +6,7 @@ import {
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
+import RoleSwitcher from "@/components/RoleSwitcher";
 
 interface NavItem {
   label: string;
@@ -82,7 +83,8 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
         ))}
       </nav>
 
-      <div className="px-4 py-4 border-t border-gray-200">
+      <div className="px-4 py-4 border-t border-gray-200 space-y-2">
+        <RoleSwitcher />
         <button
           className="flex items-center gap-3 px-4 py-2 rounded-lg w-full text-left text-gray-700 hover:bg-[#003c71]/10 transition-all"
           onClick={() => setShowLogoutModal(true)}
