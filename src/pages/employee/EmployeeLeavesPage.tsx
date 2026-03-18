@@ -5,6 +5,7 @@ import {
   AlertCircle, Pencil, FileDown, ChevronDown, ChevronUp,
   Loader2, ChevronLeft, ChevronRight, TrendingUp, Filter,
   X, CalendarDays, User, Hash, MessageSquare, ShieldCheck,
+  ThumbsUp,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -560,9 +561,10 @@ interface RequestCardProps {
   req: LeaveRequest;
   onView: () => void;
   onEdit: () => void;
+  onSelfApprove?: () => void;
 }
 
-function RequestCard({ req, onView, onEdit }: RequestCardProps) {
+function RequestCard({ req, onView, onEdit, onSelfApprove }: RequestCardProps) {
   const cfg     = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
   const Icon    = cfg.Icon;
   const canEdit = req.status === "PENDING" || req.status === "PENDING_SECOND";
@@ -637,6 +639,15 @@ function RequestCard({ req, onView, onEdit }: RequestCardProps) {
               <span className="text-[9px] text-gray-400 uppercase tracking-wide">jours</span>
             </div>
 
+            {onSelfApprove && canEdit && (
+              <button
+                onClick={e => { e.stopPropagation(); onSelfApprove(); }}
+                className="flex items-center gap-1.5 text-xs text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-lg transition font-medium border border-green-200 hover:border-green-400"
+              >
+                <ThumbsUp size={12} />
+                Approuver
+              </button>
+            )}
             {canEdit && (
               <button
                 onClick={e => { e.stopPropagation(); onEdit(); }}
@@ -654,7 +665,15 @@ function RequestCard({ req, onView, onEdit }: RequestCardProps) {
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────────
-export default function EmployeeLeavesPage() {
+interface EmployeeLeavesPageProps {
+  layout?: React.ComponentType<{ children: React.ReactNode }>;
+  canSelfApprove?: boolean;
+}
+
+export default function EmployeeLeavesPage({
+  layout: Layout = EmployeeLayout,
+  canSelfApprove = false,
+}: EmployeeLeavesPageProps) {
   const { user }    = useAuth();
   const employeeId  = user?.employee_id;
 
@@ -705,8 +724,19 @@ export default function EmployeeLeavesPage() {
     { label: "Rejetées",   count: requests.filter(r => r.status === "REJECTED").length,         color: "text-red-700",   bg: "bg-red-50",    border: "border-red-200"   },
   ];
 
+  const handleSelfApprove = async (req: LeaveRequest) => {
+    if (!employeeId) return;
+    try {
+      await leaveRequestService.approve(req.id, { reviewer_id: employeeId });
+      toast.success("Demande auto-approuvée avec succès !");
+      refresh();
+    } catch {
+      toast.error("Erreur lors de l'auto-approbation.");
+    }
+  };
+
   return (
-    <EmployeeLayout>
+    <Layout>
       <div className="max-w-4xl mx-auto px-4 md:px-0 pb-10">
 
         {/* ── Header ── */}
@@ -908,6 +938,7 @@ export default function EmployeeLeavesPage() {
                     req={req}
                     onView={() => setDetailTarget(req)}
                     onEdit={() => { setEditTarget(req); setShowForm(true); }}
+                    onSelfApprove={canSelfApprove ? () => handleSelfApprove(req) : undefined}
                   />
                 ))}
               </div>
@@ -1020,6 +1051,6 @@ export default function EmployeeLeavesPage() {
           onEdit={() => { setDetailTarget(null); setEditTarget(detailTarget); setShowForm(true); }}
         />
       )}
-    </EmployeeLayout>
+    </Layout>
   );
 }

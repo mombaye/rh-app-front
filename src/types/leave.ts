@@ -127,15 +127,16 @@ export interface LeaveCalendarEntry {
 
 // ── LeaveRequestFilters ── query params supportés par get_queryset() ──────────
 export interface LeaveRequestFilters {
-  status?:        LeaveStatus;
-  employee_id?:   number;
-  leave_type_id?: number;
-  start_date?:    string;
-  end_date?:      string;
-  department?:    string;
-  employee_name?: string;  // recherche par nom/prénom/matricule
-  year?:          number;  // filtre par année de début
-  contract_type?: ContractType; // filtré côté frontend uniquement
+  status?:              LeaveStatus;
+  employee_id?:         number;
+  leave_type_id?:       number;
+  start_date?:          string;
+  end_date?:            string;
+  department?:          string;
+  employee_name?:       string;  // recherche par nom/prénom/matricule
+  year?:                number;  // filtre par année de début
+  contract_type?:       ContractType; // filtré côté frontend uniquement
+  manager_employee_id?: number;  // filtre les subordonnés d'un manager
 }
 
 // ── ExportColumn ── colonnes disponibles pour l'export personnalisé ──────────
