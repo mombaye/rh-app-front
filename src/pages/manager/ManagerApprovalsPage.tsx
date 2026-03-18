@@ -33,7 +33,7 @@ function ApproveModal({
 }: {
   req: LeaveRequest;
   reviewerId: number;
-  onConfirm: (reqId: number, secondApproverId?: number) => void;
+  onConfirm: (reqId: number) => void;
   onClose: () => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -43,6 +43,9 @@ function ApproveModal({
     await onConfirm(req.id);
     setLoading(false);
   };
+
+  const isPendingSecond = req.status === "PENDING_SECOND";
+  const hasN2 = !!req.employee.n2_manager_id;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
@@ -60,7 +63,9 @@ function ApproveModal({
               <ThumbsUp size={20} className="text-white" />
             </div>
             <div>
-              <h3 className="text-white font-bold text-base">Approuver la demande</h3>
+              <h3 className="text-white font-bold text-base">
+                {isPendingSecond ? "Validation N+2 — Approuver" : "Approuver la demande"}
+              </h3>
               <p className="text-green-100 text-xs">{req.employee.full_name}</p>
             </div>
           </div>
@@ -84,13 +89,30 @@ function ApproveModal({
             )}
           </div>
 
-          {req.employee.requires_two_approvals && (
+          {/* Infos validation N+2 automatique */}
+          {!isPendingSecond && hasN2 && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
               <AlertCircle size={15} className="text-amber-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-amber-700">
-                Cet employé nécessite une 2ème validation.
-                En approuvant, la demande passera en attente de 2ème approbation.
-              </p>
+              <div>
+                <p className="text-xs text-amber-700 font-medium">Validation en 2 niveaux requise</p>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  Votre approbation (N+1) enverra la demande à <strong>{req.employee.n2_manager_name}</strong> (N+2) pour validation finale.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {isPendingSecond && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
+              <AlertCircle size={15} className="text-blue-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs text-blue-700 font-medium">Validation N+2 — Décision finale</p>
+                <p className="text-xs text-blue-600 mt-0.5">
+                  La demande a déjà été approuvée par le N+1
+                  {req.reviewed_by ? ` (${req.reviewed_by.full_name})` : ""}.
+                  Votre approbation sera définitive.
+                </p>
+              </div>
             </div>
           )}
 
@@ -109,7 +131,7 @@ function ApproveModal({
             className="flex-1 py-2.5 rounded-xl bg-green-500 text-white text-sm font-bold hover:bg-green-600 transition flex items-center justify-center gap-2 disabled:opacity-60 shadow-sm"
           >
             {loading ? <RefreshCw size={15} className="animate-spin" /> : <ThumbsUp size={15} />}
-            Approuver
+            {isPendingSecond ? "Approuver (final)" : hasN2 ? "Approuver (N+1)" : "Approuver"}
           </button>
         </div>
       </motion.div>
@@ -259,7 +281,7 @@ function ApprovalCard({
               </span>
             </div>
 
-            {/* Ligne 2 : matricule · service · fonction */}
+            {/* Ligne 2 : matricule · service · fonction + badge niveau */}
             <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-2 flex-wrap">
               <span className="flex items-center gap-1">
                 <Hash size={10} />
@@ -282,6 +304,16 @@ function ApprovalCard({
                     {req.employee.fonction}
                   </span>
                 </>
+              )}
+              {req.status === "PENDING_SECOND" && (
+                <span className="px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-semibold text-[10px] border border-orange-200">
+                  Validation N+2
+                </span>
+              )}
+              {req.status === "PENDING" && req.employee.n2_manager_id && (
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold text-[10px] border border-amber-200">
+                  2 niveaux requis
+                </span>
               )}
             </div>
 

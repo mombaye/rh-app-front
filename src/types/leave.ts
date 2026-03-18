@@ -26,6 +26,11 @@ export interface EmployeeMini {
   email?:                  string;
   requires_two_approvals?: boolean;
   attendance_status?:      string;   // "SHIFT" → intérimaire, sinon interne
+  // Hiérarchie N+1 / N+2
+  n1_manager_id?:          number | null;
+  n2_manager_id?:          number | null;
+  n1_manager_name?:        string | null;
+  n2_manager_name?:        string | null;
 }
 
 // ── LeaveStatus ── mirrors LeaveRequest.Status choices ───────────────────────
