@@ -15,7 +15,6 @@ export type AdminUser = {
   is_active: boolean;
   country: { id: number; name: string; code: string } | null;
   employee_name: string | null;
-  employee_id?: number | null;
 };
 
 export type AdminStats = {

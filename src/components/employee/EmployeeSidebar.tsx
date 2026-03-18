@@ -11,6 +11,7 @@ import {
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
+import RoleSwitcher from "@/components/RoleSwitcher";
 
 const navItems = [
   {
@@ -82,7 +83,8 @@ export default function EmployeeSidebar() {
           <NavLink key={item.path} item={item} onClose={onClose} />
         ))}
       </nav>
-      <div className="px-4 py-4 border-t border-gray-200">
+      <div className="px-4 py-4 border-t border-gray-200 space-y-2">
+        <RoleSwitcher />
         <button
           className="flex items-center gap-3 px-4 py-2 rounded-lg w-full text-left text-gray-700 hover:bg-camublue-900/10 transition-all"
           onClick={() => setShowLogoutModal(true)}
