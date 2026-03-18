@@ -144,7 +144,11 @@ function HolidayFormModal({
 }
 
 // ─── Composant principal ──────────────────────────────────────────────────────
-export default function HolidayManager() {
+interface HolidayManagerProps {
+  onChanged?: () => void;
+}
+
+export default function HolidayManager({ onChanged }: HolidayManagerProps = {}) {
   const [holidays,    setHolidays]    = useState<PublicHoliday[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [showForm,    setShowForm]    = useState(false);
@@ -169,6 +173,7 @@ export default function HolidayManager() {
       await holidayService.delete(id);
       setHolidays(prev => prev.filter(h => h.id !== id));
       toast.success("Jour férié supprimé.");
+      onChanged?.();
     } catch {
       toast.error("Erreur lors de la suppression.");
     } finally {
@@ -184,6 +189,7 @@ export default function HolidayManager() {
     }
     toast.success(`${created} jour(s) férié(s) ajouté(s).`);
     load();
+    onChanged?.();
     setSeeding(false);
   };
 
@@ -310,6 +316,7 @@ export default function HolidayManager() {
                   ? prev.map(x => x.id === h.id ? h : x)
                   : [...prev, h]
               );
+              onChanged?.();
             }}
             onClose={() => { setShowForm(false); setEditing(undefined); }}
           />

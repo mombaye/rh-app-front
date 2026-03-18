@@ -1,11 +1,12 @@
 // src/components/leaves/LeaveCalendar.tsx
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { leaveRequestService, holidayService } from "@/services/leaveService";
 import { ContractType, LeaveCalendarEntry, PublicHoliday } from "@/types/leave";
 import { ImSpinner2 } from "react-icons/im";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
-import { Star } from "lucide-react";
+import { Star, Settings2, ChevronDown } from "lucide-react";
+import HolidayManager from "@/components/leaves/HolidayManager";
 
 interface Props {
   contractType?: ContractType;
@@ -27,13 +28,14 @@ function getFirstDayOfMonth(year: number, month: number) {
 
 export default function LeaveCalendar({ contractType = "INTERNE" }: Props) {
   const today = new Date();
-  const [year,     setYear]     = useState(today.getFullYear());
-  const [month,    setMonth]    = useState(today.getMonth() + 1);
-  const [entries,  setEntries]  = useState<LeaveCalendarEntry[]>([]);
-  const [holidays, setHolidays] = useState<PublicHoliday[]>([]);
-  const [loading,  setLoading]  = useState(true);
+  const [year,              setYear]              = useState(today.getFullYear());
+  const [month,             setMonth]             = useState(today.getMonth() + 1);
+  const [entries,           setEntries]           = useState<LeaveCalendarEntry[]>([]);
+  const [holidays,          setHolidays]          = useState<PublicHoliday[]>([]);
+  const [loading,           setLoading]           = useState(true);
+  const [showHolidayPanel,  setShowHolidayPanel]  = useState(false);
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     setLoading(true);
     Promise.all([
       leaveRequestService.getCalendar(month, year),
@@ -42,7 +44,9 @@ export default function LeaveCalendar({ contractType = "INTERNE" }: Props) {
       .then(([cal, hols]) => { setEntries(cal); setHolidays(hols); })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [month, year, contractType]);
+  }, [month, year]);
+
+  useEffect(() => { loadData(); }, [loadData, contractType]);
 
   const prevMonth = () => {
     if (month === 1) { setMonth(12); setYear((y) => y - 1); }
@@ -73,9 +77,8 @@ export default function LeaveCalendar({ contractType = "INTERNE" }: Props) {
   // Map: "YYYY-MM-DD" → holiday name
   const holidayMap: Record<string, string> = {};
   holidays.forEach((h) => {
-    // For recurring holidays, compute actual date for this year/month
     const hDate = new Date(h.date + "T12:00:00");
-    const actualMonth = h.is_recurring ? hDate.getMonth() + 1 : hDate.getMonth() + 1;
+    const actualMonth = hDate.getMonth() + 1;
     const actualDay   = hDate.getDate();
     if (actualMonth === month) {
       const key = `${year}-${String(month).padStart(2, "0")}-${String(actualDay).padStart(2, "0")}`;
@@ -244,6 +247,39 @@ export default function LeaveCalendar({ contractType = "INTERNE" }: Props) {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── Gestion des jours fériés (panneau repliable) ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <button
+          onClick={() => setShowHolidayPanel((v) => !v)}
+          className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <Settings2 size={16} className="text-amber-500" />
+            Gérer les jours fériés
+          </span>
+          <ChevronDown
+            size={16}
+            className={`text-gray-400 transition-transform duration-200 ${showHolidayPanel ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        <AnimatePresence>
+          {showHolidayPanel && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="border-t border-gray-100 px-6 py-5">
+                <HolidayManager onChanged={loadData} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

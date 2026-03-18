@@ -5,7 +5,6 @@ import AppLayout from "@/layouts/AppLayout";
 import LeaveRequestForm from "@/components/leaves/LeaveRequestForm";
 import LeaveCalendar from "@/components/leaves/LeaveCalendar";
 import LeaveTypeManagement from "@/components/leaves/LeaveTypeManagement";
-import HolidayManager from "@/components/leaves/HolidayManager";
 import { leaveRequestService, leaveTypeService, leaveBalanceService } from "@/services/leaveService";
 import { getEmployees } from "@/services/employeeService";
 import { Employee } from "@/types/employee";
@@ -19,7 +18,7 @@ import {
   Download, Loader2, AlertTriangle, Clock, Pencil, Paperclip,
   FileCheck, Upload, ExternalLink, Users, Settings2, Wallet,
   Search, History, Info, Filter, Trash2, Send, FileSpreadsheet,
-  CheckCircle, XOctagon, Star,
+  CheckCircle, XOctagon,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ExportColumnKey, ExportColumnDef } from "@/types/leave";
@@ -67,14 +66,13 @@ const DEFAULT_EXPORT_COLUMNS: ExportColumnKey[] = [
   "start_date", "end_date", "days", "status",
 ];
 
-type TabId        = "requests" | "calendar" | "balances" | "holidays";
+type TabId        = "requests" | "calendar" | "balances";
 type StatusFilter = "ALL" | LeaveStatus;
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
   { id: "requests", label: "Demandes",    Icon: Table2       },
   { id: "calendar", label: "Calendrier",  Icon: CalendarRange },
   { id: "balances", label: "Soldes",      Icon: Wallet       },
-  { id: "holidays", label: "Jours fériés", Icon: Star        },
 ];
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
@@ -822,12 +820,6 @@ export default function LeavePage() {
           {tab === "calendar" && <LeaveCalendar />}
 
           {tab === "balances" && <BalancesTab contractType={contractType} />}
-
-          {tab === "holidays" && (
-            <div className="max-w-2xl">
-              <HolidayManager />
-            </div>
-          )}
         </div>
       </div>
 
