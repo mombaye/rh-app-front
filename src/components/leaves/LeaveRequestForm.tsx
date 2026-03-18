@@ -1,13 +1,13 @@
 // src/components/leaves/LeaveRequestForm.tsx
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { leaveTypeService, leaveRequestService } from "@/services/leaveService";
+import { leaveTypeService, leaveRequestService, holidayService } from "@/services/leaveService";
 import { getEmployees } from "@/services/employeeService";
-import { ContractType, LeaveType } from "@/types/leave";
+import { ContractType, LeaveType, HolidayCheckResult } from "@/types/leave";
 import { Employee } from "@/types/employee";
 import { FiX } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
-import { Upload, FileCheck, Paperclip, CheckCircle2, Search, User } from "lucide-react";
+import { Upload, FileCheck, Paperclip, CheckCircle2, Search, User, Star } from "lucide-react";
 
 interface Props {
   onClose:       () => void;
@@ -45,6 +45,8 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   const [loading,         setLoading]         = useState(false);
   const [error,           setError]           = useState<string | null>(null);
   const [isLoadingTypes,  setIsLoadingTypes]  = useState(true);
+  const [holidayCheck,    setHolidayCheck]    = useState<HolidayCheckResult | null>(null);
+  const [checkingDays,    setCheckingDays]    = useState(false);
 
   // Employee search
   const [allEmployees,     setAllEmployees]     = useState<Employee[]>([]);
@@ -103,16 +105,30 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Auto-calculate days
+  // Auto-calculate days + check holidays
   useEffect(() => {
     if (form.start_date && form.end_date) {
       const start = new Date(form.start_date), end = new Date(form.end_date);
       if (end >= start) {
-        const diff = Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1;
-        setForm((f) => ({ ...f, days: String(diff) }));
+        // Total calendaire (fallback si l'API est lente)
+        const totalDiff = Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1;
+        setForm((f) => ({ ...f, days: String(totalDiff) }));
+
+        // Vérification des fériés via API
+        setCheckingDays(true);
+        holidayService.checkDays(form.start_date, form.end_date)
+          .then((result) => {
+            setHolidayCheck(result);
+            setForm((f) => ({ ...f, days: String(result.effective_days) }));
+          })
+          .catch(() => { setHolidayCheck(null); })
+          .finally(() => setCheckingDays(false));
       } else {
         setForm((f) => ({ ...f, days: "" }));
+        setHolidayCheck(null);
       }
+    } else {
+      setHolidayCheck(null);
     }
   }, [form.start_date, form.end_date]);
 
@@ -457,9 +473,40 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
           <AnimatePresence>
             {form.days && Number(form.days) > 0 && (
               <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-700 flex items-center gap-2">
-                <span>📅</span>
-                <span>Durée calculée : {form.days} jour(s) calendaires</span>
+                className="space-y-2">
+                {/* Résumé jours */}
+                <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-700 flex items-center gap-2">
+                  {checkingDays
+                    ? <><ImSpinner2 className="animate-spin" size={13} /> Calcul en cours…</>
+                    : <>
+                        <span>📅</span>
+                        <span>
+                          Durée&nbsp;: <strong>{form.days}</strong> jour(s) prélevé(s) sur votre solde
+                          {holidayCheck && holidayCheck.holidays_count > 0 && (
+                            <span className="ml-1 text-blue-500 font-normal text-xs">
+                              ({holidayCheck.total_days} calendaires − {holidayCheck.holidays_count} férié(s))
+                            </span>
+                          )}
+                        </span>
+                      </>
+                  }
+                </div>
+
+                {/* Détail des fériés */}
+                {holidayCheck && holidayCheck.holidays_count > 0 && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                    className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-start gap-2">
+                    <Star size={14} className="text-amber-500 fill-amber-400 mt-0.5 shrink-0" />
+                    <div className="text-xs text-amber-700">
+                      <span className="font-semibold">{holidayCheck.holidays_count} jour(s) férié(s) dans cette période&nbsp;:</span>{" "}
+                      {holidayCheck.holidays.map(h => {
+                        const d = new Date(h.date + "T12:00:00");
+                        return `${h.name} (${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")})`;
+                      }).join(", ")}
+                      . Ces jours <strong>ne seront pas déduits</strong> de votre solde de congés.
+                    </div>
+                  </motion.div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

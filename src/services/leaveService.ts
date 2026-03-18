@@ -14,6 +14,8 @@ import {
   ApprovePayload,
   RevokePayload,
   ExportColumnKey,
+  PublicHoliday,
+  HolidayCheckResult,
 } from "../types/leave";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
@@ -358,5 +360,63 @@ export const leaveRequestService = {
       responseType: "blob",
     });
     return res.data;
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PublicHoliday  →  /api/leaves/holidays/
+// ─────────────────────────────────────────────────────────────────────────────
+export const holidayService = {
+  /** GET /api/leaves/holidays/ */
+  getAll: async (year?: number): Promise<PublicHoliday[]> => {
+    const params: Record<string, string> = {};
+    if (year) params.year = String(year);
+    const res = await axios.get(`${API}/holidays/`, { headers: getAuthHeaders(), params });
+    return res.data;
+  },
+
+  /** GET /api/leaves/holidays/for-month/?month=M&year=Y */
+  getForMonth: async (month: number, year: number): Promise<PublicHoliday[]> => {
+    const res = await axios.get(`${API}/holidays/for-month/`, {
+      headers: getAuthHeaders(),
+      params: { month, year },
+    });
+    return res.data;
+  },
+
+  /** GET /api/leaves/holidays/for-range/?start=&end= */
+  getForRange: async (start: string, end: string): Promise<PublicHoliday[]> => {
+    const res = await axios.get(`${API}/holidays/for-range/`, {
+      headers: getAuthHeaders(),
+      params: { start, end },
+    });
+    return res.data;
+  },
+
+  /** POST /api/leaves/holidays/check-days/ */
+  checkDays: async (startDate: string, endDate: string): Promise<HolidayCheckResult> => {
+    const res = await axios.post(
+      `${API}/holidays/check-days/`,
+      { start_date: startDate, end_date: endDate },
+      { headers: getAuthHeaders() },
+    );
+    return res.data;
+  },
+
+  /** POST /api/leaves/holidays/ */
+  create: async (data: Omit<PublicHoliday, "id">): Promise<PublicHoliday> => {
+    const res = await axios.post(`${API}/holidays/`, data, { headers: getAuthHeaders() });
+    return res.data;
+  },
+
+  /** PATCH /api/leaves/holidays/<id>/ */
+  update: async (id: number, data: Partial<PublicHoliday>): Promise<PublicHoliday> => {
+    const res = await axios.patch(`${API}/holidays/${id}/`, data, { headers: getAuthHeaders() });
+    return res.data;
+  },
+
+  /** DELETE /api/leaves/holidays/<id>/ */
+  delete: async (id: number): Promise<void> => {
+    await axios.delete(`${API}/holidays/${id}/`, { headers: getAuthHeaders() });
   },
 };

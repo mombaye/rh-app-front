@@ -156,6 +156,22 @@ export interface ExportColumnDef {
   label: string;
 }
 
+// ── PublicHoliday ─────────────────────────────────────────────────────────────
+export interface PublicHoliday {
+  id:           number;
+  date:         string;   // "YYYY-MM-DD"
+  name:         string;
+  is_recurring: boolean;
+  description:  string;
+}
+
+export interface HolidayCheckResult {
+  total_days:     number;
+  holidays_count: number;
+  effective_days: number;
+  holidays:       { date: string; name: string }[];
+}
+
 // ── ApprovePayload ────────────────────────────────────────────────────────────
 export interface ApprovePayload {
   reviewer_id?:        number;
