@@ -168,11 +168,15 @@ export const exportEmployeesExcel = async (opts?: {
   window.URL.revokeObjectURL(url);
 };
 
-export const createAccountFromEmployee = async (employeeId: number) => {
+export const createAccountFromEmployee = async (
+  employeeId: number,
+  managerLevel?: 1 | 2,
+) => {
   // Utilise admin_access_token si disponible (portail admin),
   // sinon fallback sur access_token (interface RH classique)
   const axiosInstance = localStorage.getItem("admin_access_token") ? adminApi : api;
-  return (await axiosInstance.post(`/api/employees/${employeeId}/create-account/`)).data;
+  const payload = managerLevel ? { manager_level: managerLevel } : {};
+  return (await axiosInstance.post(`/api/employees/${employeeId}/create-account/`, payload)).data;
 };
 
 export const sendAccessCodes = async (

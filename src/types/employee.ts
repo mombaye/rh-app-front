@@ -77,9 +77,12 @@ export interface Employee {
   requires_two_approvals?: boolean;
   n1_manager?:       number | null;   // FK id du N+1
   n2_manager?:       number | null;   // FK id du N+2
-  n1_manager_name?:  string | null;
-  n2_manager_name?:  string | null;
-  user_id?:          number | null;
+  n1_manager_name?:   string | null;
+  n2_manager_name?:   string | null;
+  user_id?:           number | null;
+  // Détection automatique rôle manager : nombre d'employés managés
+  manages_n1_count?:  number;
+  manages_n2_count?:  number;
 }
 
 export interface EmployeeHistoryEntry {

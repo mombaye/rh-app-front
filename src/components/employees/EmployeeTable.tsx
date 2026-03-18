@@ -3,7 +3,7 @@ import {
   FaEdit, FaFileExcel, FaUserPlus, FaPaperPlane,
   FaSort, FaSortUp, FaSortDown, FaFilePdf, FaHistory, FaBriefcase, FaExchangeAlt,
   FaSearch, FaTimes, FaChevronRight, FaArrowLeft, FaCheck,
-  FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight
+  FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight, FaUsers,
 } from "react-icons/fa";
 import { TbLogout } from "react-icons/tb";
 import { AiOutlineRollback } from "react-icons/ai";
@@ -154,6 +154,7 @@ export default function EmployeesTable({
   const [sendScope, setSendScope] = useState<"selected" | "filtered" | "all">("selected");
   const [createAccountConfirmEmp, setCreateAccountConfirmEmp] = useState<Employee | null>(null);
   const [createdCredentials, setCreatedCredentials] = useState<{ username: string; password: string; empName: string } | null>(null);
+  const [selectedManagerLevel, setSelectedManagerLevel] = useState<0 | 1 | 2>(0);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -328,13 +329,20 @@ export default function EmployeesTable({
     if (emp.has_user)
       return toast.error("Un compte utilisateur existe déjà pour cet employé.");
     setRowOpen(false);
+    // Auto-détecter le niveau manager à proposer par défaut
+    const n1 = emp.manages_n1_count ?? 0;
+    const n2 = emp.manages_n2_count ?? 0;
+    if (n1 > 0) setSelectedManagerLevel(1);
+    else if (n2 > 0) setSelectedManagerLevel(2);
+    else setSelectedManagerLevel(0);
     setCreateAccountConfirmEmp(emp);
   };
 
   const doCreateAccount = async (emp: Employee) => {
     setAccountLoading(emp.id);
     try {
-      const res = await createAccountFromEmployee(emp.id);
+      const ml = selectedManagerLevel > 0 ? (selectedManagerLevel as 1 | 2) : undefined;
+      const res = await createAccountFromEmployee(emp.id, ml);
       if (res.warning) {
         toast.success(`Compte créé pour ${emp.prenom} ${emp.nom}`);
         // Email échoué : afficher les identifiants dans une modale pour communication manuelle
@@ -887,6 +895,88 @@ export default function EmployeesTable({
                 <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
                   <span className="text-blue-700 font-mono font-semibold text-sm">{createAccountConfirmEmp.email}</span>
                 </div>
+
+                {/* ── Détection manager automatique ── */}
+                {((createAccountConfirmEmp.manages_n1_count ?? 0) > 0 || (createAccountConfirmEmp.manages_n2_count ?? 0) > 0) && (
+                  <div className="rounded-xl border border-purple-200 bg-purple-50/60 px-4 py-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <FaUsers className="text-purple-600 shrink-0" size={14} />
+                      <p className="text-sm font-semibold text-purple-800">
+                        Cet employé manage{" "}
+                        {(createAccountConfirmEmp.manages_n1_count ?? 0) + (createAccountConfirmEmp.manages_n2_count ?? 0)}{" "}
+                        personne(s)
+                      </p>
+                    </div>
+                    <p className="text-xs text-purple-600 leading-relaxed">
+                      Choisissez le type d'accès à créer. Avec le double accès, il pourra se connecter en tant qu'Employé <strong>et</strong> en tant que Manager avec les mêmes identifiants.
+                    </p>
+
+                    <div className="space-y-2 pt-1">
+                      {/* Employé seulement */}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedManagerLevel(0)}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition ${
+                          selectedManagerLevel === 0
+                            ? "border-slate-400 bg-white shadow-sm"
+                            : "border-slate-200 bg-white hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition ${selectedManagerLevel === 0 ? "border-slate-500" : "border-slate-300"}`}>
+                          {selectedManagerLevel === 0 && <div className="w-2 h-2 rounded-full bg-slate-500" />}
+                        </div>
+                        <span className="text-sm font-medium text-slate-700">Espace Employé uniquement</span>
+                      </button>
+
+                      {/* N1 */}
+                      {(createAccountConfirmEmp.manages_n1_count ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedManagerLevel(1)}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition ${
+                            selectedManagerLevel === 1
+                              ? "border-purple-500 bg-white shadow-sm"
+                              : "border-slate-200 bg-white hover:bg-purple-50/40"
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition ${selectedManagerLevel === 1 ? "border-purple-500" : "border-slate-300"}`}>
+                            {selectedManagerLevel === 1 && <div className="w-2 h-2 rounded-full bg-purple-500" />}
+                          </div>
+                          <div>
+                            <span className="text-sm font-semibold text-slate-800">Employé + Manager Niveau 1</span>
+                            <span className="text-xs text-slate-500 ml-2">
+                              ({createAccountConfirmEmp.manages_n1_count} managé(s))
+                            </span>
+                          </div>
+                        </button>
+                      )}
+
+                      {/* N2 */}
+                      {(createAccountConfirmEmp.manages_n2_count ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedManagerLevel(2)}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition ${
+                            selectedManagerLevel === 2
+                              ? "border-violet-500 bg-white shadow-sm"
+                              : "border-slate-200 bg-white hover:bg-violet-50/40"
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition ${selectedManagerLevel === 2 ? "border-violet-500" : "border-slate-300"}`}>
+                            {selectedManagerLevel === 2 && <div className="w-2 h-2 rounded-full bg-violet-500" />}
+                          </div>
+                          <div>
+                            <span className="text-sm font-semibold text-slate-800">Employé + Manager Niveau 2</span>
+                            <span className="text-xs text-slate-500 ml-2">
+                              ({createAccountConfirmEmp.manages_n2_count} managé(s))
+                            </span>
+                          </div>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                   <p className="text-xs text-amber-700 leading-relaxed">
                     <strong>Email envoyé :</strong> Bienvenue sur la plateforme + identifiant + mot de passe provisoire.<br />
