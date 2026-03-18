@@ -501,3 +501,27 @@ export const uploadDossierZip = async (
   });
   return res.data;
 };
+
+// ─── Demande d'accès aux bulletins antérieurs ─────────────────────────────────
+export const requestPayslipAccess = async (payload: {
+  months: { year: number; month: number }[];
+  message?: string;
+}): Promise<{ detail: string; request_id: number }> =>
+  (await api.post("/api/employees/request-payslip-access/", payload)).data;
+
+// ─── Pointages de l'employé connecté ─────────────────────────────────────────
+export const fetchMyAttendance = async (start: string, end: string) =>
+  (await api.get("/api/attendance/my-attendance/", { params: { start, end } })).data as {
+    employee_id: number;
+    matricule: string;
+    start: string;
+    end: string;
+    days: {
+      date: string;
+      status: "present" | "absent" | "incomplete";
+      in_time: string | null;
+      out_time: string | null;
+      worked_minutes: number;
+      flags: Record<string, unknown>;
+    }[];
+  };

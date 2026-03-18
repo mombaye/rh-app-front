@@ -7,6 +7,7 @@ import {
   X,
   Menu,
   UserCircle2,
+  Clock,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -33,6 +34,11 @@ const navItems = [
     label: "Mon Dossier",
     path: "/employee/dossier",
     icon: <FolderOpen size={20} />,
+  },
+  {
+    label: "Mes Pointages",
+    path: "/employee/attendance",
+    icon: <Clock size={20} />,
   },
 ];
 

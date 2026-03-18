@@ -16,10 +16,11 @@ import InterneEmployeesPage from "./pages/InterneEmployeesPage";
 import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
 import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
 import PlanningPage from "@/pages/PlanningPage";
-import EmployeeDashboardPage from "@/pages/employee/EmployeeDashboardPage";
-import EmployeeLeavesPage from "@/pages/employee/EmployeeLeavesPage";
-import EmployeePayslipPage from "@/pages/employee/EmployeePayslipPage";
-import EmployeeDossierPage from "@/pages/employee/EmployeeDossierPage";
+import EmployeeDashboardPage  from "@/pages/employee/EmployeeDashboardPage";
+import EmployeeLeavesPage     from "@/pages/employee/EmployeeLeavesPage";
+import EmployeePayslipPage    from "@/pages/employee/EmployeePayslipPage";
+import EmployeeDossierPage    from "@/pages/employee/EmployeeDossierPage";
+import EmployeeAttendancePage from "@/pages/employee/EmployeeAttendancePage";
 // Manager pages
 import ManagerDashboardPage  from "@/pages/manager/ManagerDashboardPage";
 import ManagerLeavesPage     from "@/pages/manager/ManagerLeavesPage";
@@ -134,6 +135,11 @@ function App() {
         <Route path="/employee/dossier" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeDossierPage />
+          </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/employee/attendance" element={
+          <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
+            <EmployeeAttendancePage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
 
