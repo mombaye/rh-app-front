@@ -329,11 +329,12 @@ export default function EmployeesTable({
     if (emp.has_user)
       return toast.error("Un compte utilisateur existe déjà pour cet employé.");
     setRowOpen(false);
-    // Auto-détecter le niveau manager à proposer par défaut
+    // Auto-détecter le niveau manager à proposer par défaut.
+    // N2 a la priorité : un manager qui a des managers sous lui est plus senior.
     const n1 = emp.manages_n1_count ?? 0;
     const n2 = emp.manages_n2_count ?? 0;
-    if (n1 > 0) setSelectedManagerLevel(1);
-    else if (n2 > 0) setSelectedManagerLevel(2);
+    if (n2 > 0) setSelectedManagerLevel(2);
+    else if (n1 > 0) setSelectedManagerLevel(1);
     else setSelectedManagerLevel(0);
     setCreateAccountConfirmEmp(emp);
   };
