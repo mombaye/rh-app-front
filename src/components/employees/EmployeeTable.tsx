@@ -377,6 +377,13 @@ export default function EmployeesTable({
       await deleteAccountFromEmployee(emp.id);
       toast.success(`Compte supprimé pour ${emp.prenom} ${emp.nom}`);
       setDeleteAccountConfirmEmp(null);
+      // Mise à jour immédiate du tableau : disparaît si filtre "Avec compte",
+      // sinon on reflète has_user=false sans attendre le refetch parent.
+      setFiltered(prev =>
+        userFilter === "with"
+          ? prev.filter(e => e.id !== emp.id)
+          : prev.map(e => e.id === emp.id ? { ...e, has_user: false, user_id: null } : e)
+      );
       onEmployeeUpdated?.({ ...emp, has_user: false, user_id: null });
     } catch (err: any) {
       toast.error(err?.response?.data?.error || "Erreur lors de la suppression du compte");
