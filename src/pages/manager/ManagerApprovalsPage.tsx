@@ -2,15 +2,16 @@ import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ClipboardCheck, CheckCircle2, Clock, XCircle, AlertCircle,
-  Calendar, ChevronLeft, ChevronRight, Filter, X, User,
+  Calendar, ChevronLeft, ChevronRight, Filter, User,
   MessageSquare, ThumbsUp, ThumbsDown, Search, RefreshCw,
-  Hash, Briefcase, Building2,
+  Hash, Briefcase, Building2, Download, FileSpreadsheet, X,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
 import { leaveRequestService } from "@/services/leaveService";
-import { LeaveRequest } from "@/types/leave";
+import { LeaveRequest, ExportColumnKey, ExportColumnDef } from "@/types/leave";
 import toast from "react-hot-toast";
+import { ImSpinner2 } from "react-icons/im";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const fmt = (d: string) =>
@@ -26,6 +27,192 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   CANCELLED:      { label: "Annulé",          color: "#64748b", bg: "#f8fafc", Icon: XCircle,      textColor: "text-gray-500",   borderColor: "border-gray-200"   },
   REVOKED:        { label: "Révoqué",         color: "#7c3aed", bg: "#f5f3ff", Icon: AlertCircle,  textColor: "text-purple-700", borderColor: "border-purple-200" },
 };
+
+// ─── Colonnes exportables ────────────────────────────────────────────────────
+const EXPORT_COLUMNS: ExportColumnDef[] = [
+  { key: "employee",          label: "Employé"             },
+  { key: "matricule",         label: "Matricule"           },
+  { key: "service",           label: "Service"             },
+  { key: "leave_type",        label: "Type de congé"       },
+  { key: "start_date",        label: "Date début"          },
+  { key: "end_date",          label: "Date fin"            },
+  { key: "days",              label: "Durée (jours)"       },
+  { key: "motif",             label: "Motif"               },
+  { key: "status",            label: "Statut"              },
+  { key: "reviewed_by",       label: "Validé par (N+1)"    },
+  { key: "reviewed_at",       label: "Date validation N+1" },
+  { key: "second_reviewer",   label: "Validé par (N+2)"    },
+  { key: "second_reviewed_at",label: "Date validation N+2" },
+  { key: "reject_reason",     label: "Motif de rejet"      },
+  { key: "created_at",        label: "Date de demande"     },
+];
+
+const DEFAULT_COLS: ExportColumnKey[] = [
+  "employee", "matricule", "service", "leave_type",
+  "start_date", "end_date", "days", "status",
+];
+
+// ─── Modal Export personnalisé ───────────────────────────────────────────────
+function ExportModal({
+  onClose,
+  managerId,
+  tab,
+  filterType,
+}: {
+  onClose: () => void;
+  managerId: number;
+  tab: "pending" | "history";
+  filterType: string;
+}) {
+  const [selected, setSelected] = useState<Set<ExportColumnKey>>(new Set(DEFAULT_COLS));
+  const [loading,  setLoading]  = useState(false);
+
+  const toggle = (key: ExportColumnKey) =>
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
+  const allSelected = selected.size === EXPORT_COLUMNS.length;
+  const toggleAll   = () =>
+    setSelected(allSelected ? new Set(DEFAULT_COLS) : new Set(EXPORT_COLUMNS.map(c => c.key)));
+
+  const handleExport = async () => {
+    if (selected.size === 0) { toast.error("Sélectionnez au moins une colonne."); return; }
+    setLoading(true);
+    try {
+      const statusFilter =
+        tab === "pending" ? "PENDING,PENDING_SECOND" : "APPROVED,REJECTED";
+
+      const filters: Record<string, string> = {
+        manager_employee_id: String(managerId),
+        status: statusFilter,
+      };
+      if (filterType !== "ALL") filters.leave_type_code = filterType;
+
+      const blob = await leaveRequestService.exportExcel(
+        filters as any,
+        [...selected] as ExportColumnKey[],
+      );
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement("a");
+      a.href    = url;
+      a.download = `approbations_${tab}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Export téléchargé !");
+      onClose();
+    } catch {
+      toast.error("Erreur lors de l'export.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0,  scale: 1    }}
+        exit={{    opacity: 0, y: 20, scale: 0.97 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#003c71] to-blue-700 px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+              <FileSpreadsheet size={18} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-sm">Export personnalisé</h3>
+              <p className="text-blue-200 text-xs">
+                {tab === "pending" ? "Demandes en attente" : "Historique des décisions"}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white transition">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-4">
+          {/* Tout sélectionner */}
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-500 uppercase">Colonnes à exporter</p>
+            <button
+              onClick={toggleAll}
+              className="text-xs text-[#003c71] font-semibold hover:underline"
+            >
+              {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
+            </button>
+          </div>
+
+          {/* Grille de colonnes */}
+          <div className="grid grid-cols-2 gap-2">
+            {EXPORT_COLUMNS.map(col => (
+              <label
+                key={col.key}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition text-sm font-medium select-none ${
+                  selected.has(col.key)
+                    ? "border-[#003c71] bg-[#003c71]/5 text-[#003c71]"
+                    : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="hidden"
+                  checked={selected.has(col.key)}
+                  onChange={() => toggle(col.key)}
+                />
+                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
+                  selected.has(col.key) ? "border-[#003c71] bg-[#003c71]" : "border-gray-300"
+                }`}>
+                  {selected.has(col.key) && (
+                    <svg viewBox="0 0 10 8" fill="none" className="w-2 h-2">
+                      <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </span>
+                <span className="text-xs leading-tight">{col.label}</span>
+              </label>
+            ))}
+          </div>
+
+          <p className="text-[11px] text-gray-400">
+            {selected.size} colonne{selected.size > 1 ? "s" : ""} sélectionnée{selected.size > 1 ? "s" : ""}
+          </p>
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 px-5 pb-5">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={loading || selected.size === 0}
+            className="flex-1 py-2.5 rounded-xl bg-[#003c71] text-white text-sm font-bold hover:bg-[#002d56] transition flex items-center justify-center gap-2 disabled:opacity-60 shadow-sm"
+          >
+            {loading
+              ? <ImSpinner2 className="animate-spin" size={14} />
+              : <Download size={14} />
+            }
+            Télécharger Excel
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 // ─── Modal Approbation ────────────────────────────────────────────────────────
 function ApproveModal({
@@ -56,7 +243,6 @@ function ApproveModal({
         onClick={e => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
       >
-        {/* Header */}
         <div className="bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
@@ -72,7 +258,6 @@ function ApproveModal({
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Résumé */}
           <div className="bg-gray-50 rounded-xl p-4 space-y-2">
             <div className="flex items-center gap-2 text-sm">
               <Calendar size={14} className="text-gray-400" />
@@ -89,7 +274,6 @@ function ApproveModal({
             )}
           </div>
 
-          {/* Infos validation N+2 automatique */}
           {!isPendingSecond && hasN2 && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
               <AlertCircle size={15} className="text-amber-500 mt-0.5 shrink-0" />
@@ -166,7 +350,6 @@ function RejectModal({
         onClick={e => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
       >
-        {/* Header */}
         <div className="bg-gradient-to-r from-red-500 to-rose-600 px-6 py-5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
@@ -180,7 +363,6 @@ function RejectModal({
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Résumé */}
           <div className="bg-gray-50 rounded-xl p-4 space-y-1.5">
             <div className="flex items-center gap-2 text-sm">
               <Calendar size={14} className="text-gray-400" />
@@ -225,12 +407,9 @@ function RejectModal({
   );
 }
 
-// ─── Carte de demande (validation) ──────────────────────────────────────────
+// ─── Carte de demande ────────────────────────────────────────────────────────
 function ApprovalCard({
-  req,
-  onApprove,
-  onReject,
-  isHistory,
+  req, onApprove, onReject, isHistory,
 }: {
   req: LeaveRequest;
   onApprove?: () => void;
@@ -242,11 +421,7 @@ function ApprovalCard({
   const days = parseFloat(req.days) || 0;
 
   const initials = req.employee.full_name
-    .split(" ")
-    .map(n => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+    .split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
   return (
     <motion.div
@@ -254,9 +429,6 @@ function ApprovalCard({
       animate={{ opacity: 1, y: 0 }}
       className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
     >
-      {/* Bande couleur */}
-      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl hidden" style={{ backgroundColor: cfg.color }} />
-
       <div className="p-4">
         <div className="flex items-start gap-3">
           {/* Avatar */}
@@ -269,7 +441,6 @@ function ApprovalCard({
 
           {/* Infos */}
           <div className="flex-1 min-w-0">
-            {/* Ligne 1 : nom + badge statut */}
             <div className="flex items-center gap-2 flex-wrap mb-0.5">
               <span className="font-bold text-gray-800 text-sm">{req.employee.full_name}</span>
               <span
@@ -281,73 +452,42 @@ function ApprovalCard({
               </span>
             </div>
 
-            {/* Ligne 2 : matricule · service · fonction + badge niveau */}
             <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-2 flex-wrap">
-              <span className="flex items-center gap-1">
-                <Hash size={10} />
-                {req.employee.matricule}
-              </span>
+              <span className="flex items-center gap-1"><Hash size={10} />{req.employee.matricule}</span>
               {req.employee.service && (
-                <>
-                  <span className="text-gray-200">·</span>
-                  <span className="flex items-center gap-1">
-                    <Building2 size={10} />
-                    {req.employee.service}
-                  </span>
-                </>
+                <><span className="text-gray-200">·</span><span className="flex items-center gap-1"><Building2 size={10} />{req.employee.service}</span></>
               )}
               {req.employee.fonction && (
-                <>
-                  <span className="text-gray-200">·</span>
-                  <span className="flex items-center gap-1">
-                    <Briefcase size={10} />
-                    {req.employee.fonction}
-                  </span>
-                </>
+                <><span className="text-gray-200">·</span><span className="flex items-center gap-1"><Briefcase size={10} />{req.employee.fonction}</span></>
               )}
               {req.status === "PENDING_SECOND" && (
-                <span className="px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-semibold text-[10px] border border-orange-200">
-                  Validation N+2
-                </span>
+                <span className="px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-semibold text-[10px] border border-orange-200">Validation N+2</span>
               )}
               {req.status === "PENDING" && req.employee.n2_manager_id && (
-                <span className="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold text-[10px] border border-amber-200">
-                  2 niveaux requis
-                </span>
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold text-[10px] border border-amber-200">2 niveaux requis</span>
               )}
             </div>
 
-            {/* Ligne 3 : type congé + période + durée */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md">
-                {req.leave_type.label}
-              </span>
+              <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md">{req.leave_type.label}</span>
               <span className="flex items-center gap-1 text-xs text-gray-500">
                 <Calendar size={11} className="text-gray-400" />
                 {fmt(req.start_date)} → {fmt(req.end_date)}
               </span>
-              <span className="text-xs font-bold text-gray-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md">
-                {days} j
-              </span>
+              <span className="text-xs font-bold text-gray-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md">{days} j</span>
             </div>
 
-            {/* Motif */}
             {req.motif && (
               <p className="text-[11px] text-gray-400 italic mt-1.5 truncate max-w-sm">
-                <MessageSquare size={10} className="inline mr-1" />
-                "{req.motif}"
+                <MessageSquare size={10} className="inline mr-1" />"{req.motif}"
               </p>
             )}
-
-            {/* Motif rejet */}
             {req.reject_reason && (
               <div className="flex items-start gap-1.5 mt-1.5">
                 <XCircle size={11} className="text-red-400 mt-0.5 shrink-0" />
                 <p className="text-xs text-red-500">{req.reject_reason}</p>
               </div>
             )}
-
-            {/* Infos historique */}
             {isHistory && req.reviewed_by && (
               <p className="text-[11px] text-gray-400 mt-1 flex items-center gap-1">
                 <User size={10} />
@@ -357,22 +497,20 @@ function ApprovalCard({
             )}
           </div>
 
-          {/* Actions (seulement pour en attente) */}
+          {/* Actions */}
           {!isHistory && onApprove && onReject && (
             <div className="flex flex-col gap-2 shrink-0">
               <button
                 onClick={onApprove}
                 className="flex items-center gap-1.5 text-xs text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-lg transition font-medium border border-green-200 hover:border-green-400 whitespace-nowrap"
               >
-                <ThumbsUp size={12} />
-                Approuver
+                <ThumbsUp size={12} /> Approuver
               </button>
               <button
                 onClick={onReject}
                 className="flex items-center gap-1.5 text-xs text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition font-medium border border-red-200 hover:border-red-400 whitespace-nowrap"
               >
-                <ThumbsDown size={12} />
-                Rejeter
+                <ThumbsDown size={12} /> Rejeter
               </button>
             </div>
           )}
@@ -389,14 +527,14 @@ export default function ManagerApprovalsPage() {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
 
-  const [tab,         setTab]         = useState<Tab>("pending");
-  const [requests,    setRequests]    = useState<LeaveRequest[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [search,      setSearch]      = useState("");
-  const [filterType,  setFilterType]  = useState("ALL");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [tab,          setTab]          = useState<Tab>("pending");
+  const [requests,     setRequests]     = useState<LeaveRequest[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [search,       setSearch]       = useState("");
+  const [filterType,   setFilterType]   = useState("ALL");
+  const [currentPage,  setCurrentPage]  = useState(1);
+  const [showExport,   setShowExport]   = useState(false);
 
-  // Modals
   const [approveTarget, setApproveTarget] = useState<LeaveRequest | null>(null);
   const [rejectTarget,  setRejectTarget]  = useState<LeaveRequest | null>(null);
 
@@ -410,7 +548,6 @@ export default function ManagerApprovalsPage() {
         leaveRequestService.getAll({ manager_employee_id: employeeId, status: "APPROVED"       } as any),
         leaveRequestService.getAll({ manager_employee_id: employeeId, status: "REJECTED"       } as any),
       ]);
-      // Exclure les propres demandes du manager
       const exclude = (list: LeaveRequest[]) => list.filter(r => r.employee.id !== employeeId);
       setRequests([
         ...exclude(pending as LeaveRequest[]),
@@ -427,7 +564,6 @@ export default function ManagerApprovalsPage() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Filtrage
   const pending = requests.filter(r => r.status === "PENDING" || r.status === "PENDING_SECOND");
   const history = requests.filter(r => r.status === "APPROVED" || r.status === "REJECTED");
 
@@ -435,11 +571,9 @@ export default function ManagerApprovalsPage() {
 
   const filtered = source.filter(r => {
     const matchSearch = search === "" || [
-      r.employee.full_name,
-      r.employee.matricule,
-      r.employee.service,
-      r.leave_type.label,
-    ].some(v => v.toLowerCase().includes(search.toLowerCase()));
+      r.employee.full_name, r.employee.matricule,
+      r.employee.service, r.leave_type.label,
+    ].some(v => v?.toLowerCase().includes(search.toLowerCase()));
     const matchType = filterType === "ALL" || r.leave_type.code === filterType;
     return matchSearch && matchType;
   });
@@ -451,7 +585,6 @@ export default function ManagerApprovalsPage() {
 
   const changeTab = (t: Tab) => { setTab(t); setCurrentPage(1); setSearch(""); setFilterType("ALL"); };
 
-  // Actions
   const handleApprove = async (reqId: number) => {
     if (!employeeId) return;
     try {
@@ -476,12 +609,11 @@ export default function ManagerApprovalsPage() {
     }
   };
 
-  // Stats rapides
   const statsCards = [
-    { label: "En attente",  count: pending.length,  color: "text-amber-600",  bg: "bg-amber-50",  border: "border-amber-100", tab: "pending" as Tab },
-    { label: "Approuvées",  count: history.filter(r => r.status === "APPROVED").length,  color: "text-green-600",  bg: "bg-green-50",  border: "border-green-100",  tab: "history" as Tab },
-    { label: "Rejetées",    count: history.filter(r => r.status === "REJECTED").length,  color: "text-red-600",    bg: "bg-red-50",    border: "border-red-100",    tab: "history" as Tab },
-    { label: "Total traités", count: history.length,                                     color: "text-gray-600",   bg: "bg-gray-50",   border: "border-gray-100",   tab: "history" as Tab },
+    { label: "En attente",    count: pending.length,                                     color: "text-amber-600", bg: "bg-amber-50",  border: "border-amber-100",  tab: "pending" as Tab },
+    { label: "Approuvées",    count: history.filter(r => r.status === "APPROVED").length, color: "text-green-600", bg: "bg-green-50",  border: "border-green-100",  tab: "history" as Tab },
+    { label: "Rejetées",      count: history.filter(r => r.status === "REJECTED").length, color: "text-red-600",   bg: "bg-red-50",    border: "border-red-100",    tab: "history" as Tab },
+    { label: "Total traités", count: history.length,                                      color: "text-gray-600",  bg: "bg-gray-50",   border: "border-gray-100",   tab: "history" as Tab },
   ];
 
   return (
@@ -489,7 +621,10 @@ export default function ManagerApprovalsPage() {
       <div className="max-w-5xl mx-auto px-4 md:px-0 pb-10">
 
         {/* ── Header ── */}
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between flex-wrap gap-3 mb-6">
+        <motion.div
+          initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+          className="flex items-start justify-between flex-wrap gap-3 mb-6"
+        >
           <div>
             <h1 className="text-2xl font-bold text-[#003c71] flex items-center gap-2">
               <ClipboardCheck size={22} />
@@ -497,7 +632,10 @@ export default function ManagerApprovalsPage() {
             </h1>
             <p className="text-gray-500 text-sm mt-0.5">Validez les demandes de congé de vos employés</p>
           </div>
-          <button onClick={refresh} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">
+          <button
+            onClick={refresh}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition"
+          >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             Actualiser
           </button>
@@ -520,29 +658,11 @@ export default function ManagerApprovalsPage() {
           ))}
         </div>
 
-        {/* ── Tabs ── */}
-        <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit">
-          {([["pending", "En attente", pending.length], ["history", "Historique", history.length]] as const).map(([t, label, count]) => (
-            <button
-              key={t}
-              onClick={() => changeTab(t)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
-                tab === t ? "bg-white shadow-sm text-[#003c71]" : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {label}
-              {(count as number) > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === t ? "bg-[#003c71] text-white" : "bg-gray-200 text-gray-600"}`}>
-                  {count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+        {/* ── Barre filtres + tabs + export ── */}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
 
-        {/* ── Filtres ── */}
-        <div className="flex gap-2 mb-4 flex-wrap">
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
+          {/* Recherche (gauche, flex-1) */}
+          <div className="relative flex-1 min-w-[180px]">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <input
               value={search}
@@ -551,6 +671,8 @@ export default function ManagerApprovalsPage() {
               className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white"
             />
           </div>
+
+          {/* Filtre type de congé */}
           <div className="relative">
             <Filter size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <select
@@ -564,11 +686,39 @@ export default function ManagerApprovalsPage() {
               ))}
             </select>
           </div>
+
+          {/* Tabs (En attente | Historique) */}
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+            {([["pending", "En attente", pending.length], ["history", "Historique", history.length]] as const).map(([t, label, count]) => (
+              <button
+                key={t}
+                onClick={() => changeTab(t)}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition ${
+                  tab === t ? "bg-white shadow-sm text-[#003c71]" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {label}
+                {(count as number) > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === t ? "bg-[#003c71] text-white" : "bg-gray-200 text-gray-600"}`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Bouton Export */}
+          <button
+            onClick={() => setShowExport(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-600 hover:bg-gray-50 hover:border-[#003c71] hover:text-[#003c71] transition font-medium whitespace-nowrap"
+          >
+            <Download size={14} />
+            Exporter
+          </button>
         </div>
 
         {/* ── Liste ── */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-
           {/* Toolbar */}
           <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
             <span className="font-semibold text-gray-800">
@@ -581,7 +731,9 @@ export default function ManagerApprovalsPage() {
 
           {/* Contenu */}
           {loading ? (
-            <div className="p-5 space-y-3">{[1,2,3].map(i => <div key={i} className="h-24 bg-gray-100 rounded-2xl animate-pulse" />)}</div>
+            <div className="p-5 space-y-3">
+              {[1,2,3].map(i => <div key={i} className="h-24 bg-gray-100 rounded-2xl animate-pulse" />)}
+            </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
               <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
@@ -591,7 +743,10 @@ export default function ManagerApprovalsPage() {
                 {tab === "pending" ? "Aucune demande en attente" : "Aucun historique"}
               </p>
               <p className="text-xs mt-1 text-gray-400">
-                {search || filterType !== "ALL" ? "Aucun résultat pour cette recherche" : tab === "pending" ? "Toutes les demandes ont été traitées" : "Vous n'avez pas encore traité de demandes"}
+                {search || filterType !== "ALL"
+                  ? "Aucun résultat pour cette recherche"
+                  : tab === "pending" ? "Toutes les demandes ont été traitées" : "Vous n'avez pas encore traité de demandes"
+                }
               </p>
             </div>
           ) : (
@@ -616,19 +771,29 @@ export default function ManagerApprovalsPage() {
                 </span>
                 {totalPages > 1 && (
                   <div className="flex items-center gap-1">
-                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
                       <ChevronLeft size={15} />
                     </button>
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                       <button
                         key={page}
                         onClick={() => setCurrentPage(page)}
-                        className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-medium transition ${page === currentPage ? "bg-[#003c71] text-white shadow-sm" : "border border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                        className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-medium transition ${
+                          page === currentPage ? "bg-[#003c71] text-white shadow-sm" : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                        }`}
                       >
                         {page}
                       </button>
                     ))}
-                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
                       <ChevronRight size={15} />
                     </button>
                   </div>
@@ -641,6 +806,14 @@ export default function ManagerApprovalsPage() {
 
       {/* Modals */}
       <AnimatePresence>
+        {showExport && employeeId && (
+          <ExportModal
+            onClose={() => setShowExport(false)}
+            managerId={employeeId}
+            tab={tab}
+            filterType={filterType}
+          />
+        )}
         {approveTarget && (
           <ApproveModal
             req={approveTarget}
