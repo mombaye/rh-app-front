@@ -86,7 +86,7 @@ export default function ManagerDossierPage() {
 
   return (
     <ManagerLayout>
-      <div className="max-w-4xl mx-auto px-4 md:px-0">
+      <div className="px-4 md:px-6">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
           <h1 className="text-2xl font-bold text-[#003c71]">Mon Dossier</h1>
           <p className="text-gray-500 text-sm mt-0.5">Accédez à vos documents personnels</p>

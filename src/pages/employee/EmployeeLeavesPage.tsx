@@ -1032,7 +1032,7 @@ export default function EmployeeLeavesPage({
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 md:px-0 pb-10">
+      <div className="px-4 md:px-6 pb-10">
 
         {/* ── Header ── */}
         <motion.div

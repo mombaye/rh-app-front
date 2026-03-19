@@ -183,7 +183,7 @@ export default function ManagerPayslipPage() {
 
   return (
     <ManagerLayout>
-      <div className="max-w-3xl mx-auto px-4 md:px-0">
+      <div className="px-4 md:px-6">
         {/* ── Header ── */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
           <h1 className="text-2xl font-bold text-[#003c71]">Mes Bulletins de Salaire</h1>

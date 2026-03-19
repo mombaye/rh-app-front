@@ -332,7 +332,7 @@ export default function EmployeePayslipPage({ layout: Layout = EmployeeLayout }:
 
   return (
     <Layout>
-      <div className="max-w-3xl mx-auto px-4 md:px-0 pb-10">
+      <div className="px-4 md:px-6 pb-10">
 
         {/* ── Header ── */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}

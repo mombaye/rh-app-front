@@ -605,7 +605,7 @@ export default function ManagerApprovalsPage() {
 
   return (
     <ManagerLayout>
-      <div className="max-w-5xl mx-auto px-4 md:px-0 pb-10">
+      <div className="px-4 md:px-6 pb-10">
 
         {/* ── Header ── */}
         <motion.div
