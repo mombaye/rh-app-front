@@ -5,6 +5,7 @@ import AppLayout from "@/layouts/AppLayout";
 import LeaveRequestForm from "@/components/leaves/LeaveRequestForm";
 import LeaveCalendar from "@/components/leaves/LeaveCalendar";
 import LeaveTypeManagement from "@/components/leaves/LeaveTypeManagement";
+import { useAuth } from "@/contexts/useAuth";
 import { leaveRequestService, leaveTypeService, leaveBalanceService } from "@/services/leaveService";
 import { getEmployees } from "@/services/employeeService";
 import { Employee } from "@/types/employee";
@@ -51,13 +52,16 @@ const EXPORT_COLUMNS: ExportColumnDef[] = [
   { key: "days",               label: "Jours"                 },
   { key: "motif",              label: "Motif"                 },
   { key: "status",             label: "Statut"                },
-  { key: "reviewed_by",        label: "Validé par (N+1)"      },
-  { key: "reviewed_at",        label: "Date validation N+1"   },
-  { key: "second_reviewer",    label: "Validé par (N+2)"      },
-  { key: "second_reviewed_at", label: "Date validation N+2"   },
-  { key: "reject_reason",      label: "Motif de rejet"        },
-  { key: "revoke_reason",      label: "Motif de révocation"   },
-  { key: "created_at",         label: "Date de demande"       },
+  { key: "reviewed_by",           label: "Validé par (N+1)"      },
+  { key: "reviewed_by_email",     label: "Email validateur N+1"  },
+  { key: "reviewed_at",           label: "Date validation N+1"   },
+  { key: "second_reviewer",       label: "Validé par (N+2)"      },
+  { key: "second_reviewer_email", label: "Email validateur N+2"  },
+  { key: "second_reviewed_at",    label: "Date validation N+2"   },
+  { key: "reject_reason",         label: "Motif de rejet"        },
+  { key: "revoke_reason",         label: "Motif de révocation"   },
+  { key: "justification_validated", label: "Justif. validé (O/N)"},
+  { key: "created_at",            label: "Date de demande"       },
 ];
 
 // Sélection par défaut pour l'export
@@ -2177,8 +2181,10 @@ function DetailModal({ request: r, onClose, onDone }: {
   const [revokeReason,     setRevokeReason]     = useState("");
   const [recallDate,       setRecallDate]       = useState(new Date().toISOString().slice(0, 10));
   const [showRevoke,       setShowRevoke]       = useState(false);
-  const [docFile,          setDocFile]          = useState<File | null>(null);
-  const [docLoading,       setDocLoading]       = useState(false);
+  const [docFile,            setDocFile]          = useState<File | null>(null);
+  const [docLoading,         setDocLoading]       = useState(false);
+  const [validateDocLoading, setValidateDocLoading] = useState(false);
+  const { user } = useAuth();
   const fileRef          = useRef<HTMLInputElement>(null);
   const approverRef      = useRef<HTMLDivElement>(null);
 
@@ -2247,6 +2253,17 @@ function DetailModal({ request: r, onClose, onDone }: {
     } catch (err: any) {
       toast.error(err?.response?.data?.error ?? "Erreur lors de l'envoi");
     } finally { setDocLoading(false); }
+  };
+
+  const handleValidateDoc = async () => {
+    setValidateDocLoading(true);
+    try {
+      await leaveRequestService.validateDocument(r.id, user?.employee_id);
+      toast.success("Justificatif validé ✓");
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors de la validation");
+    } finally { setValidateDocLoading(false); }
   };
 
   const isPending = r.status === "PENDING" || r.status === "PENDING_SECOND";
@@ -2343,47 +2360,84 @@ function DetailModal({ request: r, onClose, onDone }: {
           )}
 
           {/* ── Section Justificatif ─────────────────────────────────────────── */}
-          {needsDoc && (
+          {r.leave_type?.requires_justification && (
             <div className={`rounded-2xl border-2 p-4 space-y-3 ${
-              r.justification_document ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"
+              r.justification_validated
+                ? "border-emerald-300 bg-emerald-50"
+                : r.justification_document
+                  ? "border-blue-200 bg-blue-50"
+                  : "border-amber-200 bg-amber-50"
             }`}>
-              <p className={`text-sm font-bold flex items-center gap-2 ${
-                r.justification_document ? "text-emerald-700" : "text-amber-700"
-              }`}>
-                {r.justification_document
-                  ? <><FileCheck className="h-4 w-4" /> Document justificatif fourni</>
-                  : <><Paperclip className="h-4 w-4" /> Document justificatif requis</>
+              {/* Titre */}
+              <div className="flex items-center gap-2">
+                {r.justification_validated
+                  ? <CheckCircle className="h-4 w-4 text-emerald-600" />
+                  : r.justification_document
+                    ? <FileCheck className="h-4 w-4 text-blue-600" />
+                    : <Paperclip className="h-4 w-4 text-amber-600" />
                 }
-              </p>
-              <p className={`text-xs ${r.justification_document ? "text-emerald-600" : "text-amber-600"}`}>
-                Ce type de congé ({r.leave_type?.label}) nécessite un justificatif (acte de mariage, de naissance, certificat…)
-              </p>
+                <p className={`text-sm font-bold ${
+                  r.justification_validated ? "text-emerald-700"
+                  : r.justification_document ? "text-blue-700"
+                  : "text-amber-700"
+                }`}>
+                  {r.justification_validated
+                    ? "Justificatif validé ✓"
+                    : r.justification_document
+                      ? "Justificatif soumis — validation en attente"
+                      : "Justificatif non encore fourni"
+                  }
+                </p>
+              </div>
 
-              {r.justification_document ? (
-                <a href={r.justification_document} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition">
-                  <ExternalLink className="h-3.5 w-3.5" /> Ouvrir le document
-                </a>
-              ) : (
-                <div className="space-y-2">
-                  <div
-                    className="border-2 border-dashed border-amber-300 rounded-xl p-4 text-center cursor-pointer hover:bg-amber-50/50 transition"
-                    onClick={() => fileRef.current?.click()}>
-                    <Upload className="h-6 w-6 mx-auto text-amber-400 mb-1" />
-                    <p className="text-xs text-amber-600 font-semibold">
-                      {docFile ? docFile.name : "Cliquer pour sélectionner un fichier (PDF, JPEG, PNG — max 5 Mo)"}
-                    </p>
-                  </div>
-                  <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden"
-                    onChange={(e) => setDocFile(e.target.files?.[0] ?? null)} />
-                  {docFile && (
-                    <button onClick={handleUploadDoc} disabled={docLoading}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition disabled:opacity-50">
-                      {docLoading ? <ImSpinner2 className="animate-spin" size={13} /> : <Upload className="h-4 w-4" />}
-                      Envoyer le justificatif
+              {/* Infos validateur */}
+              {r.justification_validated && r.justification_validated_by && (
+                <p className="text-xs text-emerald-700">
+                  Validé par <strong>{r.justification_validated_by.full_name}</strong>
+                  {r.justification_validated_by.email && (
+                    <span className="ml-1 font-mono text-emerald-600">({r.justification_validated_by.email})</span>
+                  )}
+                  {r.justification_validated_at && (
+                    <span className="ml-1 text-emerald-500">
+                      · {new Date(r.justification_validated_at).toLocaleDateString("fr-FR")}
+                    </span>
+                  )}
+                </p>
+              )}
+
+              {/* Lien vers document */}
+              {r.justification_document && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <a href={r.justification_document} target="_blank" rel="noopener noreferrer"
+                    className={`inline-flex items-center gap-2 px-4 py-2 text-white text-xs font-bold rounded-xl transition ${
+                      r.justification_validated
+                        ? "bg-emerald-600 hover:bg-emerald-700"
+                        : "bg-blue-600 hover:bg-blue-700"
+                    }`}>
+                    <ExternalLink className="h-3.5 w-3.5" /> Ouvrir le document
+                  </a>
+
+                  {/* Bouton de validation RH */}
+                  {!r.justification_validated && (
+                    <button
+                      onClick={handleValidateDoc}
+                      disabled={validateDocLoading}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition disabled:opacity-50">
+                      {validateDocLoading
+                        ? <ImSpinner2 className="animate-spin" size={13} />
+                        : <CheckCircle className="h-3.5 w-3.5" />
+                      }
+                      Valider le justificatif
                     </button>
                   )}
                 </div>
+              )}
+
+              {/* Pas encore de document */}
+              {!r.justification_document && (
+                <p className="text-xs text-amber-600">
+                  L'employé doit soumettre un justificatif depuis son espace personnel.
+                </p>
               )}
             </div>
           )}

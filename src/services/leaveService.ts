@@ -305,6 +305,20 @@ export const leaveRequestService = {
   },
 
   /**
+   * POST /api/leaves/requests/<id>/validate_document/
+   * Marque le justificatif comme validé par le RH.
+   * Body optionnel : { validator_id: number }
+   */
+  validateDocument: async (id: number, validatorId?: number): Promise<LeaveRequest> => {
+    const res = await axios.post(
+      `${API}/requests/${id}/validate_document/`,
+      validatorId ? { validator_id: validatorId } : {},
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
+  /**
    * POST /api/leaves/requests/<id>/revoke/
    * Body : { revoke_reason, revoker_id?, recall_date? }
    * Révoque un congé approuvé (rappel d'urgence) et restitue les jours restants.

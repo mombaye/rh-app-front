@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Calendar, CheckCircle2, Clock, XCircle,
   AlertCircle, Pencil, FileDown, ChevronDown, ChevronUp,
   Loader2, ChevronLeft, ChevronRight, TrendingUp, Filter,
   X, CalendarDays, User, Hash, MessageSquare, ShieldCheck,
-  ThumbsUp,
+  ThumbsUp, Upload, FileCheck, Paperclip, ExternalLink,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -404,25 +404,47 @@ interface LeaveDetailModalProps {
   req: LeaveRequest;
   onClose: () => void;
   onEdit: () => void;
+  onRefresh?: () => void;
 }
 
-function LeaveDetailModal({ req, onClose, onEdit }: LeaveDetailModalProps) {
-  const cfg     = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
-  const Icon    = cfg.Icon;
-  const canEdit = req.status === "PENDING" || req.status === "PENDING_SECOND";
-  const days    = parseFloat(req.days) || 0;
+function LeaveDetailModal({ req, onClose, onEdit, onRefresh }: LeaveDetailModalProps) {
+  const [localReq,   setLocalReq]  = useState<LeaveRequest>(req);
+  const [docFile,    setDocFile]   = useState<File | null>(null);
+  const [docLoading, setDocLoading]= useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const fields: { icon: React.ElementType; label: string; value: string; highlight?: string }[] = [
-    { icon: CalendarDays, label: "Date de début",    value: fmt(req.start_date) },
-    { icon: CalendarDays, label: "Date de fin",      value: fmt(req.end_date)   },
+  const handleUploadDoc = async () => {
+    if (!docFile) return;
+    setDocLoading(true);
+    try {
+      const updated = await leaveRequestService.uploadDocument(localReq.id, docFile);
+      setLocalReq(updated);
+      setDocFile(null);
+      toast.success("Justificatif envoyé avec succès !");
+      onRefresh?.();
+    } catch {
+      toast.error("Erreur lors de l'envoi du document.");
+    } finally {
+      setDocLoading(false);
+    }
+  };
+
+  const cfg     = STATUS_CONFIG[localReq.status] ?? STATUS_CONFIG.CANCELLED;
+  const Icon    = cfg.Icon;
+  const canEdit = localReq.status === "PENDING" || localReq.status === "PENDING_SECOND";
+  const days    = parseFloat(localReq.days) || 0;
+
+  const fields: { icon: React.ElementType; label: string; value: string }[] = [
+    { icon: CalendarDays, label: "Date de début",    value: fmt(localReq.start_date) },
+    { icon: CalendarDays, label: "Date de fin",      value: fmt(localReq.end_date)   },
     { icon: Clock,        label: "Durée",            value: `${days} jour${days > 1 ? "s" : ""}` },
-    { icon: Calendar,     label: "Soumis le",        value: fmt(req.created_at?.slice(0, 10) ?? "") },
-    ...(req.reviewed_by
-      ? [{ icon: User as React.ElementType,        label: "Traité par",    value: req.reviewed_by.full_name }]
+    { icon: Calendar,     label: "Soumis le",        value: fmt(localReq.created_at?.slice(0, 10) ?? "") },
+    ...(localReq.reviewed_by
+      ? [{ icon: User as React.ElementType,         label: "Traité par", value: localReq.reviewed_by.full_name }]
       : []
     ),
-    ...(req.reviewed_at
-      ? [{ icon: CalendarDays as React.ElementType, label: "Traité le",    value: fmt(req.reviewed_at.slice(0, 10)) }]
+    ...(localReq.reviewed_at
+      ? [{ icon: CalendarDays as React.ElementType, label: "Traité le",  value: fmt(localReq.reviewed_at.slice(0, 10)) }]
       : []
     ),
   ];
@@ -463,7 +485,7 @@ function LeaveDetailModal({ req, onClose, onEdit }: LeaveDetailModalProps) {
                   Demande de congé
                 </p>
                 <h2 className="text-white font-bold text-lg leading-tight">
-                  {req.leave_type.label}
+                  {localReq.leave_type.label}
                 </h2>
               </div>
             </div>
@@ -505,30 +527,126 @@ function LeaveDetailModal({ req, onClose, onEdit }: LeaveDetailModalProps) {
             </div>
 
             {/* Motif de rejet */}
-            {req.reject_reason && (
+            {localReq.reject_reason && (
               <div className="bg-red-50 border border-red-100 rounded-xl p-3 flex items-start gap-2.5">
                 <XCircle size={15} className="text-red-400 mt-0.5 shrink-0" />
                 <div>
                   <p className="text-[10px] text-red-400 uppercase font-semibold tracking-wide mb-0.5">Motif de rejet</p>
-                  <p className="text-sm text-red-700 whitespace-pre-wrap">{req.reject_reason}</p>
+                  <p className="text-sm text-red-700 whitespace-pre-wrap">{localReq.reject_reason}</p>
                 </div>
               </div>
             )}
 
             {/* Approbation */}
-            {req.status === "APPROVED" && req.reviewed_by && (
+            {localReq.status === "APPROVED" && localReq.reviewed_by && (
               <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex items-center gap-2.5">
                 <ShieldCheck size={16} className="text-green-500 shrink-0" />
                 <p className="text-sm text-green-700 font-medium">
-                  Approuvé par <span className="font-bold">{req.reviewed_by.full_name}</span>
+                  Approuvé par <span className="font-bold">{localReq.reviewed_by.full_name}</span>
                 </p>
+              </div>
+            )}
+
+            {/* ── Justificatif ─────────────────────────────────────────────── */}
+            {localReq.leave_type.requires_justification && (
+              <div className={`rounded-xl border-2 p-4 space-y-3 ${
+                localReq.justification_document
+                  ? localReq.justification_validated
+                    ? "border-emerald-200 bg-emerald-50"
+                    : "border-blue-200 bg-blue-50"
+                  : "border-amber-200 bg-amber-50"
+              }`}>
+                {/* Titre statut doc */}
+                <div className="flex items-center gap-2">
+                  {localReq.justification_document
+                    ? localReq.justification_validated
+                      ? <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
+                      : <FileCheck   size={16} className="text-blue-600 shrink-0" />
+                    : <Paperclip    size={16} className="text-amber-600 shrink-0" />
+                  }
+                  <p className={`text-sm font-bold ${
+                    localReq.justification_document
+                      ? localReq.justification_validated ? "text-emerald-700" : "text-blue-700"
+                      : "text-amber-700"
+                  }`}>
+                    {localReq.justification_document
+                      ? localReq.justification_validated
+                        ? "Justificatif validé par le RH ✓"
+                        : "Justificatif soumis — en attente de validation RH"
+                      : "Justificatif requis après le retour de congé"
+                    }
+                  </p>
+                </div>
+
+                {/* Lien vers le document existant */}
+                {localReq.justification_document && (
+                  <a
+                    href={localReq.justification_document}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition hover:opacity-80 bg-white ${
+                      localReq.justification_validated
+                        ? "border-emerald-300 text-emerald-700"
+                        : "border-blue-300 text-blue-700"
+                    }`}
+                  >
+                    <ExternalLink size={12} /> Voir le document
+                  </a>
+                )}
+
+                {/* Upload (si pas encore de doc OU doc non validé) */}
+                {(localReq.status === "APPROVED" || localReq.status === "REVOKED") &&
+                 !localReq.justification_validated && (
+                  <div className="space-y-2">
+                    {localReq.justification_document && (
+                      <p className="text-xs text-blue-600">Vous pouvez remplacer le document :</p>
+                    )}
+                    <div
+                      className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition ${
+                        localReq.justification_document
+                          ? "border-blue-300 hover:bg-blue-50"
+                          : "border-amber-300 hover:bg-amber-50"
+                      }`}
+                      onClick={() => fileRef.current?.click()}
+                    >
+                      <Upload size={20} className={`mx-auto mb-1 ${localReq.justification_document ? "text-blue-400" : "text-amber-400"}`} />
+                      <p className={`text-xs font-semibold ${localReq.justification_document ? "text-blue-600" : "text-amber-600"}`}>
+                        {docFile ? docFile.name : "Cliquer pour sélectionner (PDF, JPEG, PNG — max 5 Mo)"}
+                      </p>
+                    </div>
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={e => setDocFile(e.target.files?.[0] ?? null)}
+                    />
+                    {docFile && (
+                      <button
+                        onClick={handleUploadDoc}
+                        disabled={docLoading}
+                        className={`w-full flex items-center justify-center gap-2 py-2 text-white text-sm font-bold rounded-xl transition disabled:opacity-50 ${
+                          localReq.justification_document
+                            ? "bg-blue-500 hover:bg-blue-600"
+                            : "bg-amber-500 hover:bg-amber-600"
+                        }`}
+                      >
+                        {docLoading
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <Upload size={14} />
+                        }
+                        {localReq.justification_document ? "Remplacer le document" : "Envoyer le justificatif"}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Référence */}
             <div className="flex items-center gap-1.5 text-xs text-gray-400">
               <Hash size={12} />
-              <span>Référence : <span className="font-semibold text-gray-500">#{req.id}</span></span>
+              <span>Référence : <span className="font-semibold text-gray-500">#{localReq.id}</span></span>
             </div>
           </div>
 
@@ -1049,6 +1167,7 @@ export default function EmployeeLeavesPage({
           req={detailTarget}
           onClose={() => setDetailTarget(null)}
           onEdit={() => { setDetailTarget(null); setEditTarget(detailTarget); setShowForm(true); }}
+          onRefresh={refresh}
         />
       )}
     </Layout>

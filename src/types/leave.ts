@@ -72,7 +72,10 @@ export interface LeaveRequest {
   days_remaining_at_revocation: string | null;
 
   // Justificatif
-  justification_document: string | null;
+  justification_document:     string | null;
+  justification_validated:    boolean;
+  justification_validated_by: EmployeeMini | null;
+  justification_validated_at: string | null;
 
   created_at:    string;
   updated_at:    string;
@@ -148,8 +151,11 @@ export interface LeaveRequestFilters {
 export type ExportColumnKey =
   | "id" | "employee" | "matricule" | "service" | "leave_type"
   | "start_date" | "end_date" | "days" | "motif" | "status"
-  | "reviewed_by" | "reviewed_at" | "second_reviewer" | "second_reviewed_at"
-  | "reject_reason" | "revoke_reason" | "created_at";
+  | "reviewed_by" | "reviewed_by_email" | "reviewed_at"
+  | "second_reviewer" | "second_reviewer_email" | "second_reviewed_at"
+  | "reject_reason" | "revoke_reason"
+  | "justification_validated"
+  | "created_at";
 
 export interface ExportColumnDef {
   key:   ExportColumnKey;
