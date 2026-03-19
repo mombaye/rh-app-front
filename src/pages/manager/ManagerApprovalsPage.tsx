@@ -4,14 +4,16 @@ import {
   ClipboardCheck, CheckCircle2, Clock, XCircle, AlertCircle,
   Calendar, ChevronLeft, ChevronRight, Filter, User,
   MessageSquare, ThumbsUp, ThumbsDown, Search, RefreshCw,
-  Hash, Briefcase, Building2, Download, FileSpreadsheet, X,
+  Hash, Briefcase, Building2, Download, FileText, X,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
 import { leaveRequestService } from "@/services/leaveService";
-import { LeaveRequest, ExportColumnKey, ExportColumnDef } from "@/types/leave";
+import { LeaveRequest } from "@/types/leave";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const fmt = (d: string) =>
@@ -28,93 +30,100 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   REVOKED:        { label: "Révoqué",         color: "#7c3aed", bg: "#f5f3ff", Icon: AlertCircle,  textColor: "text-purple-700", borderColor: "border-purple-200" },
 };
 
-// ─── Colonnes exportables ────────────────────────────────────────────────────
-const EXPORT_COLUMNS: ExportColumnDef[] = [
-  { key: "employee",          label: "Employé"             },
-  { key: "matricule",         label: "Matricule"           },
-  { key: "service",           label: "Service"             },
-  { key: "leave_type",        label: "Type de congé"       },
-  { key: "start_date",        label: "Date début"          },
-  { key: "end_date",          label: "Date fin"            },
-  { key: "days",              label: "Durée (jours)"       },
-  { key: "motif",             label: "Motif"               },
-  { key: "status",            label: "Statut"              },
-  { key: "reviewed_by",       label: "Validé par (N+1)"    },
-  { key: "reviewed_at",       label: "Date validation N+1" },
-  { key: "second_reviewer",   label: "Validé par (N+2)"    },
-  { key: "second_reviewed_at",label: "Date validation N+2" },
-  { key: "reject_reason",     label: "Motif de rejet"      },
-  { key: "created_at",        label: "Date de demande"     },
+// ─── Colonnes exportables PDF ────────────────────────────────────────────────
+type ColKey = "employee" | "matricule" | "service" | "leave_type" | "start_date" | "end_date" | "days" | "motif" | "status" | "reviewed_by" | "reviewed_at" | "second_reviewer" | "reject_reason" | "created_at";
+
+const EXPORT_COLUMNS: { key: ColKey; label: string; get: (r: LeaveRequest) => string }[] = [
+  { key: "employee",        label: "Employé",             get: r => r.employee.full_name ?? `${r.employee.nom} ${r.employee.prenom}` },
+  { key: "matricule",       label: "Matricule",           get: r => r.employee.matricule ?? "—"                                     },
+  { key: "service",         label: "Service",             get: r => r.employee.service   ?? "—"                                     },
+  { key: "leave_type",      label: "Type de congé",       get: r => r.leave_type.label                                              },
+  { key: "start_date",      label: "Date début",          get: r => fmt(r.start_date)                                               },
+  { key: "end_date",        label: "Date fin",            get: r => fmt(r.end_date)                                                 },
+  { key: "days",            label: "Jours",               get: r => String(r.days)                                                  },
+  { key: "motif",           label: "Motif",               get: r => r.motif || "—"                                                  },
+  { key: "status",          label: "Statut",              get: r => STATUS_CONFIG[r.status]?.label ?? r.status                      },
+  { key: "reviewed_by",     label: "Validé par (N+1)",    get: r => r.reviewed_by?.full_name     ?? "—"                             },
+  { key: "reviewed_at",     label: "Date validation N+1", get: r => r.reviewed_at ? fmt(r.reviewed_at)         : "—"                },
+  { key: "second_reviewer", label: "Validé par (N+2)",    get: r => r.second_reviewer?.full_name ?? "—"                             },
+  { key: "reject_reason",   label: "Motif de rejet",      get: r => r.reject_reason              ?? "—"                             },
+  { key: "created_at",      label: "Date de demande",     get: r => fmt(r.created_at)                                               },
 ];
 
-const DEFAULT_COLS: ExportColumnKey[] = [
-  "employee", "matricule", "service", "leave_type",
-  "start_date", "end_date", "days", "status",
-];
+const DEFAULT_COLS: ColKey[] = ["employee", "matricule", "service", "leave_type", "start_date", "end_date", "days", "status"];
 
-// ─── Modal Export personnalisé ───────────────────────────────────────────────
+function exportManagerPDF(
+  requests: LeaveRequest[],
+  managerName: string,
+  tab: "pending" | "history",
+  columns: ColKey[],
+) {
+  const cols = EXPORT_COLUMNS.filter(c => columns.includes(c.key));
+  const doc  = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+  // En-tête
+  doc.setFillColor(0, 60, 113);
+  doc.rect(0, 0, 297, 28, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(15);
+  doc.setFont("helvetica", "bold");
+  doc.text(tab === "pending" ? "Demandes en attente d'approbation" : "Historique des décisions", 14, 12);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Manager : ${managerName}`, 14, 20);
+  doc.text(`Exporté le ${new Date().toLocaleDateString("fr-FR")}`, 283, 20, { align: "right" });
+
+  autoTable(doc, {
+    head: [cols.map(c => c.label)],
+    body: requests.map(r => cols.map(c => c.get(r))),
+    startY: 34,
+    headStyles: { fillColor: [0, 60, 113], textColor: 255, fontStyle: "bold", fontSize: 8 },
+    bodyStyles: { fontSize: 8 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    styles: { cellPadding: 3, overflow: "linebreak" },
+    margin: { left: 14, right: 14 },
+  });
+
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text(
+      `Camusat Sénégal RH — Document confidentiel — Page ${i}/${pageCount}`,
+      148.5, 207, { align: "center" },
+    );
+  }
+
+  doc.save(`approbations_${tab}_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+// ─── Modal Export PDF personnalisé ───────────────────────────────────────────
 function ExportModal({
-  onClose,
-  managerId,
-  tab,
-  filterType,
+  onClose, requests, managerName, tab,
 }: {
   onClose: () => void;
-  managerId: number;
+  requests: LeaveRequest[];
+  managerName: string;
   tab: "pending" | "history";
-  filterType: string;
 }) {
-  const [selected, setSelected] = useState<Set<ExportColumnKey>>(new Set(DEFAULT_COLS));
-  const [loading,  setLoading]  = useState(false);
+  const [selected, setSelected] = useState<Set<ColKey>>(new Set(DEFAULT_COLS));
 
-  const toggle = (key: ExportColumnKey) =>
-    setSelected(prev => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
+  const toggle = (key: ColKey) =>
+    setSelected(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
   const allSelected = selected.size === EXPORT_COLUMNS.length;
-  const toggleAll   = () =>
-    setSelected(allSelected ? new Set(DEFAULT_COLS) : new Set(EXPORT_COLUMNS.map(c => c.key)));
+  const toggleAll   = () => setSelected(allSelected ? new Set(DEFAULT_COLS) : new Set(EXPORT_COLUMNS.map(c => c.key)));
 
-  const handleExport = async () => {
+  const handleExport = () => {
     if (selected.size === 0) { toast.error("Sélectionnez au moins une colonne."); return; }
-    setLoading(true);
-    try {
-      const statusFilter =
-        tab === "pending" ? "PENDING,PENDING_SECOND" : "APPROVED,REJECTED";
-
-      const filters: Record<string, string> = {
-        manager_employee_id: String(managerId),
-        status: statusFilter,
-      };
-      if (filterType !== "ALL") filters.leave_type_code = filterType;
-
-      const blob = await leaveRequestService.exportExcel(
-        filters as any,
-        [...selected] as ExportColumnKey[],
-      );
-      const url = URL.createObjectURL(blob);
-      const a   = document.createElement("a");
-      a.href    = url;
-      a.download = `approbations_${tab}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("Export téléchargé !");
-      onClose();
-    } catch {
-      toast.error("Erreur lors de l'export.");
-    } finally {
-      setLoading(false);
-    }
+    exportManagerPDF(requests, managerName, tab, [...selected] as ColKey[]);
+    toast.success("PDF généré !");
+    onClose();
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.97 }}
         animate={{ opacity: 1, y: 0,  scale: 1    }}
@@ -126,53 +135,38 @@ function ExportModal({
         <div className="bg-gradient-to-r from-[#003c71] to-blue-700 px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-              <FileSpreadsheet size={18} className="text-white" />
+              <FileText size={18} className="text-white" />
             </div>
             <div>
-              <h3 className="text-white font-bold text-sm">Export personnalisé</h3>
+              <h3 className="text-white font-bold text-sm">Export PDF personnalisé</h3>
               <p className="text-blue-200 text-xs">
-                {tab === "pending" ? "Demandes en attente" : "Historique des décisions"}
+                {tab === "pending" ? "Demandes en attente" : "Historique des décisions"} — {requests.length} ligne{requests.length > 1 ? "s" : ""}
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/60 hover:text-white transition">
-            <X size={18} />
-          </button>
+          <button onClick={onClose} className="text-white/60 hover:text-white transition"><X size={18} /></button>
         </div>
 
         {/* Body */}
         <div className="p-5 space-y-4">
-          {/* Tout sélectionner */}
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-gray-500 uppercase">Colonnes à exporter</p>
-            <button
-              onClick={toggleAll}
-              className="text-xs text-[#003c71] font-semibold hover:underline"
-            >
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Colonnes à inclure</p>
+            <button onClick={toggleAll} className="text-xs text-[#003c71] font-semibold hover:underline">
               {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
             </button>
           </div>
-
-          {/* Grille de colonnes */}
           <div className="grid grid-cols-2 gap-2">
             {EXPORT_COLUMNS.map(col => (
               <label
                 key={col.key}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition text-sm font-medium select-none ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition select-none ${
                   selected.has(col.key)
                     ? "border-[#003c71] bg-[#003c71]/5 text-[#003c71]"
                     : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
                 }`}
               >
-                <input
-                  type="checkbox"
-                  className="hidden"
-                  checked={selected.has(col.key)}
-                  onChange={() => toggle(col.key)}
-                />
-                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
-                  selected.has(col.key) ? "border-[#003c71] bg-[#003c71]" : "border-gray-300"
-                }`}>
+                <input type="checkbox" className="hidden" checked={selected.has(col.key)} onChange={() => toggle(col.key)} />
+                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected.has(col.key) ? "border-[#003c71] bg-[#003c71]" : "border-gray-300"}`}>
                   {selected.has(col.key) && (
                     <svg viewBox="0 0 10 8" fill="none" className="w-2 h-2">
                       <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -183,30 +177,23 @@ function ExportModal({
               </label>
             ))}
           </div>
-
           <p className="text-[11px] text-gray-400">
-            {selected.size} colonne{selected.size > 1 ? "s" : ""} sélectionnée{selected.size > 1 ? "s" : ""}
+            {selected.size} colonne{selected.size > 1 ? "s" : ""} · {requests.length} ligne{requests.length > 1 ? "s" : ""} dans le PDF
           </p>
         </div>
 
         {/* Footer */}
         <div className="flex gap-3 px-5 pb-5">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
-          >
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition">
             Annuler
           </button>
           <button
             onClick={handleExport}
-            disabled={loading || selected.size === 0}
+            disabled={selected.size === 0}
             className="flex-1 py-2.5 rounded-xl bg-[#003c71] text-white text-sm font-bold hover:bg-[#002d56] transition flex items-center justify-center gap-2 disabled:opacity-60 shadow-sm"
           >
-            {loading
-              ? <ImSpinner2 className="animate-spin" size={14} />
-              : <Download size={14} />
-            }
-            Télécharger Excel
+            <Download size={14} />
+            Télécharger PDF
           </button>
         </div>
       </motion.div>
@@ -806,12 +793,12 @@ export default function ManagerApprovalsPage() {
 
       {/* Modals */}
       <AnimatePresence>
-        {showExport && employeeId && (
+        {showExport && (
           <ExportModal
             onClose={() => setShowExport(false)}
-            managerId={employeeId}
+            requests={filtered}
+            managerName={user?.employee_name || user?.username || "Manager"}
             tab={tab}
-            filterType={filterType}
           />
         )}
         {approveTarget && (
