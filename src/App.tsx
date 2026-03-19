@@ -62,15 +62,11 @@ function EmployeeOnlyRoute({ children }: { children: React.ReactNode }) {
   return <Navigate to="/employee/dashboard" replace />;
 }
 
-/** Manager uniquement → redirige si activeRole n'est pas manager.
- *  Exception : un manager passé en mode "Employé" reste dans l'interface
- *  Manager (le bouton Approbations sera simplement désactivé côté sidebar). */
+/** Manager uniquement → redirige si activeRole n'est pas manager. */
 function ManagerOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { user, activeRole, availableRoles } = useAuth();
+  const { user, activeRole } = useAuth();
   if (!user) return null;
   if (activeRole === "manager1" || activeRole === "manager2") return <>{children}</>;
-  if (activeRole === "employe" && (availableRoles.includes("manager1") || availableRoles.includes("manager2")))
-    return <>{children}</>;
   if (activeRole === "rh") return <Navigate to="/dashboard" replace />;
   return <Navigate to="/employee/dashboard" replace />;
 }
