@@ -158,8 +158,16 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
       }
       onSaved();
     } catch (err: any) {
-      const msg = err?.response?.data?.non_field_errors?.[0]
-        || err?.response?.data?.detail
+      const data = err?.response?.data;
+      // Extrait le premier message d'erreur disponible (champ ou global)
+      const msg = data?.non_field_errors?.[0]
+        || data?.detail
+        || data?.start_date?.[0]
+        || data?.end_date?.[0]
+        || data?.employee_id?.[0]
+        || data?.leave_type_id?.[0]
+        || data?.days?.[0]
+        || (typeof data === "string" ? data : null)
         || "Erreur lors de l'enregistrement.";
       toast.error(msg);
     } finally {
