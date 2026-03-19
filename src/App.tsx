@@ -28,6 +28,10 @@ import ManagerPayslipPage    from "@/pages/manager/ManagerPayslipPage";
 import ManagerDossierPage    from "@/pages/manager/ManagerDossierPage";
 import ManagerApprovalsPage  from "@/pages/manager/ManagerApprovalsPage";
 import { useAuth } from "@/contexts/useAuth";
+// RH espace employé
+import RhLeavesPage   from "@/pages/rh/RhLeavesPage";
+import RhPayslipPage  from "@/pages/rh/RhPayslipPage";
+import RhDossierPage  from "@/pages/rh/RhDossierPage";
 
 // ── Helpers de rôles basés sur activeRole ────────────────────────────────────
 
@@ -159,6 +163,11 @@ function App() {
             <PlanningPage />
           </FirstLoginGuard></ProtectedRoute>
         } />
+
+        {/* ── Espace RH — espace employé ───────────────────────── */}
+        <Route path="/rh/my-leaves"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhLeavesPage  /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-payslips" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhPayslipPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-dossier"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDossierPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
 
         {/* ── Espace RH ────────────────────────────────────────── */}
         <Route path="/dashboard" element={

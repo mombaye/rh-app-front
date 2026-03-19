@@ -126,7 +126,11 @@ function PreviewModal({ matricule, bulletin, onClose, onDownload }: PreviewModal
 
 // ─── Page principale ─────────────────────────────────────────────────────────
 
-export default function ManagerPayslipPage() {
+interface ManagerPayslipPageProps {
+  layout?: React.ComponentType<{ children: React.ReactNode }>;
+}
+
+export default function ManagerPayslipPage({ layout: Layout = ManagerLayout }: ManagerPayslipPageProps) {
   const { user } = useAuth();
   const matricule = user?.employee_matricule;
 
@@ -182,7 +186,7 @@ export default function ManagerPayslipPage() {
   const handlePreview = (b: BulletinEntry) => setPreview(b);
 
   return (
-    <ManagerLayout>
+    <Layout>
       <div className="px-4 md:px-6">
         {/* ── Header ── */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
@@ -328,6 +332,6 @@ export default function ManagerPayslipPage() {
           />
         )}
       </AnimatePresence>
-    </ManagerLayout>
+    </Layout>
   );
 }

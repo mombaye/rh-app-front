@@ -20,7 +20,11 @@ const getExt = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";
 const fmtSize = (bytes?: number) => !bytes ? "" : bytes < 1024 ? `${bytes} o` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} Ko` : `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 const fmtDate = (d?: string) => !d ? "" : new Date(d).toLocaleDateString("fr-FR");
 
-export default function ManagerDossierPage() {
+interface ManagerDossierPageProps {
+  layout?: React.ComponentType<{ children: React.ReactNode }>;
+}
+
+export default function ManagerDossierPage({ layout: Layout = ManagerLayout }: ManagerDossierPageProps) {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
 
@@ -85,7 +89,7 @@ export default function ManagerDossierPage() {
   const files   = items.filter(i => i.type === "file");
 
   return (
-    <ManagerLayout>
+    <Layout>
       <div className="px-4 md:px-6">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
           <h1 className="text-2xl font-bold text-[#003c71]">Mon Dossier</h1>
@@ -176,6 +180,6 @@ export default function ManagerDossierPage() {
           )}
         </motion.div>
       </div>
-    </ManagerLayout>
+    </Layout>
   );
 }

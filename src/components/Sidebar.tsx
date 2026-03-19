@@ -11,6 +11,8 @@ import {
   X,
   Menu,
   CalendarRange,
+  UserCircle,
+  FolderOpen,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -49,6 +51,16 @@ const navItems = [
     label: "Bulletins Salariés",
     path: "/payslip",
     icon: <BadgeDollarSign size={20} />,
+  },
+  {
+    label: "Mon espace",
+    path: "/rh/my",
+    icon: <UserCircle size={20} />,
+    subItems: [
+      { label: "Mes Congés",   path: "/rh/my-leaves"   },
+      { label: "Mes Bulletins", path: "/rh/my-payslips" },
+      { label: "Mon Dossier",  path: "/rh/my-dossier"  },
+    ],
   },
 ];
 
