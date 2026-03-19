@@ -6,14 +6,12 @@ import {
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
-import RoleSwitcher from "@/components/RoleSwitcher";
 
 interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
   badge?: number;
-  disabled?: boolean;
 }
 
 interface ManagerSidebarProps {
@@ -22,25 +20,17 @@ interface ManagerSidebarProps {
 
 export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps) {
   const location = useLocation();
-  const { user, logout, activeRole } = useAuth();
+  const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const isManagerMode = activeRole === "manager1" || activeRole === "manager2";
-
-  const overview:      NavItem = { label: "Vue d'ensemble", path: "/manager/dashboard", icon: <LayoutDashboard size={20} /> };
-  const approvals:     NavItem = { label: "Approbations",   path: "/manager/approvals", icon: <ClipboardCheck size={20} />, badge: isManagerMode && pendingCount > 0 ? pendingCount : undefined, disabled: !isManagerMode };
-  const employeeItems: NavItem[] = [
-    { label: "Mes Congés",    path: "/manager/leaves",   icon: <CalendarDays size={20} />,    disabled: isManagerMode },
-    { label: "Mes Bulletins", path: "/manager/payslips", icon: <BadgeDollarSign size={20} />, disabled: isManagerMode },
-    { label: "Mon Dossier",   path: "/manager/dossier",  icon: <FolderOpen size={20} />,      disabled: isManagerMode },
+  const navItems: NavItem[] = [
+    { label: "Vue d'ensemble", path: "/manager/dashboard", icon: <LayoutDashboard size={20} /> },
+    { label: "Approbations",   path: "/manager/approvals", icon: <ClipboardCheck size={20} />, badge: pendingCount > 0 ? pendingCount : undefined },
+    { label: "Mes Congés",    path: "/manager/leaves",    icon: <CalendarDays size={20} /> },
+    { label: "Mes Bulletins", path: "/manager/payslips",  icon: <BadgeDollarSign size={20} /> },
+    { label: "Mon Dossier",   path: "/manager/dossier",   icon: <FolderOpen size={20} /> },
   ];
-
-  // Mode Manager : Vue d'ensemble → Approbations → items Employé (grisés)
-  // Mode Employé : Vue d'ensemble → items Employé → Approbations (grisée)
-  const navItems: NavItem[] = isManagerMode
-    ? [overview, approvals, ...employeeItems]
-    : [overview, ...employeeItems, approvals];
 
   useEffect(() => {
     const handleResize = () => { if (window.innerWidth >= 768) setMobileOpen(false); };
@@ -52,25 +42,6 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
 
   const NavLink = ({ item, onClose }: { item: NavItem; onClose?: () => void }) => {
     const isActive = location.pathname === item.path;
-
-    if (item.disabled) {
-      const tip = isManagerMode
-        ? "Passez en mode Employé pour accéder à cette fonctionnalité"
-        : "Passez en mode Manager pour accéder à cette fonctionnalité";
-      return (
-        <div
-          title={tip}
-          className="flex items-center gap-3 px-4 py-3 rounded-lg font-medium cursor-not-allowed opacity-35 select-none text-gray-400"
-        >
-          {item.icon}
-          <span className="flex-1">{item.label}</span>
-          <span className="text-[9px] bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide">
-            {isManagerMode ? "Employé" : "Manager"}
-          </span>
-        </div>
-      );
-    }
-
     return (
       <Link
         to={item.path}
@@ -94,11 +65,6 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
 
   const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
     <>
-      {/* Sélecteur de rôle en haut */}
-      <div className="mx-4 mt-4">
-        <RoleSwitcher />
-      </div>
-
       <nav className="flex-1 px-4 py-6 space-y-1">
         {navItems.map(item => (
           <NavLink key={item.path} item={item} onClose={onClose} />
@@ -114,7 +80,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
           <div className="min-w-0">
             <p className="font-medium text-sm truncate">{displayName}</p>
             <p className="text-[10px] text-gray-400">
-              {isManagerMode ? `Niveau ${user?.manager_level ?? "—"}` : "Mode Employé"}
+              {user?.manager_level ? `Manager Niveau ${user.manager_level}` : "Manager"}
             </p>
           </div>
         </button>

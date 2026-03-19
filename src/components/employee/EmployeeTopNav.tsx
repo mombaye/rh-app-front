@@ -12,7 +12,6 @@ import {
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
-import RoleSwitcher from "@/components/RoleSwitcher";
 
 const navItems = [
   { label: "Vue d'ensemble", path: "/employee/dashboard", icon: <LayoutDashboard size={18} /> },
@@ -71,9 +70,8 @@ export default function EmployeeTopNav() {
             })}
           </nav>
 
-          {/* Col 3 – Switcher + Logout right */}
+          {/* Col 3 – Logout right */}
           <div className="flex items-center justify-end gap-2">
-            <RoleSwitcher />
             <button
               onClick={() => setShowLogoutModal(true)}
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition"

@@ -15,7 +15,6 @@ import {
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
-import RoleSwitcher from "@/components/RoleSwitcher";
 
 const navItems = [
   {
@@ -171,11 +170,6 @@ export default function Sidebar() {
 
   const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
     <>
-      {/* Sélecteur de rôle en haut (visible uniquement si plusieurs rôles) */}
-      <div className="mx-4 mt-4">
-        <RoleSwitcher />
-      </div>
-
       {user?.is_planning_manager && (
         <div className="mx-4 mt-2 px-3 py-2 rounded-lg bg-camublue-900/10 text-camublue-900 text-xs font-semibold flex items-center gap-2">
           <CalendarRange size={14} />
