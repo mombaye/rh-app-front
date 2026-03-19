@@ -753,11 +753,11 @@ function RequestCard({ req, onView, onEdit, onSelfApprove }: RequestCardProps) {
                 <Icon size={10} />
                 {cfg.label}
               </span>
-              {/* Badge absent */}
+              {/* Badge non justifié */}
               {isAbsent && (
                 <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-semibold bg-red-50 text-red-700 border-red-200">
                   <UserX size={10} />
-                  Absent
+                  Non justifié
                 </span>
               )}
               {/* Badge justif. en attente */}
@@ -801,11 +801,11 @@ function RequestCard({ req, onView, onEdit, onSelfApprove }: RequestCardProps) {
               </p>
             )}
 
-            {/* Alerte absence */}
+            {/* Alerte non justifié */}
             {isAbsent && (
               <p className="text-xs text-red-600 mt-1 flex items-center gap-1 font-medium">
                 <UserX size={11} />
-                Marqué absent — justificatif non fourni
+                Non justifié — justificatif non fourni
               </p>
             )}
 

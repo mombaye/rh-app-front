@@ -944,7 +944,7 @@ const JUSTIF_STATUS_CFG: Record<JustifStatus, { label: string; color: string; bg
   missing:   { label: "Manquant",         color: "#d97706", bg: "#fffbeb", border: "#fde68a", dot: "bg-amber-400"   },
   uploaded:  { label: "Soumis",           color: "#0284c7", bg: "#eff6ff", border: "#bfdbfe", dot: "bg-blue-400"    },
   validated: { label: "Validé",           color: "#059669", bg: "#ecfdf5", border: "#a7f3d0", dot: "bg-emerald-500" },
-  absent:    { label: "Absent (défaut)",  color: "#dc2626", bg: "#fef2f2", border: "#fecaca", dot: "bg-red-500"     },
+  absent:    { label: "Non justifié",     color: "#dc2626", bg: "#fef2f2", border: "#fecaca", dot: "bg-red-500"     },
 };
 
 interface JustificationsTabProps {
@@ -992,7 +992,7 @@ function JustificationsTab({ onOpenDetail }: JustificationsTabProps) {
     setActionId(id);
     try {
       await leaveRequestService.markAsAbsent(id, { marker_id: user?.employee_id });
-      toast.success("Employé marqué absent ✓");
+      toast.success("Congé marqué non justifié ✓");
       await load();
     } catch { toast.error("Erreur lors du marquage"); }
     finally { setActionId(null); }
@@ -1002,7 +1002,7 @@ function JustificationsTab({ onOpenDetail }: JustificationsTabProps) {
     setActionId(id);
     try {
       await leaveRequestService.markAsAbsent(id, { undo: true });
-      toast.success("Marquage absent annulé ✓");
+      toast.success("Marquage non justifié annulé ✓");
       await load();
     } catch { toast.error("Erreur lors de l'annulation"); }
     finally { setActionId(null); }
@@ -1053,7 +1053,7 @@ function JustificationsTab({ onOpenDetail }: JustificationsTabProps) {
           { key: "missing",   label: "Manquants",   icon: AlertCircle,  color: "#d97706", bg: "#fffbeb" },
           { key: "uploaded",  label: "Soumis",      icon: Upload,       color: "#0284c7", bg: "#eff6ff" },
           { key: "validated", label: "Validés",     icon: ShieldCheck,  color: "#059669", bg: "#ecfdf5" },
-          { key: "absent",    label: "Absents",     icon: UserX,        color: "#dc2626", bg: "#fef2f2" },
+          { key: "absent",    label: "Non justifiés", icon: UserX,      color: "#dc2626", bg: "#fef2f2" },
         ] as const).map(({ key, label, icon: Icon, color, bg }) => (
           <button key={key}
             onClick={() => setFilter(filter === key ? "ALL" : key)}
@@ -1097,7 +1097,7 @@ function JustificationsTab({ onOpenDetail }: JustificationsTabProps) {
               {filter === "missing" ? "Aucun justificatif manquant" :
                filter === "uploaded" ? "Aucun justificatif en attente de validation" :
                filter === "validated" ? "Aucun justificatif validé" :
-               filter === "absent" ? "Aucun employé marqué absent" :
+               filter === "absent" ? "Aucun congé marqué non justifié" :
                "Aucun congé nécessitant un justificatif"}
             </p>
           </div>
@@ -1210,10 +1210,10 @@ function JustificationsTab({ onOpenDetail }: JustificationsTabProps) {
                               disabled={isActing}
                               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg transition border border-red-200 whitespace-nowrap disabled:opacity-50">
                               {isActing ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserX className="h-3 w-3" />}
-                              Marquer absent
+                              Non justifié
                             </button>
                           )}
-                          {/* Annuler marquage absent */}
+                          {/* Annuler marquage non justifié */}
                           {jStatus === "absent" && (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleUndoAbsent(r.id); }}
@@ -2584,7 +2584,7 @@ function DetailModal({ request: r, onClose, onDone }: {
     setMarkAbsentLoading(true);
     try {
       await leaveRequestService.markAsAbsent(r.id, { marker_id: user?.employee_id, undo });
-      toast.success(undo ? "Marquage absent annulé ✓" : "Employé marqué absent ✓");
+      toast.success(undo ? "Marquage non justifié annulé ✓" : "Congé marqué non justifié ✓");
       onDone();
     } catch (err: any) {
       toast.error(err?.response?.data?.error ?? "Erreur");
@@ -2712,7 +2712,7 @@ function DetailModal({ request: r, onClose, onDone }: {
                   : "text-amber-700"
                 }`}>
                   {r.marked_as_absent
-                    ? "Absence enregistrée — justificatif non fourni"
+                    ? "Non justifié — justificatif non fourni"
                     : r.justification_validated
                       ? "Justificatif validé ✓"
                       : r.justification_document
@@ -2803,19 +2803,19 @@ function DetailModal({ request: r, onClose, onDone }: {
                     disabled={markAbsentLoading}
                     className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-xl transition border border-red-200 disabled:opacity-50 whitespace-nowrap shrink-0">
                     {markAbsentLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserX className="h-3 w-3" />}
-                    Marquer absent
+                    Non justifié
                   </button>
                 </div>
               )}
 
-              {/* Justificatif soumis mais non validé : option marquer absent aussi */}
+              {/* Justificatif soumis mais non validé : option marquer non justifié aussi */}
               {r.justification_document && !r.justification_validated && !r.marked_as_absent && r.status === "APPROVED" && (
                 <button
                   onClick={() => handleMarkAbsent(false)}
                   disabled={markAbsentLoading}
                   className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-xl transition border border-red-200 disabled:opacity-50">
                   {markAbsentLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserX className="h-3 w-3" />}
-                  Marquer absent (doc insuffisant)
+                  Non justifié (doc insuffisant)
                 </button>
               )}
             </div>
