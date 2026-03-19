@@ -28,40 +28,19 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
 
   const isManagerMode = activeRole === "manager1" || activeRole === "manager2";
 
-  // Fonctionnalités Employé → actives en mode Employé, grisées en mode Manager
-  // Fonctionnalités Manager → actives en mode Manager, grisées en mode Employé
-  const navItems: NavItem[] = [
-    {
-      label:    "Vue d'ensemble",
-      path:     "/manager/dashboard",
-      icon:     <LayoutDashboard size={20} />,
-    },
-    {
-      label:    "Mes Congés",
-      path:     "/manager/leaves",
-      icon:     <CalendarDays size={20} />,
-      disabled: isManagerMode,
-    },
-    {
-      label:    "Mes Bulletins",
-      path:     "/manager/payslips",
-      icon:     <BadgeDollarSign size={20} />,
-      disabled: isManagerMode,
-    },
-    {
-      label:    "Mon Dossier",
-      path:     "/manager/dossier",
-      icon:     <FolderOpen size={20} />,
-      disabled: isManagerMode,
-    },
-    {
-      label:    "Approbations",
-      path:     "/manager/approvals",
-      icon:     <ClipboardCheck size={20} />,
-      badge:    isManagerMode && pendingCount > 0 ? pendingCount : undefined,
-      disabled: !isManagerMode,
-    },
+  const overview:      NavItem = { label: "Vue d'ensemble", path: "/manager/dashboard", icon: <LayoutDashboard size={20} /> };
+  const approvals:     NavItem = { label: "Approbations",   path: "/manager/approvals", icon: <ClipboardCheck size={20} />, badge: isManagerMode && pendingCount > 0 ? pendingCount : undefined, disabled: !isManagerMode };
+  const employeeItems: NavItem[] = [
+    { label: "Mes Congés",    path: "/manager/leaves",   icon: <CalendarDays size={20} />,    disabled: isManagerMode },
+    { label: "Mes Bulletins", path: "/manager/payslips", icon: <BadgeDollarSign size={20} />, disabled: isManagerMode },
+    { label: "Mon Dossier",   path: "/manager/dossier",  icon: <FolderOpen size={20} />,      disabled: isManagerMode },
   ];
+
+  // Mode Manager : Vue d'ensemble → Approbations → items Employé (grisés)
+  // Mode Employé : Vue d'ensemble → items Employé → Approbations (grisée)
+  const navItems: NavItem[] = isManagerMode
+    ? [overview, approvals, ...employeeItems]
+    : [overview, ...employeeItems, approvals];
 
   useEffect(() => {
     const handleResize = () => { if (window.innerWidth >= 768) setMobileOpen(false); };
