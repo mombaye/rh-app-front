@@ -6,7 +6,7 @@ import {
   Loader2, ChevronLeft, ChevronRight, TrendingUp, Filter,
   X, CalendarDays, User, Hash, MessageSquare, ShieldCheck,
   ThumbsUp, Upload, FileCheck, Paperclip, ExternalLink,
-  AlertTriangle, UserX,
+  AlertTriangle, UserX, Trash2, Eye,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -770,10 +770,11 @@ interface RequestCardProps {
   req: LeaveRequest;
   onView: () => void;
   onEdit: () => void;
+  onCancel: () => void;
   onSelfApprove?: () => void;
 }
 
-function RequestCard({ req, onView, onEdit, onSelfApprove }: RequestCardProps) {
+function RequestCard({ req, onView, onEdit, onCancel, onSelfApprove }: RequestCardProps) {
   const cfg     = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
   const Icon    = cfg.Icon;
   const canEdit = req.status === "PENDING" || req.status === "PENDING_SECOND";
@@ -889,28 +890,49 @@ function RequestCard({ req, onView, onEdit, onSelfApprove }: RequestCardProps) {
           {/* Actions */}
           <div className="flex items-center gap-2 shrink-0">
             {/* Badge jours */}
-            <div className="hidden sm:flex flex-col items-center justify-center w-12 h-12 rounded-xl border-2 border-gray-100 bg-gray-50">
+            <div className="hidden sm:flex flex-col items-center justify-center w-12 h-12 rounded-xl border-2 border-gray-100 bg-gray-50 shrink-0">
               <span className="text-lg font-bold text-gray-700 leading-none">{days}</span>
               <span className="text-[9px] text-gray-400 uppercase tracking-wide">jours</span>
             </div>
 
-            {onSelfApprove && canEdit && (
-              <button
-                onClick={e => { e.stopPropagation(); onSelfApprove(); }}
-                className="flex items-center gap-1.5 text-xs text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-lg transition font-medium border border-green-200 hover:border-green-400"
-              >
-                <ThumbsUp size={12} />
-                Approuver
-              </button>
-            )}
+            {/* Bouton Voir le détail */}
+            <button
+              onClick={e => { e.stopPropagation(); onView(); }}
+              title="Voir le détail"
+              className="p-2 rounded-lg text-gray-400 hover:text-[#003c71] hover:bg-[#003c71]/8 border border-gray-100 hover:border-[#003c71]/20 transition"
+            >
+              <Eye size={14} />
+            </button>
+
             {canEdit && (
-              <button
-                onClick={e => { e.stopPropagation(); onEdit(); }}
-                className="flex items-center gap-1.5 text-xs text-[#003c71] hover:bg-[#003c71]/10 px-3 py-1.5 rounded-lg transition font-medium border border-[#003c71]/20 hover:border-[#003c71]/40"
-              >
-                <Pencil size={12} />
-                Modifier
-              </button>
+              <>
+                {onSelfApprove && (
+                  <button
+                    onClick={e => { e.stopPropagation(); onSelfApprove(); }}
+                    title="Approuver"
+                    className="flex items-center gap-1.5 text-xs text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-lg transition font-medium border border-green-200 hover:border-green-400"
+                  >
+                    <ThumbsUp size={12} />
+                    <span className="hidden sm:inline">Approuver</span>
+                  </button>
+                )}
+                <button
+                  onClick={e => { e.stopPropagation(); onEdit(); }}
+                  title="Modifier"
+                  className="flex items-center gap-1.5 text-xs text-[#003c71] hover:bg-[#003c71]/10 px-3 py-1.5 rounded-lg transition font-medium border border-[#003c71]/20 hover:border-[#003c71]/40"
+                >
+                  <Pencil size={12} />
+                  <span className="hidden sm:inline">Modifier</span>
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); onCancel(); }}
+                  title="Annuler la demande"
+                  className="flex items-center gap-1.5 text-xs text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition font-medium border border-red-200 hover:border-red-400"
+                >
+                  <Trash2 size={12} />
+                  <span className="hidden sm:inline">Annuler</span>
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -939,6 +961,8 @@ export default function EmployeeLeavesPage({
   const [showForm,      setShowForm]     = useState(false);
   const [editTarget,    setEditTarget]   = useState<LeaveRequest | null>(null);
   const [detailTarget,  setDetailTarget] = useState<LeaveRequest | null>(null);
+  const [cancelTarget,  setCancelTarget] = useState<LeaveRequest | null>(null);
+  const [cancelling,    setCancelling]   = useState(false);
   const [showExport,    setShowExport]   = useState(false);
   const [filterStatus,  setFilterStatus] = useState("ALL");
   const [showBalances,  setShowBalances] = useState(true);
@@ -987,6 +1011,22 @@ export default function EmployeeLeavesPage({
       refresh();
     } catch {
       toast.error("Erreur lors de l'auto-approbation.");
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    try {
+      await leaveRequestService.cancel(cancelTarget.id);
+      toast.success("Demande annulée.");
+      setCancelTarget(null);
+      refresh();
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.response?.data?.detail || "Erreur lors de l'annulation.";
+      toast.error(msg);
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -1193,6 +1233,7 @@ export default function EmployeeLeavesPage({
                     req={req}
                     onView={() => setDetailTarget(req)}
                     onEdit={() => { setEditTarget(req); setShowForm(true); }}
+                    onCancel={() => setCancelTarget(req)}
                     onSelfApprove={canSelfApprove ? () => handleSelfApprove(req) : undefined}
                   />
                 ))}
@@ -1306,6 +1347,50 @@ export default function EmployeeLeavesPage({
           onEdit={() => { setDetailTarget(null); setEditTarget(detailTarget); setShowForm(true); }}
           onRefresh={refresh}
         />
+      )}
+
+      {/* ── Modal confirmation annulation ── */}
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-4">
+              <Trash2 size={22} className="text-red-600" />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 text-center mb-1">
+              Annuler cette demande ?
+            </h3>
+            <p className="text-sm text-gray-500 text-center mb-1">
+              <span className="font-medium text-gray-700">{cancelTarget.leave_type.label}</span>
+            </p>
+            <p className="text-xs text-gray-400 text-center mb-5">
+              {cancelTarget.start_date} → {cancelTarget.end_date}
+            </p>
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-center mb-5">
+              Cette action est irréversible. La demande passera au statut Annulé.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setCancelTarget(null)}
+                disabled={cancelling}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
+              >
+                Garder
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {cancelling && <Loader2 size={14} className="animate-spin" />}
+                Confirmer l'annulation
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
     </Layout>
   );
