@@ -24,7 +24,8 @@ export default function RoleSwitcher() {
   const handleSwitch = (role: UserRole) => {
     setOpen(false);
     switchRole(role);
-    navigate(dashboardForRole(role));
+    // Toujours rester dans l'interface Manager ; seul le mode change.
+    navigate("/manager/dashboard");
   };
 
   return (

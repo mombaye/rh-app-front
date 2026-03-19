@@ -28,11 +28,32 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
 
   const isManagerMode = activeRole === "manager1" || activeRole === "manager2";
 
+  // Fonctionnalités Employé → actives en mode Employé, grisées en mode Manager
+  // Fonctionnalités Manager → actives en mode Manager, grisées en mode Employé
   const navItems: NavItem[] = [
-    { label: "Vue d'ensemble",  path: "/manager/dashboard",  icon: <LayoutDashboard size={20} /> },
-    { label: "Mes Congés",      path: "/manager/leaves",     icon: <CalendarDays size={20} /> },
-    { label: "Mes Bulletins",   path: "/manager/payslips",   icon: <BadgeDollarSign size={20} /> },
-    { label: "Mon Dossier",     path: "/manager/dossier",    icon: <FolderOpen size={20} /> },
+    {
+      label:    "Vue d'ensemble",
+      path:     "/manager/dashboard",
+      icon:     <LayoutDashboard size={20} />,
+    },
+    {
+      label:    "Mes Congés",
+      path:     "/manager/leaves",
+      icon:     <CalendarDays size={20} />,
+      disabled: isManagerMode,
+    },
+    {
+      label:    "Mes Bulletins",
+      path:     "/manager/payslips",
+      icon:     <BadgeDollarSign size={20} />,
+      disabled: isManagerMode,
+    },
+    {
+      label:    "Mon Dossier",
+      path:     "/manager/dossier",
+      icon:     <FolderOpen size={20} />,
+      disabled: isManagerMode,
+    },
     {
       label:    "Approbations",
       path:     "/manager/approvals",
@@ -54,13 +75,19 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
     const isActive = location.pathname === item.path;
 
     if (item.disabled) {
+      const tip = isManagerMode
+        ? "Passez en mode Employé pour accéder à cette fonctionnalité"
+        : "Passez en mode Manager pour accéder à cette fonctionnalité";
       return (
         <div
-          title="Passez en mode Manager pour accéder aux approbations"
-          className="flex items-center gap-3 px-4 py-3 rounded-lg font-medium cursor-not-allowed opacity-40 select-none text-gray-400"
+          title={tip}
+          className="flex items-center gap-3 px-4 py-3 rounded-lg font-medium cursor-not-allowed opacity-35 select-none text-gray-400"
         >
           {item.icon}
           <span className="flex-1">{item.label}</span>
+          <span className="text-[9px] bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide">
+            {isManagerMode ? "Employé" : "Manager"}
+          </span>
         </div>
       );
     }

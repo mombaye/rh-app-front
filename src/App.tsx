@@ -62,11 +62,14 @@ function EmployeeOnlyRoute({ children }: { children: React.ReactNode }) {
   return <Navigate to="/employee/dashboard" replace />;
 }
 
-/** Manager uniquement → redirige si activeRole n'est pas manager. */
+/** Accessible si l'utilisateur a au moins un rôle manager (même en mode Employé). */
 function ManagerOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { user, activeRole } = useAuth();
+  const { user, activeRole, availableRoles } = useAuth();
   if (!user) return null;
   if (activeRole === "manager1" || activeRole === "manager2") return <>{children}</>;
+  // Un manager en mode Employé reste dans l'interface Manager
+  if (activeRole === "employe" && (availableRoles.includes("manager1") || availableRoles.includes("manager2")))
+    return <>{children}</>;
   if (activeRole === "rh") return <Navigate to="/dashboard" replace />;
   return <Navigate to="/employee/dashboard" replace />;
 }
