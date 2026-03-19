@@ -4,7 +4,7 @@ import {
   ClipboardCheck, CheckCircle2, Clock, XCircle, AlertCircle,
   Calendar, ChevronLeft, ChevronRight, Filter, User,
   MessageSquare, ThumbsUp, ThumbsDown, Search, RefreshCw,
-  Hash, Briefcase, Building2, Download, FileText, X,
+  Hash, Briefcase, Building2, Download, FileText, X, Ban,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
@@ -394,13 +394,151 @@ function RejectModal({
   );
 }
 
+// ─── Modal Annulation (Manager) ───────────────────────────────────────────────
+function CancelModal({
+  req, onConfirm, onClose,
+}: {
+  req: LeaveRequest;
+  onConfirm: (reqId: number) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const handle = async () => {
+    setLoading(true);
+    await onConfirm(req.id);
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0,  scale: 1    }}
+        exit={{    opacity: 0, y: 20, scale: 0.97 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+      >
+        <div className="bg-gradient-to-r from-gray-700 to-gray-900 px-6 py-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+              <Ban size={20} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-base">Annuler le congé approuvé</h3>
+              <p className="text-gray-300 text-xs">{req.employee.full_name}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="bg-gray-50 rounded-xl p-4 space-y-1.5">
+            <div className="flex items-center gap-2 text-sm">
+              <Calendar size={14} className="text-gray-400" />
+              <span className="text-gray-700 font-medium">{req.leave_type.label}</span>
+              <span className="text-gray-400">·</span>
+              <span className="text-gray-600">{parseFloat(req.days)} jour{parseFloat(req.days) > 1 ? "s" : ""}</span>
+            </div>
+            <div className="text-xs text-gray-500">{fmt(req.start_date)} → {fmt(req.end_date)}</div>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+            <AlertCircle size={15} className="text-amber-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-700">
+              L'annulation restituera les jours de congé au solde de l'employé. Cette action est irréversible.
+            </p>
+          </div>
+
+          <p className="text-sm text-gray-600">
+            Confirmez-vous l'annulation de ce congé approuvé ?
+          </p>
+        </div>
+
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition">
+            Retour
+          </button>
+          <button
+            onClick={handle}
+            disabled={loading}
+            className="flex-1 py-2.5 rounded-xl bg-gray-800 text-white text-sm font-bold hover:bg-gray-900 transition flex items-center justify-center gap-2 disabled:opacity-60 shadow-sm"
+          >
+            {loading ? <RefreshCw size={15} className="animate-spin" /> : <Ban size={15} />}
+            Annuler le congé
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Modal Alerte congé en cours ──────────────────────────────────────────────
+function InProgressAlertModal({ req, onClose }: { req: LeaveRequest; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0,  scale: 1    }}
+        exit={{    opacity: 0, y: 20, scale: 0.97 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+      >
+        <div className="bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+              <AlertCircle size={20} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-base">Annulation impossible</h3>
+              <p className="text-orange-100 text-xs">{req.employee.full_name}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="bg-gray-50 rounded-xl p-4 space-y-1.5">
+            <div className="flex items-center gap-2 text-sm">
+              <Calendar size={14} className="text-gray-400" />
+              <span className="text-gray-700 font-medium">{req.leave_type.label}</span>
+              <span className="text-gray-400">·</span>
+              <span className="text-gray-600">{parseFloat(req.days)} jour{parseFloat(req.days) > 1 ? "s" : ""}</span>
+            </div>
+            <div className="text-xs text-gray-500">{fmt(req.start_date)} → {fmt(req.end_date)}</div>
+          </div>
+
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
+            <AlertCircle size={18} className="text-orange-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-orange-800">Congé en cours de consommation</p>
+              <p className="text-xs text-orange-600 mt-1">
+                Ce congé a déjà débuté et est en cours de consommation. Il ne peut pas être annulé.
+                Si vous devez rappeler l'employé en urgence, utilisez la fonctionnalité de <strong>révocation</strong>.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 pb-6">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl bg-[#003c71] text-white text-sm font-bold hover:bg-[#002d56] transition"
+          >
+            Compris
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Carte de demande ────────────────────────────────────────────────────────
 function ApprovalCard({
-  req, onApprove, onReject, isHistory,
+  req, onApprove, onReject, onCancel, isHistory,
 }: {
   req: LeaveRequest;
   onApprove?: () => void;
   onReject?: () => void;
+  onCancel?: () => void;
   isHistory?: boolean;
 }) {
   const cfg  = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
@@ -501,6 +639,17 @@ function ApprovalCard({
               </button>
             </div>
           )}
+          {/* Bouton Annuler pour les congés APPROVED en historique */}
+          {isHistory && req.status === "APPROVED" && onCancel && (
+            <div className="shrink-0">
+              <button
+                onClick={onCancel}
+                className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition font-medium border border-gray-200 hover:border-gray-400 whitespace-nowrap"
+              >
+                <Ban size={12} /> Annuler
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
@@ -522,8 +671,10 @@ export default function ManagerApprovalsPage() {
   const [currentPage,  setCurrentPage]  = useState(1);
   const [showExport,   setShowExport]   = useState(false);
 
-  const [approveTarget, setApproveTarget] = useState<LeaveRequest | null>(null);
-  const [rejectTarget,  setRejectTarget]  = useState<LeaveRequest | null>(null);
+  const [approveTarget,    setApproveTarget]    = useState<LeaveRequest | null>(null);
+  const [rejectTarget,     setRejectTarget]     = useState<LeaveRequest | null>(null);
+  const [cancelTarget,     setCancelTarget]     = useState<LeaveRequest | null>(null);
+  const [inProgressLeave,  setInProgressLeave]  = useState<LeaveRequest | null>(null);
 
   const refresh = useCallback(async () => {
     if (!employeeId) { setLoading(false); return; }
@@ -593,6 +744,24 @@ export default function ManagerApprovalsPage() {
       refresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors du rejet.");
+    }
+  };
+
+  const handleCancel = async (reqId: number): Promise<void> => {
+    const target = cancelTarget;
+    try {
+      await leaveRequestService.cancel(reqId);
+      toast.success("Congé annulé. Les jours ont été restitués au solde.");
+      setCancelTarget(null);
+      refresh();
+    } catch (e: any) {
+      const data = e?.response?.data;
+      setCancelTarget(null);
+      if (data?.in_progress && target) {
+        setInProgressLeave(target);
+      } else {
+        toast.error(data?.error || "Erreur lors de l'annulation.");
+      }
     }
   };
 
@@ -746,6 +915,7 @@ export default function ManagerApprovalsPage() {
                     isHistory={tab === "history"}
                     onApprove={tab === "pending" ? () => setApproveTarget(req) : undefined}
                     onReject={tab  === "pending" ? () => setRejectTarget(req)  : undefined}
+                    onCancel={tab  === "history" && req.status === "APPROVED" ? () => setCancelTarget(req) : undefined}
                   />
                 ))}
               </div>
@@ -814,6 +984,19 @@ export default function ManagerApprovalsPage() {
             req={rejectTarget}
             onConfirm={handleReject}
             onClose={() => setRejectTarget(null)}
+          />
+        )}
+        {cancelTarget && (
+          <CancelModal
+            req={cancelTarget}
+            onConfirm={handleCancel}
+            onClose={() => setCancelTarget(null)}
+          />
+        )}
+        {inProgressLeave && (
+          <InProgressAlertModal
+            req={inProgressLeave}
+            onClose={() => setInProgressLeave(null)}
           />
         )}
       </AnimatePresence>

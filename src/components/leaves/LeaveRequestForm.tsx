@@ -61,7 +61,10 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   const [docFile,     setDocFile]     = useState<File | null>(null);
   const [docLoading,  setDocLoading]  = useState(false);
   const [docDone,     setDocDone]     = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const fileRef    = useRef<HTMLInputElement>(null);
+  // Justificatif optionnel sélectionné dès l'étape 1
+  const [optDocFile,  setOptDocFile]  = useState<File | null>(null);
+  const optFileRef = useRef<HTMLInputElement>(null);
 
   // Load leave types
   useEffect(() => {
@@ -172,7 +175,18 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         days:          parseFloat(form.days),
         motif:         form.motif.trim(),
       });
-      if (needsDoc) {
+
+      // Si un fichier optionnel a été sélectionné en step 1, l'uploader maintenant
+      if (optDocFile) {
+        try {
+          await leaveRequestService.uploadDocument(created.id, optDocFile);
+        } catch {
+          // Upload échoué : on continue quand même (la demande est créée)
+        }
+        onSuccess?.();
+        onClose();
+      } else if (needsDoc) {
+        // Type de congé qui exige un justificatif → étape 2
         setCreatedId(created.id);
       } else {
         onSuccess?.();
@@ -520,6 +534,48 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               placeholder="Décrivez le motif de l'absence…" rows={3}
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition resize-none" />
           </div>
+
+          {/* ── Justificatif optionnel ───────────────────────────────── */}
+          {!needsDoc && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
+                Justificatif <span className="text-gray-400 font-normal normal-case">(optionnel)</span>
+              </label>
+              <div
+                className="flex items-center gap-3 border border-dashed border-gray-300 rounded-xl px-4 py-3 cursor-pointer hover:border-camublue-900 hover:bg-slate-50 transition"
+                onClick={() => optFileRef.current?.click()}
+              >
+                {optDocFile ? (
+                  <>
+                    <FileCheck className="h-5 w-5 text-emerald-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-700 truncate">{optDocFile.name}</p>
+                      <p className="text-xs text-slate-400">{(optDocFile.size / 1024).toFixed(0)} Ko</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setOptDocFile(null); }}
+                      className="text-slate-400 hover:text-slate-600 transition p-1 rounded-lg hover:bg-white"
+                    >
+                      <FiX size={14} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Paperclip className="h-5 w-5 text-gray-400 shrink-0" />
+                    <p className="text-sm text-gray-400">Joindre un document (PDF, JPEG, PNG — max 5 Mo)</p>
+                  </>
+                )}
+              </div>
+              <input
+                ref={optFileRef}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                className="hidden"
+                onChange={(e) => { setOptDocFile(e.target.files?.[0] ?? null); }}
+              />
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button onClick={onClose}
