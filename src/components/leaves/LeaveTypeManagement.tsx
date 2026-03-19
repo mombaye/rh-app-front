@@ -11,13 +11,14 @@ import toast from "react-hot-toast";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 
 const EMPTY_FORM = {
-  code:                   "",
-  label:                  "",
-  is_paid:                true,
-  requires_justification: false,
-  color:                  "#3b82f6",
-  monthly_accrual:        "0",
-  max_days_per_request:   "0",
+  code:                      "",
+  label:                     "",
+  is_paid:                   true,
+  requires_justification:    false,
+  justification_grace_days:  "7",
+  color:                     "#3b82f6",
+  monthly_accrual:           "0",
+  max_days_per_request:      "0",
 };
 
 type FormState = typeof EMPTY_FORM;
@@ -70,13 +71,14 @@ export default function LeaveTypeManagement() {
   const openEdit = (t: LeaveType) => {
     setEditTarget(t);
     setForm({
-      code:                   t.code,
-      label:                  t.label,
-      is_paid:                t.is_paid,
-      requires_justification: t.requires_justification,
-      color:                  t.color,
-      monthly_accrual:        t.monthly_accrual ?? "0",
-      max_days_per_request:   String(t.max_days_per_request ?? 0),
+      code:                      t.code,
+      label:                     t.label,
+      is_paid:                   t.is_paid,
+      requires_justification:    t.requires_justification,
+      justification_grace_days:  String(t.justification_grace_days ?? 7),
+      color:                     t.color,
+      monthly_accrual:           t.monthly_accrual ?? "0",
+      max_days_per_request:      String(t.max_days_per_request ?? 0),
     });
     setFormError(null);
     setShowForm(true);
@@ -106,13 +108,14 @@ export default function LeaveTypeManagement() {
     setFormError(null);
     try {
       const payload = {
-        code:                   form.code.toUpperCase().trim(),
-        label:                  form.label.trim(),
-        is_paid:                form.is_paid,
-        requires_justification: form.requires_justification,
-        color:                  form.color,
-        monthly_accrual:        parseFloat(form.monthly_accrual) || 0,
-        max_days_per_request:   parseInt(form.max_days_per_request) || 0,
+        code:                      form.code.toUpperCase().trim(),
+        label:                     form.label.trim(),
+        is_paid:                   form.is_paid,
+        requires_justification:    form.requires_justification,
+        justification_grace_days:  parseInt(form.justification_grace_days) || 7,
+        color:                     form.color,
+        monthly_accrual:           parseFloat(form.monthly_accrual) || 0,
+        max_days_per_request:      parseInt(form.max_days_per_request) || 0,
       };
       if (editTarget) {
         await leaveTypeService.update(editTarget.id, payload);
@@ -286,6 +289,14 @@ export default function LeaveTypeManagement() {
                       {t.requires_justification ? "Oui" : "Non"}
                     </span>
                   </div>
+                  {t.requires_justification && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Délai justificatif</span>
+                      <span className="font-semibold text-amber-700">
+                        {t.justification_grace_days ?? 7}j après congé
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -405,8 +416,24 @@ export default function LeaveTypeManagement() {
                     <input type="checkbox" name="requires_justification" checked={form.requires_justification} onChange={handleChange}
                       className="w-4 h-4 rounded accent-amber-500"
                     />
-                    <span className="text-sm text-gray-700 font-medium">Justificatif requis</span>
+                    <span className="text-sm text-gray-700 font-medium">Justificatif requis après le congé</span>
                   </label>
+                  {form.requires_justification && (
+                    <div className="ml-6.5 pl-1">
+                      <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
+                        Délai de dépôt (jours calendaires après fin du congé)
+                      </label>
+                      <input
+                        type="number" name="justification_grace_days"
+                        value={form.justification_grace_days}
+                        onChange={handleChange} min={1} max={90}
+                        className="w-full border border-amber-200 bg-amber-50 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition"
+                      />
+                      <p className="text-xs text-amber-600 mt-1">
+                        L'employé aura {form.justification_grace_days || 7} jours après la fin de son congé pour soumettre le justificatif. Passé ce délai, le RH peut le marquer absent.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3 pt-2">

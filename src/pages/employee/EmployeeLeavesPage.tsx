@@ -6,6 +6,7 @@ import {
   Loader2, ChevronLeft, ChevronRight, TrendingUp, Filter,
   X, CalendarDays, User, Hash, MessageSquare, ShieldCheck,
   ThumbsUp, Upload, FileCheck, Paperclip, ExternalLink,
+  AlertTriangle, UserX,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -550,33 +551,60 @@ function LeaveDetailModal({ req, onClose, onEdit, onRefresh }: LeaveDetailModalP
             {/* ── Justificatif ─────────────────────────────────────────────── */}
             {localReq.leave_type.requires_justification && (
               <div className={`rounded-xl border-2 p-4 space-y-3 ${
-                localReq.justification_document
-                  ? localReq.justification_validated
-                    ? "border-emerald-200 bg-emerald-50"
-                    : "border-blue-200 bg-blue-50"
-                  : "border-amber-200 bg-amber-50"
+                localReq.marked_as_absent
+                  ? "border-red-200 bg-red-50"
+                  : localReq.justification_document
+                    ? localReq.justification_validated
+                      ? "border-emerald-200 bg-emerald-50"
+                      : "border-blue-200 bg-blue-50"
+                    : "border-amber-200 bg-amber-50"
               }`}>
                 {/* Titre statut doc */}
                 <div className="flex items-center gap-2">
-                  {localReq.justification_document
-                    ? localReq.justification_validated
-                      ? <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
-                      : <FileCheck   size={16} className="text-blue-600 shrink-0" />
-                    : <Paperclip    size={16} className="text-amber-600 shrink-0" />
+                  {localReq.marked_as_absent
+                    ? <UserX      size={16} className="text-red-600 shrink-0" />
+                    : localReq.justification_document
+                      ? localReq.justification_validated
+                        ? <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
+                        : <FileCheck   size={16} className="text-blue-600 shrink-0" />
+                      : <Paperclip    size={16} className="text-amber-600 shrink-0" />
                   }
                   <p className={`text-sm font-bold ${
-                    localReq.justification_document
-                      ? localReq.justification_validated ? "text-emerald-700" : "text-blue-700"
-                      : "text-amber-700"
+                    localReq.marked_as_absent
+                      ? "text-red-700"
+                      : localReq.justification_document
+                        ? localReq.justification_validated ? "text-emerald-700" : "text-blue-700"
+                        : "text-amber-700"
                   }`}>
-                    {localReq.justification_document
-                      ? localReq.justification_validated
-                        ? "Justificatif validé par le RH ✓"
-                        : "Justificatif soumis — en attente de validation RH"
-                      : "Justificatif requis après le retour de congé"
+                    {localReq.marked_as_absent
+                      ? "Absence enregistrée — justificatif non fourni"
+                      : localReq.justification_document
+                        ? localReq.justification_validated
+                          ? "Justificatif validé par le RH ✓"
+                          : "Justificatif soumis — en attente de validation RH"
+                        : "Justificatif requis après le retour de congé"
                     }
                   </p>
                 </div>
+
+                {/* Date limite */}
+                {!localReq.marked_as_absent && localReq.justification_deadline && !localReq.justification_validated && (
+                  <p className="text-xs text-amber-700 flex items-center gap-1.5">
+                    <AlertTriangle size={12} className="shrink-0" />
+                    Date limite de dépôt : <span className="font-semibold">{fmtShort(localReq.justification_deadline)}</span>
+                  </p>
+                )}
+
+                {/* Info marquage absent */}
+                {localReq.marked_as_absent && localReq.marked_as_absent_by && (
+                  <p className="text-xs text-red-600 flex items-center gap-1.5">
+                    <User size={12} className="shrink-0" />
+                    Marqué par <span className="font-semibold">{localReq.marked_as_absent_by.full_name}</span>
+                    {localReq.marked_as_absent_at && (
+                      <> le {fmtShort(localReq.marked_as_absent_at.slice(0, 10))}</>
+                    )}
+                  </p>
+                )}
 
                 {/* Lien vers le document existant */}
                 {localReq.justification_document && (
@@ -594,8 +622,9 @@ function LeaveDetailModal({ req, onClose, onEdit, onRefresh }: LeaveDetailModalP
                   </a>
                 )}
 
-                {/* Upload (si pas encore de doc OU doc non validé) */}
-                {(localReq.status === "APPROVED" || localReq.status === "REVOKED") &&
+                {/* Upload (si pas encore de doc OU doc non validé, et pas marqué absent) */}
+                {!localReq.marked_as_absent &&
+                 (localReq.status === "APPROVED" || localReq.status === "REVOKED") &&
                  !localReq.justification_validated && (
                   <div className="space-y-2">
                     {localReq.justification_document && (
@@ -688,17 +717,27 @@ function RequestCard({ req, onView, onEdit, onSelfApprove }: RequestCardProps) {
   const canEdit = req.status === "PENDING" || req.status === "PENDING_SECOND";
   const days    = parseFloat(req.days) || 0;
 
+  // Justification alerts
+  const needsJustif  = req.leave_type.requires_justification && req.status === "APPROVED";
+  const isAbsent     = req.marked_as_absent;
+  const justifDone   = !!req.justification_document;
+  const justifPending = req.justification_pending; // approved + ended + no doc
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       onClick={onView}
-      className="group relative bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition-all duration-200 overflow-hidden cursor-pointer"
+      className={`group relative bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer ${
+        isAbsent ? "border-red-200 hover:border-red-300" :
+        justifPending ? "border-amber-200 hover:border-amber-300" :
+        "border-gray-100 hover:border-gray-200"
+      }`}
     >
       {/* Bande de couleur statut */}
       <div
         className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl"
-        style={{ backgroundColor: cfg.color }}
+        style={{ backgroundColor: isAbsent ? "#dc2626" : cfg.color }}
       />
 
       <div className="pl-5 pr-4 py-4">
@@ -714,6 +753,20 @@ function RequestCard({ req, onView, onEdit, onSelfApprove }: RequestCardProps) {
                 <Icon size={10} />
                 {cfg.label}
               </span>
+              {/* Badge absent */}
+              {isAbsent && (
+                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-semibold bg-red-50 text-red-700 border-red-200">
+                  <UserX size={10} />
+                  Absent
+                </span>
+              )}
+              {/* Badge justif. en attente */}
+              {!isAbsent && justifPending && (
+                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-semibold bg-amber-50 text-amber-700 border-amber-200">
+                  <AlertTriangle size={10} />
+                  Justificatif requis
+                </span>
+              )}
             </div>
 
             {/* Période */}
@@ -745,6 +798,28 @@ function RequestCard({ req, onView, onEdit, onSelfApprove }: RequestCardProps) {
               <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
                 <CheckCircle2 size={11} />
                 Approuvé par {req.reviewed_by.full_name}
+              </p>
+            )}
+
+            {/* Alerte absence */}
+            {isAbsent && (
+              <p className="text-xs text-red-600 mt-1 flex items-center gap-1 font-medium">
+                <UserX size={11} />
+                Marqué absent — justificatif non fourni
+              </p>
+            )}
+
+            {/* Alerte justificatif en attente */}
+            {!isAbsent && needsJustif && justifDone && !req.justification_validated && (
+              <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                <FileCheck size={11} />
+                Justificatif soumis — en attente de validation RH
+              </p>
+            )}
+            {!isAbsent && needsJustif && !justifDone && req.justification_deadline && (
+              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1 font-medium">
+                <AlertTriangle size={11} />
+                Justificatif requis avant le {fmtShort(req.justification_deadline)}
               </p>
             )}
           </div>

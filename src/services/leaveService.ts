@@ -333,6 +333,36 @@ export const leaveRequestService = {
   },
 
   /**
+   * POST /api/leaves/requests/<id>/mark_as_absent/
+   * Le RH marque l'employé comme absent (justificatif non fourni).
+   * Body optionnel : { marker_id: number, undo: boolean }
+   */
+  markAsAbsent: async (
+    id: number,
+    payload?: { marker_id?: number; undo?: boolean }
+  ): Promise<LeaveRequest> => {
+    const res = await axios.post(
+      `${API}/requests/${id}/mark_as_absent/`,
+      payload ?? {},
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
+  /**
+   * GET /api/leaves/requests/?pending_justification=true
+   * Retourne tous les congés approuvés dont la justification est requise,
+   * la période est terminée, et dont le document n'a pas encore été soumis.
+   */
+  getPendingJustifications: async (): Promise<LeaveRequest[]> => {
+    const res = await axios.get(`${API}/requests/`, {
+      headers: getAuthHeaders(),
+      params:  { pending_justification: "true" },
+    });
+    return res.data;
+  },
+
+  /**
    * POST /api/leaves/requests/trigger-monthly-credit/
    * Déclenche le crédit mensuel (+2j) pour tous les employés actifs.
    */

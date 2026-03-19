@@ -19,7 +19,8 @@ import {
   Download, Loader2, AlertTriangle, Clock, Pencil, Paperclip,
   FileCheck, Upload, ExternalLink, Users, Settings2, Wallet,
   Search, History, Info, Filter, Trash2, Send, FileSpreadsheet,
-  CheckCircle, XOctagon, Mail, GitBranch,
+  CheckCircle, XOctagon, Mail, GitBranch, UserX, ShieldCheck,
+  AlertCircle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ExportColumnKey, ExportColumnDef } from "@/types/leave";
@@ -70,13 +71,14 @@ const DEFAULT_EXPORT_COLUMNS: ExportColumnKey[] = [
   "start_date", "end_date", "days", "status",
 ];
 
-type TabId        = "requests" | "calendar" | "balances";
+type TabId        = "requests" | "calendar" | "balances" | "justifications";
 type StatusFilter = "ALL" | LeaveStatus;
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
-  { id: "requests", label: "Demandes",    Icon: Table2       },
-  { id: "calendar", label: "Calendrier",  Icon: CalendarRange },
-  { id: "balances", label: "Soldes",      Icon: Wallet       },
+  { id: "requests",       label: "Demandes",      Icon: Table2       },
+  { id: "calendar",       label: "Calendrier",    Icon: CalendarRange },
+  { id: "balances",       label: "Soldes",        Icon: Wallet       },
+  { id: "justifications", label: "Justificatifs", Icon: FileCheck    },
 ];
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
@@ -821,6 +823,8 @@ export default function LeavePage() {
           {tab === "calendar" && <LeaveCalendar />}
 
           {tab === "balances" && <BalancesTab contractType={contractType} />}
+
+          {tab === "justifications" && <JustificationsTab onOpenDetail={openDetail} />}
         </div>
       </div>
 
@@ -921,6 +925,315 @@ export default function LeavePage() {
         )}
       </AnimatePresence>
     </AppLayout>
+  );
+}
+
+// ─── Onglet Justificatifs ────────────────────────────────────────────────────
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8030";
+
+type JustifStatus = "missing" | "uploaded" | "validated" | "absent";
+
+function getJustifStatus(r: LeaveRequest): JustifStatus {
+  if (r.marked_as_absent)        return "absent";
+  if (r.justification_validated) return "validated";
+  if (r.justification_document)  return "uploaded";
+  return "missing";
+}
+
+const JUSTIF_STATUS_CFG: Record<JustifStatus, { label: string; color: string; bg: string; border: string; dot: string }> = {
+  missing:   { label: "Manquant",         color: "#d97706", bg: "#fffbeb", border: "#fde68a", dot: "bg-amber-400"   },
+  uploaded:  { label: "Soumis",           color: "#0284c7", bg: "#eff6ff", border: "#bfdbfe", dot: "bg-blue-400"    },
+  validated: { label: "Validé",           color: "#059669", bg: "#ecfdf5", border: "#a7f3d0", dot: "bg-emerald-500" },
+  absent:    { label: "Absent (défaut)",  color: "#dc2626", bg: "#fef2f2", border: "#fecaca", dot: "bg-red-500"     },
+};
+
+interface JustificationsTabProps {
+  onOpenDetail: (r: LeaveRequest) => void;
+}
+
+function JustificationsTab({ onOpenDetail }: JustificationsTabProps) {
+  const { user } = useAuth();
+  const [requests,    setRequests]    = useState<LeaveRequest[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState<string | null>(null);
+  const [filter,      setFilter]      = useState<JustifStatus | "ALL">("ALL");
+  const [searchQ,     setSearchQ]     = useState("");
+  const [actionId,    setActionId]    = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      // Fetch all approved leaves and filter client-side for those requiring justification
+      const all = await leaveRequestService.getAll({ status: "APPROVED" });
+      const withJustif = (Array.isArray(all) ? all : []).filter(
+        (r) => r.leave_type.requires_justification
+      );
+      setRequests(withJustif);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? "Erreur de chargement");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleValidate = async (id: number) => {
+    setActionId(id);
+    try {
+      await leaveRequestService.validateDocument(id, user?.employee_id);
+      toast.success("Justificatif validé ✓");
+      await load();
+    } catch { toast.error("Erreur lors de la validation"); }
+    finally { setActionId(null); }
+  };
+
+  const handleMarkAbsent = async (id: number) => {
+    setActionId(id);
+    try {
+      await leaveRequestService.markAsAbsent(id, { marker_id: user?.employee_id });
+      toast.success("Employé marqué absent ✓");
+      await load();
+    } catch { toast.error("Erreur lors du marquage"); }
+    finally { setActionId(null); }
+  };
+
+  const handleUndoAbsent = async (id: number) => {
+    setActionId(id);
+    try {
+      await leaveRequestService.markAsAbsent(id, { undo: true });
+      toast.success("Marquage absent annulé ✓");
+      await load();
+    } catch { toast.error("Erreur lors de l'annulation"); }
+    finally { setActionId(null); }
+  };
+
+  const filtered = requests.filter((r) => {
+    if (filter !== "ALL" && getJustifStatus(r) !== filter) return false;
+    if (searchQ) {
+      const q = searchQ.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const name = (r.employee?.full_name ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const mat  = (r.employee?.matricule ?? "").toLowerCase();
+      const type = (r.leave_type?.label ?? "").toLowerCase();
+      if (!name.includes(q) && !mat.includes(q) && !type.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const counts = {
+    ALL:       requests.length,
+    missing:   requests.filter((r) => getJustifStatus(r) === "missing").length,
+    uploaded:  requests.filter((r) => getJustifStatus(r) === "uploaded").length,
+    validated: requests.filter((r) => getJustifStatus(r) === "validated").length,
+    absent:    requests.filter((r) => getJustifStatus(r) === "absent").length,
+  };
+
+  if (loading) return (
+    <div className="flex flex-col items-center gap-3 text-slate-400 py-24">
+      <Loader2 className="h-7 w-7 animate-spin" />
+      <p className="text-sm">Chargement des justificatifs…</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="flex flex-col items-center gap-4 py-24">
+      <AlertTriangle className="h-9 w-9 text-red-400" />
+      <p className="text-sm font-medium text-red-500">{error}</p>
+      <button onClick={load} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-sm font-medium transition">
+        <RefreshCw className="h-3.5 w-3.5" />Réessayer
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {([
+          { key: "missing",   label: "Manquants",   icon: AlertCircle,  color: "#d97706", bg: "#fffbeb" },
+          { key: "uploaded",  label: "Soumis",      icon: Upload,       color: "#0284c7", bg: "#eff6ff" },
+          { key: "validated", label: "Validés",     icon: ShieldCheck,  color: "#059669", bg: "#ecfdf5" },
+          { key: "absent",    label: "Absents",     icon: UserX,        color: "#dc2626", bg: "#fef2f2" },
+        ] as const).map(({ key, label, icon: Icon, color, bg }) => (
+          <button key={key}
+            onClick={() => setFilter(filter === key ? "ALL" : key)}
+            className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition text-left ${
+              filter === key ? "border-current shadow-md" : "border-transparent bg-white shadow-sm hover:shadow-md"
+            }`}
+            style={{ color, backgroundColor: filter === key ? color + "18" : bg }}>
+            <Icon className="h-6 w-6 shrink-0" />
+            <div>
+              <p className="text-2xl font-black tabular-nums">{counts[key]}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider opacity-75">{label}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Barre de recherche + refresh */}
+      <div className="flex gap-2 items-center">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+          <input type="text" placeholder="Rechercher employé, type…"
+            value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition bg-white" />
+          {searchQ && (
+            <button onClick={() => setSearchQ("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <button onClick={load} title="Actualiser" className="p-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 transition">
+          <RefreshCw className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        {filtered.length === 0 ? (
+          <div className="py-20 text-center text-slate-400">
+            <FileCheck className="h-12 w-12 mx-auto mb-3 text-slate-200" />
+            <p className="font-medium text-sm">
+              {filter === "missing" ? "Aucun justificatif manquant" :
+               filter === "uploaded" ? "Aucun justificatif en attente de validation" :
+               filter === "validated" ? "Aucun justificatif validé" :
+               filter === "absent" ? "Aucun employé marqué absent" :
+               "Aucun congé nécessitant un justificatif"}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  {["Employé", "Type de congé", "Période", "Échéance", "Statut justif.", "Document", "Actions"].map((h) => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filtered.map((r, i) => {
+                  const lc     = r.leave_type?.color ?? "#6b7280";
+                  const jStatus = getJustifStatus(r);
+                  const cfg    = JUSTIF_STATUS_CFG[jStatus];
+                  const isActing = actionId === r.id;
+                  const docUrl = r.justification_document
+                    ? (r.justification_document.startsWith("http") ? r.justification_document : `${API_BASE}${r.justification_document}`)
+                    : null;
+
+                  return (
+                    <motion.tr key={r.id}
+                      initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.12, delay: i * 0.02 }}
+                      onClick={() => onOpenDetail(r)}
+                      className={`hover:bg-slate-50/80 transition cursor-pointer ${i % 2 !== 0 ? "bg-slate-50/20" : ""}`}>
+
+                      {/* Employé */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black text-white shrink-0"
+                            style={{ backgroundColor: lc }}>
+                            {(r.employee?.full_name ?? "??").slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-800 truncate max-w-[140px]">{r.employee?.full_name ?? "—"}</p>
+                            <p className="text-xs text-slate-400 truncate max-w-[140px]">{r.employee?.matricule} · {r.employee?.service ?? "—"}</p>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Type */}
+                      <td className="px-4 py-3.5">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap"
+                          style={{ backgroundColor: lc + "20", color: lc }}>
+                          {r.leave_type?.label ?? "—"}
+                        </span>
+                      </td>
+
+                      {/* Période */}
+                      <td className="px-4 py-3.5 text-slate-600 text-xs whitespace-nowrap font-mono">
+                        {fmtDate(r.start_date)} → {fmtDate(r.end_date)}
+                      </td>
+
+                      {/* Échéance */}
+                      <td className="px-4 py-3.5 text-xs whitespace-nowrap">
+                        {r.justification_deadline ? (
+                          <span className={`font-semibold ${
+                            new Date(r.justification_deadline) < new Date() && !r.justification_document && !r.marked_as_absent
+                              ? "text-red-600" : "text-slate-600"
+                          }`}>
+                            {fmtDate(r.justification_deadline)}
+                          </span>
+                        ) : "—"}
+                      </td>
+
+                      {/* Statut justif. */}
+                      <td className="px-4 py-3.5">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap"
+                          style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
+                          {cfg.label}
+                        </span>
+                      </td>
+
+                      {/* Document */}
+                      <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        {docUrl ? (
+                          <a href={docUrl} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 transition border border-blue-200 whitespace-nowrap">
+                            <ExternalLink className="h-3.5 w-3.5" /> Voir le doc
+                          </a>
+                        ) : (
+                          <span className="text-xs text-slate-300 italic">Aucun document</span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex flex-col gap-1.5">
+                          {/* Valider le document */}
+                          {jStatus === "uploaded" && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleValidate(r.id); }}
+                              disabled={isActing}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg transition border border-emerald-200 whitespace-nowrap disabled:opacity-50">
+                              {isActing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                              Valider
+                            </button>
+                          )}
+                          {/* Marquer absent */}
+                          {(jStatus === "missing" || jStatus === "uploaded") && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleMarkAbsent(r.id); }}
+                              disabled={isActing}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg transition border border-red-200 whitespace-nowrap disabled:opacity-50">
+                              {isActing ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserX className="h-3 w-3" />}
+                              Marquer absent
+                            </button>
+                          )}
+                          {/* Annuler marquage absent */}
+                          {jStatus === "absent" && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleUndoAbsent(r.id); }}
+                              disabled={isActing}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition border border-slate-200 whitespace-nowrap disabled:opacity-50">
+                              {isActing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                              Annuler
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </motion.tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -2184,6 +2497,7 @@ function DetailModal({ request: r, onClose, onDone }: {
   const [docFile,            setDocFile]          = useState<File | null>(null);
   const [docLoading,         setDocLoading]       = useState(false);
   const [validateDocLoading, setValidateDocLoading] = useState(false);
+  const [markAbsentLoading,  setMarkAbsentLoading] = useState(false);
   const { user } = useAuth();
   const fileRef          = useRef<HTMLInputElement>(null);
   const approverRef      = useRef<HTMLDivElement>(null);
@@ -2264,6 +2578,17 @@ function DetailModal({ request: r, onClose, onDone }: {
     } catch (err: any) {
       toast.error(err?.response?.data?.error ?? "Erreur lors de la validation");
     } finally { setValidateDocLoading(false); }
+  };
+
+  const handleMarkAbsent = async (undo = false) => {
+    setMarkAbsentLoading(true);
+    try {
+      await leaveRequestService.markAsAbsent(r.id, { marker_id: user?.employee_id, undo });
+      toast.success(undo ? "Marquage absent annulé ✓" : "Employé marqué absent ✓");
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur");
+    } finally { setMarkAbsentLoading(false); }
   };
 
   const isPending = r.status === "PENDING" || r.status === "PENDING_SECOND";
@@ -2362,41 +2687,74 @@ function DetailModal({ request: r, onClose, onDone }: {
           {/* ── Section Justificatif ─────────────────────────────────────────── */}
           {r.leave_type?.requires_justification && (
             <div className={`rounded-2xl border-2 p-4 space-y-3 ${
-              r.justification_validated
-                ? "border-emerald-300 bg-emerald-50"
-                : r.justification_document
-                  ? "border-blue-200 bg-blue-50"
-                  : "border-amber-200 bg-amber-50"
+              r.marked_as_absent
+                ? "border-red-300 bg-red-50"
+                : r.justification_validated
+                  ? "border-emerald-300 bg-emerald-50"
+                  : r.justification_document
+                    ? "border-blue-200 bg-blue-50"
+                    : "border-amber-200 bg-amber-50"
             }`}>
               {/* Titre */}
               <div className="flex items-center gap-2">
-                {r.justification_validated
-                  ? <CheckCircle className="h-4 w-4 text-emerald-600" />
-                  : r.justification_document
-                    ? <FileCheck className="h-4 w-4 text-blue-600" />
-                    : <Paperclip className="h-4 w-4 text-amber-600" />
+                {r.marked_as_absent
+                  ? <UserX className="h-4 w-4 text-red-600" />
+                  : r.justification_validated
+                    ? <CheckCircle className="h-4 w-4 text-emerald-600" />
+                    : r.justification_document
+                      ? <FileCheck className="h-4 w-4 text-blue-600" />
+                      : <Paperclip className="h-4 w-4 text-amber-600" />
                 }
                 <p className={`text-sm font-bold ${
-                  r.justification_validated ? "text-emerald-700"
+                  r.marked_as_absent ? "text-red-700"
+                  : r.justification_validated ? "text-emerald-700"
                   : r.justification_document ? "text-blue-700"
                   : "text-amber-700"
                 }`}>
-                  {r.justification_validated
-                    ? "Justificatif validé ✓"
-                    : r.justification_document
-                      ? "Justificatif soumis — validation en attente"
-                      : "Justificatif non encore fourni"
+                  {r.marked_as_absent
+                    ? "Absence enregistrée — justificatif non fourni"
+                    : r.justification_validated
+                      ? "Justificatif validé ✓"
+                      : r.justification_document
+                        ? "Justificatif soumis — validation en attente"
+                        : "Justificatif non encore fourni"
                   }
                 </p>
               </div>
+
+              {/* Date limite */}
+              {!r.marked_as_absent && r.justification_deadline && !r.justification_validated && (
+                <p className="text-xs text-amber-700 flex items-center gap-1.5">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  Date limite de dépôt : <span className="font-semibold">{fmtDate(r.justification_deadline)}</span>
+                </p>
+              )}
+
+              {/* Info absence */}
+              {r.marked_as_absent && (
+                <div className="space-y-1">
+                  {r.marked_as_absent_by && (
+                    <p className="text-xs text-red-700">
+                      Marqué par <strong>{r.marked_as_absent_by.full_name}</strong>
+                      {r.marked_as_absent_at && (
+                        <span className="ml-1">· le {new Date(r.marked_as_absent_at).toLocaleDateString("fr-FR")}</span>
+                      )}
+                    </p>
+                  )}
+                  <button
+                    onClick={() => handleMarkAbsent(true)}
+                    disabled={markAbsentLoading}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition disabled:opacity-50">
+                    {markAbsentLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                    Annuler le marquage
+                  </button>
+                </div>
+              )}
 
               {/* Infos validateur */}
               {r.justification_validated && r.justification_validated_by && (
                 <p className="text-xs text-emerald-700">
                   Validé par <strong>{r.justification_validated_by.full_name}</strong>
-                  {r.justification_validated_by.email && (
-                    <span className="ml-1 font-mono text-emerald-600">({r.justification_validated_by.email})</span>
-                  )}
                   {r.justification_validated_at && (
                     <span className="ml-1 text-emerald-500">
                       · {new Date(r.justification_validated_at).toLocaleDateString("fr-FR")}
@@ -2408,7 +2766,8 @@ function DetailModal({ request: r, onClose, onDone }: {
               {/* Lien vers document */}
               {r.justification_document && (
                 <div className="flex items-center gap-2 flex-wrap">
-                  <a href={r.justification_document} target="_blank" rel="noopener noreferrer"
+                  <a href={r.justification_document.startsWith("http") ? r.justification_document : `${API_BASE}${r.justification_document}`}
+                    target="_blank" rel="noopener noreferrer"
                     className={`inline-flex items-center gap-2 px-4 py-2 text-white text-xs font-bold rounded-xl transition ${
                       r.justification_validated
                         ? "bg-emerald-600 hover:bg-emerald-700"
@@ -2418,13 +2777,13 @@ function DetailModal({ request: r, onClose, onDone }: {
                   </a>
 
                   {/* Bouton de validation RH */}
-                  {!r.justification_validated && (
+                  {!r.justification_validated && !r.marked_as_absent && (
                     <button
                       onClick={handleValidateDoc}
                       disabled={validateDocLoading}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition disabled:opacity-50">
                       {validateDocLoading
-                        ? <ImSpinner2 className="animate-spin" size={13} />
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         : <CheckCircle className="h-3.5 w-3.5" />
                       }
                       Valider le justificatif
@@ -2433,11 +2792,31 @@ function DetailModal({ request: r, onClose, onDone }: {
                 </div>
               )}
 
-              {/* Pas encore de document */}
-              {!r.justification_document && (
-                <p className="text-xs text-amber-600">
-                  L'employé doit soumettre un justificatif depuis son espace personnel.
-                </p>
+              {/* Pas encore de document : option marquer absent */}
+              {!r.justification_document && !r.marked_as_absent && r.status === "APPROVED" && (
+                <div className="flex items-start gap-3">
+                  <p className="text-xs text-amber-600 flex-1">
+                    L'employé doit soumettre un justificatif depuis son espace personnel.
+                  </p>
+                  <button
+                    onClick={() => handleMarkAbsent(false)}
+                    disabled={markAbsentLoading}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-xl transition border border-red-200 disabled:opacity-50 whitespace-nowrap shrink-0">
+                    {markAbsentLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserX className="h-3 w-3" />}
+                    Marquer absent
+                  </button>
+                </div>
+              )}
+
+              {/* Justificatif soumis mais non validé : option marquer absent aussi */}
+              {r.justification_document && !r.justification_validated && !r.marked_as_absent && r.status === "APPROVED" && (
+                <button
+                  onClick={() => handleMarkAbsent(false)}
+                  disabled={markAbsentLoading}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-xl transition border border-red-200 disabled:opacity-50">
+                  {markAbsentLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserX className="h-3 w-3" />}
+                  Marquer absent (doc insuffisant)
+                </button>
               )}
             </div>
           )}

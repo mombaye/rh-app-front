@@ -5,14 +5,15 @@ export type ContractType = "INTERNE" | "INTERIM";
 
 // ── LeaveType ── mirrors LeaveTypeSerializer ──────────────────────────────────
 export interface LeaveType {
-  id:                      number;
-  code:                    string;
-  label:                   string;
-  is_paid:                 boolean;
-  requires_justification:  boolean;
-  color:                   string;
-  monthly_accrual:         string;
-  max_days_per_request:    number;
+  id:                       number;
+  code:                     string;
+  label:                    string;
+  is_paid:                  boolean;
+  requires_justification:   boolean;
+  justification_grace_days: number;   // délai en jours après fin du congé pour soumettre le justificatif
+  color:                    string;
+  monthly_accrual:          string;
+  max_days_per_request:     number;
 }
 
 // ── EmployeeMini ── mirrors EmployeeMiniSerializer ────────────────────────────
@@ -76,6 +77,13 @@ export interface LeaveRequest {
   justification_validated:    boolean;
   justification_validated_by: EmployeeMini | null;
   justification_validated_at: string | null;
+  justification_deadline:     string | null;   // "YYYY-MM-DD" — date limite de dépôt
+  justification_pending:      boolean;         // true si justif requise, congé terminé, aucun doc
+
+  // Absence pour défaut de justificatif
+  marked_as_absent:    boolean;
+  marked_as_absent_by: EmployeeMini | null;
+  marked_as_absent_at: string | null;
 
   created_at:    string;
   updated_at:    string;
@@ -135,16 +143,17 @@ export interface LeaveCalendarEntry {
 
 // ── LeaveRequestFilters ── query params supportés par get_queryset() ──────────
 export interface LeaveRequestFilters {
-  status?:              LeaveStatus;
-  employee_id?:         number;
-  leave_type_id?:       number;
-  start_date?:          string;
-  end_date?:            string;
-  department?:          string;
-  employee_name?:       string;  // recherche par nom/prénom/matricule
-  year?:                number;  // filtre par année de début
-  contract_type?:       ContractType; // filtré côté frontend uniquement
-  manager_employee_id?: number;  // filtre les subordonnés d'un manager
+  status?:                 LeaveStatus;
+  employee_id?:            number;
+  leave_type_id?:          number;
+  start_date?:             string;
+  end_date?:               string;
+  department?:             string;
+  employee_name?:          string;  // recherche par nom/prénom/matricule
+  year?:                   number;  // filtre par année de début
+  contract_type?:          ContractType; // filtré côté frontend uniquement
+  manager_employee_id?:    number;  // filtre les subordonnés d'un manager
+  pending_justification?:  string;  // "true" → congés approuvés dont le justif. est manquant
 }
 
 // ── ExportColumn ── colonnes disponibles pour l'export personnalisé ──────────
