@@ -4,29 +4,25 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import welcome from "@/assets/illustrations/hr-welcome.svg";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import toast, { Toaster } from "react-hot-toast";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth, type UserRole, dashboardForRole } from "@/contexts/useAuth";
-import { ArrowLeft, UserRound, Users, ShieldCheck, LayoutDashboard, Calendar } from "lucide-react";
+// Priorité de rôle : rh > manager2 > manager1 > planning > employe
+const ROLE_PRIORITY: UserRole[] = ["rh", "manager2", "manager1", "planning", "employe"];
 
-const ROLE_META: Record<UserRole, { label: string; description: string; Icon: React.ElementType; color: string }> = {
-  employe:  { label: "Employé",        description: "Accédez à vos congés, bulletins et dossier",       Icon: UserRound,      color: "text-blue-600 bg-blue-50 border-blue-200" },
-  manager1: { label: "Manager N1",     description: "Gérez votre équipe et validez les demandes",        Icon: Users,          color: "text-purple-600 bg-purple-50 border-purple-200" },
-  manager2: { label: "Manager N2",     description: "Supervision et validation de second niveau",        Icon: Users,          color: "text-violet-600 bg-violet-50 border-violet-200" },
-  rh:       { label: "Espace RH",      description: "Administrez les employés, congés et pointages",     Icon: ShieldCheck,    color: "text-camublue-900 bg-camublue-900/8 border-camublue-900/20" },
-  planning: { label: "Planning",       description: "Gestion des plannings et shifts",                   Icon: Calendar,       color: "text-green-600 bg-green-50 border-green-200" },
-};
-
-type Step = "login" | "select-role";
+function pickBestRole(roles: UserRole[]): UserRole {
+  for (const r of ROLE_PRIORITY) {
+    if (roles.includes(r)) return r;
+  }
+  return roles[0];
+}
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
-  const [step,     setStep]     = useState<Step>("login");
-  const [pendingRoles, setPendingRoles] = useState<UserRole[]>([]);
 
   const navigate = useNavigate();
   const { login, switchRole } = useAuth();
@@ -39,20 +35,9 @@ export default function LoginPage() {
       const profile = await login(username, password);
       const roles: UserRole[] = (profile as any).roles ?? [];
 
-      if (roles.length === 0) {
-        navigate("/employee/dashboard");
-        return;
-      }
-
-      if (roles.length === 1) {
-        switchRole(roles[0]);
-        navigate(dashboardForRole(roles[0]));
-        return;
-      }
-
-      // Multiple roles → show selection screen
-      setPendingRoles(roles);
-      setStep("select-role");
+      const role = roles.length > 0 ? pickBestRole(roles) : "employe";
+      switchRole(role);
+      navigate(dashboardForRole(role));
     } catch (err: any) {
       const msg = err?.response?.data?.detail || "Identifiants incorrects ou erreur réseau.";
       setError(msg);
@@ -62,22 +47,13 @@ export default function LoginPage() {
     }
   };
 
-  const handleSelectRole = (role: UserRole) => {
-    switchRole(role);
-    navigate(dashboardForRole(role));
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-white px-4 py-12">
       <Toaster position="top-right" />
 
-      <AnimatePresence mode="wait">
-        {step === "login" ? (
-          <motion.div
-            key="login"
+      <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
             transition={{ duration: 0.35 }}
             className="w-full max-w-sm"
           >
@@ -157,59 +133,6 @@ export default function LoginPage() {
               </CardContent>
             </Card>
           </motion.div>
-        ) : (
-          <motion.div
-            key="select-role"
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
-            transition={{ duration: 0.35 }}
-            className="w-full max-w-sm"
-          >
-            <Card className="shadow-md rounded-2xl border border-slate-200">
-              <CardContent className="p-7 sm:p-8 flex flex-col items-center">
-
-                <div className="w-12 h-12 rounded-full bg-camublue-900/10 flex items-center justify-center mb-4">
-                  <LayoutDashboard className="h-6 w-6 text-camublue-900" />
-                </div>
-
-                <h1 className="text-xl font-bold text-slate-800 mb-1 text-center">
-                  Choisissez votre espace
-                </h1>
-                <p className="text-sm text-slate-400 mb-6 text-center">
-                  Votre compte a accès à plusieurs espaces. Lequel souhaitez-vous ouvrir ?
-                </p>
-
-                <div className="w-full space-y-3">
-                  {pendingRoles.map((role) => {
-                    const meta = ROLE_META[role];
-                    if (!meta) return null;
-                    return (
-                      <button
-                        key={role}
-                        onClick={() => handleSelectRole(role)}
-                        className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl border-2 text-left transition hover:scale-[1.01] active:scale-[0.99] ${meta.color}`}
-                      >
-                        <div className="flex-shrink-0">
-                          <meta.Icon className="h-5 w-5" strokeWidth={2} />
-                        </div>
-                        <div>
-                          <div className="font-semibold text-sm">{meta.label}</div>
-                          <div className="text-xs opacity-70 leading-tight mt-0.5">{meta.description}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <footer className="mt-8 text-slate-300 text-xs text-center">
-                  © {new Date().getFullYear()} Camusat Sénégal RH
-                </footer>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

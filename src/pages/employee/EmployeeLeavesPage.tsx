@@ -1239,43 +1239,40 @@ export default function EmployeeLeavesPage({
                 ))}
               </div>
 
-              {/* Pagination — toujours visible */}
+              {/* Pagination */}
               <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-xs text-gray-400">
-                  {filtered.length} demande{filtered.length > 1 ? "s" : ""}
-                  {totalPages > 1 && ` · Page ${currentPage} / ${totalPages}`}
+                  Page {currentPage} / {totalPages} · {filtered.length} demande{filtered.length > 1 ? "s" : ""}
                 </span>
-                {totalPages > 1 && (
-                  <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    <ChevronLeft size={15} />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                     <button
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-medium transition ${
+                        page === currentPage
+                          ? "bg-[#003c71] text-white shadow-sm"
+                          : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                      }`}
                     >
-                      <ChevronLeft size={15} />
+                      {page}
                     </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-medium transition ${
-                          page === currentPage
-                            ? "bg-[#003c71] text-white shadow-sm"
-                            : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                        }`}
-                      >
-                        {page}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                      className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                    >
-                      <ChevronRight size={15} />
-                    </button>
-                  </div>
-                )}
+                  ))}
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
               </div>
             </>
           )}
