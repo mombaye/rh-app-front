@@ -171,8 +171,13 @@ export default function Sidebar() {
 
   const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
     <>
+      {/* Sélecteur de rôle en haut (visible uniquement si plusieurs rôles) */}
+      <div className="mx-4 mt-4">
+        <RoleSwitcher />
+      </div>
+
       {user?.is_planning_manager && (
-        <div className="mx-4 mt-4 px-3 py-2 rounded-lg bg-camublue-900/10 text-camublue-900 text-xs font-semibold flex items-center gap-2">
+        <div className="mx-4 mt-2 px-3 py-2 rounded-lg bg-camublue-900/10 text-camublue-900 text-xs font-semibold flex items-center gap-2">
           <CalendarRange size={14} />
           Gestionnaire de Planning
         </div>
@@ -182,8 +187,7 @@ export default function Sidebar() {
           <NavLink key={item.path} item={item} onClose={onClose} />
         ))}
       </nav>
-      <div className="px-4 py-4 border-t border-gray-200 space-y-2">
-        <RoleSwitcher />
+      <div className="px-4 py-4 border-t border-gray-200">
         <button
           className="flex items-center gap-3 px-4 py-2 rounded-lg w-full text-left text-gray-700 hover:bg-camublue-900/10 transition-all"
           onClick={() => setShowLogoutModal(true)}

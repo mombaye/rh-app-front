@@ -94,14 +94,9 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
 
   const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
     <>
-      {/* Badge espace */}
-      <div className={`mx-4 mt-4 px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors ${
-        isManagerMode
-          ? "bg-[#003c71]/10 text-[#003c71]"
-          : "bg-gray-100 text-gray-500"
-      }`}>
-        <ClipboardCheck size={14} />
-        {isManagerMode ? "Espace Manager" : "Espace Employé"}
+      {/* Sélecteur de rôle en haut */}
+      <div className="mx-4 mt-4">
+        <RoleSwitcher />
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-1">
@@ -110,8 +105,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
         ))}
       </nav>
 
-      <div className="px-4 py-4 border-t border-gray-200 space-y-2">
-        <RoleSwitcher />
+      <div className="px-4 py-4 border-t border-gray-200">
         <button
           className="flex items-center gap-3 px-4 py-2 rounded-lg w-full text-left text-gray-700 hover:bg-[#003c71]/10 transition-all"
           onClick={() => setShowLogoutModal(true)}
