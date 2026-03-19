@@ -39,6 +39,16 @@ function computeRoles(profile: User): UserRole[] {
   return (profile.roles as UserRole[]) ?? [];
 }
 
+// Priorité de rôle : rh > manager2 > manager1 > planning > employe
+const ROLE_PRIORITY: UserRole[] = ["rh", "manager2", "manager1", "planning", "employe"];
+
+function pickBestRole(roles: UserRole[]): UserRole {
+  for (const r of ROLE_PRIORITY) {
+    if (roles.includes(r)) return r;
+  }
+  return roles[0];
+}
+
 function dashboardForRole(role: UserRole): string {
   switch (role) {
     case "rh":       return "/dashboard";
@@ -73,8 +83,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (stored && roles.includes(stored)) {
             setActiveRole(stored);
           } else if (roles.length > 0) {
-            setActiveRole(roles[0]);
-            localStorage.setItem("active_role", roles[0]);
+            const best = pickBestRole(roles);
+            setActiveRole(best);
+            localStorage.setItem("active_role", best);
           }
         } catch {
           setUser(null);
@@ -109,10 +120,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const switchRole = (role: UserRole) => {
-    if (availableRoles.includes(role)) {
-      setActiveRole(role);
-      localStorage.setItem("active_role", role);
-    }
+    // Pas de garde sur availableRoles : juste après login() le state user
+    // n'est pas encore re-rendu donc availableRoles serait vide et bloquerait.
+    setActiveRole(role);
+    localStorage.setItem("active_role", role);
   };
 
   const logout = () => {
