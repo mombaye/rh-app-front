@@ -27,6 +27,10 @@ import { ExportColumnKey, ExportColumnDef } from "@/types/leave";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
+import EmployeeLeavesPage from "@/pages/employee/EmployeeLeavesPage";
+
+// Layout passthrough : intègre la vue employé sans double structure de page
+const PassthroughLayout = ({ children }: { children: React.ReactNode }) => <>{children}</>;
 
 // ─── Config statuts ───────────────────────────────────────────────────────────
 const STATUS_CFG: Record<
@@ -71,7 +75,7 @@ const DEFAULT_EXPORT_COLUMNS: ExportColumnKey[] = [
   "start_date", "end_date", "days", "status",
 ];
 
-type TabId        = "requests" | "calendar" | "balances" | "justifications";
+type TabId        = "requests" | "calendar" | "balances" | "justifications" | "myspace";
 type StatusFilter = "ALL" | LeaveStatus;
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
@@ -79,6 +83,7 @@ const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
   { id: "calendar",       label: "Calendrier",    Icon: CalendarRange },
   { id: "balances",       label: "Soldes",        Icon: Wallet       },
   { id: "justifications", label: "Justificatifs", Icon: FileCheck    },
+  { id: "myspace",        label: "Mes congés",    Icon: CalendarDays },
 ];
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
@@ -825,6 +830,8 @@ export default function LeavePage() {
           {tab === "balances" && <BalancesTab contractType={contractType} />}
 
           {tab === "justifications" && <JustificationsTab onOpenDetail={openDetail} />}
+
+          {tab === "myspace" && <EmployeeLeavesPage layout={PassthroughLayout} />}
         </div>
       </div>
 
