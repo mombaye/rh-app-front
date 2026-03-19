@@ -122,6 +122,45 @@ interface LeaveFormProps {
   onSaved: () => void;
 }
 
+// ── Traduction des erreurs backend en messages lisibles ─────────────────────
+function parseLeaveError(err: any): string {
+  const data = err?.response?.data;
+  const status = err?.response?.status;
+
+  if (!data && !status) return "Impossible de contacter le serveur. Vérifiez votre connexion.";
+
+  // Erreurs champ par champ
+  const fieldMsg =
+    data?.non_field_errors?.[0] ||
+    data?.start_date?.[0] ||
+    data?.end_date?.[0] ||
+    data?.days?.[0] ||
+    data?.leave_type_id?.[0] ||
+    data?.employee_id?.[0] ||
+    data?.detail ||
+    (typeof data === "string" ? data : null);
+
+  if (fieldMsg) {
+    // Traduit les messages backend courants en français plus clairs
+    if (fieldMsg.includes("existe déjà sur cette période") || fieldMsg.includes("overlap"))
+      return "Vous avez déjà une demande de congé sur cette période. Choisissez d'autres dates.";
+    if (fieldMsg.includes("jour ouvrable") || fieldMsg.includes("jours fériés"))
+      return "La période sélectionnée ne contient que des jours fériés. Veuillez choisir d'autres dates.";
+    if (fieldMsg.includes("date de fin") || fieldMsg.includes("end_date"))
+      return "La date de fin doit être égale ou postérieure à la date de début.";
+    if (fieldMsg.includes("solde") || fieldMsg.includes("balance") || fieldMsg.includes("insuffisant"))
+      return "Votre solde de congés est insuffisant pour cette période.";
+    if (fieldMsg.includes("Authentication") || fieldMsg.includes("token") || fieldMsg.includes("credentials"))
+      return "Votre session a expiré. Veuillez vous reconnecter.";
+    return fieldMsg;
+  }
+
+  if (status === 400) return "La demande est invalide. Vérifiez les dates et le type de congé sélectionné.";
+  if (status === 401 || status === 403) return "Accès refusé. Votre session a peut-être expiré.";
+  if (status === 500) return "Une erreur serveur s'est produite. Veuillez réessayer ou contacter l'administrateur.";
+  return "Une erreur inattendue s'est produite. Veuillez réessayer.";
+}
+
 function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSaved }: LeaveFormProps) {
   const [form, setForm] = useState<Partial<LeaveRequestCreate>>({
     employee_id:   employeeId,
@@ -132,6 +171,7 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
     motif:         initial?.motif ?? "",
   });
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     if (form.start_date && form.end_date && form.end_date >= form.start_date) {
@@ -140,13 +180,30 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
       const diff = Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
       setForm(p => ({ ...p, days: diff }));
     }
+    setFormError(null); // Efface l'erreur dès que l'utilisateur modifie les dates
   }, [form.start_date, form.end_date]);
 
   const handleSave = async () => {
-    if (!form.leave_type_id || !form.start_date || !form.end_date || !form.days) {
-      toast.error("Veuillez remplir tous les champs obligatoires.");
+    setFormError(null);
+
+    // Validations frontend avant d'envoyer
+    if (!form.leave_type_id) {
+      setFormError("Veuillez sélectionner un type de congé.");
       return;
     }
+    if (!form.start_date || !form.end_date) {
+      setFormError("Veuillez renseigner les dates de début et de fin.");
+      return;
+    }
+    if (form.end_date < form.start_date) {
+      setFormError("La date de fin doit être égale ou postérieure à la date de début.");
+      return;
+    }
+    if (!form.days || form.days <= 0) {
+      setFormError("Impossible de calculer la durée. Vérifiez les dates saisies.");
+      return;
+    }
+
     setSaving(true);
     try {
       if (mode === "create") {
@@ -158,18 +215,7 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
       }
       onSaved();
     } catch (err: any) {
-      const data = err?.response?.data;
-      // Extrait le premier message d'erreur disponible (champ ou global)
-      const msg = data?.non_field_errors?.[0]
-        || data?.detail
-        || data?.start_date?.[0]
-        || data?.end_date?.[0]
-        || data?.employee_id?.[0]
-        || data?.leave_type_id?.[0]
-        || data?.days?.[0]
-        || (typeof data === "string" ? data : null)
-        || "Erreur lors de l'enregistrement.";
-      toast.error(msg);
+      setFormError(parseLeaveError(err));
     } finally {
       setSaving(false);
     }
@@ -193,13 +239,21 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
         </div>
 
         <div className="p-6 space-y-4">
+          {/* Alerte d'erreur visible dans le formulaire */}
+          {formError && (
+            <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <AlertTriangle size={17} className="text-red-500 shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700 leading-snug">{formError}</p>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Type de congé <span className="text-red-400">*</span>
             </label>
             <select
               value={form.leave_type_id ?? ""}
-              onChange={e => setForm(p => ({ ...p, leave_type_id: Number(e.target.value) }))}
+              onChange={e => { setFormError(null); setForm(p => ({ ...p, leave_type_id: Number(e.target.value) })); }}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
             >
               <option value="">-- Sélectionner un type --</option>
