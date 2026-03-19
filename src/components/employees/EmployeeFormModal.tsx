@@ -27,7 +27,7 @@ type FormData = {
   type_contrat: ContractType | ""; fonction: string; categorie: string;
   date_embauche: string; date_fin_cdd: string; date_fin_periode_essai: string;
   business_line: string; projet: string; service: string;
-  manager: string; localisation: string; email: string; telephone: string;
+  manager: string; manager_email: string; localisation: string; email: string; telephone: string;
 };
 
 const EMPTY: FormData = {
@@ -41,7 +41,7 @@ const EMPTY: FormData = {
   type_contrat: "", fonction: "", categorie: "",
   date_embauche: "", date_fin_cdd: "", date_fin_periode_essai: "",
   business_line: "", projet: "", service: "",
-  manager: "", localisation: "", email: "", telephone: "",
+  manager: "", manager_email: "", localisation: "", email: "", telephone: "",
 };
 
 // ── Étapes ────────────────────────────────────────────────────────────────────
@@ -119,6 +119,7 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
         date_fin_periode_essai: initialData.date_fin_periode_essai ?? "",
         business_line: initialData.business_line ?? "", projet: initialData.projet ?? "",
         service: initialData.service ?? "", manager: initialData.manager ?? "",
+        manager_email: initialData.manager_email ?? "",
         localisation: initialData.localisation ?? "", email: initialData.email ?? "",
         telephone: initialData.telephone ?? "",
       });
@@ -340,6 +341,9 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
               <F label="Projet"><Input name="projet" value={form.projet} onChange={ch} /></F>
               <F label="Service"><Input name="service" value={form.service} onChange={ch} /></F>
               <F label="Line Manager"><Input name="manager" value={form.manager} onChange={ch} /></F>
+              <F label="Email du manager">
+                <Input type="email" name="manager_email" value={form.manager_email} onChange={ch} placeholder="manager@example.com" />
+              </F>
               <F label="Localisation"><Input name="localisation" value={form.localisation} onChange={ch} /></F>
               <F label="Adresse mail"><Input type="email" name="email" value={form.email} onChange={ch} /></F>
               <F label="Téléphone"><Input name="telephone" value={form.telephone} onChange={ch} /></F>

@@ -60,6 +60,7 @@ export interface Employee {
   projet?:                 string | null;
   service?:                string | null;
   manager?:                string | null;
+  manager_email?:          string | null;
   localisation?:           string | null;
   email?:                  string | null;
   telephone?:              string | null;
