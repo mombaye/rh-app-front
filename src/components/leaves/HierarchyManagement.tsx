@@ -462,11 +462,31 @@ function OrgChartTab() {
 
       {/* ── Modal : assignation en masse des membres ─────────────────────────── */}
       {bulkDept && (() => {
+        const deptName = bulkDept.name.trim().toLowerCase();
+        const deptCode = bulkDept.code.trim().toLowerCase();
         const q = bulkSearch.trim().toLowerCase();
-        const visibleEmps = allEmployees.filter(e =>
-          e.status === "ACTIVE" &&
-          (!q || `${e.nom} ${e.prenom}`.toLowerCase().includes(q) || (e.matricule ?? "").toLowerCase().includes(q) || (e.service ?? "").toLowerCase().includes(q))
-        );
+
+        // Base : employés dont service ou projet correspond à ce département
+        const deptEmps = allEmployees.filter(e => {
+          if (e.status !== "ACTIVE") return false;
+          const svc  = (e.service ?? "").toLowerCase();
+          const proj = (e.projet  ?? "").toLowerCase();
+          return svc === deptName || svc === deptCode || proj === deptName || proj === deptCode;
+        });
+
+        // Aussi inclure ceux déjà assignés dans l'organigramme (au cas où leur service diffère légèrement)
+        const alreadyAssigned = employees.filter(e => e.service === bulkDept.name);
+        const alreadyIds = new Set(alreadyAssigned.map(e => e.id));
+        const extraEmps = allEmployees.filter(e => alreadyIds.has(e.id) && !deptEmps.find(d => d.id === e.id));
+        const baseEmps = [...deptEmps, ...extraEmps];
+
+        const visibleEmps = q
+          ? baseEmps.filter(e =>
+              `${e.nom} ${e.prenom}`.toLowerCase().includes(q) ||
+              (e.matricule ?? "").toLowerCase().includes(q) ||
+              (e.service ?? "").toLowerCase().includes(q)
+            )
+          : baseEmps;
         const allChecked  = visibleEmps.length > 0 && visibleEmps.every(e => bulkSelected.has(e.id));
         const someChecked = visibleEmps.some(e => bulkSelected.has(e.id));
         return (
