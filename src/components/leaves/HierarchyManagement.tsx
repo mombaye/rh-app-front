@@ -87,6 +87,12 @@ function OrgChartTab() {
   }>({ name: "", code: "", description: "", head_id: null, dg_validator_id: null });
   const [savingDept, setSavingDept] = useState(false);
 
+  // Assignation en masse des membres d'un département
+  const [bulkDept,      setBulkDept]      = useState<Department | null>(null);
+  const [bulkSelected,  setBulkSelected]  = useState<Set<number>>(new Set());
+  const [bulkSearch,    setBulkSearch]    = useState("");
+  const [bulkSaving,    setBulkSaving]    = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -186,6 +192,43 @@ function OrgChartTab() {
     }
   };
 
+  // ── Assignation en masse ────────────────────────────────────────────────────
+  const openBulkAssign = (dept: Department) => {
+    setBulkDept(dept);
+    setBulkSearch("");
+    // Pré-cocher les employés déjà dans ce département
+    const currentIds = new Set(
+      employees.filter(e => e.service === dept.name).map(e => e.id)
+    );
+    setBulkSelected(currentIds);
+  };
+
+  const handleBulkSave = async () => {
+    if (!bulkDept) return;
+    setBulkSaving(true);
+    try {
+      const previousIds = new Set(
+        employees.filter(e => e.service === bulkDept.name).map(e => e.id)
+      );
+      const toAdd    = [...bulkSelected].filter(id => !previousIds.has(id));
+      const toRemove = [...previousIds].filter(id => !bulkSelected.has(id));
+
+      await Promise.all([
+        ...toAdd.map(id    => patchEmployee(id, { service: bulkDept.name })),
+        ...toRemove.map(id => patchEmployee(id, { service: null })),
+      ]);
+
+      const changed = toAdd.length + toRemove.length;
+      toast.success(`${changed} employé(s) mis à jour ✓`);
+      setBulkDept(null);
+      load();
+    } catch {
+      toast.error("Erreur lors de l'assignation en masse.");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   if (loading) return <LoadingSpinner />;
 
   const unassigned = empsByDept[""] ?? [];
@@ -230,6 +273,7 @@ function OrgChartTab() {
                 employees={empsByDept[dept.name] ?? []}
                 onEditEmployee={openEditEmp}
                 onEditDept={openEditDept}
+                onBulkAssign={openBulkAssign}
               />
             ))}
           </div>
@@ -415,18 +459,158 @@ function OrgChartTab() {
           </div>
         </div>
       )}
+
+      {/* ── Modal : assignation en masse des membres ─────────────────────────── */}
+      {bulkDept && (() => {
+        const q = bulkSearch.trim().toLowerCase();
+        const visibleEmps = allEmployees.filter(e =>
+          e.status === "ACTIVE" &&
+          (!q || `${e.nom} ${e.prenom}`.toLowerCase().includes(q) || (e.matricule ?? "").toLowerCase().includes(q) || (e.service ?? "").toLowerCase().includes(q))
+        );
+        const allChecked  = visibleEmps.length > 0 && visibleEmps.every(e => bulkSelected.has(e.id));
+        const someChecked = visibleEmps.some(e => bulkSelected.has(e.id));
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+            onClick={() => setBulkDept(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]"
+              onClick={e => e.stopPropagation()}>
+
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+                <div>
+                  <h3 className="font-bold text-gray-800">Membres du département</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    <span className="font-semibold text-emerald-700">{bulkDept.name}</span>
+                    {" · "}Cochez pour assigner, décochez pour retirer
+                  </p>
+                </div>
+                <button onClick={() => setBulkDept(null)}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Barre de recherche + Tout/Aucun */}
+              <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 space-y-2">
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    autoFocus
+                    value={bulkSearch}
+                    onChange={e => setBulkSearch(e.target.value)}
+                    placeholder="Rechercher par nom, matricule, service..."
+                    className="w-full border rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <label className="flex items-center gap-2 cursor-pointer select-none font-medium hover:text-gray-800 transition">
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      ref={el => { if (el) el.indeterminate = someChecked && !allChecked; }}
+                      onChange={() => {
+                        if (allChecked) {
+                          setBulkSelected(prev => {
+                            const next = new Set(prev);
+                            visibleEmps.forEach(e => next.delete(e.id));
+                            return next;
+                          });
+                        } else {
+                          setBulkSelected(prev => {
+                            const next = new Set(prev);
+                            visibleEmps.forEach(e => next.add(e.id));
+                            return next;
+                          });
+                        }
+                      }}
+                      className="accent-emerald-600 h-4 w-4"
+                    />
+                    {allChecked ? "Tout désélectionner" : "Tout sélectionner"}
+                  </label>
+                  <span className="font-semibold text-emerald-700">
+                    {bulkSelected.size} sélectionné(s)
+                  </span>
+                </div>
+              </div>
+
+              {/* Liste scrollable */}
+              <div className="overflow-y-auto flex-1 px-2 py-2">
+                {visibleEmps.length === 0 ? (
+                  <p className="text-center text-sm text-gray-400 italic py-8">Aucun employé trouvé</p>
+                ) : (
+                  visibleEmps.map(emp => {
+                    const checked = bulkSelected.has(emp.id);
+                    const currentDept = employees.find(e => e.id === emp.id)?.service ?? "";
+                    const isInOtherDept = currentDept && currentDept !== bulkDept.name;
+                    return (
+                      <label
+                        key={emp.id}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition select-none ${
+                          checked ? "bg-emerald-50 border border-emerald-200" : "hover:bg-gray-50 border border-transparent"
+                        } mb-1`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setBulkSelected(prev => {
+                            const next = new Set(prev);
+                            checked ? next.delete(emp.id) : next.add(emp.id);
+                            return next;
+                          })}
+                          className="accent-emerald-600 h-4 w-4 flex-shrink-0"
+                        />
+                        <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-black flex-shrink-0">
+                          {`${emp.nom} ${emp.prenom}`.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">{emp.nom} {emp.prenom}</p>
+                          <p className="text-xs text-gray-400 truncate">{emp.matricule} · {emp.fonction ?? "—"}</p>
+                        </div>
+                        {isInOtherDept && (
+                          <span className="text-[10px] text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-md flex-shrink-0">
+                            {currentDept}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+                <p className="text-xs text-gray-400">
+                  Les employés en orange sont déjà dans un autre département.
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setBulkDept(null)}
+                    className="px-4 py-2 text-sm border rounded-xl hover:bg-gray-100 font-medium transition">
+                    Annuler
+                  </button>
+                  <button onClick={handleBulkSave} disabled={bulkSaving}
+                    className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm rounded-xl hover:bg-emerald-700 disabled:opacity-60 font-bold transition">
+                    {bulkSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    Appliquer
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
 
 // ── DeptColumn : colonne département dans l'organigramme ─────────────────────
 function DeptColumn({
-  dept, employees, onEditEmployee, onEditDept,
+  dept, employees, onEditEmployee, onEditDept, onBulkAssign,
 }: {
   dept: Department;
   employees: EmployeeHierarchy[];
   onEditEmployee: (emp: EmployeeHierarchy) => void;
   onEditDept: (dept: Department) => void;
+  onBulkAssign: (dept: Department) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -451,17 +635,25 @@ function DeptColumn({
           {dept.dg_validator_name && (
             <p className="text-[10px] text-emerald-500 mt-0.5">DG : {dept.dg_validator_name}</p>
           )}
-          <p className="text-[10px] text-emerald-400 mt-0.5 italic">Cliquez pour modifier</p>
         </button>
 
-        {/* Toggle employés */}
-        <button
-          onClick={() => setExpanded(e => !e)}
-          className="w-full flex items-center justify-between px-4 py-2 bg-emerald-100 hover:bg-emerald-200 text-xs font-semibold text-emerald-700 border-t border-emerald-200 transition"
-        >
-          <span className="flex items-center gap-1"><Users size={11} /> {employees.length} employé(s)</span>
-          {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        </button>
+        {/* Bouton "Gérer les membres" + toggle */}
+        <div className="flex border-t border-emerald-200">
+          <button
+            onClick={() => onBulkAssign(dept)}
+            className="flex-1 flex items-center justify-center gap-1 px-2 py-2 bg-emerald-100 hover:bg-emerald-600 hover:text-white text-xs font-semibold text-emerald-700 transition"
+            title="Assigner des employés en masse"
+          >
+            <UserCheck size={12} /> Membres
+          </button>
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-600 border-l border-emerald-200 transition"
+            title={expanded ? "Replier" : "Déplier"}
+          >
+            {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+        </div>
       </div>
 
       {/* Connecteur → Employés */}
