@@ -731,6 +731,30 @@ function DepartmentsTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  // ── Auto-détection des employés correspondants ─────────────────────────────
+  const autoMatch = useMemo(() => {
+    if (!form.name.trim() || editing) return [];
+    const q = form.name.trim().toLowerCase();
+    return employees.filter(e =>
+      e.status === "ACTIVE" && (
+        (e.service ?? "").toLowerCase() === q ||
+        (e.projet  ?? "").toLowerCase() === q
+      )
+    );
+  }, [form.name, employees, editing]);
+
+  // ── Manager suggéré : n1_manager le plus fréquent parmi les matchés ────────
+  const suggestedHead = useMemo(() => {
+    if (autoMatch.length === 0) return null;
+    const freq: Record<number, number> = {};
+    autoMatch.forEach(e => {
+      if (e.n1_manager) freq[e.n1_manager] = (freq[e.n1_manager] ?? 0) + 1;
+    });
+    const topId = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (!topId) return null;
+    return employees.find(e => e.id === Number(topId)) ?? null;
+  }, [autoMatch, employees]);
+
   const openCreate = () => {
     setEditing(null);
     setForm({ name: "", code: "", description: "", head_id: null, dg_validator_id: null });
@@ -761,7 +785,13 @@ function DepartmentsTab() {
         toast.success("Département mis à jour.");
       } else {
         await departmentService.create(form);
-        toast.success("Département créé.");
+        // Assignation automatique des employés détectés
+        if (autoMatch.length > 0) {
+          await Promise.all(autoMatch.map(e => patchEmployee(e.id, { service: form.name })));
+          toast.success(`Département créé · ${autoMatch.length} employé(s) assigné(s) automatiquement ✓`);
+        } else {
+          toast.success("Département créé.");
+        }
       }
       setShowForm(false);
       load();
@@ -811,11 +841,11 @@ function DepartmentsTab() {
           onClick={() => setShowForm(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             {/* Header modal */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
               <h3 className="font-bold text-gray-800 text-base">
                 {editing ? "Modifier le département" : "Nouveau département"}
               </h3>
@@ -827,51 +857,124 @@ function DepartmentsTab() {
               </button>
             </div>
             {/* Corps */}
-            <div className="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="Nom *">
-                <input
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  placeholder="ex : Ressources Humaines"
-                />
-              </FormField>
-              <FormField label="Code *">
-                <input
-                  value={form.code}
-                  onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  placeholder="ex : RH"
-                />
-              </FormField>
-              <FormField label="Responsable (N+1 du chef)">
-                <EmployeeSelect
-                  employees={activeEmployees}
-                  value={form.head_id ?? null}
-                  onChange={v => setForm(f => ({ ...f, head_id: v }))}
-                  placeholder="Choisir le responsable..."
-                />
-              </FormField>
-              <FormField label="Validateur DG (N+2)">
-                <EmployeeSelect
-                  employees={activeEmployees}
-                  value={form.dg_validator_id ?? null}
-                  onChange={v => setForm(f => ({ ...f, dg_validator_id: v }))}
-                  placeholder="Choisir le DG validateur..."
-                />
-              </FormField>
-              <FormField label="Description" className="sm:col-span-2">
-                <textarea
-                  value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  rows={2}
-                  placeholder="Description optionnelle..."
-                />
-              </FormField>
+            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField label="Nom *">
+                  <input
+                    value={form.name}
+                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    placeholder="ex : Ressources Humaines"
+                  />
+                </FormField>
+                <FormField label="Code *">
+                  <input
+                    value={form.code}
+                    onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    placeholder="ex : RH"
+                  />
+                </FormField>
+                <FormField label="Responsable (N+1 du chef)">
+                  <EmployeeSelect
+                    employees={activeEmployees}
+                    value={form.head_id ?? null}
+                    onChange={v => setForm(f => ({ ...f, head_id: v }))}
+                    placeholder="Choisir le responsable..."
+                  />
+                </FormField>
+                <FormField label="Validateur DG (N+2)">
+                  <EmployeeSelect
+                    employees={activeEmployees}
+                    value={form.dg_validator_id ?? null}
+                    onChange={v => setForm(f => ({ ...f, dg_validator_id: v }))}
+                    placeholder="Choisir le DG validateur..."
+                  />
+                </FormField>
+                <FormField label="Description" className="sm:col-span-2">
+                  <textarea
+                    value={form.description}
+                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    rows={2}
+                    placeholder="Description optionnelle..."
+                  />
+                </FormField>
+              </div>
+
+              {/* ── Preview auto-assignation (création seulement) ───────────── */}
+              {!editing && form.name.trim() && (
+                <div className={`rounded-xl border p-4 space-y-3 ${
+                  autoMatch.length > 0 ? "bg-emerald-50 border-emerald-200" : "bg-gray-50 border-gray-200"
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <Users size={14} className={autoMatch.length > 0 ? "text-emerald-600" : "text-gray-400"} />
+                    <span className="text-xs font-semibold text-gray-700">Employés détectés automatiquement</span>
+                  </div>
+
+                  {autoMatch.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">
+                      Aucun employé avec <code className="bg-gray-100 px-1 rounded">service</code> ou <code className="bg-gray-100 px-1 rounded">projet</code> = <strong>"{form.name}"</strong>
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-emerald-700 font-medium">
+                        <strong>{autoMatch.length}</strong> employé(s) seront automatiquement assignés à ce département
+                        {autoMatch.some(e => e.projet?.toLowerCase() === form.name.trim().toLowerCase()) && (
+                          <span className="text-emerald-500"> (via service ou projet)</span>
+                        )}
+                      </p>
+
+                      {/* Suggestion responsable */}
+                      {suggestedHead && (
+                        <div className="flex items-center justify-between bg-white border border-emerald-200 rounded-lg px-3 py-2">
+                          <div>
+                            <p className="text-[11px] text-gray-500 font-medium">Responsable suggéré</p>
+                            <p className="text-sm font-bold text-gray-800">
+                              {suggestedHead.nom} {suggestedHead.prenom}
+                            </p>
+                            <p className="text-[10px] text-gray-400">{suggestedHead.matricule} · {suggestedHead.fonction ?? "—"}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setForm(f => ({ ...f, head_id: suggestedHead.id }))}
+                            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                              form.head_id === suggestedHead.id
+                                ? "bg-emerald-600 text-white"
+                                : "bg-emerald-100 text-emerald-700 hover:bg-emerald-600 hover:text-white"
+                            }`}
+                          >
+                            {form.head_id === suggestedHead.id ? <Check size={11} /> : <UserCheck size={11} />}
+                            {form.head_id === suggestedHead.id ? "Sélectionné" : "Utiliser"}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Aperçu des 4 premiers employés */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {autoMatch.slice(0, 4).map(e => (
+                          <span key={e.id} className="flex items-center gap-1 text-[11px] bg-white border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-medium">
+                            <span className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[8px] font-black">
+                              {`${e.nom}${e.prenom}`.slice(0, 1).toUpperCase()}
+                            </span>
+                            {e.nom} {e.prenom}
+                            {(e.projet ?? "").toLowerCase() === form.name.trim().toLowerCase() && (e.service ?? "").toLowerCase() !== form.name.trim().toLowerCase() && (
+                              <span className="text-[9px] text-blue-500 italic">projet</span>
+                            )}
+                          </span>
+                        ))}
+                        {autoMatch.length > 4 && (
+                          <span className="text-[11px] text-emerald-600 italic px-2 py-0.5">+{autoMatch.length - 4} autres</span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
+
             {/* Footer */}
-            <div className="flex gap-2 justify-end px-6 py-4 border-t border-gray-100 bg-gray-50">
+            <div className="flex gap-2 justify-end px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
               <button
                 onClick={() => setShowForm(false)}
                 className="px-4 py-2 text-sm border rounded-xl hover:bg-gray-100 font-medium transition"
@@ -884,7 +987,7 @@ function DepartmentsTab() {
                 className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60 font-semibold transition"
               >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                Enregistrer
+                {!editing && autoMatch.length > 0 ? `Créer & assigner ${autoMatch.length} employé(s)` : "Enregistrer"}
               </button>
             </div>
           </div>
