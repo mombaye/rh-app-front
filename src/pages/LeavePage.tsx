@@ -27,11 +27,7 @@ import { ExportColumnKey, ExportColumnDef } from "@/types/leave";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
-import EmployeeLeavesPage from "@/pages/employee/EmployeeLeavesPage";
 import HierarchyManagement from "@/components/leaves/HierarchyManagement";
-
-// Layout passthrough : intègre la vue employé sans double structure de page
-const PassthroughLayout = ({ children }: { children: React.ReactNode }) => <>{children}</>;
 
 // ─── Config statuts ───────────────────────────────────────────────────────────
 const STATUS_CFG: Record<
@@ -76,7 +72,7 @@ const DEFAULT_EXPORT_COLUMNS: ExportColumnKey[] = [
   "start_date", "end_date", "days", "status",
 ];
 
-type TabId        = "requests" | "calendar" | "balances" | "justifications" | "myspace" | "hierarchy";
+type TabId        = "requests" | "calendar" | "balances" | "justifications" | "hierarchy";
 type StatusFilter = "ALL" | LeaveStatus;
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
@@ -85,7 +81,6 @@ const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
   { id: "balances",       label: "Soldes",        Icon: Wallet       },
   { id: "justifications", label: "Justificatifs", Icon: FileCheck    },
   { id: "hierarchy",      label: "Hiérarchie",    Icon: GitBranch    },
-  { id: "myspace",        label: "Mes congés",    Icon: CalendarDays },
 ];
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
@@ -828,11 +823,7 @@ export default function LeavePage() {
 
           {tab === "balances" && (
             <>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-base font-bold text-slate-800">Soldes de congés</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Acquis, pris et restants par employé et par type</p>
-                </div>
+              <div className="flex justify-end mb-3">
                 <div className="flex bg-white border border-slate-200 rounded-xl p-0.5 text-xs font-semibold">
                   {(["INTERNE", "INTERIM"] as ContractType[]).map((c) => (
                     <button key={c} onClick={() => setContractType(c)}
@@ -848,35 +839,9 @@ export default function LeavePage() {
             </>
           )}
 
-          {tab === "justifications" && (
-            <>
-              <div className="mb-4">
-                <h2 className="text-base font-bold text-slate-800">Justificatifs à traiter</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Congés approuvés dont le justificatif n'a pas encore été soumis ou validé</p>
-              </div>
-              <JustificationsTab onOpenDetail={openDetail} />
-            </>
-          )}
+          {tab === "justifications" && <JustificationsTab onOpenDetail={openDetail} />}
 
-          {tab === "hierarchy" && (
-            <>
-              <div className="mb-4">
-                <h2 className="text-base font-bold text-slate-800">Hiérarchie de validation</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Gérez les départements, les chaînes N+1/N+2 et les règles d'approbation automatique</p>
-              </div>
-              <HierarchyManagement />
-            </>
-          )}
-
-          {tab === "myspace" && (
-            <>
-              <div className="mb-4">
-                <h2 className="text-base font-bold text-slate-800">Mes congés</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Consultez et gérez vos propres demandes de congé</p>
-              </div>
-              <EmployeeLeavesPage layout={PassthroughLayout} />
-            </>
-          )}
+          {tab === "hierarchy" && <HierarchyManagement />}
         </div>
       </div>
 

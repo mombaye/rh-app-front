@@ -34,19 +34,6 @@ export default function HierarchyManagement() {
 
   return (
     <div className="space-y-4">
-      {/* En-tête */}
-      <div className="flex items-center gap-3 mb-2">
-        <GitBranch className="text-blue-600" size={22} />
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800">
-            Gestion de la hiérarchie de validation
-          </h2>
-          <p className="text-sm text-gray-500">
-            Configurez les chaînes d'approbation, les responsables de département et les règles automatiques.
-          </p>
-        </div>
-      </div>
-
       {/* Onglets */}
       <div className="flex gap-1 border-b border-gray-200 mb-4">
         {TABS.map(({ id, label, Icon }) => (
@@ -180,70 +167,89 @@ function DepartmentsTab() {
         </button>
       </div>
 
-      {/* Formulaire */}
+      {/* Modal Nouveau / Modifier département */}
       {showForm && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-4">
-          <h3 className="font-semibold text-blue-800">
-            {editing ? "Modifier le département" : "Nouveau département"}
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Nom *">
-              <input
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-                placeholder="ex : Ressources Humaines"
-              />
-            </FormField>
-            <FormField label="Code *">
-              <input
-                value={form.code}
-                onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm uppercase"
-                placeholder="ex : RH"
-              />
-            </FormField>
-            <FormField label="Responsable de département (N+1 du chef)">
-              <EmployeeSelect
-                employees={activeEmployees}
-                value={form.head_id ?? null}
-                onChange={v => setForm(f => ({ ...f, head_id: v }))}
-                placeholder="Choisir le responsable..."
-              />
-            </FormField>
-            <FormField label="Validateur Direction Générale (N+2)">
-              <EmployeeSelect
-                employees={activeEmployees}
-                value={form.dg_validator_id ?? null}
-                onChange={v => setForm(f => ({ ...f, dg_validator_id: v }))}
-                placeholder="Choisir le DG validateur..."
-              />
-            </FormField>
-            <FormField label="Description" className="sm:col-span-2">
-              <textarea
-                value={form.description}
-                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-                rows={2}
-                placeholder="Description optionnelle..."
-              />
-            </FormField>
-          </div>
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={() => setShowForm(false)}
-              className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"
-            >
-              Annuler
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-60"
-            >
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-              Enregistrer
-            </button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+          onClick={() => setShowForm(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header modal */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="font-bold text-gray-800 text-base">
+                {editing ? "Modifier le département" : "Nouveau département"}
+              </h3>
+              <button
+                onClick={() => setShowForm(false)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {/* Corps */}
+            <div className="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField label="Nom *">
+                <input
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  placeholder="ex : Ressources Humaines"
+                />
+              </FormField>
+              <FormField label="Code *">
+                <input
+                  value={form.code}
+                  onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  placeholder="ex : RH"
+                />
+              </FormField>
+              <FormField label="Responsable (N+1 du chef)">
+                <EmployeeSelect
+                  employees={activeEmployees}
+                  value={form.head_id ?? null}
+                  onChange={v => setForm(f => ({ ...f, head_id: v }))}
+                  placeholder="Choisir le responsable..."
+                />
+              </FormField>
+              <FormField label="Validateur DG (N+2)">
+                <EmployeeSelect
+                  employees={activeEmployees}
+                  value={form.dg_validator_id ?? null}
+                  onChange={v => setForm(f => ({ ...f, dg_validator_id: v }))}
+                  placeholder="Choisir le DG validateur..."
+                />
+              </FormField>
+              <FormField label="Description" className="sm:col-span-2">
+                <textarea
+                  value={form.description}
+                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  rows={2}
+                  placeholder="Description optionnelle..."
+                />
+              </FormField>
+            </div>
+            {/* Footer */}
+            <div className="flex gap-2 justify-end px-6 py-4 border-t border-gray-100 bg-gray-50">
+              <button
+                onClick={() => setShowForm(false)}
+                className="px-4 py-2 text-sm border rounded-xl hover:bg-gray-100 font-medium transition"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60 font-semibold transition"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                Enregistrer
+              </button>
+            </div>
           </div>
         </div>
       )}
