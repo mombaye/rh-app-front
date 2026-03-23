@@ -300,9 +300,10 @@ export default function LeavePage() {
     <AppLayout>
       <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-slate-50">
 
-        {/* ── Header ──────────────────────────────────────────────────────────── */}
-        <div className="shrink-0 px-4 sm:px-6 pt-5 pb-3 bg-white border-b border-slate-100 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* ── Header simplifié : titre + onglets + actions globales ──────────── */}
+        <div className="shrink-0 bg-white border-b border-slate-100 shadow-sm">
+          {/* Ligne titre */}
+          <div className="flex items-center justify-between px-4 sm:px-6 pt-4 pb-3">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-2xl bg-camublue-900 text-white">
                 <CalendarDays className="h-5 w-5" />
@@ -312,208 +313,32 @@ export default function LeavePage() {
                 <p className="text-xs text-slate-400 mt-0.5">Gestion complète des demandes de congé</p>
               </div>
             </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex bg-slate-100 rounded-xl p-0.5 text-xs font-semibold">
-                {(["INTERNE", "INTERIM"] as ContractType[]).map((c) => (
-                  <button key={c} onClick={() => setContractType(c)}
-                    className={`px-3 py-1.5 rounded-lg transition ${
-                      contractType === c ? "bg-white text-camublue-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                    }`}>
-                    {c === "INTERNE" ? "Internes" : "Intérimaires"}
-                  </button>
-                ))}
-              </div>
-
-              <button onClick={() => setShowExportDialog(true)} title="Export personnalisé"
-                disabled={exportLoading}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-emerald-600 hover:border-emerald-300 transition text-xs font-semibold disabled:opacity-50">
-                {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                <span className="hidden sm:inline">Exporter</span>
-              </button>
-
+            <div className="flex items-center gap-2">
               <button onClick={fetchAll} disabled={loading} title="Actualiser"
                 className="p-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition">
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               </button>
-
               <button onClick={() => setShowLeaveTypes(true)}
-                title="Gérer les types de congés"
-                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 text-sm font-semibold transition">
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-sm font-semibold transition">
                 <Settings2 className="h-4 w-4" />
                 <span className="hidden sm:inline">Types de congés</span>
               </button>
+            </div>
+          </div>
 
-              <button onClick={() => setShowForm(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-bold transition shadow-sm">
-                <Plus className="h-4 w-4" />Nouvelle demande
+          {/* Navigation par onglets */}
+          <div className="flex gap-0 overflow-x-auto px-4 sm:px-6">
+            {TABS.map(({ id, label, Icon }) => (
+              <button key={id} onClick={() => setTab(id)}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+                  tab === id
+                    ? "border-camublue-900 text-camublue-900 bg-camublue-900/5"
+                    : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                }`}>
+                <Icon className="h-3.5 w-3.5" />{label}
               </button>
-            </div>
+            ))}
           </div>
-
-          {/* KPI Cards */}
-          {summary && (
-            <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
-              <KpiCard label="Total"      value={summary.total}    color="#003c71" />
-              <KpiCard label="En attente" value={summary.pending}  color="#d97706"
-                active={statusFilter === "PENDING" || statusFilter === "PENDING_SECOND"}
-                onClick={() => setStatusFilter(
-                  (statusFilter === "PENDING" || statusFilter === "PENDING_SECOND") ? "ALL" : "PENDING"
-                )} />
-              <KpiCard label="Approuvés"  value={summary.approved} color="#059669"
-                sub={`${summary.total_days_approved}j accordés`}
-                active={statusFilter === "APPROVED"}
-                onClick={() => setStatusFilter(statusFilter === "APPROVED" ? "ALL" : "APPROVED")} />
-              <KpiCard label="Rejetés"    value={summary.rejected} color="#dc2626"
-                active={statusFilter === "REJECTED"}
-                onClick={() => setStatusFilter(statusFilter === "REJECTED" ? "ALL" : "REJECTED")} />
-              <KpiCard label="Révoqués"   value={summary.revoked ?? 0} color="#b45309"
-                active={statusFilter === "REVOKED"}
-                onClick={() => setStatusFilter(statusFilter === "REVOKED" ? "ALL" : "REVOKED")} />
-            </div>
-          )}
-
-          {/* Tabs + filtre */}
-          <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
-            <div className="flex gap-1 overflow-x-auto">
-              {TABS.map(({ id, label, Icon }) => (
-                <button key={id} onClick={() => setTab(id)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                    tab === id ? "bg-camublue-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"
-                  }`}>
-                  <Icon className="h-3.5 w-3.5" />{label}
-                </button>
-              ))}
-            </div>
-
-            {tab === "requests" && (
-              <div className="flex items-center gap-2">
-                {/* Filtre statut */}
-                <div className="relative" ref={filterRef}>
-                  <button onClick={() => setFilterOpen((o) => !o)}
-                    className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-medium transition">
-                    <span className="hidden sm:inline text-xs">{currentFilterLabel}</span>
-                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
-                  </button>
-                  <AnimatePresence>
-                    {filterOpen && (
-                      <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -6 }}
-                        className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-30">
-                        {STATUS_FILTERS.map(({ value, label }) => {
-                          const cfg = value === "ALL" ? null : STATUS_CFG[value as LeaveStatus];
-                          return (
-                            <button key={value}
-                              onClick={() => { setStatusFilter(value); setFilterOpen(false); }}
-                              className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors text-left ${
-                                statusFilter === value ? "font-bold bg-slate-50 text-camublue-900" : "text-slate-700 hover:bg-slate-50"
-                              }`}>
-                              {cfg && <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />}
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                {/* Filtres avancés */}
-                <button onClick={() => setShowAdvancedFilters((o) => !o)}
-                  className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border transition font-medium ${
-                    advancedFilterCount > 0
-                      ? "border-camublue-300 bg-camublue-50 text-camublue-700"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                  }`}>
-                  <Filter className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline text-xs">Filtres</span>
-                  {advancedFilterCount > 0 && (
-                    <span className="bg-camublue-700 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                      {advancedFilterCount}
-                    </span>
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* ── Panneau de filtres avancés ─────────────────────────────────────── */}
-          <AnimatePresence>
-            {showAdvancedFilters && tab === "requests" && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden border-t border-slate-100 mt-3">
-                <div className="py-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                  {/* Type de congé */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Type</label>
-                    <select value={filterLeaveTypeId} onChange={(e) => setFilterLeaveTypeId(e.target.value)}
-                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300">
-                      <option value="">Tous les types</option>
-                      {availableLeaveTypes.map((t) => (
-                        <option key={t.id} value={t.id}>{t.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Employé */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Employé</label>
-                    <input type="text" value={filterEmployeeName}
-                      onChange={(e) => setFilterEmployeeName(e.target.value)}
-                      placeholder="Nom / Matricule"
-                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
-                  </div>
-
-                  {/* Service */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Service</label>
-                    <input type="text" value={filterDepartment}
-                      onChange={(e) => setFilterDepartment(e.target.value)}
-                      placeholder="Département"
-                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
-                  </div>
-
-                  {/* Date début */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Début (≥)</label>
-                    <input type="date" value={filterStartDate}
-                      onChange={(e) => setFilterStartDate(e.target.value)}
-                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
-                  </div>
-
-                  {/* Date fin */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Fin (≤)</label>
-                    <input type="date" value={filterEndDate}
-                      onChange={(e) => setFilterEndDate(e.target.value)}
-                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
-                  </div>
-
-                  {/* Année */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Année</label>
-                    <input type="number" value={filterYear}
-                      onChange={(e) => setFilterYear(e.target.value)}
-                      placeholder={String(new Date().getFullYear())}
-                      min="2020" max="2099"
-                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
-                  </div>
-                </div>
-                {advancedFilterCount > 0 && (
-                  <div className="pb-2">
-                    <button onClick={resetAdvancedFilters}
-                      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-500 transition font-medium">
-                      <X className="h-3 w-3" />Réinitialiser les filtres
-                    </button>
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
         {/* ── Export Dialog ──────────────────────────────────────────────────────── */}
@@ -595,6 +420,168 @@ export default function LeavePage() {
 
           {tab === "requests" && (
             <>
+              {/* ── Toolbar Demandes : actions + KPIs + filtres ───────────────── */}
+              <div className="mb-4 space-y-3">
+                {/* Ligne 1 : toggle contrat + actions */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex bg-white border border-slate-200 rounded-xl p-0.5 text-xs font-semibold w-fit">
+                    {(["INTERNE", "INTERIM"] as ContractType[]).map((c) => (
+                      <button key={c} onClick={() => setContractType(c)}
+                        className={`px-3 py-1.5 rounded-lg transition ${
+                          contractType === c ? "bg-camublue-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
+                        }`}>
+                        {c === "INTERNE" ? "Internes" : "Intérimaires"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setShowExportDialog(true)} disabled={exportLoading}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-emerald-600 hover:border-emerald-300 transition text-xs font-semibold disabled:opacity-50">
+                      {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                      <span className="hidden sm:inline">Exporter</span>
+                    </button>
+                    <button onClick={() => setShowForm(true)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-bold transition shadow-sm">
+                      <Plus className="h-4 w-4" />Nouvelle demande
+                    </button>
+                  </div>
+                </div>
+
+                {/* Ligne 2 : KPI Cards */}
+                {summary && (
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    <KpiCard label="Total"      value={summary.total}    color="#003c71" />
+                    <KpiCard label="En attente" value={summary.pending}  color="#d97706"
+                      active={statusFilter === "PENDING" || statusFilter === "PENDING_SECOND"}
+                      onClick={() => setStatusFilter(
+                        (statusFilter === "PENDING" || statusFilter === "PENDING_SECOND") ? "ALL" : "PENDING"
+                      )} />
+                    <KpiCard label="Approuvés"  value={summary.approved} color="#059669"
+                      sub={`${summary.total_days_approved}j accordés`}
+                      active={statusFilter === "APPROVED"}
+                      onClick={() => setStatusFilter(statusFilter === "APPROVED" ? "ALL" : "APPROVED")} />
+                    <KpiCard label="Rejetés"    value={summary.rejected} color="#dc2626"
+                      active={statusFilter === "REJECTED"}
+                      onClick={() => setStatusFilter(statusFilter === "REJECTED" ? "ALL" : "REJECTED")} />
+                    <KpiCard label="Révoqués"   value={summary.revoked ?? 0} color="#b45309"
+                      active={statusFilter === "REVOKED"}
+                      onClick={() => setStatusFilter(statusFilter === "REVOKED" ? "ALL" : "REVOKED")} />
+                  </div>
+                )}
+
+                {/* Ligne 3 : Filtres statut + avancés */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="relative" ref={filterRef}>
+                    <button onClick={() => setFilterOpen((o) => !o)}
+                      className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-medium transition">
+                      <span className="text-xs">{currentFilterLabel}</span>
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    <AnimatePresence>
+                      {filterOpen && (
+                        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          className="absolute left-0 mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-30">
+                          {STATUS_FILTERS.map(({ value, label }) => {
+                            const cfg = value === "ALL" ? null : STATUS_CFG[value as LeaveStatus];
+                            return (
+                              <button key={value}
+                                onClick={() => { setStatusFilter(value); setFilterOpen(false); }}
+                                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors text-left ${
+                                  statusFilter === value ? "font-bold bg-slate-50 text-camublue-900" : "text-slate-700 hover:bg-slate-50"
+                                }`}>
+                                {cfg && <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />}
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  <button onClick={() => setShowAdvancedFilters((o) => !o)}
+                    className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border transition font-medium ${
+                      advancedFilterCount > 0
+                        ? "border-camublue-300 bg-camublue-50 text-camublue-700"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}>
+                    <Filter className="h-3.5 w-3.5" />
+                    <span className="text-xs">Filtres</span>
+                    {advancedFilterCount > 0 && (
+                      <span className="bg-camublue-700 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                        {advancedFilterCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Panneau filtres avancés */}
+                <AnimatePresence>
+                  {showAdvancedFilters && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
+                      className="overflow-hidden bg-white rounded-2xl border border-slate-100">
+                      <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Type</label>
+                          <select value={filterLeaveTypeId} onChange={(e) => setFilterLeaveTypeId(e.target.value)}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300">
+                            <option value="">Tous les types</option>
+                            {availableLeaveTypes.map((t) => (
+                              <option key={t.id} value={t.id}>{t.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Employé</label>
+                          <input type="text" value={filterEmployeeName}
+                            onChange={(e) => setFilterEmployeeName(e.target.value)}
+                            placeholder="Nom / Matricule"
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Service</label>
+                          <input type="text" value={filterDepartment}
+                            onChange={(e) => setFilterDepartment(e.target.value)}
+                            placeholder="Département"
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Début (≥)</label>
+                          <input type="date" value={filterStartDate}
+                            onChange={(e) => setFilterStartDate(e.target.value)}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Fin (≤)</label>
+                          <input type="date" value={filterEndDate}
+                            onChange={(e) => setFilterEndDate(e.target.value)}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Année</label>
+                          <input type="number" value={filterYear}
+                            onChange={(e) => setFilterYear(e.target.value)}
+                            placeholder={String(new Date().getFullYear())}
+                            min="2020" max="2099"
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-camublue-300" />
+                        </div>
+                      </div>
+                      {advancedFilterCount > 0 && (
+                        <div className="px-4 pb-3">
+                          <button onClick={resetAdvancedFilters}
+                            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-500 transition font-medium">
+                            <X className="h-3 w-3" />Réinitialiser les filtres
+                          </button>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
               {loading && (
                 <div className="flex flex-col items-center gap-3 text-slate-400 py-24">
                   <Loader2 className="h-7 w-7 animate-spin" />
@@ -827,15 +814,69 @@ export default function LeavePage() {
             </>
           )}
 
-          {tab === "calendar" && <LeaveCalendar />}
+          {tab === "calendar" && (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-800">Calendrier des absences</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Visualisez les congés approuvés sur le mois</p>
+                </div>
+              </div>
+              <LeaveCalendar />
+            </>
+          )}
 
-          {tab === "balances" && <BalancesTab contractType={contractType} />}
+          {tab === "balances" && (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-800">Soldes de congés</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Acquis, pris et restants par employé et par type</p>
+                </div>
+                <div className="flex bg-white border border-slate-200 rounded-xl p-0.5 text-xs font-semibold">
+                  {(["INTERNE", "INTERIM"] as ContractType[]).map((c) => (
+                    <button key={c} onClick={() => setContractType(c)}
+                      className={`px-3 py-1.5 rounded-lg transition ${
+                        contractType === c ? "bg-camublue-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
+                      }`}>
+                      {c === "INTERNE" ? "Internes" : "Intérimaires"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <BalancesTab contractType={contractType} />
+            </>
+          )}
 
-          {tab === "justifications" && <JustificationsTab onOpenDetail={openDetail} />}
+          {tab === "justifications" && (
+            <>
+              <div className="mb-4">
+                <h2 className="text-base font-bold text-slate-800">Justificatifs à traiter</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Congés approuvés dont le justificatif n'a pas encore été soumis ou validé</p>
+              </div>
+              <JustificationsTab onOpenDetail={openDetail} />
+            </>
+          )}
 
-          {tab === "hierarchy" && <HierarchyManagement />}
+          {tab === "hierarchy" && (
+            <>
+              <div className="mb-4">
+                <h2 className="text-base font-bold text-slate-800">Hiérarchie de validation</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Gérez les départements, les chaînes N+1/N+2 et les règles d'approbation automatique</p>
+              </div>
+              <HierarchyManagement />
+            </>
+          )}
 
-          {tab === "myspace" && <EmployeeLeavesPage layout={PassthroughLayout} />}
+          {tab === "myspace" && (
+            <>
+              <div className="mb-4">
+                <h2 className="text-base font-bold text-slate-800">Mes congés</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Consultez et gérez vos propres demandes de congé</p>
+              </div>
+              <EmployeeLeavesPage layout={PassthroughLayout} />
+            </>
+          )}
         </div>
       </div>
 
