@@ -1405,56 +1405,76 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
 
       <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Employé</th>
-                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Type de congé</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Acquis</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Pris</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Solde</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              {/* Ligne de titre des groupes */}
+              <tr className="bg-red-600 text-white">
+                <th className="px-3 py-2 text-left text-xs font-bold border border-red-700 whitespace-nowrap" rowSpan={2}>Employé</th>
+                <th className="px-3 py-2 text-left text-xs font-bold border border-red-700 whitespace-nowrap" rowSpan={2}>Type</th>
+                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700 uppercase leading-tight">Report Années<br/>Antérieures</th>
+                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700 uppercase leading-tight">Congés Payés Acquis<br/>Mois en Cours</th>
+                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700 uppercase leading-tight bg-red-700">Solde des Congés<br/>Acquis à Date</th>
+                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700 uppercase leading-tight">Congés Payés Pris<br/>en {currentYear}</th>
+                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700 uppercase leading-tight bg-amber-500 text-slate-900">Solde des Congés<br/>Payés à Prendre</th>
+                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700" rowSpan={2}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginated.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-400">
                     {searchQuery ? "Aucun résultat pour cette recherche" : "Aucun solde trouvé pour ce type d'employé"}
                   </td>
                 </tr>
               )}
               {paginated.map((b) => {
-                const remaining = parseFloat(b.remaining);
+                const report    = parseFloat(b.adjusted  ?? "0");
+                const acquis    = parseFloat(b.acquired  ?? "0");
+                const pris      = parseFloat(b.taken     ?? "0");
+                const soldeDate = acquis + report;
+                const remaining = parseFloat(b.remaining ?? "0");
                 const isLow     = remaining <= 2;
                 const emp       = empMap.get(b.employee);
                 return (
                   <tr key={b.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-slate-800">{b.employee_name}</p>
+                    <td className="px-3 py-2 border border-slate-200">
+                      <p className="font-semibold text-slate-800 text-xs">{b.employee_name}</p>
                       {emp && (
                         <p className="text-[10px] text-slate-400">
                           {emp.matricule}{emp.fonction ? ` · ${emp.fonction}` : ""}
                         </p>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold"
+                    <td className="px-3 py-2 border border-slate-200">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-semibold"
                         style={{ backgroundColor: (b.leave_type.color ?? "#6b7280") + "20", color: b.leave_type.color ?? "#6b7280" }}>
                         {b.leave_type.label}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-center font-semibold text-slate-700">{b.acquired}j</td>
-                    <td className="px-4 py-3 text-center font-semibold text-red-500">{b.taken}j</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`font-black tabular-nums text-base ${isLow ? "text-red-500" : "text-emerald-600"}`}>
-                        {b.remaining}j
-                      </span>
+                    {/* Report années antérieures */}
+                    <td className="px-3 py-2 text-center border border-slate-200 tabular-nums font-semibold text-slate-700 text-sm">
+                      {report.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    {/* Acquis mois en cours */}
+                    <td className="px-3 py-2 text-center border border-slate-200 tabular-nums font-semibold text-slate-700 text-sm">
+                      {acquis.toFixed(2)}
+                    </td>
+                    {/* Solde acquis à date */}
+                    <td className="px-3 py-2 text-center border border-slate-200 tabular-nums font-bold text-slate-800 text-sm bg-slate-50">
+                      {soldeDate.toFixed(2)}
+                    </td>
+                    {/* Pris en année */}
+                    <td className="px-3 py-2 text-center border border-slate-200 tabular-nums font-semibold text-red-500 text-sm">
+                      {pris.toFixed(2)}
+                    </td>
+                    {/* Solde à prendre */}
+                    <td className={`px-3 py-2 text-center border border-slate-200 tabular-nums font-black text-sm ${isLow ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-800"}`}>
+                      {remaining.toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2 text-center border border-slate-200">
                       <button
                         onClick={() => setHistoryEmp({ id: b.employee, name: b.employee_name })}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition flex items-center gap-1 mx-auto">
+                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-semibold rounded-lg transition flex items-center gap-1 mx-auto whitespace-nowrap">
                         <History className="h-3 w-3" /> Historique
                       </button>
                     </td>
@@ -1591,15 +1611,38 @@ function ImportBalancesModal({ onClose, onImported }: { onClose: () => void; onI
   };
 
   const downloadTemplate = () => {
+    const year = new Date().getFullYear();
+    const headers = [
+      "MATRICULE",
+      "TYPE_CONGE",
+      "REPORT_ANNEES_ANTERIEURES",
+      "CONGES_PAYES_ACQUIS_MOIS_EN_COURS",
+      "CONGES_PAYES_PRIS",
+    ];
     const ws = XLSX.utils.aoa_to_sheet([
-      ["MATRICULE", "TYPE_CONGE", "ACQUIS"],
-      ["EMP001", "CONGE_PAYE", 24],
-      ["EMP002", "CONGE_PAYE", 18],
+      headers,
+      ["EMP001", "CONGE_PAYE", 3505, 585, 509],
+      ["EMP002", "CONGE_PAYE", 87,   4,   8  ],
     ]);
-    ws["!cols"] = [{ wch: 16 }, { wch: 20 }, { wch: 10 }];
+    ws["!cols"] = [
+      { wch: 14 }, { wch: 16 }, { wch: 28 }, { wch: 34 }, { wch: 20 },
+    ];
+    // Style header row in red
+    const headerRange = XLSX.utils.decode_range(ws["!ref"] ?? "A1:E1");
+    for (let c = headerRange.s.c; c <= headerRange.e.c; c++) {
+      const cellAddr = XLSX.utils.encode_cell({ r: 0, c });
+      if (!ws[cellAddr]) continue;
+      ws[cellAddr].s = {
+        font:    { bold: true, color: { rgb: "FFFFFF" } },
+        fill:    { fgColor: { rgb: "CC0000" } },
+        alignment: { horizontal: "center", wrapText: true },
+      };
+    }
+    // Highlight "SOLDE PAYES A PRENDRE" computed column hint via a note
+    // (computed column not in template — see note below)
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Soldes");
-    XLSX.writeFile(wb, "template_soldes_conges.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, `Soldes ${year}`);
+    XLSX.writeFile(wb, `template_soldes_conges_${year}.xlsx`);
   };
 
   return (
@@ -1619,8 +1662,8 @@ function ImportBalancesModal({ onClose, onImported }: { onClose: () => void; onI
               <FileSpreadsheet className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-800">Importer les soldes acquis</h3>
-              <p className="text-xs text-slate-500">Fichier Excel avec MATRICULE, TYPE_CONGE, ACQUIS</p>
+              <h3 className="font-bold text-slate-800">Importer les soldes de congés</h3>
+              <p className="text-xs text-slate-500">Format : MATRICULE · TYPE_CONGE · REPORT · ACQUIS MOIS · PRIS</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 transition">
@@ -1658,22 +1701,42 @@ function ImportBalancesModal({ onClose, onImported }: { onClose: () => void; onI
           </div>
 
           {/* Format attendu */}
-          <div className="bg-slate-50 rounded-xl p-3 space-y-1.5">
+          <div className="bg-slate-50 rounded-xl p-3 space-y-2">
             <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">Format attendu</p>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead><tr className="text-slate-500">
-                  <th className="text-left pr-4 py-1 font-semibold">MATRICULE</th>
-                  <th className="text-left pr-4 py-1 font-semibold">TYPE_CONGE</th>
-                  <th className="text-left py-1 font-semibold">ACQUIS</th>
-                </tr></thead>
-                <tbody className="text-slate-700 font-mono">
-                  <tr><td className="pr-4">EMP001</td><td className="pr-4">CONGE_PAYE</td><td>24</td></tr>
-                  <tr><td className="pr-4">EMP002</td><td className="pr-4">CONGE_PAYE</td><td>18.5</td></tr>
+              <table className="w-full text-[10px] border-collapse">
+                <thead>
+                  <tr className="bg-red-600 text-white">
+                    <th className="px-2 py-1 border border-red-700 font-bold text-center whitespace-nowrap">MATRICULE</th>
+                    <th className="px-2 py-1 border border-red-700 font-bold text-center whitespace-nowrap">TYPE_CONGE</th>
+                    <th className="px-2 py-1 border border-red-700 font-bold text-center leading-tight">REPORT_ANNEES<br/>_ANTERIEURES</th>
+                    <th className="px-2 py-1 border border-red-700 font-bold text-center leading-tight">CONGES_PAYES_ACQUIS<br/>_MOIS_EN_COURS</th>
+                    <th className="px-2 py-1 border border-red-700 font-bold text-center leading-tight bg-amber-500 text-slate-900">CONGES<br/>_PAYES_PRIS</th>
+                  </tr>
+                </thead>
+                <tbody className="font-mono text-slate-700">
+                  <tr className="border-b border-slate-200">
+                    <td className="px-2 py-1 border border-slate-200 text-center">EMP001</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center">CONGE_PAYE</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center">3505,00</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center">585,00</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center bg-amber-50">509,00</td>
+                  </tr>
+                  <tr>
+                    <td className="px-2 py-1 border border-slate-200 text-center">EMP002</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center">CONGE_PAYE</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center">87</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center">4</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center bg-amber-50">8</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
-            <p className="text-[11px] text-slate-400">TYPE_CONGE correspond au <strong>code</strong> du type de congé.</p>
+            <div className="space-y-0.5">
+              <p className="text-[11px] text-slate-500"><strong>TYPE_CONGE</strong> = code du type (ex&nbsp;: CONGE_PAYE).</p>
+              <p className="text-[11px] text-slate-500"><strong>REPORT</strong> = jours reportés des années précédentes (optionnel, défaut 0).</p>
+              <p className="text-[11px] text-slate-500"><strong>CONGES_PAYES_PRIS</strong> = jours déjà pris dans l'année (optionnel, défaut 0).</p>
+            </div>
           </div>
 
           {/* Résultats */}
