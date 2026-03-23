@@ -187,6 +187,75 @@ export interface HolidayCheckResult {
   holidays:       { date: string; name: string }[];
 }
 
+// ── Department ────────────────────────────────────────────────────────────────
+export interface Department {
+  id:                  number;
+  name:                string;
+  code:                string;
+  description:         string;
+  head:                number | null;
+  head_name:           string | null;
+  dg_validator:        number | null;
+  dg_validator_name:   string | null;
+  employee_count:      number;
+  created_at:          string;
+  updated_at:          string;
+}
+
+export interface DepartmentCreate {
+  name:           string;
+  code:           string;
+  description?:   string;
+  head_id?:       number | null;
+  dg_validator_id?: number | null;
+}
+
+// ── ApprovalRule ──────────────────────────────────────────────────────────────
+export type ApprovalRuleType = "LONG_LEAVE" | "LEAVE_TYPE" | "DEPARTMENT";
+
+export interface ApprovalRule {
+  id:                     number;
+  name:                   string;
+  rule_type:              ApprovalRuleType;
+  rule_type_display:      string;
+  min_days:               number;
+  leave_type:             number | null;
+  leave_type_label:       string | null;
+  required_approver:      number | null;
+  required_approver_name: string | null;
+  is_active:              boolean;
+  description:            string;
+  created_at:             string;
+  updated_at:             string;
+}
+
+export interface ApprovalRuleCreate {
+  name:                string;
+  rule_type:           ApprovalRuleType;
+  min_days?:           number;
+  leave_type_id?:      number | null;
+  required_approver_id?: number | null;
+  is_active?:          boolean;
+  description?:        string;
+}
+
+// ── EmployeeHierarchy ─────────────────────────────────────────────────────────
+export interface EmployeeHierarchy {
+  id:                   number;
+  matricule:            string;
+  full_name:            string;
+  fonction:             string | null;
+  service:              string | null;
+  n1_manager:           number | null;
+  n1_manager_name:      string | null;
+  n2_manager:           number | null;
+  n2_manager_name:      string | null;
+  requires_two_approvals: boolean;
+  manages_n1_count:     number;
+  manages_n2_count:     number;
+  status:               string;
+}
+
 // ── ApprovePayload ────────────────────────────────────────────────────────────
 export interface ApprovePayload {
   reviewer_id?:        number;

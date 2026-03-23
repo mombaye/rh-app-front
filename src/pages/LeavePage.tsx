@@ -28,6 +28,7 @@ import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 import EmployeeLeavesPage from "@/pages/employee/EmployeeLeavesPage";
+import HierarchyManagement from "@/components/leaves/HierarchyManagement";
 
 // Layout passthrough : intègre la vue employé sans double structure de page
 const PassthroughLayout = ({ children }: { children: React.ReactNode }) => <>{children}</>;
@@ -75,7 +76,7 @@ const DEFAULT_EXPORT_COLUMNS: ExportColumnKey[] = [
   "start_date", "end_date", "days", "status",
 ];
 
-type TabId        = "requests" | "calendar" | "balances" | "justifications" | "myspace";
+type TabId        = "requests" | "calendar" | "balances" | "justifications" | "myspace" | "hierarchy";
 type StatusFilter = "ALL" | LeaveStatus;
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
@@ -83,6 +84,7 @@ const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
   { id: "calendar",       label: "Calendrier",    Icon: CalendarRange },
   { id: "balances",       label: "Soldes",        Icon: Wallet       },
   { id: "justifications", label: "Justificatifs", Icon: FileCheck    },
+  { id: "hierarchy",      label: "Hiérarchie",    Icon: GitBranch    },
   { id: "myspace",        label: "Mes congés",    Icon: CalendarDays },
 ];
 
@@ -830,6 +832,8 @@ export default function LeavePage() {
           {tab === "balances" && <BalancesTab contractType={contractType} />}
 
           {tab === "justifications" && <JustificationsTab onOpenDetail={openDetail} />}
+
+          {tab === "hierarchy" && <HierarchyManagement />}
 
           {tab === "myspace" && <EmployeeLeavesPage layout={PassthroughLayout} />}
         </div>
