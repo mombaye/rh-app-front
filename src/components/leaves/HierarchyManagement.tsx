@@ -1,7 +1,7 @@
 // src/components/leaves/HierarchyManagement.tsx
 // Gestion de la hiérarchie de validation des congés
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Building2, Users, ShieldCheck, Plus, Pencil, Trash2,
   Search, ChevronDown, ChevronUp, X, Check, AlertCircle,
@@ -9,14 +9,16 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Employee } from "@/types/employee";
+import { patchEmployee } from "@/services/employeeService";
 import { Department, DepartmentCreate, ApprovalRule, ApprovalRuleCreate, EmployeeHierarchy } from "@/types/leave";
 import { departmentService, employeeHierarchyService, approvalRuleService } from "@/services/hierarchyService";
 import { getEmployees } from "@/services/employeeService";
 
 // ─── Tabs ───────────────────────────────────────────────────────────────────
-type HierarchyTab = "departments" | "employees" | "rules";
+type HierarchyTab = "orgchart" | "departments" | "employees" | "rules";
 
 const TABS: { id: HierarchyTab; label: string; Icon: React.ElementType }[] = [
+  { id: "orgchart",    label: "Organigramme",        Icon: GitBranch   },
   { id: "departments", label: "Départements",        Icon: Building2   },
   { id: "employees",   label: "Hiérarchie employés", Icon: Users       },
   { id: "rules",       label: "Règles d'approbation", Icon: ShieldCheck },
@@ -30,32 +32,475 @@ const RULE_TYPE_LABELS: Record<string, string> = {
 
 // ─── Component principal ─────────────────────────────────────────────────────
 export default function HierarchyManagement() {
-  const [activeTab, setActiveTab] = useState<HierarchyTab>("departments");
+  const [activeTab, setActiveTab] = useState<HierarchyTab>("orgchart");
 
   return (
     <div className="space-y-4">
       {/* Onglets */}
-      <div className="flex gap-1 border-b border-gray-200 mb-4">
+      <div className="flex gap-0 border-b border-gray-200">
         {TABS.map(({ id, label, Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-md transition-colors
-              ${activeTab === id
-                ? "border-b-2 border-blue-600 text-blue-700 bg-blue-50"
-                : "text-gray-600 hover:text-gray-800 hover:bg-gray-50"
-              }`}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+              activeTab === id
+                ? "border-blue-600 text-blue-700 bg-blue-50/50"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+            }`}
           >
-            <Icon size={15} />
+            <Icon size={14} />
             {label}
           </button>
         ))}
       </div>
 
       {/* Contenu */}
+      {activeTab === "orgchart"    && <OrgChartTab />}
       {activeTab === "departments" && <DepartmentsTab />}
       {activeTab === "employees"   && <EmployeesHierarchyTab />}
       {activeTab === "rules"       && <ApprovalRulesTab />}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Onglet Organigramme
+// ─────────────────────────────────────────────────────────────────────────────
+function OrgChartTab() {
+  const [departments,  setDepartments]  = useState<Department[]>([]);
+  const [employees,    setEmployees]    = useState<EmployeeHierarchy[]>([]);
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [editingEmp,   setEditingEmp]   = useState<EmployeeHierarchy | null>(null);
+  const [editForm,     setEditForm]     = useState<{
+    n1_manager_id: number | null;
+    n2_manager_id: number | null;
+    requires_two_approvals: boolean;
+    service: string;
+  }>({ n1_manager_id: null, n2_manager_id: null, requires_two_approvals: false, service: "" });
+  const [saving, setSaving] = useState(false);
+
+  // Dept en cours d'édition (depuis l'orgchart)
+  const [editingDept,   setEditingDept]   = useState<Department | null>(null);
+  const [deptForm,      setDeptForm]      = useState<{
+    name: string; code: string; description: string; head_id: number | null; dg_validator_id: number | null;
+  }>({ name: "", code: "", description: "", head_id: null, dg_validator_id: null });
+  const [savingDept, setSavingDept] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [depts, hier, emps] = await Promise.all([
+        departmentService.getAll(),
+        employeeHierarchyService.getAll(),
+        getEmployees({ status: "ACTIVE" }),
+      ]);
+      setDepartments(depts);
+      setEmployees(hier);
+      setAllEmployees(emps);
+    } catch {
+      toast.error("Impossible de charger l'organigramme.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Regrouper les employés par département (service = nom du département)
+  const empsByDept = useMemo(() => {
+    const map: Record<string, EmployeeHierarchy[]> = {};
+    employees.forEach(emp => {
+      const key = emp.service ?? "";
+      if (!map[key]) map[key] = [];
+      map[key].push(emp);
+    });
+    return map;
+  }, [employees]);
+
+  // Noms des DG validators (dédupliqués)
+  const dgNames = useMemo(() =>
+    [...new Set(departments.map(d => d.dg_validator_name).filter(Boolean))],
+    [departments]
+  );
+
+  const openEditEmp = (emp: EmployeeHierarchy) => {
+    setEditingEmp(emp);
+    setEditForm({
+      n1_manager_id: emp.n1_manager,
+      n2_manager_id: emp.n2_manager,
+      requires_two_approvals: emp.requires_two_approvals,
+      service: emp.service ?? "",
+    });
+  };
+
+  const handleSaveEmp = async () => {
+    if (!editingEmp) return;
+    setSaving(true);
+    try {
+      await employeeHierarchyService.update(editingEmp.id, {
+        n1_manager_id: editForm.n1_manager_id,
+        n2_manager_id: editForm.n2_manager_id,
+        requires_two_approvals: editForm.requires_two_approvals,
+      });
+      // Mettre à jour le département (service) si changé
+      if (editForm.service !== (editingEmp.service ?? "")) {
+        await patchEmployee(editingEmp.id, { service: editForm.service || null });
+      }
+      toast.success("Hiérarchie mise à jour ✓");
+      setEditingEmp(null);
+      load();
+    } catch {
+      toast.error("Erreur lors de la mise à jour.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEditDept = (dept: Department) => {
+    setEditingDept(dept);
+    setDeptForm({
+      name:             dept.name,
+      code:             dept.code,
+      description:      dept.description,
+      head_id:          dept.head,
+      dg_validator_id:  dept.dg_validator,
+    });
+  };
+
+  const handleSaveDept = async () => {
+    if (!editingDept || !deptForm.name || !deptForm.code) {
+      toast.error("Nom et code obligatoires.");
+      return;
+    }
+    setSavingDept(true);
+    try {
+      await departmentService.update(editingDept.id, deptForm);
+      toast.success("Département mis à jour ✓");
+      setEditingDept(null);
+      load();
+    } catch {
+      toast.error("Erreur lors de la mise à jour du département.");
+    } finally {
+      setSavingDept(false);
+    }
+  };
+
+  if (loading) return <LoadingSpinner />;
+
+  const unassigned = empsByDept[""] ?? [];
+  const activeEmps = allEmployees.filter(e => e.status === "ACTIVE");
+
+  return (
+    <div className="space-y-6">
+
+      {/* ── Légende ──────────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
+        <div className="flex items-center gap-1.5"><span className="w-4 h-4 rounded border-2 border-indigo-400 bg-indigo-100 inline-block" />Direction Générale</div>
+        <div className="flex items-center gap-1.5"><span className="w-4 h-4 rounded border-2 border-emerald-400 bg-emerald-50 inline-block" />Chefs de département</div>
+        <div className="flex items-center gap-1.5"><span className="w-4 h-4 rounded border-2 border-blue-300 bg-blue-50 inline-block" />Employés</div>
+        <div className="flex items-center gap-1.5 ml-auto text-gray-400 italic">Cliquez sur un employé ou un département pour le modifier</div>
+      </div>
+
+      {/* ── Direction Générale ────────────────────────────────────────────────── */}
+      <div className="flex flex-col items-center gap-0">
+        <div className="bg-indigo-100 border-2 border-indigo-400 rounded-2xl px-10 py-4 text-center min-w-[240px]">
+          <p className="text-xs font-bold uppercase tracking-widest text-indigo-500 mb-1">Direction Générale</p>
+          <p className="font-black text-indigo-900 text-base">PDG / DG / Directeur</p>
+          {dgNames.length > 0 ? (
+            <p className="text-sm text-indigo-600 mt-1">{dgNames.join(" · ")}</p>
+          ) : (
+            <p className="text-xs text-indigo-400 italic mt-1">Non défini</p>
+          )}
+        </div>
+
+        {/* Connecteur vertical */}
+        {departments.length > 0 && <div className="w-px h-8 bg-gray-300" />}
+      </div>
+
+      {/* ── Responsables de département ───────────────────────────────────────── */}
+      {departments.length > 0 && (
+        <>
+          <p className="text-center text-xs text-gray-400 italic -mt-4">Responsables de département</p>
+          <div className="flex flex-wrap gap-6 justify-center">
+            {departments.map(dept => (
+              <DeptColumn
+                key={dept.id}
+                dept={dept}
+                employees={empsByDept[dept.name] ?? []}
+                onEditEmployee={openEditEmp}
+                onEditDept={openEditDept}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {departments.length === 0 && (
+        <div className="text-center py-8 text-gray-400">
+          <Building2 size={36} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm italic">Aucun département configuré.</p>
+          <p className="text-xs mt-1">Créez des départements dans l'onglet "Départements".</p>
+        </div>
+      )}
+
+      {/* ── Employés sans département ─────────────────────────────────────────── */}
+      {unassigned.length > 0 && (
+        <div className="bg-amber-50 border border-dashed border-amber-300 rounded-2xl p-4">
+          <p className="text-xs font-bold text-amber-700 mb-3 flex items-center gap-1.5">
+            <AlertCircle size={13} /> {unassigned.length} employé(s) sans département assigné
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {unassigned.map(emp => (
+              <button
+                key={emp.id}
+                onClick={() => openEditEmp(emp)}
+                className="flex items-center gap-2 px-3 py-2 bg-white border border-amber-200 rounded-xl text-xs hover:border-blue-400 hover:bg-blue-50 transition"
+              >
+                <div className="w-5 h-5 rounded-full bg-amber-400 text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0">
+                  {emp.full_name.slice(0, 2).toUpperCase()}
+                </div>
+                <span className="font-semibold text-gray-700">{emp.full_name}</span>
+                <span className="text-gray-400">{emp.fonction ?? ""}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal : édition hiérarchie employé ────────────────────────────────── */}
+      {editingEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+          onClick={() => setEditingEmp(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-sm flex-shrink-0">
+                  {editingEmp.full_name.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-bold text-gray-800">{editingEmp.full_name}</p>
+                  <p className="text-xs text-gray-400">{editingEmp.matricule} · {editingEmp.fonction ?? "—"}</p>
+                </div>
+              </div>
+              <button onClick={() => setEditingEmp(null)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
+                <X size={16} />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              {/* Département */}
+              <FormField label="Département">
+                <select
+                  value={editForm.service}
+                  onChange={e => setEditForm(f => ({ ...f, service: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                  <option value="">— Sans département</option>
+                  {departments.map(d => (
+                    <option key={d.id} value={d.name}>{d.name} ({d.code})</option>
+                  ))}
+                </select>
+              </FormField>
+
+              {/* N+1 */}
+              <FormField label="Manager direct N+1">
+                <EmployeeSelect
+                  employees={activeEmps.filter(e => e.id !== editingEmp.id)}
+                  value={editForm.n1_manager_id}
+                  onChange={v => setEditForm(f => ({ ...f, n1_manager_id: v }))}
+                  placeholder="Choisir le N+1..."
+                />
+              </FormField>
+
+              {/* N+2 */}
+              <FormField label="Manager N+2 (Direction)">
+                <EmployeeSelect
+                  employees={activeEmps.filter(e => e.id !== editingEmp.id)}
+                  value={editForm.n2_manager_id}
+                  onChange={v => setEditForm(f => ({
+                    ...f,
+                    n2_manager_id: v,
+                    requires_two_approvals: v !== null ? true : f.requires_two_approvals,
+                  }))}
+                  placeholder="Choisir le N+2..."
+                />
+              </FormField>
+
+              {/* Double validation */}
+              <label className="flex items-center gap-3 cursor-pointer select-none p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition">
+                <input
+                  type="checkbox"
+                  checked={editForm.requires_two_approvals}
+                  onChange={e => setEditForm(f => ({ ...f, requires_two_approvals: e.target.checked }))}
+                  className="h-4 w-4 rounded accent-blue-600"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Double validation requise</p>
+                  <p className="text-xs text-gray-400">N+1 et N+2 doivent tous deux approuver le congé</p>
+                </div>
+              </label>
+            </div>
+            {/* Footer */}
+            <div className="flex gap-2 justify-end px-6 py-4 border-t border-gray-100 bg-gray-50">
+              <button onClick={() => setEditingEmp(null)}
+                className="px-4 py-2 text-sm border rounded-xl hover:bg-gray-100 font-medium transition">
+                Annuler
+              </button>
+              <button onClick={handleSaveEmp} disabled={saving}
+                className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60 font-bold transition">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal : édition département ────────────────────────────────────────── */}
+      {editingDept && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+          onClick={() => setEditingDept(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="font-bold text-gray-800">Modifier le département</h3>
+              <button onClick={() => setEditingDept(null)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField label="Nom *">
+                <input value={deptForm.name}
+                  onChange={e => setDeptForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+              </FormField>
+              <FormField label="Code *">
+                <input value={deptForm.code}
+                  onChange={e => setDeptForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-300" />
+              </FormField>
+              <FormField label="Responsable N+1">
+                <EmployeeSelect employees={activeEmps} value={deptForm.head_id ?? null}
+                  onChange={v => setDeptForm(f => ({ ...f, head_id: v }))}
+                  placeholder="Chef de département..." />
+              </FormField>
+              <FormField label="Validateur DG (N+2)">
+                <EmployeeSelect employees={activeEmps} value={deptForm.dg_validator_id ?? null}
+                  onChange={v => setDeptForm(f => ({ ...f, dg_validator_id: v }))}
+                  placeholder="Directeur général..." />
+              </FormField>
+              <FormField label="Description" className="sm:col-span-2">
+                <textarea value={deptForm.description}
+                  onChange={e => setDeptForm(f => ({ ...f, description: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  rows={2} />
+              </FormField>
+            </div>
+            <div className="flex gap-2 justify-end px-6 py-4 border-t border-gray-100 bg-gray-50">
+              <button onClick={() => setEditingDept(null)}
+                className="px-4 py-2 text-sm border rounded-xl hover:bg-gray-100 font-medium transition">
+                Annuler
+              </button>
+              <button onClick={handleSaveDept} disabled={savingDept}
+                className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm rounded-xl hover:bg-emerald-700 disabled:opacity-60 font-bold transition">
+                {savingDept ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── DeptColumn : colonne département dans l'organigramme ─────────────────────
+function DeptColumn({
+  dept, employees, onEditEmployee, onEditDept,
+}: {
+  dept: Department;
+  employees: EmployeeHierarchy[];
+  onEditEmployee: (emp: EmployeeHierarchy) => void;
+  onEditDept: (dept: Department) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+
+  return (
+    <div className="flex flex-col items-center">
+      {/* Connecteur depuis DG */}
+      <div className="w-px h-8 bg-gray-300" />
+
+      {/* Carte département */}
+      <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl min-w-[175px] max-w-[210px] overflow-hidden shadow-sm">
+        <button
+          onClick={() => onEditDept(dept)}
+          className="w-full px-4 pt-3 pb-2 text-center hover:bg-emerald-100 transition"
+        >
+          <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md tracking-wider">
+            {dept.code}
+          </span>
+          <p className="font-black text-emerald-900 text-sm mt-1.5">{dept.name}</p>
+          <p className="text-xs text-emerald-700 mt-0.5 truncate max-w-full">
+            {dept.head_name ?? <span className="italic text-emerald-400">Sans responsable</span>}
+          </p>
+          {dept.dg_validator_name && (
+            <p className="text-[10px] text-emerald-500 mt-0.5">DG : {dept.dg_validator_name}</p>
+          )}
+          <p className="text-[10px] text-emerald-400 mt-0.5 italic">Cliquez pour modifier</p>
+        </button>
+
+        {/* Toggle employés */}
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="w-full flex items-center justify-between px-4 py-2 bg-emerald-100 hover:bg-emerald-200 text-xs font-semibold text-emerald-700 border-t border-emerald-200 transition"
+        >
+          <span className="flex items-center gap-1"><Users size={11} /> {employees.length} employé(s)</span>
+          {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
+      </div>
+
+      {/* Connecteur → Employés */}
+      {expanded && (
+        <>
+          <div className="w-px h-4 bg-gray-300" />
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl min-w-[175px] max-w-[210px] overflow-hidden">
+            {employees.length === 0 ? (
+              <p className="text-[11px] text-gray-400 italic text-center px-3 py-4">Aucun employé</p>
+            ) : (
+              <div className="divide-y divide-blue-100">
+                {employees.map(emp => (
+                  <button
+                    key={emp.id}
+                    onClick={() => onEditEmployee(emp)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-blue-100 transition text-left"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                      {emp.full_name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-gray-800 truncate">{emp.full_name}</p>
+                      <p className="text-[10px] text-gray-400 truncate">{emp.fonction ?? "—"}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                      {emp.n1_manager_name && (
+                        <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 rounded">N+1</span>
+                      )}
+                      {emp.requires_two_approvals && (
+                        <span className="text-[9px] text-orange-600 bg-orange-50 border border-orange-200 px-1 rounded">2✓</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
