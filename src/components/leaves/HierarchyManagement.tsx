@@ -731,17 +731,21 @@ function DepartmentsTab() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Auto-détection des employés correspondants ─────────────────────────────
+  // ── Auto-détection des employés correspondants (nom OU code) ──────────────
   const autoMatch = useMemo(() => {
-    if (!form.name.trim() || editing) return [];
-    const q = form.name.trim().toLowerCase();
-    return employees.filter(e =>
-      e.status === "ACTIVE" && (
-        (e.service ?? "").toLowerCase() === q ||
-        (e.projet  ?? "").toLowerCase() === q
-      )
-    );
-  }, [form.name, employees, editing]);
+    if ((!form.name.trim() && !form.code.trim()) || editing) return [];
+    const qName = form.name.trim().toLowerCase();
+    const qCode = form.code.trim().toLowerCase();
+    return employees.filter(e => {
+      if (e.status !== "ACTIVE") return false;
+      const svc  = (e.service ?? "").toLowerCase();
+      const proj = (e.projet  ?? "").toLowerCase();
+      return (
+        (qName && (svc === qName || proj === qName)) ||
+        (qCode && (svc === qCode || proj === qCode))
+      );
+    });
+  }, [form.name, form.code, employees, editing]);
 
   // ── Manager suggéré : n1_manager le plus fréquent parmi les matchés ────────
   const suggestedHead = useMemo(() => {
@@ -903,7 +907,7 @@ function DepartmentsTab() {
               </div>
 
               {/* ── Preview auto-assignation (création seulement) ───────────── */}
-              {!editing && form.name.trim() && (
+              {!editing && (form.name.trim() || form.code.trim()) && (
                 <div className={`rounded-xl border p-4 space-y-3 ${
                   autoMatch.length > 0 ? "bg-emerald-50 border-emerald-200" : "bg-gray-50 border-gray-200"
                 }`}>
@@ -914,7 +918,10 @@ function DepartmentsTab() {
 
                   {autoMatch.length === 0 ? (
                     <p className="text-xs text-gray-400 italic">
-                      Aucun employé avec <code className="bg-gray-100 px-1 rounded">service</code> ou <code className="bg-gray-100 px-1 rounded">projet</code> = <strong>"{form.name}"</strong>
+                      Aucun employé avec <code className="bg-gray-100 px-1 rounded">service</code> ou <code className="bg-gray-100 px-1 rounded">projet</code> correspondant à{" "}
+                      {form.name.trim() && <strong>"{form.name}"</strong>}
+                      {form.name.trim() && form.code.trim() && <span className="text-gray-300"> / </span>}
+                      {form.code.trim() && <strong>"{form.code}"</strong>}
                     </p>
                   ) : (
                     <>
