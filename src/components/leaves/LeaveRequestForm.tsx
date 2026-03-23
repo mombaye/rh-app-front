@@ -1,13 +1,13 @@
 // src/components/leaves/LeaveRequestForm.tsx
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { leaveTypeService, leaveRequestService, holidayService } from "@/services/leaveService";
+import { leaveTypeService, leaveRequestService, holidayService, leaveBalanceService } from "@/services/leaveService";
 import { getEmployees } from "@/services/employeeService";
 import { ContractType, LeaveType, HolidayCheckResult } from "@/types/leave";
 import { Employee } from "@/types/employee";
 import { FiX } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
-import { Upload, FileCheck, Paperclip, CheckCircle2, Search, User, Star } from "lucide-react";
+import { Upload, FileCheck, Paperclip, CheckCircle2, Search, User, AlertTriangle, Wallet } from "lucide-react";
 
 interface Props {
   onClose:       () => void;
@@ -66,6 +66,13 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   const [optDocFile,  setOptDocFile]  = useState<File | null>(null);
   const optFileRef = useRef<HTMLInputElement>(null);
 
+  // Vérification du solde en temps réel
+  const [balanceCheck, setBalanceCheck] = useState<{
+    remaining: number; acquired: number; taken: number; adjusted: number;
+    sufficient: boolean; is_paid: boolean; leave_type_label: string;
+  } | null>(null);
+  const [checkingBalance, setCheckingBalance] = useState(false);
+
   // Load leave types
   useEffect(() => {
     setIsLoadingTypes(true);
@@ -107,6 +114,24 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Vérification du solde dès que employé + type + jours sont connus
+  useEffect(() => {
+    if (!form.employee_id || !form.leave_type_id || !form.days || Number(form.days) <= 0) {
+      setBalanceCheck(null);
+      return;
+    }
+    const empId  = parseInt(form.employee_id, 10);
+    const typeId = parseInt(form.leave_type_id, 10);
+    const days   = parseFloat(form.days);
+    const year   = form.start_date ? new Date(form.start_date).getFullYear() : new Date().getFullYear();
+
+    setCheckingBalance(true);
+    leaveBalanceService.check({ employee_id: empId, leave_type_id: typeId, days, year })
+      .then(res => setBalanceCheck(res))
+      .catch(() => setBalanceCheck(null))
+      .finally(() => setCheckingBalance(false));
+  }, [form.employee_id, form.leave_type_id, form.days, form.start_date]);
 
   // Auto-calculate days + check holidays
   useEffect(() => {
@@ -153,6 +178,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     setSelectedEmployee(null);
     setForm((f) => ({ ...f, employee_id: "" }));
     setEmpSearch("");
+    setBalanceCheck(null);
   };
 
   const selectedType = leaveTypes.find((t) => String(t.id) === form.leave_type_id);
@@ -164,6 +190,13 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     }
     if (!form.days || Number(form.days) <= 0) {
       setError("La date de fin doit être postérieure ou égale à la date de début."); return;
+    }
+    if (balanceCheck && balanceCheck.is_paid && !balanceCheck.sufficient) {
+      setError(
+        `Solde insuffisant pour « ${balanceCheck.leave_type_label} » : ` +
+        `${balanceCheck.remaining}j disponible(s), ${Number(form.days)}j demandé(s).`
+      );
+      return;
     }
     setLoading(true); setError(null);
     try {
@@ -463,6 +496,74 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                 </motion.div>
               </AnimatePresence>
             )}
+
+            {/* ── Widget solde disponible ─────────────────────────────── */}
+            <AnimatePresence>
+              {form.employee_id && form.leave_type_id && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className={`mt-2 rounded-xl border px-4 py-3 ${
+                    checkingBalance
+                      ? "bg-gray-50 border-gray-200"
+                      : !balanceCheck
+                      ? "bg-gray-50 border-gray-200"
+                      : !balanceCheck.is_paid
+                      ? "bg-blue-50 border-blue-200"
+                      : balanceCheck.sufficient
+                      ? "bg-emerald-50 border-emerald-200"
+                      : "bg-red-50 border-red-200"
+                  }`}
+                >
+                  {checkingBalance ? (
+                    <p className="text-xs text-gray-400 flex items-center gap-1.5">
+                      <ImSpinner2 className="animate-spin" size={12} /> Vérification du solde…
+                    </p>
+                  ) : !balanceCheck ? null : !balanceCheck.is_paid ? (
+                    <p className="text-xs text-blue-700 flex items-center gap-1.5">
+                      <Wallet className="h-3.5 w-3.5 shrink-0" />
+                      Congé non payé — aucun solde requis
+                    </p>
+                  ) : (
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2">
+                        {balanceCheck.sufficient
+                          ? <Wallet className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                          : <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
+                        }
+                        <div>
+                          <p className={`text-xs font-semibold ${balanceCheck.sufficient ? "text-emerald-800" : "text-red-700"}`}>
+                            {balanceCheck.sufficient
+                              ? "Solde suffisant"
+                              : "Solde insuffisant — demande bloquée"
+                            }
+                          </p>
+                          <p className={`text-xs mt-0.5 ${balanceCheck.sufficient ? "text-emerald-600" : "text-red-500"}`}>
+                            Disponible : <strong>{balanceCheck.remaining}j</strong>
+                            {form.days && Number(form.days) > 0 && (
+                              <> · Demandé : <strong>{form.days}j</strong></>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-[10px] text-gray-400">Acquis</p>
+                        <p className="text-xs font-bold text-gray-600">{balanceCheck.acquired}j</p>
+                        {balanceCheck.adjusted !== 0 && (
+                          <>
+                            <p className="text-[10px] text-gray-400 mt-0.5">Ajusté</p>
+                            <p className={`text-xs font-bold ${balanceCheck.adjusted > 0 ? "text-emerald-600" : "text-orange-500"}`}>
+                              {balanceCheck.adjusted > 0 ? "+" : ""}{balanceCheck.adjusted}j
+                            </p>
+                          </>
+                        )}
+                        <p className="text-[10px] text-gray-400 mt-0.5">Pris</p>
+                        <p className="text-xs font-bold text-gray-600">{balanceCheck.taken}j</p>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* ── Dates ───────────────────────────────────────────────── */}
@@ -582,15 +683,22 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               className="flex-1 border border-gray-200 text-gray-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition">
               Annuler
             </button>
-            <button onClick={handleSubmit} disabled={loading || isLoadingTypes}
-              className="flex-[2] bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
-              {loading
-                ? <><ImSpinner2 className="animate-spin" size={14} /> Envoi en cours…</>
-                : needsDoc
-                  ? "📎 Soumettre & joindre justificatif"
-                  : "📤 Soumettre la demande"
-              }
-            </button>
+            {balanceCheck && balanceCheck.is_paid && !balanceCheck.sufficient ? (
+              <button disabled
+                className="flex-[2] bg-red-400 text-white text-sm font-semibold py-2.5 rounded-xl opacity-70 cursor-not-allowed flex items-center justify-center gap-2">
+                <AlertTriangle size={14} /> Solde insuffisant
+              </button>
+            ) : (
+              <button onClick={handleSubmit} disabled={loading || isLoadingTypes || checkingBalance}
+                className="flex-[2] bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
+                {loading
+                  ? <><ImSpinner2 className="animate-spin" size={14} /> Envoi en cours…</>
+                  : needsDoc
+                    ? "📎 Soumettre & joindre justificatif"
+                    : "📤 Soumettre la demande"
+                }
+              </button>
+            )}
           </div>
         </div>
       </motion.div>

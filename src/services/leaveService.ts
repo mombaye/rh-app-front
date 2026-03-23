@@ -129,6 +129,38 @@ export const leaveBalanceService = {
     });
     return res.data;
   },
+
+  /**
+   * GET /api/leaves/balances/check/?employee_id=X&leave_type_id=Y&days=Z&year=YYYY
+   * Vérifie si l'employé a assez de solde pour le nombre de jours demandé.
+   */
+  check: async (params: {
+    employee_id: number;
+    leave_type_id: number;
+    days: number;
+    year?: number;
+  }): Promise<{
+    remaining: number;
+    acquired: number;
+    taken: number;
+    adjusted: number;
+    requested_days: number;
+    sufficient: boolean;
+    is_paid: boolean;
+    leave_type_label: string;
+    year: number;
+  }> => {
+    const res = await axios.get(`${API}/balances/check/`, {
+      headers: getAuthHeaders(),
+      params: {
+        employee_id:   params.employee_id,
+        leave_type_id: params.leave_type_id,
+        days:          params.days,
+        ...(params.year ? { year: params.year } : {}),
+      },
+    });
+    return res.data;
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
