@@ -3,14 +3,17 @@
 //   GET /api/leaves/balances/?year=Y          → getAll (liste globale)
 //   GET /api/leaves/balances/employee/<id>/   → getByEmployee
 //   PATCH /api/leaves/balances/<id>/adjust/   → adjust  body: { adjusted }
+//   GET /api/leaves/balances/<id>/history/    → historique
 
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { leaveBalanceService } from "@/services/leaveService";
 import { ContractType, LeaveBalance } from "@/types/leave";
 import { ImSpinner2 } from "react-icons/im";
 import { FiEdit3, FiX, FiCheck } from "react-icons/fi";
+import { History } from "lucide-react";
 import toast from "react-hot-toast";
+import { LeaveBalanceHistoryModal } from "./LeaveBalanceHistory";
 
 interface Props {
   contractType?: ContractType;
@@ -24,10 +27,11 @@ interface EditState {
 
 export default function LeaveBalances({ contractType = "INTERNE" }: Props) {
   const currentYear = new Date().getFullYear();
-  const [year,     setYear]     = useState(currentYear);
-  const [balances, setBalances] = useState<LeaveBalance[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [edit,     setEdit]     = useState<EditState | null>(null);
+  const [year,        setYear]        = useState(currentYear);
+  const [balances,    setBalances]    = useState<LeaveBalance[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [edit,        setEdit]        = useState<EditState | null>(null);
+  const [histBalance, setHistBalance] = useState<LeaveBalance | null>(null);
 
   // GET /api/leaves/balances/?year=Y
   const fetchBalances = async () => {
@@ -97,7 +101,7 @@ export default function LeaveBalances({ contractType = "INTERNE" }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  {["Employé", "Type de congé", "Acquis", "Pris", "Ajustement", "Restant", "Action"].map((h) => (
+                  {["Employé", "Type de congé", "Acquis", "Pris", "Ajustement", "Restant", "Reportés", "Actions"].map((h) => (
                     <th
                       key={h}
                       className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap"
@@ -205,19 +209,34 @@ export default function LeaveBalances({ contractType = "INTERNE" }: Props) {
                         </span>
                       </td>
 
-                      {/* Action */}
+                      {/* Reportés */}
+                      <td className="px-5 py-4 text-slate-500 font-medium">
+                        {parseFloat(b.carried_forward) > 0
+                          ? <span className="text-amber-600 font-semibold">+{b.carried_forward}j</span>
+                          : <span className="text-slate-300">—</span>
+                        }
+                      </td>
+
+                      {/* Actions */}
                       <td className="px-5 py-4">
-                        {!isEdit && (
+                        <div className="flex items-center gap-1">
+                          {!isEdit && (
+                            <button
+                              onClick={() => setEdit({ id: b.id, value: b.adjusted, loading: false })}
+                              className="p-2 text-gray-400 hover:text-camublue-900 hover:bg-camublue-900/5 rounded-lg transition"
+                              title="Ajuster le solde"
+                            >
+                              <FiEdit3 size={14} />
+                            </button>
+                          )}
                           <button
-                            onClick={() =>
-                              setEdit({ id: b.id, value: b.adjusted, loading: false })
-                            }
-                            className="p-2 text-gray-400 hover:text-camublue-900 hover:bg-camublue-900/5 rounded-lg transition"
-                            title="Ajuster le solde"
+                            onClick={() => setHistBalance(b)}
+                            className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition"
+                            title="Historique du solde"
                           >
-                            <FiEdit3 size={14} />
+                            <History size={14} />
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -227,6 +246,16 @@ export default function LeaveBalances({ contractType = "INTERNE" }: Props) {
           </div>
         )}
       </div>
+
+      {/* History modal */}
+      <AnimatePresence>
+        {histBalance && (
+          <LeaveBalanceHistoryModal
+            balance={histBalance}
+            onClose={() => setHistBalance(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

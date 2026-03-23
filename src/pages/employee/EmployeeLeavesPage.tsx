@@ -163,12 +163,14 @@ function parseLeaveError(err: any): string {
 
 function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSaved }: LeaveFormProps) {
   const [form, setForm] = useState<Partial<LeaveRequestCreate>>({
-    employee_id:   employeeId,
-    leave_type_id: initial?.leave_type_id,
-    start_date:    initial?.start_date ?? "",
-    end_date:      initial?.end_date ?? "",
-    days:          initial?.days,
-    motif:         initial?.motif ?? "",
+    employee_id:    employeeId,
+    leave_type_id:  initial?.leave_type_id,
+    start_date:     initial?.start_date ?? "",
+    end_date:       initial?.end_date ?? "",
+    days:           initial?.days,
+    motif:          initial?.motif ?? "",
+    half_day_start: (initial as any)?.half_day_start ?? false,
+    half_day_end:   (initial as any)?.half_day_end   ?? false,
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -177,11 +179,13 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
     if (form.start_date && form.end_date && form.end_date >= form.start_date) {
       const s = new Date(form.start_date);
       const e = new Date(form.end_date);
-      const diff = Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
-      setForm(p => ({ ...p, days: diff }));
+      let diff = Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
+      if (form.half_day_start) diff -= 0.5;
+      if (form.half_day_end)   diff -= 0.5;
+      setForm(p => ({ ...p, days: Math.max(0.5, diff) }));
     }
-    setFormError(null); // Efface l'erreur dès que l'utilisateur modifie les dates
-  }, [form.start_date, form.end_date]);
+    setFormError(null);
+  }, [form.start_date, form.end_date, form.half_day_start, form.half_day_end]);
 
   const handleSave = async () => {
     setFormError(null);
@@ -274,6 +278,15 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
                 onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
               />
+              <label className="flex items-center gap-2 mt-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!form.half_day_start}
+                  onChange={e => setForm(p => ({ ...p, half_day_start: e.target.checked }))}
+                  className="rounded text-[#003c71]"
+                />
+                <span className="text-xs text-gray-500">Commence l'après-midi (½ j)</span>
+              </label>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -285,6 +298,15 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
                 onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
               />
+              <label className="flex items-center gap-2 mt-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!form.half_day_end}
+                  onChange={e => setForm(p => ({ ...p, half_day_end: e.target.checked }))}
+                  className="rounded text-[#003c71]"
+                />
+                <span className="text-xs text-gray-500">Se termine le matin (½ j)</span>
+              </label>
             </div>
           </div>
 

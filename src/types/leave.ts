@@ -10,10 +10,14 @@ export interface LeaveType {
   label:                    string;
   is_paid:                  boolean;
   requires_justification:   boolean;
-  justification_grace_days: number;   // délai en jours après fin du congé pour soumettre le justificatif
+  justification_grace_days: number;
   color:                    string;
   monthly_accrual:          string;
   max_days_per_request:     number;
+  max_days_per_year:        number;   // plafond annuel (0 = illimité)
+  carry_forward_days:       number;   // jours reportables max (0 = pas de report)
+  exclude_weekends:         boolean;  // exclure sam/dim du décompte
+  allow_negative_balance:   boolean;  // autoriser solde négatif
 }
 
 // ── EmployeeMini ── mirrors EmployeeMiniSerializer ────────────────────────────
@@ -26,8 +30,7 @@ export interface EmployeeMini {
   manager:                 string;
   email?:                  string;
   requires_two_approvals?: boolean;
-  attendance_status?:      string;   // "SHIFT" → intérimaire, sinon interne
-  // Hiérarchie N+1 / N+2
+  attendance_status?:      string;
   n1_manager_id?:          number | null;
   n2_manager_id?:          number | null;
   n1_manager_name?:        string | null;
@@ -48,13 +51,17 @@ export interface LeaveRequest {
   id:            number;
   employee:      EmployeeMini;
   leave_type:    LeaveType;
-  start_date:    string;          // "YYYY-MM-DD"
-  end_date:      string;          // "YYYY-MM-DD"
-  days:          string;          // DecimalField → string en JSON
-  duration_days: string;          // alias de days (read_only)
+  start_date:    string;
+  end_date:      string;
+  days:          string;
+  duration_days: string;
   motif:         string;
   status:        LeaveStatus;
-  status_label:  string;          // get_status_display()
+  status_label:  string;
+
+  // Demi-journée
+  half_day_start: boolean;
+  half_day_end:   boolean;
 
   // 1ère validation
   reviewed_by:   EmployeeMini | null;
@@ -66,7 +73,7 @@ export interface LeaveRequest {
   second_reviewer:          EmployeeMini | null;
   second_reviewed_at:       string | null;
 
-  // Révocation (rappel d'urgence)
+  // Révocation
   revoke_reason:                string;
   revoked_by:                   EmployeeMini | null;
   revoked_at:                   string | null;
@@ -77,8 +84,8 @@ export interface LeaveRequest {
   justification_validated:    boolean;
   justification_validated_by: EmployeeMini | null;
   justification_validated_at: string | null;
-  justification_deadline:     string | null;   // "YYYY-MM-DD" — date limite de dépôt
-  justification_pending:      boolean;         // true si justif requise, congé terminé, aucun doc
+  justification_deadline:     string | null;
+  justification_pending:      boolean;
 
   // Absence pour défaut de justificatif
   marked_as_absent:    boolean;
@@ -91,29 +98,62 @@ export interface LeaveRequest {
 
 // ── LeaveRequestCreate ── mirrors LeaveRequestCreateSerializer ────────────────
 export interface LeaveRequestCreate {
-  employee_id:   number;
-  leave_type_id: number;
-  start_date:    string;
-  end_date:      string;
-  days:          number;
-  motif:         string;
+  employee_id:    number;
+  leave_type_id:  number;
+  start_date:     string;
+  end_date:       string;
+  days:           number;
+  motif:          string;
+  half_day_start?: boolean;
+  half_day_end?:   boolean;
 }
 
 // ── LeaveBalance ── mirrors LeaveBalanceSerializer ───────────────────────────
 export interface LeaveBalance {
-  id:            number;
-  employee:      number;          // PK
-  employee_name: string;
-  leave_type:    LeaveType;
-  year:          number;
-  acquired:      string;          // DecimalField
-  taken:         string;
-  adjusted:      string;
-  remaining:     string;          // computed read_only
+  id:              number;
+  employee:        number;
+  employee_name:   string;
+  leave_type:      LeaveType;
+  year:            number;
+  acquired:        string;
+  taken:           string;
+  adjusted:        string;
+  remaining:       string;
+  carried_forward: string;  // jours reportés de l'année précédente
 }
 
 export interface LeaveBalanceAdjust {
   adjusted: number;
+}
+
+// ── LeaveBalanceHistory ── mirrors LeaveBalanceHistorySerializer ───────────────
+export type BalanceOperationType =
+  | "ACCRUAL"
+  | "DEDUCTION"
+  | "RESTORATION"
+  | "ADJUSTMENT"
+  | "CARRYOVER"
+  | "IMPORT";
+
+export interface LeaveBalanceHistory {
+  id:                number;
+  operation:         BalanceOperationType;
+  operation_label:   string;
+  delta:             string;       // positif = gain, négatif = perte
+  balance_after:     string;
+  leave_request_id:  number | null;
+  performed_by_name: string | null;
+  note:              string;
+  created_at:        string;
+}
+
+// ── CarryoverResult ── mirrors carryover() action ──────────────────────────────
+export interface CarryoverResult {
+  year_from:           number;
+  year_to:             number;
+  processed:           number;
+  skipped:             number;
+  total_days_carried:  number;
 }
 
 // ── LeaveSummary ── mirrors summary() action ──────────────────────────────────
@@ -133,7 +173,7 @@ export interface LeaveCalendarEntry {
   employee_id:   number;
   employee_name: string;
   matricule:     string;
-  leave_type:    string;    // code
+  leave_type:    string;
   leave_label:   string;
   color:         string;
   start_date:    string;
@@ -141,7 +181,34 @@ export interface LeaveCalendarEntry {
   days:          string;
 }
 
-// ── LeaveRequestFilters ── query params supportés par get_queryset() ──────────
+// ── LeavePlanningEntry ── mirrors planning() action ───────────────────────────
+export interface LeavePlanningEntry {
+  id:              number;
+  employee_id:     number;
+  employee_name:   string;
+  matricule:       string;
+  service:         string;
+  leave_type_id:   number;
+  leave_type:      string;
+  leave_label:     string;
+  color:           string;
+  start_date:      string;
+  end_date:        string;
+  days:            number;
+  half_day_start:  boolean;
+  half_day_end:    boolean;
+}
+
+// ── AbsenceRateRow ── mirrors stats_absence_rate() action ─────────────────────
+export interface AbsenceRateRow {
+  department:       string | null;
+  employee_count:   number;
+  total_requests:   number;
+  total_days:       number;
+  absence_rate_pct: number;
+}
+
+// ── LeaveRequestFilters ───────────────────────────────────────────────────────
 export interface LeaveRequestFilters {
   status?:                 LeaveStatus;
   employee_id?:            number;
@@ -149,14 +216,14 @@ export interface LeaveRequestFilters {
   start_date?:             string;
   end_date?:               string;
   department?:             string;
-  employee_name?:          string;  // recherche par nom/prénom/matricule
-  year?:                   number;  // filtre par année de début
-  contract_type?:          ContractType; // filtré côté frontend uniquement
-  manager_employee_id?:    number;  // filtre les subordonnés d'un manager
-  pending_justification?:  string;  // "true" → congés approuvés dont le justif. est manquant
+  employee_name?:          string;
+  year?:                   number;
+  contract_type?:          ContractType;
+  manager_employee_id?:    number;
+  pending_justification?:  string;
 }
 
-// ── ExportColumn ── colonnes disponibles pour l'export personnalisé ──────────
+// ── ExportColumn ──────────────────────────────────────────────────────────────
 export type ExportColumnKey =
   | "id" | "employee" | "matricule" | "service" | "leave_type"
   | "start_date" | "end_date" | "days" | "motif" | "status"
@@ -174,7 +241,7 @@ export interface ExportColumnDef {
 // ── PublicHoliday ─────────────────────────────────────────────────────────────
 export interface PublicHoliday {
   id:           number;
-  date:         string;   // "YYYY-MM-DD"
+  date:         string;
   name:         string;
   is_recurring: boolean;
   description:  string;
@@ -256,6 +323,34 @@ export interface EmployeeHierarchy {
   status:               string;
 }
 
+// ── ManagerDelegation ── mirrors ManagerDelegationSerializer ──────────────────
+export interface ManagerDelegation {
+  id:                  number;
+  delegator:           number;
+  delegator_name:      string;
+  delegate:            number;
+  delegate_name:       string;
+  start_date:          string;
+  end_date:            string;
+  reason:              string;
+  is_active:           boolean;
+  is_currently_active: boolean;
+  created_by:          number | null;
+  created_by_name:     string | null;
+  created_at:          string;
+  updated_at:          string;
+}
+
+export interface ManagerDelegationCreate {
+  delegator_id:  number;
+  delegate_id:   number;
+  start_date:    string;
+  end_date:      string;
+  reason?:       string;
+  is_active?:    boolean;
+  created_by_id?: number;
+}
+
 // ── ApprovePayload ────────────────────────────────────────────────────────────
 export interface ApprovePayload {
   reviewer_id?:        number;
@@ -266,5 +361,5 @@ export interface ApprovePayload {
 export interface RevokePayload {
   revoke_reason: string;
   revoker_id?:   number;
-  recall_date?:  string;  // "YYYY-MM-DD"
+  recall_date?:  string;
 }

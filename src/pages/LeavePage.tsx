@@ -28,6 +28,10 @@ import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 import HierarchyManagement from "@/components/leaves/HierarchyManagement";
+import ManagerDelegationManager from "@/components/leaves/ManagerDelegationManager";
+import LeavePlanning from "@/components/leaves/LeavePlanning";
+import LeaveAbsenceRate from "@/components/leaves/LeaveAbsenceRate";
+import { LeaveCarryoverPanel } from "@/components/leaves/LeaveBalanceHistory";
 
 // ─── Config statuts ───────────────────────────────────────────────────────────
 const STATUS_CFG: Record<
@@ -72,15 +76,18 @@ const DEFAULT_EXPORT_COLUMNS: ExportColumnKey[] = [
   "start_date", "end_date", "days", "status",
 ];
 
-type TabId        = "requests" | "calendar" | "balances" | "justifications" | "hierarchy";
+type TabId        = "requests" | "calendar" | "balances" | "justifications" | "hierarchy" | "planning" | "analytics" | "delegations";
 type StatusFilter = "ALL" | LeaveStatus;
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
-  { id: "requests",       label: "Demandes",      Icon: Table2       },
-  { id: "calendar",       label: "Calendrier",    Icon: CalendarRange },
-  { id: "balances",       label: "Soldes",        Icon: Wallet       },
-  { id: "justifications", label: "Justificatifs", Icon: FileCheck    },
-  { id: "hierarchy",      label: "Hiérarchie",    Icon: GitBranch    },
+  { id: "requests",       label: "Demandes",       Icon: Table2       },
+  { id: "calendar",       label: "Calendrier",     Icon: CalendarRange },
+  { id: "planning",       label: "Planning",       Icon: CalendarDays  },
+  { id: "balances",       label: "Soldes",         Icon: Wallet       },
+  { id: "justifications", label: "Justificatifs",  Icon: FileCheck    },
+  { id: "hierarchy",      label: "Hiérarchie",     Icon: GitBranch    },
+  { id: "delegations",    label: "Délégations",    Icon: Users        },
+  { id: "analytics",      label: "Analyses",       Icon: History      },
 ];
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
@@ -842,6 +849,33 @@ export default function LeavePage() {
           {tab === "justifications" && <JustificationsTab onOpenDetail={openDetail} />}
 
           {tab === "hierarchy" && <HierarchyManagement />}
+
+          {tab === "planning" && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">Planning prévisionnel</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Vue mensuelle des congés approuvés par équipe</p>
+              </div>
+              <LeavePlanning />
+            </div>
+          )}
+
+          {tab === "delegations" && (
+            <div className="space-y-4">
+              <ManagerDelegationManager />
+            </div>
+          )}
+
+          {tab === "analytics" && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">Analyses & rapports</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Taux d'absence, répartition par type et report de soldes</p>
+              </div>
+              <LeaveAbsenceRate />
+              <LeaveCarryoverPanel onDone={fetchAll} />
+            </div>
+          )}
         </div>
       </div>
 
