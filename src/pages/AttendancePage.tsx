@@ -33,13 +33,13 @@
     CartesianGrid,
   } from "recharts";
 
-  type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly";
+  type StatusFilter = "all" | "ok" | "absent" | "on_mission" | "incomplete" | "anomaly";
   type TopMode = "most_worked" | "least_worked" | "absent" | "not_pointing";
   type PeriodTopMode = "most_worked" | "least_worked";
   type PeriodSortKey = "worked" | "name" | "service";
 
   const STATUS_STYLE: Record<
-    "ok" | "absent" | "incomplete" | "anomaly",
+    "ok" | "absent" | "on_mission" | "incomplete" | "anomaly",
     { badge: string; dot: string; label: string }
   > = {
     ok: {
@@ -51,6 +51,11 @@
       badge: "bg-red-50 text-red-700 ring-1 ring-red-200",
       dot: "bg-red-500",
       label: "Absent",
+    },
+    on_mission: {
+      badge: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+      dot: "bg-blue-500",
+      label: "En Mission",
     },
     incomplete: {
       badge: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
@@ -64,7 +69,7 @@
     },
   };
 
-  function StatusBadge({ status }: { status: "ok" | "absent" | "incomplete" | "anomaly" }) {
+  function StatusBadge({ status }: { status: "ok" | "absent" | "on_mission" | "incomplete" | "anomaly" }) {
     const s = STATUS_STYLE[status] ?? STATUS_STYLE.anomaly;
     return (
       <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-lg font-medium ${s.badge}`}>
@@ -257,19 +262,23 @@ function minutesToSignedHHMM(min: number) {
 
     const toHandleList = useMemo(() => {
       return dailyFiltered.filter(
-        (r) => r.status === "absent" || r.status === "incomplete" || r.status === "anomaly"
+        (r) => (r.status === "absent" || r.status === "incomplete" || r.status === "anomaly") && r.status !== "on_mission"
       );
     }, [dailyFiltered]);
 
     // Pie daily
     const pieDaily = useMemo(() => {
       if (!daily) return [];
-      return [
+      const data = [
         { name: "Présents", value: daily.kpis.present },
         { name: "Absents", value: daily.kpis.absent },
         { name: "Incomplets", value: daily.kpis.incomplete },
         { name: "Anomalies", value: daily.kpis.anomalies },
       ];
+      if (daily.kpis.on_mission) {
+        data.push({ name: "En Mission", value: daily.kpis.on_mission });
+      }
+      return data;
     }, [daily]);
 
     // daily top chart
@@ -463,6 +472,7 @@ function minutesToSignedHHMM(min: number) {
                     <option value="all">Tous</option>
                     <option value="ok">OK</option>
                     <option value="absent">Absent</option>
+                    <option value="on_mission">En Mission</option>
                     <option value="incomplete">Incomplete</option>
                     <option value="anomaly">Anomaly</option>
                   </select>
@@ -542,6 +552,9 @@ function minutesToSignedHHMM(min: number) {
             <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
               <Kpi title="Présents" value={daily.kpis.present} hint={`le ${daily.date} · ${daily.weekday_label ?? ""}`} />
               <Kpi title="Absents" value={daily.kpis.absent} hint="pas de IN/OUT" />
+              {(daily.kpis.on_mission ?? 0) > 0 && (
+                <Kpi title="En Mission" value={daily.kpis.on_mission ?? 0} hint="en déplacement professionnel" />
+              )}
               <Kpi title="Incomplets" value={daily.kpis.incomplete} hint="IN ou OUT manquant" />
               <Kpi title="Retard moyen" value={`${daily.kpis.avg_late_minutes} min`} hint="sur les OK" />
             </div>

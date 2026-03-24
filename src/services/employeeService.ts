@@ -303,21 +303,24 @@ export async function deleteBulletinLog(id: number) {
   await api.delete(`/api/employees/bulletins/logs/${id}/`);
 }
 
-// ── Mission ───────────────────────────────────────────────────────────────────
+// ── Mission / Déplacement professionnel ───────────────────────────────────────
 
-/**
- * Définit l'employé comme étant en mission.
- * Au pointage, il sera affiché "En mission" au lieu d'Absent.
- */
-export const markMission = async (id: number): Promise<Employee> => {
-  const res = await api.post(`/api/employees/${id}/mark-mission/`);
-  return res.data;
+export type SetMissionPayload = {
+  on_mission: boolean;
+  mission_label?: string;
+  mission_start?: string;
+  mission_end?: string | null;
 };
 
 /**
- * Retire le statut "En mission" de l'employé.
+ * POST /api/employees/{id}/set-mission/
+ * Définit ou retire le statut "En mission" d'un employé.
+ * Au pointage, il sera affiché "En mission" au lieu d'Absent.
  */
-export const endMission = async (id: number): Promise<Employee> => {
-  const res = await api.post(`/api/employees/${id}/end-mission/`);
+export const setMission = async (
+  id: number,
+  payload: SetMissionPayload
+): Promise<Employee> => {
+  const res = await api.post(`/api/employees/${id}/set-mission/`, payload);
   return res.data;
 };

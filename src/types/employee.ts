@@ -25,8 +25,11 @@ export interface Employee {
   // Type de contrat
   type_contrat?: string | null;
 
-  // Statut mission : si true, l'employé est affiché "En mission" au pointage au lieu d'Absent
-  en_mission?: boolean;
+  // ── Mission / Déplacement professionnel ──────────────────
+  on_mission?:      boolean;
+  mission_label?:   string | null;
+  mission_start?:   string | null;
+  mission_end?:     string | null;
 
   // champ déjà utilisé dans ton code (si tu l'as côté backend)
   has_user?: boolean;
