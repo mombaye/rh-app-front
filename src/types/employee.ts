@@ -22,6 +22,12 @@ export interface Employee {
   motif_sortie?: string | null;
   is_active_employee?: boolean;
 
-  // champ déjà utilisé dans ton code (si tu l’as côté backend)
+  // Type de contrat
+  type_contrat?: string | null;
+
+  // Statut mission : si true, l'employé est affiché "En mission" au pointage au lieu d'Absent
+  en_mission?: boolean;
+
+  // champ déjà utilisé dans ton code (si tu l'as côté backend)
   has_user?: boolean;
 }

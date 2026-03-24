@@ -109,7 +109,7 @@ export const uploadPayslipPdf = async (formData: FormData) => {
 
 
 export async function sendAccessCodes(matricules?: string[]) {
-  // Si matricules est undefined ou [], l’API enverra à tout le monde
+  // Si matricules est undefined ou [], l'API enverra à tout le monde
   const payload = matricules && matricules.length ? { matricules } : {};
   const { data } = await api.post("/api/employees/send-access-codes/", payload);
   return data as { sent: string[]; errors: string[] };
@@ -118,7 +118,7 @@ export async function sendAccessCodes(matricules?: string[]) {
 
 
 export const createAccountFromEmployee = async (employeeId: number) => {
-  // Ici, tu appelles l’endpoint DRF sur UN SEUL employé
+  // Ici, tu appelles l'endpoint DRF sur UN SEUL employé
   const res = await api.post("/api/employees/create-accounts/", {
     employee_ids: [employeeId]
   });
@@ -140,7 +140,7 @@ export const fetchAvailableBulletins = async (matricule: string) => {
 
 // services/employeeService.ts
 
-// Pour lancer l’envoi massif (upload PDF)
+// Pour lancer l'envoi massif (upload PDF)
 export const sendBulletinsMass = async (file: File) => {
   const formData = new FormData();
   formData.append("file", file);
@@ -168,7 +168,7 @@ export const getEmployees = async (opts?: { status?: 'ALL' | 'ACTIVE' | 'EXITED'
 
 
 
-// 🔁 “Sortie” (soft-delete)
+// 🔁 "Sortie" (soft-delete)
 export const markExit = async (id: number, payload: { date_sortie: string; motif_sortie?: string }) => {
   const res = await api.post(`/api/employees/${id}/mark-exit/`, payload);
   return res.data as Employee;
@@ -303,3 +303,21 @@ export async function deleteBulletinLog(id: number) {
   await api.delete(`/api/employees/bulletins/logs/${id}/`);
 }
 
+// ── Mission ───────────────────────────────────────────────────────────────────
+
+/**
+ * Définit l'employé comme étant en mission.
+ * Au pointage, il sera affiché "En mission" au lieu d'Absent.
+ */
+export const markMission = async (id: number): Promise<Employee> => {
+  const res = await api.post(`/api/employees/${id}/mark-mission/`);
+  return res.data;
+};
+
+/**
+ * Retire le statut "En mission" de l'employé.
+ */
+export const endMission = async (id: number): Promise<Employee> => {
+  const res = await api.post(`/api/employees/${id}/end-mission/`);
+  return res.data;
+};
