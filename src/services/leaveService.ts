@@ -4,6 +4,8 @@
 import axios from "axios";
 import {
   LeaveType,
+  LeaveTypeSeniorityBonus,
+  LeaveTypeSeniorityBonusCreate,
   LeaveBalance,
   LeaveBalanceAdjust,
   LeaveRequest,
@@ -60,6 +62,42 @@ export const leaveTypeService = {
   /** DELETE /api/leaves/types/<id>/ */
   delete: async (id: number): Promise<void> => {
     await axios.delete(`${API}/types/${id}/`, {
+      headers: getAuthHeaders(),
+    });
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LeaveTypeSeniorityBonus  →  /api/leaves/types/<id>/seniority-bonuses/
+// ─────────────────────────────────────────────────────────────────────────────
+export const seniorityBonusService = {
+  /** GET /api/leaves/types/<leaveTypeId>/seniority-bonuses/ */
+  getAll: async (leaveTypeId: number): Promise<LeaveTypeSeniorityBonus[]> => {
+    const res = await axios.get(`${API}/types/${leaveTypeId}/seniority-bonuses/`, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
+
+  /** POST /api/leaves/types/<leaveTypeId>/seniority-bonuses/ */
+  create: async (leaveTypeId: number, data: LeaveTypeSeniorityBonusCreate): Promise<LeaveTypeSeniorityBonus> => {
+    const res = await axios.post(`${API}/types/${leaveTypeId}/seniority-bonuses/`, data, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
+
+  /** PATCH /api/leaves/types/<leaveTypeId>/seniority-bonuses/<id>/ */
+  update: async (leaveTypeId: number, id: number, data: Partial<LeaveTypeSeniorityBonusCreate>): Promise<LeaveTypeSeniorityBonus> => {
+    const res = await axios.patch(`${API}/types/${leaveTypeId}/seniority-bonuses/${id}/`, data, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
+
+  /** DELETE /api/leaves/types/<leaveTypeId>/seniority-bonuses/<id>/ */
+  delete: async (leaveTypeId: number, id: number): Promise<void> => {
+    await axios.delete(`${API}/types/${leaveTypeId}/seniority-bonuses/${id}/`, {
       headers: getAuthHeaders(),
     });
   },

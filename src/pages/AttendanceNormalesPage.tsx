@@ -4,7 +4,7 @@ import AppLayout from "@/layouts/AppLayout";
 import {
   Clock, AlertTriangle, UserMinus, Filter, FileSpreadsheet, X, ChevronLeft, ChevronRight,
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown, Settings, CheckCircle,
-  CalendarDays, TrendingUp, Lock, Pencil, Plus, Trash2,
+  CalendarDays, TrendingUp, Lock, Pencil, Plus, Trash2, Briefcase,
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import {
@@ -20,7 +20,7 @@ import * as XLSX from "xlsx";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ViewMode = "daily" | "weekly" | "monthly";
-type StatusFilter = "all" | "ok" | "absent" | "on_leave" | "incomplete" | "anomaly" | "late" | "deficit";
+type StatusFilter = "all" | "ok" | "absent" | "on_leave" | "on_mission" | "incomplete" | "anomaly" | "late" | "deficit";
 type MotifType = "absent" | "not_pointing";
 type WorkContext = "Normale" | "Ramadan" | string;
 
@@ -75,7 +75,8 @@ interface CompensationResult {
 
 interface FlatRecord {
   employee_id: number; matricule: string; full_name: string; department: string; project: string;
-  status: "ok" | "absent" | "on_leave" | "incomplete" | "anomaly";
+  status: "ok" | "absent" | "on_leave" | "on_mission" | "incomplete" | "anomaly";
+  mission_label?: string | null;
   is_late_api: boolean; late_label_api: string | null; late_minutes_api: number;
   computed_late_minutes: number; overtime_minutes: number;
   compensation: CompensationResult; deficit_minutes: number;
@@ -194,19 +195,21 @@ async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ succ
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const STATUS_CFG = {
-  ok:        { label: "OK",        dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-  absent:    { label: "Absent",    dot: "bg-red-500",     badge: "bg-red-50 text-red-700 ring-red-200" },
-  on_leave:  { label: "En Congé", dot: "bg-sky-500",     badge: "bg-sky-50 text-sky-700 ring-sky-200" },
-  incomplete:{ label: "Incomplet", dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200" },
-  anomaly:   { label: "Anomalie",  dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200" },
+  ok:         { label: "OK",          dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+  absent:     { label: "Absent",      dot: "bg-red-500",     badge: "bg-red-50 text-red-700 ring-red-200" },
+  on_leave:   { label: "En Congé",   dot: "bg-sky-500",     badge: "bg-sky-50 text-sky-700 ring-sky-200" },
+  on_mission: { label: "En Mission",  dot: "bg-orange-500",  badge: "bg-orange-50 text-orange-700 ring-orange-200" },
+  incomplete: { label: "Incomplet",   dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200" },
+  anomaly:    { label: "Anomalie",    dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200" },
 };
 
 const QUICK_FILTERS = [
   { key: "all"       as StatusFilter, label: "Tous",         dotColor: "bg-slate-400",  activeText: "text-slate-800",   activeBg: "bg-slate-900", activeDot: "bg-white"         },
   { key: "ok"        as StatusFilter, label: "OK",           dotColor: "bg-emerald-400",activeText: "text-emerald-700", activeBg: "bg-emerald-50",activeDot: "bg-emerald-500"   },
   { key: "absent"    as StatusFilter, label: "Absents",      dotColor: "bg-red-400",    activeText: "text-red-700",     activeBg: "bg-red-50",    activeDot: "bg-red-500"       },
-  { key: "on_leave"  as StatusFilter, label: "En Congé",    dotColor: "bg-sky-400",    activeText: "text-sky-700",     activeBg: "bg-sky-50",    activeDot: "bg-sky-500"       },
-  { key: "late"      as StatusFilter, label: "Retards",      dotColor: "bg-orange-400", activeText: "text-orange-700",  activeBg: "bg-orange-50", activeDot: "bg-orange-500"    },
+  { key: "on_leave"  as StatusFilter, label: "En Congé",    dotColor: "bg-sky-400",    activeText: "text-sky-700",     activeBg: "bg-sky-50",      activeDot: "bg-sky-500"       },
+  { key: "on_mission"as StatusFilter, label: "En Mission",  dotColor: "bg-orange-400", activeText: "text-orange-700",  activeBg: "bg-orange-50",   activeDot: "bg-orange-500"    },
+  { key: "late"      as StatusFilter, label: "Retards",      dotColor: "bg-amber-400",  activeText: "text-amber-700",   activeBg: "bg-amber-50",    activeDot: "bg-amber-500"     },
   { key: "incomplete"as StatusFilter, label: "Incomplets",   dotColor: "bg-amber-400",  activeText: "text-amber-800",   activeBg: "bg-amber-50",  activeDot: "bg-amber-500"     },
   { key: "anomaly"   as StatusFilter, label: "Anomalies",    dotColor: "bg-violet-400", activeText: "text-violet-700",  activeBg: "bg-violet-50", activeDot: "bg-violet-500"    },
   { key: "deficit"   as StatusFilter, label: "Heures moins", dotColor: "bg-rose-400",   activeText: "text-rose-700",    activeBg: "bg-rose-50",   activeDot: "bg-rose-500"      },
@@ -1225,7 +1228,14 @@ function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
         <td className="px-4 py-3">
           <ServiceBadge service={r.department} />
         </td>
-        <td className="px-4 py-3"><div className="flex justify-center"><StatusPill status={r.status} /></div></td>
+        <td className="px-4 py-3">
+          <div className="flex flex-col items-center gap-0.5">
+            <StatusPill status={r.status} />
+            {r.status === "on_mission" && r.mission_label && (
+              <span className="text-[10px] text-orange-600 leading-tight truncate max-w-[120px]" title={r.mission_label}>{r.mission_label}</span>
+            )}
+          </div>
+        </td>
         <td className="px-4 py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
         <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.computed_late_minutes > 0 ? "text-red-600 font-semibold" : "text-slate-700"}`}>
           <div className="flex justify-center">{formatTime(r.in_time)}</div>
@@ -1501,6 +1511,7 @@ export default function AttendanceNormalesPage() {
         delta_minutes: r.delta_minutes ?? 0,
         expected_minutes: isDaily ? effectiveWorkMin : (r.expected_minutes ?? 0),
         email: r.email ?? emailMap.get(mat) ?? null,
+        mission_label: r.mission_label ?? null,
       };
     };
 
@@ -1548,15 +1559,17 @@ export default function AttendanceNormalesPage() {
   const kpis = useMemo(() => {
     const total = allRecords.length;
     if (viewMode === "daily" && daily) {
-      const absent = allRecords.filter((r) => r.status === "absent").length;
-      return { total, absent, late: allRecords.filter((r) => r.computed_late_minutes > 0).length, anomaly: daily.kpis.anomalies };
+      const absent     = allRecords.filter((r) => r.status === "absent").length;
+      const on_mission = allRecords.filter((r) => r.status === "on_mission").length;
+      return { total, absent, on_mission, late: allRecords.filter((r) => r.computed_late_minutes > 0).length, anomaly: daily.kpis.anomalies };
     }
     const emp = (viewMode === "weekly" ? weekly?.by_employee : monthly?.by_employee) as any[] | undefined;
     if (emp) {
-      const absent = allRecords.filter((r) => r.status === "absent").length;
-      return { total, absent, late: emp.filter((r) => (r.late_days ?? 0) > 0).length, anomaly: emp.filter((r) => r.anomaly_days > 0).length };
+      const absent     = allRecords.filter((r) => r.status === "absent").length;
+      const on_mission = allRecords.filter((r) => r.status === "on_mission").length;
+      return { total, absent, on_mission, late: emp.filter((r) => (r.late_days ?? 0) > 0).length, anomaly: emp.filter((r) => r.anomaly_days > 0).length };
     }
-    return { total: 0, absent: 0, late: 0, anomaly: 0 };
+    return { total: 0, absent: 0, on_mission: 0, late: 0, anomaly: 0 };
   }, [viewMode, daily, weekly, monthly, allRecords]);
 
   const isLateRecord = useCallback((r: FlatRecord) => viewMode === "daily" ? r.computed_late_minutes > 0 : r.is_late_api, [viewMode]);
@@ -1711,9 +1724,12 @@ export default function AttendanceNormalesPage() {
         </div>
 
         {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
           <AbsentsCard total={kpis.total} absent={kpis.absent} loading={loading} delay={0.05} />
-          <StatCard icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
+          <StatCard icon={Briefcase} label="En Mission" value={kpis.on_mission ?? 0} color="orange" delay={0.08} loading={loading}
+            active={statusFilter === "on_mission"} sub="Cliquer pour filtrer"
+            onClick={() => setStatusFilter((f) => f === "on_mission" ? "all" : "on_mission")} />
+          <StatCard icon={Clock} label="Retards" value={kpis.late} color="amber" delay={0.1} loading={loading}
             active={statusFilter === "late"} sub="Cliquer pour filtrer"
             onClick={() => setStatusFilter((f) => f === "late" ? "all" : "late")} />
           <StatCard icon={AlertTriangle} label="Anomalies" value={kpis.anomaly} color="violet" delay={0.15} loading={loading} />

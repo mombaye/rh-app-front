@@ -6,6 +6,7 @@ import EmployeesTable from "@/components/employees/EmployeeTable";
 import ExitEmployeeModal from "@/components/employees/ExitEmployeeModal";
 import EmployeeFormModal from "@/components/employees/EmployeeFormModal";
 import ReinstateEmployeeModal from "@/components/employees/ReinstateEmployeeModal";
+import EmployeeMissionModal from "@/components/employees/EmployeeMissionModal";
 import { Employee, ContractType } from "@/types/employee";
 import {
   getEmployees,
@@ -1219,6 +1220,7 @@ export default function InterneEmployeesPage() {
   const [reinstateTarget, setReinstateTarget] = useState<Employee | null>(null);
   const [exitOpen, setExitOpen]               = useState(false);
   const [exitTarget, setExitTarget]           = useState<Employee | null>(null);
+  const [missionTarget, setMissionTarget]     = useState<Employee | null>(null);
   const [bulkMatOpen, setBulkMatOpen]         = useState(false);
   const [docsOpen, setDocsOpen]               = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
@@ -1254,6 +1256,7 @@ export default function InterneEmployeesPage() {
   const handleEdit      = (emp: Employee) => { setSelected(emp); setShowModal(true); };
   const handleCreate    = () => { setSelected(null); setShowModal(true); };
   const handleExitClick = (emp: Employee) => { setExitTarget(emp); setExitOpen(true); };
+  const handleMission   = (emp: Employee) => { setMissionTarget(emp); };
 
   const handleConfirmExit = async (payload: {
     date_sortie: string;
@@ -1469,6 +1472,7 @@ export default function InterneEmployeesPage() {
             onEdit={handleEdit}
             onExit={handleExitClick}
             onReinstate={openReinstate}
+            onMission={handleMission}
             onImport={handleImport}
             onEmployeeUpdated={fetchInternalEmployees}
             showContractType={true}
@@ -1494,6 +1498,11 @@ export default function InterneEmployeesPage() {
           onClose={() => setReinstateOpen(false)}
           employee={reinstateTarget}
           onConfirm={doReinstate}
+        />
+        <EmployeeMissionModal
+          employee={missionTarget}
+          onClose={() => setMissionTarget(null)}
+          onUpdated={(updated) => setAllEmployees(prev => prev.map(e => e.id === updated.id ? updated : e))}
         />
 
         <AnimatePresence>

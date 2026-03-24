@@ -84,6 +84,12 @@ export interface Employee {
   // Détection automatique rôle manager : nombre d'employés managés
   manages_n1_count?:  number;
   manages_n2_count?:  number;
+
+  // ── Mission / déplacement professionnel ──────────────────
+  on_mission?:     boolean;
+  mission_label?:  string | null;
+  mission_start?:  string | null;   // YYYY-MM-DD
+  mission_end?:    string | null;   // YYYY-MM-DD
 }
 
 export interface EmployeeHistoryEntry {

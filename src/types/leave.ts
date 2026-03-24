@@ -6,6 +6,15 @@ export type ContractType = "INTERNE" | "INTERIM";
 // ── LeaveCountMode ─────────────────────────────────────────────────────────────
 export type LeaveCountMode = "CALENDAR" | "WORKING" | "WORKABLE";
 
+// ── LeaveTypeSeniorityBonus ── mirrors LeaveTypeSeniorityBonusSerializer ───────
+/** Palier de majoration d'ancienneté Art. L144 Code du Travail sénégalais */
+export interface LeaveTypeSeniorityBonus {
+  id:                 number;
+  leave_type:         number;
+  min_years:          number;   // seuil d'ancienneté (5, 10, 15, 20 ans)
+  extra_days_per_year: string;  // jours supplémentaires par an (DecimalField → string)
+}
+
 // ── LeaveType ── mirrors LeaveTypeSerializer ──────────────────────────────────
 export interface LeaveType {
   id:                       number;
@@ -17,15 +26,21 @@ export interface LeaveType {
   color:                    string;
   monthly_accrual:          string;
   max_days_per_request:     number;
-  /** Durée minimale légale (ex: mariage=4j, décès=3j). 0 = sans contrainte. */
+  /** Durée minimale légale (ex: mariage=5j Art. L147). 0 = sans contrainte. */
   min_days_per_request:     number;
-  /** Mode de décompte : WORKING=ouvrés Lun-Ven, WORKABLE=ouvrables Lun-Sam, CALENDAR=calendaires */
+  /** Mode de décompte : WORKING=ouvrés Lun-Ven, WORKABLE=ouvrables Lun-Sam (Art. L143), CALENDAR=calendaires */
   count_mode:               LeaveCountMode;
   count_mode_display:       string;
   /** Délai de prévenance obligatoire (jours calendaires avant la date de début). 0 = aucune contrainte. */
   notice_days_required:     number;
   /** Plafond de report en fin d'année. 0=illimité, -1=pas de report. */
   max_carry_over_days:      string;
+  /** Majoration d'ancienneté Art. L144 activée pour ce type */
+  seniority_bonus_enabled:  boolean;
+  /** Congé spécial Art. L147 (mariage, naissance, décès) — non déduit du solde CP */
+  is_special_leave:         boolean;
+  /** Grille des paliers d'ancienneté si seniority_bonus_enabled=true */
+  seniority_bonuses:        LeaveTypeSeniorityBonus[];
 }
 
 // ── EmployeeMini ── mirrors EmployeeMiniSerializer ────────────────────────────
@@ -323,4 +338,10 @@ export interface CarryOverResult {
   total_carried: number;
   count:         number;
   details:       CarryOverDetail[];
+}
+
+// ── LeaveTypeSeniorityBonusCreate ──────────────────────────────────────────────
+export interface LeaveTypeSeniorityBonusCreate {
+  min_years:          number;
+  extra_days_per_year: number;
 }

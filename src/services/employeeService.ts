@@ -138,6 +138,19 @@ export const reinstate = async (
   payload?: { date_reintegration?: string; update_date_embauche?: boolean }
 ) => (await api.post(`/api/employees/${id}/reinstate/`, payload ?? {})).data;
 
+export interface MissionPayload {
+  on_mission: boolean;
+  mission_label?: string;
+  mission_start?: string | null;  // YYYY-MM-DD
+  mission_end?: string | null;    // YYYY-MM-DD
+}
+
+export const setMission = async (
+  id: number,
+  payload: MissionPayload
+): Promise<import("@/types/employee").Employee> =>
+  (await api.post(`/api/employees/${id}/set-mission/`, payload)).data;
+
 export const sendAccessCodesInterim = async (matricules?: string[]) => {
   const payload = matricules?.length ? { matricules } : {};
   return (await api.post("/api/employees/send-access-codes-interim/", payload)).data;
