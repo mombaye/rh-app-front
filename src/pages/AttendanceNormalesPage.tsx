@@ -20,7 +20,7 @@ import * as XLSX from "xlsx";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ViewMode = "daily" | "weekly" | "monthly";
-type StatusFilter = "all" | "ok" | "absent" | "on_leave" | "incomplete" | "anomaly" | "late" | "deficit";
+type StatusFilter = "all" | "ok" | "absent" | "on_leave" | "on_mission" | "incomplete" | "anomaly" | "late" | "deficit";
 type MotifType = "absent" | "not_pointing";
 type WorkContext = "Normale" | "Ramadan" | string;
 
@@ -75,7 +75,7 @@ interface CompensationResult {
 
 interface FlatRecord {
   employee_id: number; matricule: string; full_name: string; department: string; project: string;
-  status: "ok" | "absent" | "on_leave" | "incomplete" | "anomaly";
+  status: "ok" | "absent" | "on_leave" | "on_mission" | "incomplete" | "anomaly";
   is_late_api: boolean; late_label_api: string | null; late_minutes_api: number;
   computed_late_minutes: number; overtime_minutes: number;
   compensation: CompensationResult; deficit_minutes: number;
@@ -92,7 +92,7 @@ interface SummaryRecord {
 interface Pointage {
   day: string; date: string;
   in_time: string | null; out_time: string | null;
-  status: "ok" | "absent" | "incomplete" | "anomaly";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "on_leave" | "on_mission";
 }
 
 // ─── Utilitaires ──────────────────────────────────────────────────────────────
@@ -194,11 +194,12 @@ async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ succ
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const STATUS_CFG = {
-  ok:        { label: "OK",        dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-  absent:    { label: "Absent",    dot: "bg-red-500",     badge: "bg-red-50 text-red-700 ring-red-200" },
-  on_leave:  { label: "En Congé", dot: "bg-sky-500",     badge: "bg-sky-50 text-sky-700 ring-sky-200" },
-  incomplete:{ label: "Incomplet", dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200" },
-  anomaly:   { label: "Anomalie",  dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200" },
+  ok:         { label: "OK",         dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+  absent:     { label: "Absent",     dot: "bg-red-500",     badge: "bg-red-50 text-red-700 ring-red-200" },
+  on_leave:   { label: "En Congé",  dot: "bg-sky-500",     badge: "bg-sky-50 text-sky-700 ring-sky-200" },
+  on_mission: { label: "En Mission", dot: "bg-indigo-500",  badge: "bg-indigo-50 text-indigo-700 ring-indigo-200" },
+  incomplete: { label: "Incomplet",  dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200" },
+  anomaly:    { label: "Anomalie",   dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200" },
 };
 
 const QUICK_FILTERS = [
@@ -206,6 +207,7 @@ const QUICK_FILTERS = [
   { key: "ok"        as StatusFilter, label: "OK",           dotColor: "bg-emerald-400",activeText: "text-emerald-700", activeBg: "bg-emerald-50",activeDot: "bg-emerald-500"   },
   { key: "absent"    as StatusFilter, label: "Absents",      dotColor: "bg-red-400",    activeText: "text-red-700",     activeBg: "bg-red-50",    activeDot: "bg-red-500"       },
   { key: "on_leave"  as StatusFilter, label: "En Congé",    dotColor: "bg-sky-400",    activeText: "text-sky-700",     activeBg: "bg-sky-50",    activeDot: "bg-sky-500"       },
+  { key: "on_mission"as StatusFilter, label: "En Mission",   dotColor: "bg-indigo-400", activeText: "text-indigo-700",  activeBg: "bg-indigo-50", activeDot: "bg-indigo-500"    },
   { key: "late"      as StatusFilter, label: "Retards",      dotColor: "bg-orange-400", activeText: "text-orange-700",  activeBg: "bg-orange-50", activeDot: "bg-orange-500"    },
   { key: "incomplete"as StatusFilter, label: "Incomplets",   dotColor: "bg-amber-400",  activeText: "text-amber-800",   activeBg: "bg-amber-50",  activeDot: "bg-amber-500"     },
   { key: "anomaly"   as StatusFilter, label: "Anomalies",    dotColor: "bg-violet-400", activeText: "text-violet-700",  activeBg: "bg-violet-50", activeDot: "bg-violet-500"    },
@@ -1488,7 +1490,7 @@ export default function AttendanceNormalesPage() {
           const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
           return p ? String(p).toUpperCase() : (projectMap.get(mat) ?? "—");
         })(),
-        status: isDaily ? r.status : r.absent_days > 0 ? "absent" : r.incomplete_days > 0 ? "incomplete" : "ok",
+        status: isDaily ? r.status : r.on_mission_days > 0 ? "on_mission" : r.on_leave_days > 0 ? "on_leave" : r.absent_days > 0 ? "absent" : r.incomplete_days > 0 ? "incomplete" : "ok",
         is_late_api: r.is_late ?? r.late_days > 0,
         late_label_api: r.late_label ?? (r.late_days > 0 ? `${r.late_days}j · moy ${r.avg_late_minutes}min` : null),
         late_minutes_api: r.late_minutes ?? r.total_late_minutes ?? 0,

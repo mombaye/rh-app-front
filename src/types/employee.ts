@@ -74,6 +74,12 @@ export interface Employee {
   is_active_employee?: boolean;
   has_user?:           boolean;
 
+  // ── Mission / déplacement professionnel ─────────────────
+  on_mission?:     boolean;
+  mission_label?:  string | null;
+  mission_start?:  string | null;
+  mission_end?:    string | null;
+
   // ── Workflow congés — hiérarchie N+1 / N+2 ──────────────
   requires_two_approvals?: boolean;
   n1_manager?:       number | null;   // FK id du N+1

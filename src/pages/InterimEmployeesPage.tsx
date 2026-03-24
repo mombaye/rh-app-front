@@ -6,12 +6,14 @@ import EmployeesTable from "@/components/employees/EmployeeTable";
 import ExitEmployeeModal from "@/components/employees/ExitEmployeeModal";
 import EmployeeFormModal from "@/components/employees/EmployeeFormModal";
 import ReinstateEmployeeModal from "@/components/employees/ReinstateEmployeeModal";
+import MissionModal from "@/components/employees/MissionModal";
 import { Employee } from "@/types/employee";
 import {
   getEmployees,
   importEmployees,
   markExit,
   reinstate,
+  patchEmployee,
   sendAccessCodesInterim,
   bulkUpdateMatricules,
   previewMatriculeChanges,
@@ -386,6 +388,8 @@ export default function InterimEmployeesPage() {
   const [reinstateTarget, setReinstateTarget] = useState<Employee | null>(null);
   const [exitOpen, setExitOpen] = useState(false);
   const [exitTarget, setExitTarget] = useState<Employee | null>(null);
+  const [missionOpen, setMissionOpen] = useState(false);
+  const [missionTarget, setMissionTarget] = useState<Employee | null>(null);
   const [isSendingCodes, setIsSendingCodes] = useState(false);
   const [bulkMatOpen, setBulkMatOpen] = useState(false);
 
@@ -417,7 +421,24 @@ export default function InterimEmployeesPage() {
 
   const handleEdit = (employee: Employee) => { setSelected(employee); setShowModal(true); };
   const handleCreate = () => { setSelected(null); setShowModal(true); };
-  const handleExitClick = (emp: Employee) => { setExitTarget(emp); setExitOpen(true); };
+  const handleExitClick    = (emp: Employee) => { setExitTarget(emp); setExitOpen(true); };
+  const handleMissionClick = (emp: Employee) => { setMissionTarget(emp); setMissionOpen(true); };
+
+  const handleConfirmMission = async (payload: {
+    on_mission: boolean; mission_label?: string; mission_start?: string | null; mission_end?: string | null;
+  }) => {
+    if (!missionTarget) return;
+    try {
+      await patchEmployee(missionTarget.id, payload);
+      toast.success(payload.on_mission
+        ? `${missionTarget.prenom} ${missionTarget.nom} défini(e) en mission`
+        : `Mission terminée pour ${missionTarget.prenom} ${missionTarget.nom}`);
+      setMissionOpen(false); setMissionTarget(null);
+      fetchInterimEmployees();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Erreur lors de la mise à jour de la mission");
+    }
+  };
 
   const handleConfirmExit = async (payload: { date_sortie: string; motif_sortie?: string }) => {
     if (!exitTarget) return;
@@ -595,6 +616,7 @@ export default function InterimEmployeesPage() {
             onEdit={handleEdit}
             onExit={handleExitClick}
             onReinstate={openReinstate}
+            onMission={handleMissionClick}
             onImport={handleImport}
             onEmployeeUpdated={fetchInterimEmployees}
             showContractType={false}
@@ -611,6 +633,7 @@ export default function InterimEmployeesPage() {
         />
         <ExitEmployeeModal open={exitOpen} onClose={() => setExitOpen(false)} employee={exitTarget} onConfirm={handleConfirmExit} />
         <ReinstateEmployeeModal open={reinstateOpen} onClose={() => setReinstateOpen(false)} employee={reinstateTarget} onConfirm={doReinstate} />
+        <MissionModal open={missionOpen} onClose={() => setMissionOpen(false)} employee={missionTarget} onConfirm={handleConfirmMission} />
 
         <AnimatePresence>
           {bulkMatOpen && (

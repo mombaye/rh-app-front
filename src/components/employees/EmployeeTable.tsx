@@ -5,7 +5,7 @@ import {
   FaSearch, FaTimes, FaChevronRight, FaArrowLeft, FaCheck,
   FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight, FaUsers, FaUserTimes, FaTrash,
 } from "react-icons/fa";
-import { TbLogout } from "react-icons/tb";
+import { TbLogout, TbPlane } from "react-icons/tb";
 import { AiOutlineRollback } from "react-icons/ai";
 import { motion, AnimatePresence } from "framer-motion";
 import { Employee } from "@/types/employee";
@@ -26,6 +26,7 @@ interface Props {
   onEdit: (employee: Employee) => void;
   onExit: (employee: Employee) => void;
   onReinstate: (employee: Employee) => void;
+  onMission?: (employee: Employee) => void;
   onImport: (file: File) => void;
   onEmployeeUpdated?: (employee: Employee) => void;
   showContractType?: boolean;
@@ -125,6 +126,7 @@ export default function EmployeesTable({
   onEdit,
   onExit,
   onReinstate,
+  onMission,
   onImport,
   onEmployeeUpdated,
   showContractType = true,
@@ -414,6 +416,15 @@ export default function EmployeesTable({
           Suspendu
         </span>
       );
+    if (e.on_mission)
+      return (
+        <span
+          title={e.mission_label || "En mission"}
+          className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700"
+        >
+          En Mission
+        </span>
+      );
     return (
       <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
         Actif
@@ -448,6 +459,7 @@ export default function EmployeesTable({
       { id: "send-code",       icon: <FaPaperPlane size={15} />,      label: "Envoyer le code d'accès",      color: "text-emerald-600",  show: true },
       { id: "create-account",  icon: <FaUserPlus size={15} />,    label: "Créer un accès utilisateur",    color: "text-blue-600",  show: !isExited && !rowEmp.has_user },
       { id: "delete-account",  icon: <FaUserTimes size={15} />,  label: "Supprimer le compte utilisateur", color: "text-red-500",  show: !!rowEmp.has_user },
+      { id: "mission",         icon: <TbPlane size={15} />,           label: rowEmp.on_mission ? "Gérer la mission" : "Définir en mission", color: "text-indigo-600", show: !isExited },
       { id: "exit",            icon: <TbLogout size={15} />,          label: "Enregistrer la sortie",        color: "text-red-600",      show: !isExited },
       { id: "reinstate",       icon: <AiOutlineRollback size={15} />, label: "Réintégrer l'employé",         color: "text-camublue-900", show: isExited },
       { id: "payslip",         icon: <FaFilePdf size={15} />,         label: "Renvoyer un bulletin de paie", color: "text-purple-600",   show: true },
@@ -462,6 +474,7 @@ export default function EmployeesTable({
       else if (id === "send-code")       { doSendCodeSingle(rowEmp); }
       else if (id === "create-account")  { handleCreateAccount(rowEmp); }
       else if (id === "delete-account")  { handleDeleteAccount(rowEmp); }
+      else if (id === "mission")         { onMission?.(rowEmp); setRowOpen(false); }
       else if (id === "exit")            { onExit(rowEmp); setRowOpen(false); }
       else if (id === "reinstate")       { onReinstate(rowEmp); setRowOpen(false); }
       else if (id === "payslip")         { setPayslipEmp(rowEmp); setPayslipOpen(true); setRowOpen(false); }

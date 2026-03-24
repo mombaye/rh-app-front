@@ -17,9 +17,13 @@ export interface DailyRecord {
   late_label: string | null;
   is_late: boolean;
   early_leave_minutes: number;
-  status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working" | "on_leave" | "on_mission";
   is_planned: boolean;
   flags: Record<string, unknown>;
+  on_mission?: boolean;
+  mission_label?: string;
+  mission_start?: string | null;
+  mission_end?: string | null;
   position?: string;
   fonction?: string;
   job_title?: string;
@@ -29,6 +33,8 @@ export interface DailyRecord {
 export interface DailyKpis {
   present: number;
   absent: number;
+  on_leave: number;
+  on_mission: number;
   incomplete: number;
   anomalies: number;
   late: number;
@@ -96,6 +102,8 @@ export interface PeriodEmployeeRow {
   anomaly_days: number;
   incomplete_days: number;
   absent_days: number;
+  on_leave_days?: number;
+  on_mission_days?: number;
   not_pointing_days: number;
   days_total: number;
   total_late_minutes: number;
@@ -164,7 +172,7 @@ export interface DayDetail {
   date: string;
   weekday: number;
   weekday_label: string;
-  status: "ok" | "absent" | "incomplete" | "anomaly";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "on_leave" | "on_mission";
   in_time?: string | null;
   out_time?: string | null;
   worked_minutes: number;
@@ -231,7 +239,7 @@ export interface ShiftRecord {
   late_label: string | null;
   is_late: boolean;
   early_leave_minutes: number;
-  status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working" | "on_leave" | "on_mission";
   flags: Record<string, any>;
   is_replacement: boolean;
   replaced_by: string | null;
