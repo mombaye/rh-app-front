@@ -21,12 +21,13 @@ const STATUS_CONFIG: Record<
   LeaveStatus,
   { label: string; color: string; bg: string; dotClass: string }
 > = {
-  PENDING:        { label: "En attente",          color: "#f59e0b", bg: "#fffbeb", dotClass: "bg-amber-400"   },
-  PENDING_SECOND: { label: "En att. 2ème valid.", color: "#7c3aed", bg: "#f5f3ff", dotClass: "bg-violet-500"  },
-  APPROVED:       { label: "Approuvé",            color: "#10b981", bg: "#ecfdf5", dotClass: "bg-emerald-500" },
-  REJECTED:       { label: "Rejeté",              color: "#ef4444", bg: "#fef2f2", dotClass: "bg-red-500"     },
-  CANCELLED:      { label: "Annulé",              color: "#64748b", bg: "#f8fafc", dotClass: "bg-slate-400"   },
-  REVOKED:        { label: "Révoqué",             color: "#b45309", bg: "#fff7ed", dotClass: "bg-orange-500"  },
+  PENDING:        { label: "En attente (Manager)",   color: "#f59e0b", bg: "#fffbeb", dotClass: "bg-amber-400"   },
+  PENDING_SECOND: { label: "En att. N+2",            color: "#7c3aed", bg: "#f5f3ff", dotClass: "bg-violet-500"  },
+  PENDING_RH:     { label: "En attente RH",          color: "#8b5cf6", bg: "#f3f0ff", dotClass: "bg-purple-500"  },
+  APPROVED:       { label: "Approuvé",               color: "#10b981", bg: "#ecfdf5", dotClass: "bg-emerald-500" },
+  REJECTED:       { label: "Rejeté",                 color: "#ef4444", bg: "#fef2f2", dotClass: "bg-red-500"     },
+  CANCELLED:      { label: "Annulé",                 color: "#64748b", bg: "#f8fafc", dotClass: "bg-slate-400"   },
+  REVOKED:        { label: "Révoqué",                color: "#b45309", bg: "#fff7ed", dotClass: "bg-orange-500"  },
 };
 
 // Convertit le filtre UI → LeaveStatus API
@@ -53,6 +54,7 @@ export default function LeaveRequestList({
   const [fetchError,    setFetchError]    = useState<string | null>(null);
   const [selected,      setSelected]      = useState<LeaveRequest | null>(null);
   const [rejectReason,  setRejectReason]  = useState("");
+  const [hrRejectReason, setHrRejectReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -143,13 +145,54 @@ export default function LeaveRequestList({
     }
   };
 
+  /** POST /api/leaves/requests/<id>/hr_validate/ — validation RH finale */
+  const handleHrValidate = async (id: number) => {
+    setActionLoading(true);
+    try {
+      await leaveRequestService.hrValidate(id);
+      toast.success("Congé validé définitivement par le RH ✓");
+      await fetchRequests();
+      setSelected(null);
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.error ??
+        err?.response?.data?.detail ??
+        "Erreur lors de la validation RH";
+      toast.error(msg);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  /** POST /api/leaves/requests/<id>/hr_reject/ — rejet RH */
+  const handleHrReject = async (id: number) => {
+    if (!hrRejectReason.trim()) {
+      toast.error("Le motif de rejet RH est obligatoire.");
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await leaveRequestService.hrReject(id, { reject_reason: hrRejectReason });
+      toast.success("Demande rejetée par le RH");
+      await fetchRequests();
+      setSelected(null);
+      setHrRejectReason("");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors du rejet RH");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const openDetail = (r: LeaveRequest) => {
     setSelected(r);
     setRejectReason("");
+    setHrRejectReason("");
   };
   const closeModal = () => {
     setSelected(null);
     setRejectReason("");
+    setHrRejectReason("");
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -301,13 +344,14 @@ export default function LeaveRequestList({
 
                       {/* Actions rapides inline */}
                       <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex gap-2">
-                          {r.status === "PENDING" && (
+                        <div className="flex gap-2 flex-wrap">
+                          {/* N+1 / N+2 : approuver ou rejeter */}
+                          {(r.status === "PENDING" || r.status === "PENDING_SECOND") && (
                             <>
                               <button
                                 onClick={() => handleApprove(r.id)}
                                 disabled={actionLoading}
-                                title="Approuver"
+                                title="Approuver (passe en validation RH)"
                                 className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 whitespace-nowrap"
                               >
                                 ✓ Approuver
@@ -315,6 +359,26 @@ export default function LeaveRequestList({
                               <button
                                 onClick={() => openDetail(r)}
                                 title="Rejeter (saisir un motif)"
+                                className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-lg transition whitespace-nowrap"
+                              >
+                                ✗ Rejeter
+                              </button>
+                            </>
+                          )}
+                          {/* RH : validation finale */}
+                          {r.status === "PENDING_RH" && (
+                            <>
+                              <button
+                                onClick={() => handleHrValidate(r.id)}
+                                disabled={actionLoading}
+                                title="Valider définitivement (RH)"
+                                className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 whitespace-nowrap"
+                              >
+                                ✓ Valider (RH)
+                              </button>
+                              <button
+                                onClick={() => openDetail(r)}
+                                title="Rejeter depuis le RH"
                                 className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-lg transition whitespace-nowrap"
                               >
                                 ✗ Rejeter
@@ -438,11 +502,64 @@ export default function LeaveRequestList({
                   </div>
                 )}
 
-                {/* Zone saisie motif rejet — uniquement si PENDING */}
-                {selected.status === "PENDING" && (
+                {/* Chaîne d'approbation — si au moins une validation a eu lieu */}
+                {(selected.reviewed_by || selected.second_reviewer || selected.hr_reviewer || selected.status === "PENDING_RH") && (
+                  <div className="bg-purple-50 border border-purple-100 rounded-xl p-4 space-y-2">
+                    <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-2">
+                      Chaîne d'approbation
+                    </p>
+                    {selected.reviewed_by && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-emerald-500 font-bold">✓</span>
+                        <span className="text-gray-600">
+                          <strong>N+1 :</strong> {selected.reviewed_by.full_name}
+                          {selected.reviewed_at && (
+                            <span className="text-gray-400 text-xs ml-1">
+                              — {fmtDate(selected.reviewed_at.slice(0, 10))}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {selected.second_reviewer && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-emerald-500 font-bold">✓</span>
+                        <span className="text-gray-600">
+                          <strong>N+2 :</strong> {selected.second_reviewer.full_name}
+                          {selected.second_reviewed_at && (
+                            <span className="text-gray-400 text-xs ml-1">
+                              — {fmtDate(selected.second_reviewed_at.slice(0, 10))}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {selected.hr_reviewer ? (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-purple-500 font-bold">✓</span>
+                        <span className="text-gray-600">
+                          <strong>RH :</strong> {selected.hr_reviewer.full_name}
+                          {selected.hr_reviewed_at && (
+                            <span className="text-gray-400 text-xs ml-1">
+                              — {fmtDate(selected.hr_reviewed_at.slice(0, 10))}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    ) : selected.status === "PENDING_RH" ? (
+                      <div className="flex items-center gap-2 text-sm text-purple-600">
+                        <span className="font-bold">⏳</span>
+                        <span><strong>RH :</strong> En attente de validation finale</span>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* Zone saisie motif rejet — Manager N+1 / N+2 */}
+                {(selected.status === "PENDING" || selected.status === "PENDING_SECOND") && (
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5 tracking-wide">
-                      Motif de rejet{" "}
+                      Motif de rejet manager{" "}
                       <span className="normal-case font-normal text-gray-400">
                         (obligatoire pour rejeter)
                       </span>
@@ -457,8 +574,27 @@ export default function LeaveRequestList({
                   </div>
                 )}
 
-                {/* Boutons d'action modal */}
-                {selected.status === "PENDING" && (
+                {/* Zone saisie motif rejet RH — depuis PENDING_RH */}
+                {selected.status === "PENDING_RH" && (
+                  <div>
+                    <label className="text-xs font-semibold text-purple-600 uppercase block mb-1.5 tracking-wide">
+                      Motif de rejet RH{" "}
+                      <span className="normal-case font-normal text-gray-400">
+                        (obligatoire pour rejeter)
+                      </span>
+                    </label>
+                    <textarea
+                      value={hrRejectReason}
+                      onChange={(e) => setHrRejectReason(e.target.value)}
+                      placeholder="Motif du rejet par le service RH…"
+                      rows={2}
+                      className="w-full border border-purple-200 rounded-xl p-3 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 resize-none transition"
+                    />
+                  </div>
+                )}
+
+                {/* Boutons d'action modal — Manager (N+1 / N+2) */}
+                {(selected.status === "PENDING" || selected.status === "PENDING_SECOND") && (
                   <div className="flex gap-3 pt-1">
                     <button
                       disabled={actionLoading || !rejectReason.trim()}
@@ -474,10 +610,42 @@ export default function LeaveRequestList({
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50"
                     >
                       {actionLoading && <ImSpinner2 className="animate-spin" size={13} />}
-                      ✓ Approuver
+                      ✓ Approuver → Envoyer au RH
                     </button>
                   </div>
                 )}
+
+                {/* Boutons d'action modal — RH validation finale */}
+                {selected.status === "PENDING_RH" && (
+                  <div className="space-y-3 pt-1">
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-sm text-purple-800">
+                      <p className="font-semibold mb-1">⚠️ Validation RH finale requise</p>
+                      <p className="text-xs text-purple-600">
+                        Ce congé a été approuvé par le(s) manager(s). Votre validation
+                        enregistre officiellement le congé et déduit le solde de l'employé.
+                      </p>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        disabled={actionLoading || !hrRejectReason.trim()}
+                        onClick={() => handleHrReject(selected.id)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50"
+                      >
+                        {actionLoading && <ImSpinner2 className="animate-spin" size={13} />}
+                        ✗ Rejeter (RH)
+                      </button>
+                      <button
+                        disabled={actionLoading}
+                        onClick={() => handleHrValidate(selected.id)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50"
+                      >
+                        {actionLoading && <ImSpinner2 className="animate-spin" size={13} />}
+                        ✓ Valider définitivement
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {selected.status === "APPROVED" && (
                   <div className="pt-1">
                     <button

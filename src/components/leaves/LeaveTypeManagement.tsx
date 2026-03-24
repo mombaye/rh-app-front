@@ -19,6 +19,10 @@ const EMPTY_FORM = {
   color:                     "#3b82f6",
   monthly_accrual:           "0",
   max_days_per_request:      "0",
+  min_days_per_request:      "0",
+  count_mode:                "WORKING" as "CALENDAR" | "WORKING" | "WORKABLE",
+  notice_days_required:      "0",
+  max_carry_over_days:       "0",
 };
 
 type FormState = typeof EMPTY_FORM;
@@ -79,6 +83,10 @@ export default function LeaveTypeManagement() {
       color:                     t.color,
       monthly_accrual:           t.monthly_accrual ?? "0",
       max_days_per_request:      String(t.max_days_per_request ?? 0),
+      min_days_per_request:      String(t.min_days_per_request ?? 0),
+      count_mode:                (t.count_mode ?? "WORKING") as "CALENDAR" | "WORKING" | "WORKABLE",
+      notice_days_required:      String(t.notice_days_required ?? 0),
+      max_carry_over_days:       String(t.max_carry_over_days ?? "0"),
     });
     setFormError(null);
     setShowForm(true);
@@ -116,6 +124,10 @@ export default function LeaveTypeManagement() {
         color:                     form.color,
         monthly_accrual:           parseFloat(form.monthly_accrual) || 0,
         max_days_per_request:      parseInt(form.max_days_per_request) || 0,
+        min_days_per_request:      parseInt(form.min_days_per_request) || 0,
+        count_mode:                form.count_mode,
+        notice_days_required:      parseInt(form.notice_days_required) || 0,
+        max_carry_over_days:       parseFloat(form.max_carry_over_days) || 0,
       };
       if (editTarget) {
         await leaveTypeService.update(editTarget.id, payload);
@@ -272,31 +284,47 @@ export default function LeaveTypeManagement() {
 
                 <div className="mt-3 space-y-1.5 text-xs text-gray-600">
                   <div className="flex items-center justify-between">
+                    <span className="text-gray-400">Décompte</span>
+                    <span className="font-semibold text-gray-800">
+                      {t.count_mode === "WORKING" ? "Jours ouvrés" : t.count_mode === "WORKABLE" ? "Jours ouvrables" : "Jours calendaires"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
                     <span className="text-gray-400">Accrual mensuel</span>
                     <span className="font-semibold text-gray-800">
                       {parseFloat(t.monthly_accrual) > 0 ? `+${t.monthly_accrual}j/mois` : "Aucun"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Max par demande</span>
+                    <span className="text-gray-400">Durée (min / max)</span>
                     <span className="font-semibold text-gray-800">
-                      {t.max_days_per_request > 0 ? `${t.max_days_per_request}j` : "Illimité"}
+                      {t.min_days_per_request > 0 ? `≥${t.min_days_per_request}j` : "—"}
+                      {" / "}
+                      {t.max_days_per_request > 0 ? `≤${t.max_days_per_request}j` : "∞"}
+                    </span>
+                  </div>
+                  {t.notice_days_required > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Préavis</span>
+                      <span className="font-semibold text-blue-700">{t.notice_days_required}j avant</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400">Report annuel</span>
+                    <span className="font-semibold text-gray-800">
+                      {parseFloat(t.max_carry_over_days) < 0
+                        ? "Aucun"
+                        : parseFloat(t.max_carry_over_days) === 0
+                        ? "Illimité"
+                        : `≤${t.max_carry_over_days}j`}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-400">Justificatif requis</span>
                     <span className={`font-semibold ${t.requires_justification ? "text-amber-600" : "text-gray-500"}`}>
-                      {t.requires_justification ? "Oui" : "Non"}
+                      {t.requires_justification ? `Oui (${t.justification_grace_days ?? 7}j)` : "Non"}
                     </span>
                   </div>
-                  {t.requires_justification && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Délai justificatif</span>
-                      <span className="font-semibold text-amber-700">
-                        {t.justification_grace_days ?? 7}j après congé
-                      </span>
-                    </div>
-                  )}
                 </div>
               </div>
             </motion.div>
@@ -378,6 +406,25 @@ export default function LeaveTypeManagement() {
                   />
                 </div>
 
+                {/* Mode de décompte */}
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
+                    Mode de décompte des jours
+                  </label>
+                  <select
+                    name="count_mode" value={form.count_mode}
+                    onChange={handleChange}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition bg-white"
+                  >
+                    <option value="WORKING">Jours ouvrés (Lun-Ven) — recommandé CP/RTT</option>
+                    <option value="WORKABLE">Jours ouvrables (Lun-Sam)</option>
+                    <option value="CALENDAR">Jours calendaires (tous les jours)</option>
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    France : CP/RTT = jours ouvrés. Maladie/congés spéciaux = jours calendaires.
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
@@ -389,7 +436,7 @@ export default function LeaveTypeManagement() {
                       placeholder="0 = pas d'accrual"
                       className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 transition"
                     />
-                    <p className="text-xs text-gray-400 mt-1">2 = 2j crédités le 1er du mois</p>
+                    <p className="text-xs text-gray-400 mt-1">2.5 = 30j/an (norme française CP)</p>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
@@ -403,6 +450,48 @@ export default function LeaveTypeManagement() {
                     />
                     <p className="text-xs text-gray-400 mt-1">0 = pas de limite</p>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
+                      Min jours / demande (légal)
+                    </label>
+                    <input
+                      type="number" name="min_days_per_request" value={form.min_days_per_request}
+                      onChange={handleChange} min={0}
+                      placeholder="0 = sans minimum"
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 transition"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Ex : Mariage=4j, Décès=3-5j (loi fr.)</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
+                      Délai de prévenance (jours)
+                    </label>
+                    <input
+                      type="number" name="notice_days_required" value={form.notice_days_required}
+                      onChange={handleChange} min={0}
+                      placeholder="0 = aucune contrainte"
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 transition"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Ex : 14j = préavis 2 semaines</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
+                    Report fin d'année (jours max)
+                  </label>
+                  <input
+                    type="number" name="max_carry_over_days" value={form.max_carry_over_days}
+                    onChange={handleChange} min={-1} step={0.5}
+                    placeholder="0 = illimité"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 transition"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    0 = report illimité · -1 = aucun report autorisé · Ex : 10 = max 10j reportables
+                  </p>
                 </div>
 
                 <div className="space-y-2.5">

@@ -3,6 +3,9 @@
 
 export type ContractType = "INTERNE" | "INTERIM";
 
+// ── LeaveCountMode ─────────────────────────────────────────────────────────────
+export type LeaveCountMode = "CALENDAR" | "WORKING" | "WORKABLE";
+
 // ── LeaveType ── mirrors LeaveTypeSerializer ──────────────────────────────────
 export interface LeaveType {
   id:                       number;
@@ -14,6 +17,15 @@ export interface LeaveType {
   color:                    string;
   monthly_accrual:          string;
   max_days_per_request:     number;
+  /** Durée minimale légale (ex: mariage=4j, décès=3j). 0 = sans contrainte. */
+  min_days_per_request:     number;
+  /** Mode de décompte : WORKING=ouvrés Lun-Ven, WORKABLE=ouvrables Lun-Sam, CALENDAR=calendaires */
+  count_mode:               LeaveCountMode;
+  count_mode_display:       string;
+  /** Délai de prévenance obligatoire (jours calendaires avant la date de début). 0 = aucune contrainte. */
+  notice_days_required:     number;
+  /** Plafond de report en fin d'année. 0=illimité, -1=pas de report. */
+  max_carry_over_days:      string;
 }
 
 // ── EmployeeMini ── mirrors EmployeeMiniSerializer ────────────────────────────
@@ -38,10 +50,18 @@ export interface EmployeeMini {
 export type LeaveStatus =
   | "PENDING"
   | "PENDING_SECOND"
+  | "PENDING_RH"       // En attente de validation RH finale
   | "APPROVED"
   | "REJECTED"
   | "CANCELLED"
   | "REVOKED";
+
+/** Statuts en attente de quelqu'un (non encore décidés) */
+export const PENDING_STATUSES: LeaveStatus[] = [
+  "PENDING",
+  "PENDING_SECOND",
+  "PENDING_RH",
+];
 
 // ── LeaveRequest ── mirrors LeaveRequestSerializer ───────────────────────────
 export interface LeaveRequest {
@@ -61,10 +81,14 @@ export interface LeaveRequest {
   reviewed_at:   string | null;
   reject_reason: string;
 
-  // 2ème validation
+  // 2ème validation (N+2 optionnel)
   requires_second_approval: boolean;
   second_reviewer:          EmployeeMini | null;
   second_reviewed_at:       string | null;
+
+  // Validation RH finale (obligatoire)
+  hr_reviewer:              EmployeeMini | null;
+  hr_reviewed_at:           string | null;
 
   // Révocation (rappel d'urgence)
   revoke_reason:                string;
@@ -119,7 +143,8 @@ export interface LeaveBalanceAdjust {
 // ── LeaveSummary ── mirrors summary() action ──────────────────────────────────
 export interface LeaveSummary {
   total:               number;
-  pending:             number;
+  pending:             number;   // PENDING + PENDING_SECOND (à traiter par les managers)
+  pending_rh:          number;   // PENDING_RH (à traiter par le RH)
   approved:            number;
   rejected:            number;
   cancelled:           number;
@@ -162,6 +187,7 @@ export type ExportColumnKey =
   | "start_date" | "end_date" | "days" | "motif" | "status"
   | "reviewed_by" | "reviewed_by_email" | "reviewed_at"
   | "second_reviewer" | "second_reviewer_email" | "second_reviewed_at"
+  | "hr_reviewer" | "hr_reviewed_at"
   | "reject_reason" | "revoke_reason"
   | "justification_validated"
   | "created_at";
@@ -267,4 +293,34 @@ export interface RevokePayload {
   revoke_reason: string;
   revoker_id?:   number;
   recall_date?:  string;  // "YYYY-MM-DD"
+}
+
+// ── HrValidatePayload ──────────────────────────────────────────────────────────
+export interface HrValidatePayload {
+  hr_reviewer_id?: number;
+}
+
+// ── HrRejectPayload ────────────────────────────────────────────────────────────
+export interface HrRejectPayload {
+  reject_reason:   string;
+  hr_reviewer_id?: number;
+}
+
+// ── CarryOverResult ────────────────────────────────────────────────────────────
+export interface CarryOverDetail {
+  employee:            string;
+  matricule:           string;
+  leave_type:          string;
+  remaining_from_year: number;
+  carried_over:        number;
+  reason?:             string;
+}
+
+export interface CarryOverResult {
+  from_year:     number;
+  to_year:       number;
+  dry_run:       boolean;
+  total_carried: number;
+  count:         number;
+  details:       CarryOverDetail[];
 }

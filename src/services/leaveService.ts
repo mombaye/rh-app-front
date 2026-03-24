@@ -13,6 +13,9 @@ import {
   LeaveCalendarEntry,
   ApprovePayload,
   RevokePayload,
+  HrValidatePayload,
+  HrRejectPayload,
+  CarryOverResult,
   ExportColumnKey,
   PublicHoliday,
   HolidayCheckResult,
@@ -363,6 +366,34 @@ export const leaveRequestService = {
   },
 
   /**
+   * POST /api/leaves/requests/<id>/hr_validate/
+   * Validation RH finale : PENDING_RH → APPROVED.
+   * Body optionnel : { hr_reviewer_id: number }
+   */
+  hrValidate: async (id: number, payload?: HrValidatePayload): Promise<LeaveRequest> => {
+    const res = await axios.post(
+      `${API}/requests/${id}/hr_validate/`,
+      payload ?? {},
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /api/leaves/requests/<id>/hr_reject/
+   * Rejet RH depuis PENDING_RH.
+   * Body : { reject_reason, hr_reviewer_id? }
+   */
+  hrReject: async (id: number, payload: HrRejectPayload): Promise<LeaveRequest> => {
+    const res = await axios.post(
+      `${API}/requests/${id}/hr_reject/`,
+      payload,
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
+  /**
    * POST /api/leaves/requests/trigger-monthly-credit/
    * Déclenche le crédit mensuel (+2j) pour tous les employés actifs.
    */
@@ -370,6 +401,24 @@ export const leaveRequestService = {
     const res = await axios.post(
       `${API}/requests/trigger-monthly-credit/`,
       {},
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /api/leaves/requests/carry-over/
+   * Report de congés de fin d'année.
+   * Body : { from_year, to_year?, dry_run? }
+   */
+  carryOver: async (
+    fromYear: number,
+    toYear?: number,
+    dryRun?: boolean
+  ): Promise<CarryOverResult> => {
+    const res = await axios.post(
+      `${API}/requests/carry-over/`,
+      { from_year: fromYear, to_year: toYear, dry_run: dryRun ?? false },
       { headers: getAuthHeaders() }
     );
     return res.data;
