@@ -22,6 +22,15 @@ export interface Employee {
   motif_sortie?: string | null;
   is_active_employee?: boolean;
 
-  // champ déjà utilisé dans ton code (si tu l’as côté backend)
+  // Type de contrat
+  type_contrat?: string | null;
+
+  // ── Mission / Déplacement professionnel ──────────────────
+  on_mission?:      boolean;
+  mission_label?:   string | null;
+  mission_start?:   string | null;
+  mission_end?:     string | null;
+
+  // champ déjà utilisé dans ton code (si tu l'as côté backend)
   has_user?: boolean;
 }

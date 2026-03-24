@@ -7,7 +7,8 @@ import {
   FaSort,
   FaSortUp,
   FaSortDown,
-  FaFilePdf
+  FaFilePdf,
+  FaPlane,
 } from "react-icons/fa";
 import { TbLogout } from "react-icons/tb";
 import { AiOutlineRollback } from "react-icons/ai";
@@ -19,6 +20,7 @@ import { ImSpinner2 } from "react-icons/im";
 import { Menu, Transition } from "@headlessui/react";
 
 import EmployeePayslipResendModal from "@/components/employees/EmployeePayslipResendModal";
+import MissionModal from "@/components/employees/MissionModal";
 
 
 
@@ -51,6 +53,8 @@ export default function EmployeesTable({
   const [isExporting, setIsExporting] = useState(false);
   const [payslipOpen, setPayslipOpen] = useState(false);
   const [payslipEmp, setPayslipEmp] = useState<Employee | null>(null);
+  const [missionOpen, setMissionOpen] = useState(false);
+  const [missionEmp, setMissionEmp] = useState<Employee | null>(null);
 
   // Tri par colonne
   const [sortConfig, setSortConfig] = useState<{
@@ -252,6 +256,21 @@ export default function EmployeesTable({
         <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
           Suspendu
         </span>
+      );
+    }
+    if (e.on_mission) {
+      return (
+        <div className="flex flex-col gap-1">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+            <FaPlane size={10} />
+            En mission
+          </span>
+          {e.mission_label && (
+            <span className="text-[10px] text-blue-500 truncate max-w-[160px]" title={e.mission_label}>
+              {e.mission_label}
+            </span>
+          )}
+        </div>
       );
     }
     return (
@@ -605,6 +624,20 @@ export default function EmployeesTable({
                     <FaEdit />
                   </button>
 
+                  {/* Mission */}
+                  {emp.status !== "EXITED" && (
+                    <button
+                      onClick={() => {
+                        setMissionEmp(emp);
+                        setMissionOpen(true);
+                      }}
+                      className={`${emp.on_mission ? "text-blue-600 hover:text-blue-800" : "text-slate-400 hover:text-blue-600"}`}
+                      title={emp.on_mission ? "Gestion de la mission" : "Mettre en mission"}
+                    >
+                      <FaPlane />
+                    </button>
+                  )}
+
                   {/* Sortie / Réintégrer */}
                   {emp.status !== "EXITED" ? (
                     <button
@@ -622,7 +655,7 @@ export default function EmployeesTable({
                     >
                       <AiOutlineRollback />
                     </button>
-                    
+
                   )}
 
                   <button
@@ -701,6 +734,19 @@ export default function EmployeesTable({
         onClose={() => {
           setPayslipOpen(false);
           setPayslipEmp(null);
+        }}
+      />
+
+      <MissionModal
+        open={missionOpen}
+        employee={missionEmp}
+        onClose={() => {
+          setMissionOpen(false);
+          setMissionEmp(null);
+        }}
+        onUpdated={() => {
+          setMissionOpen(false);
+          setMissionEmp(null);
         }}
       />
 

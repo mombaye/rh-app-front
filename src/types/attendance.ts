@@ -1,6 +1,6 @@
 // src/types/attendance.ts
 
-export type AttendanceStatus = "ok" | "absent" | "incomplete" | "anomaly";
+export type AttendanceStatus = "ok" | "absent" | "incomplete" | "anomaly" | "on_mission" | "on_leave";
 
 export type DailyRecord = {
   employee_id: number;
@@ -19,6 +19,10 @@ export type DailyRecord = {
   early_leave_minutes?: number | null;
   status: AttendanceStatus;
   flags?: Record<string, any>;
+  on_mission?: boolean;
+  mission_label?: string;
+  mission_start?: string | null;
+  mission_end?: string | null;
   // optionnels si backend les renvoie
   position?: string | null;
   fonction?: string | null;
@@ -35,7 +39,9 @@ export type DailyStatsResponse = {
     absent: number;
     incomplete: number;
     anomalies: number;
+    on_mission?: number;
     not_pointing?: number;
+    late?: number;
     avg_late_minutes: number;
     total_overtime_minutes: number;
   };
@@ -45,6 +51,7 @@ export type DailyStatsResponse = {
     absent: number;
     incomplete: number;
     anomaly: number;
+    on_mission?: number;
   }>;
   late_top: Array<{ full_name: string; late_minutes: number; department?: string | null }>;
   records: DailyRecord[];
@@ -60,6 +67,7 @@ export type WeeklyDayRow = {
   absent_count?: number;
   incomplete_count?: number;
   anomaly_count?: number;
+  on_mission_count?: number;
   not_pointing_count?: number;
 };
 
@@ -70,6 +78,7 @@ export type PeriodEmployeeRow = {
   prenom?: string | null;
   full_name?: string | null;
   service?: string | null;
+  on_mission?: boolean;
 
   worked_minutes: number;
   expected_minutes: number;
@@ -81,6 +90,7 @@ export type PeriodEmployeeRow = {
   absent_days?: number;
   incomplete_days?: number;
   anomaly_days?: number;
+  on_mission_days?: number;
   not_pointing_days?: number;
   days_total?: number;
 
@@ -106,6 +116,7 @@ export type WeeklyStatsResponse = {
   absent_days: number;
   incomplete_days?: number;
   anomaly_days?: number;
+  on_mission_days?: number;
   not_pointing_days?: number;
 
   by_day: WeeklyDayRow[];
@@ -141,7 +152,7 @@ export type EmployeePeriodDetailDay = {
   date: string; // YYYY-MM-DD
   weekday?: number;
   weekday_label?: string;
-  status: AttendanceStatus | "present"; // backend renvoie ok/anomaly/incomplete/absent (et parfois present)
+  status: AttendanceStatus | "present"; // backend renvoie ok/anomaly/incomplete/absent/mission (et parfois present)
   in_time?: string | null;
   out_time?: string | null;
   worked_minutes?: number;
