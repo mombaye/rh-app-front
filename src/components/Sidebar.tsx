@@ -7,17 +7,16 @@ import {
   Menu,
   X,
   Clock,
-  CalendarDays,
 } from "lucide-react";
 import logo from "@/assets/images/camusat-logo.png";
 import { useState } from "react";
 
 const navItems = [
   { label: "Tableau de bord", path: "/dashboard", icon: <LayoutDashboard size={20} /> },
-  { label: "Employ\u00e9s", path: "/employees", icon: <Users2 size={20} /> },
-  { label: "Bulletins Salari\u00e9s", path: "/payslip", icon: <BadgeDollarSign size={20} /> },
+  { label: "Employés", path: "/employees", icon: <Users2 size={20} /> },
+  { label: "Bulletins Salariés", path: "/payslip", icon: <BadgeDollarSign size={20} /> },
   { label: "Pointages", path: "/attendance", icon: <Clock size={20} /> },
-  { label: "Cong\u00e9s", path: "/leaves", icon: <CalendarDays size={20} /> },
+  // ... ajoute tes autres modules ici
 ];
 
 export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boolean, setMobileOpen: (open: boolean) => void }) {

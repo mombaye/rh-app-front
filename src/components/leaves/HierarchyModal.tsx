@@ -11,16 +11,14 @@ import {
   Briefcase,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getHierarchy } from "@/services/leaveService";
-import type { HierarchyNode } from "@/services/leaveService";
+import { getHierarchy } from "@/services/hierarchyService";
+import type { HierarchyNode } from "@/services/hierarchyService";
 import toast from "react-hot-toast";
 
 interface Props {
   open: boolean;
   onClose: () => void;
 }
-
-// ── Helpers ─────────────────────────────────────────────
 
 function countDescendants(node: HierarchyNode): number {
   return node.children.reduce(
@@ -55,8 +53,6 @@ function filterTree(
   return nodes.map(walk).filter(Boolean) as HierarchyNode[];
 }
 
-// ── Tree Node ───────────────────────────────────────────
-
 function TreeNode({
   node,
   depth,
@@ -77,14 +73,12 @@ function TreeNode({
     <div
       className={depth > 0 ? "ml-5 border-l-2 border-slate-200 pl-4" : ""}
     >
-      {/* Node row */}
       <div
         className={`flex items-start gap-2 py-1.5 group ${
           hasChildren ? "cursor-pointer" : ""
         }`}
         onClick={() => hasChildren && setExpanded(!expanded)}
       >
-        {/* Expand / collapse icon */}
         <div className="mt-2.5 shrink-0 w-4">
           {hasChildren ? (
             <span className="text-slate-400 group-hover:text-camublue-900 transition-colors">
@@ -99,7 +93,6 @@ function TreeNode({
           )}
         </div>
 
-        {/* Card */}
         <div
           className={`flex-1 rounded-xl border px-3 py-2 shadow-sm hover:shadow-md transition-all ${
             isRoot
@@ -129,7 +122,6 @@ function TreeNode({
             )}
           </div>
 
-          {/* Fonction */}
           {node.fonction && (
             <div
               className={`flex items-center gap-1 text-xs mt-0.5 ${
@@ -141,7 +133,6 @@ function TreeNode({
             </div>
           )}
 
-          {/* Service + localisation */}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {node.service && (
               <span
@@ -168,7 +159,6 @@ function TreeNode({
         </div>
       </div>
 
-      {/* Children */}
       <AnimatePresence>
         {expanded && hasChildren && (
           <motion.div
@@ -191,8 +181,6 @@ function TreeNode({
     </div>
   );
 }
-
-// ── Modal ───────────────────────────────────────────────
 
 export default function HierarchyModal({ open, onClose }: Props) {
   const [tree, setTree] = useState<HierarchyNode[]>([]);
