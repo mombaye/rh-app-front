@@ -556,7 +556,7 @@ interface Props { layout?: React.ComponentType<{ children: React.ReactNode }>; }
 
 export default function EmployeeAttendancePage({ layout: Layout = EmployeeLayout }: Props) {
   const { user } = useAuth();
-  const [view,       setView]      = useState<ViewMode>("monthly");
+  const [view,       setView]      = useState<ViewMode>("daily");
   const [showExport, setShowExport] = useState(false);
 
   const now = new Date();

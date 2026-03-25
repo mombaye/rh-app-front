@@ -9,10 +9,15 @@ import {
   AlertCircle,
   XCircle,
   TrendingUp,
+  Building2,
+  User,
+  ShieldCheck,
+  ArrowDown,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
 import { leaveBalanceService, leaveRequestService } from "@/services/leaveService";
+import { employeeHierarchyService, MyHierarchyChain } from "@/services/hierarchyService";
 import { fetchAvailableBulletins } from "@/services/employeeService";
 import { getEmployeeDocuments } from "@/services/employeeService";
 import { LeaveBalance, LeaveRequest } from "@/types/leave";
@@ -39,6 +44,7 @@ export default function EmployeeDashboardPage() {
   const [bulletinCount, setBulletinCount] = useState<number | null>(null);
   const [docCount, setDocCount]     = useState<number | null>(null);
   const [loading, setLoading]       = useState(true);
+  const [hierarchy, setHierarchy]   = useState<MyHierarchyChain | null>(null);
 
   useEffect(() => {
     if (!employeeId) { setLoading(false); return; }
@@ -60,6 +66,12 @@ export default function EmployeeDashboardPage() {
       setDocCount(Array.isArray((docs as any).items) ? (docs as any).items.length : 0);
     }).finally(() => setLoading(false));
   }, [employeeId, employeeMatricule]);
+
+  useEffect(() => {
+    employeeHierarchyService.getMyHierarchy()
+      .then(setHierarchy)
+      .catch(() => {});
+  }, []);
 
   const totalRemaining = balances.reduce((s, b) => s + parseFloat(b.remaining || "0"), 0);
   const pendingCount   = requests.filter(r => r.status === "PENDING" || r.status === "PENDING_SECOND").length;
@@ -259,6 +271,106 @@ export default function EmployeeDashboardPage() {
             )}
           </motion.div>
         </div>
+
+        {/* ── Arborescence de validation ── */}
+        {hierarchy && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mt-6"
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                <Building2 size={18} className="text-camublue-900" />
+                Mon arborescence de validation
+              </h2>
+              <Link to="/employee/leaves" className="text-xs text-camublue-900 hover:underline">
+                Voir mes congés →
+              </Link>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">Circuit de validation appliqué à vos demandes de congé</p>
+
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-0 sm:gap-3 justify-center">
+              {/* Employé (moi) */}
+              <div className="flex flex-col items-center text-center min-w-[140px]">
+                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 mb-2">
+                  <User size={22} className="text-blue-700" />
+                </div>
+                <span className="text-xs font-bold text-blue-800 leading-tight">{hierarchy.employee.full_name}</span>
+                <span className="text-[10px] text-blue-500 mt-0.5">{hierarchy.employee.fonction || hierarchy.employee.service}</span>
+                <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded mt-1">Vous</span>
+              </div>
+
+              {/* Connecteur → */}
+              <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
+                <ArrowDown size={16} className="text-gray-300 sm:hidden" />
+                <div className="hidden sm:block w-8 h-0.5 bg-gray-300 rounded" />
+                <div className="hidden sm:block w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[6px] border-l-gray-300" />
+              </div>
+
+              {/* N+1 */}
+              <div className="flex flex-col items-center text-center min-w-[140px]">
+                <div className={`p-3 rounded-xl mb-2 ${hierarchy.n1_manager ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
+                  <ShieldCheck size={22} className={hierarchy.n1_manager ? "text-amber-700" : "text-gray-400"} />
+                </div>
+                {hierarchy.n1_manager ? (
+                  <>
+                    <span className="text-xs font-bold text-amber-800 leading-tight">{hierarchy.n1_manager.full_name}</span>
+                    <span className="text-[10px] text-amber-500 mt-0.5">{hierarchy.n1_manager.fonction || hierarchy.n1_manager.service}</span>
+                  </>
+                ) : (
+                  <span className="text-xs text-gray-400 italic">Non défini</span>
+                )}
+                <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded mt-1">N+1</span>
+              </div>
+
+              {/* N+2 (conditionnel) */}
+              {hierarchy.requires_two_approvals && (
+                <>
+                  <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
+                    <ArrowDown size={16} className="text-gray-300 sm:hidden" />
+                    <div className="hidden sm:block w-8 h-0.5 bg-gray-300 rounded" />
+                    <div className="hidden sm:block w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[6px] border-l-gray-300" />
+                  </div>
+
+                  <div className="flex flex-col items-center text-center min-w-[140px]">
+                    <div className={`p-3 rounded-xl mb-2 ${hierarchy.n2_manager ? "bg-orange-50 border border-orange-200" : "bg-gray-50 border border-gray-200"}`}>
+                      <ShieldCheck size={22} className={hierarchy.n2_manager ? "text-orange-700" : "text-gray-400"} />
+                    </div>
+                    {hierarchy.n2_manager ? (
+                      <>
+                        <span className="text-xs font-bold text-orange-800 leading-tight">{hierarchy.n2_manager.full_name}</span>
+                        <span className="text-[10px] text-orange-500 mt-0.5">{hierarchy.n2_manager.fonction || hierarchy.n2_manager.service}</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">Non défini</span>
+                    )}
+                    <span className="text-[9px] font-semibold text-orange-700 bg-orange-50 px-2 py-0.5 rounded mt-1">N+2</span>
+                  </div>
+                </>
+              )}
+
+              {/* Connecteur → RH */}
+              <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
+                <ArrowDown size={16} className="text-gray-300 sm:hidden" />
+                <div className="hidden sm:block w-8 h-0.5 bg-gray-300 rounded" />
+                <div className="hidden sm:block w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[6px] border-l-gray-300" />
+              </div>
+
+              {/* RH */}
+              <div className="flex flex-col items-center text-center min-w-[140px]">
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 mb-2">
+                  <CheckCircle2 size={22} className="text-emerald-700" />
+                </div>
+                <span className="text-xs font-bold text-emerald-800 leading-tight">Service RH</span>
+                <span className="text-[10px] text-emerald-500 mt-0.5">Validation finale</span>
+                <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded mt-1">RH</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
       </div>
     </EmployeeLayout>
   );
