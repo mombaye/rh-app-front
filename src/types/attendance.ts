@@ -243,6 +243,10 @@ export interface ShiftRecord {
   flags: Record<string, any>;
   is_replacement: boolean;
   replaced_by: string | null;
+  replacement_in_time: string | null;
+  replacement_out_time: string | null;
+  replacement_worked_minutes: number | null;
+  replaces_employee: string | null;
 }
 
 export interface ShiftDailyStatsResponse {

@@ -7,7 +7,7 @@ import {
   Clock, AlertTriangle, UserMinus, FileSpreadsheet, X, ChevronLeft, ChevronRight,
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
   Check, Settings, CheckCircle, Lock, CalendarDays,
-  TrendingUp, Pencil, Plus, Trash2, Upload, CalendarRange, ArrowLeftRight,
+  TrendingUp, Pencil, Plus, Trash2, Upload, CalendarRange, ArrowLeftRight, ArrowRight,
   Table2, Filter,
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
@@ -60,6 +60,10 @@ interface FlatRecord {
   is_shift_pending: boolean;
   team_id: string;
   replaced_by: string | null;
+  replacement_in_time: string | null;
+  replacement_out_time: string | null;
+  replacement_worked_minutes: number | null;
+  replaces_employee: string | null;
 }
 
 interface SummaryRecord {
@@ -1616,13 +1620,22 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
         <td className="px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center font-mono text-slate-500 text-xs">{r.matricule || "—"}</div></td>
         <td className="px-2 py-2 lg:px-4 lg:py-3">
           <div className="flex flex-col items-center gap-0.5">
-            <div className="flex items-center gap-1.5">
+            {r.replaced_by ? (
+              /* Absent avec remplaçant : affiche Absent → Remplaçant */
+              <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                <span className="font-medium text-red-500 text-xs lg:text-sm line-through">{r.full_name}</span>
+                <ArrowRight className="h-3 w-3 text-purple-500 shrink-0" />
+                <span className="font-semibold text-purple-700 text-xs lg:text-sm">{r.replaced_by}</span>
+              </div>
+            ) : r.replaces_employee ? (
+              /* Remplaçant : affiche Absent → Remplaçant */
+              <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                <span className="font-medium text-red-400 text-xs lg:text-sm line-through">{r.replaces_employee}</span>
+                <ArrowRight className="h-3 w-3 text-purple-500 shrink-0" />
+                <span className="font-semibold text-purple-700 text-xs lg:text-sm">{r.full_name}</span>
+              </div>
+            ) : (
               <span className="font-medium text-slate-800 text-xs lg:text-sm">{r.full_name}</span>
-            </div>
-            {r.replaced_by && (
-              <span className="text-[10px] text-purple-600 font-semibold flex items-center gap-1">
-                <ArrowLeftRight className="h-2.5 w-2.5" />remplacé par {r.replaced_by}
-              </span>
             )}
           </div>
         </td>
@@ -1647,16 +1660,29 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
           </div>
         </td>
         <td className="px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
-        <td className={`px-2 py-2 lg:px-4 lg:py-3 tabular-nums font-mono text-xs lg:text-sm ${r.is_shift_pending ? "text-blue-400" : r.status === "absent" ? "text-red-400" : r.computed_late_minutes > 0 ? "text-orange-500 font-semibold" : "text-slate-700"}`}>
+        <td className={`px-2 py-2 lg:px-4 lg:py-3 tabular-nums font-mono text-xs lg:text-sm ${r.is_shift_pending ? "text-blue-400" : r.status === "absent" && !r.replacement_in_time ? "text-red-400" : r.status === "absent" && r.replacement_in_time ? "text-purple-600" : r.computed_late_minutes > 0 ? "text-orange-500 font-semibold" : "text-slate-700"}`}>
           <div className="flex justify-center">
             {r.in_time ? formatTime(r.in_time)
-              : r.is_shift_pending ? <span className="text-[10px] text-blue-400 font-medium">En attente</span>
-                : r.status === "absent" ? <span className="text-[10px] text-red-400 font-medium">—</span>
-                  : "—"}
+              : r.replacement_in_time ? <span className="text-purple-600 font-medium" title="Pointage du remplaçant">{formatTime(r.replacement_in_time)}</span>
+                : r.is_shift_pending ? <span className="text-[10px] text-blue-400 font-medium">En attente</span>
+                  : r.status === "absent" ? <span className="text-[10px] text-red-400 font-medium">—</span>
+                    : "—"}
           </div>
         </td>
-        <td className={`px-2 py-2 lg:px-4 lg:py-3 tabular-nums font-mono text-xs lg:text-sm ${r.overtime_minutes > 0 ? "text-emerald-600 font-semibold" : "text-slate-700"}`}><div className="flex justify-center">{formatTime(r.out_time)}</div></td>
-        <td className="px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center"><WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} /></div></td>
+        <td className={`px-2 py-2 lg:px-4 lg:py-3 tabular-nums font-mono text-xs lg:text-sm ${r.status === "absent" && r.replacement_out_time ? "text-purple-600" : r.overtime_minutes > 0 ? "text-emerald-600 font-semibold" : "text-slate-700"}`}>
+          <div className="flex justify-center">
+            {r.out_time ? formatTime(r.out_time)
+              : r.replacement_out_time ? <span className="text-purple-600 font-medium" title="Pointage du remplaçant">{formatTime(r.replacement_out_time)}</span>
+                : formatTime(r.out_time)}
+          </div>
+        </td>
+        <td className="px-2 py-2 lg:px-4 lg:py-3">
+          <div className="flex justify-center">
+            {r.worked_minutes > 0 ? <WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} />
+              : r.replacement_worked_minutes ? <WorkedTimeBadge minutes={r.replacement_worked_minutes} expectedMin={r.expected_minutes} />
+                : <WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} />}
+          </div>
+        </td>
         <td className="hidden xl:table-cell px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center"><OvertimeBadge minutes={r.overtime_minutes} /></div></td>
         <td className="hidden xl:table-cell px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center"><CompensationCell c={r.compensation} /></div></td>
         <td className="px-2 py-2 lg:px-4 lg:py-3">
@@ -1676,7 +1702,21 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
         <td colSpan={12} className="px-3 py-2">
           <div className="flex items-center justify-between gap-2 cursor-pointer" onClick={() => setExpanded((v) => !v)}>
             <div className="min-w-0">
-              <p className="font-semibold text-slate-800 text-sm truncate">{r.full_name}</p>
+              {r.replaced_by ? (
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="font-semibold text-red-500 text-sm line-through">{r.full_name}</span>
+                  <ArrowRight className="h-3 w-3 text-purple-500 shrink-0" />
+                  <span className="font-semibold text-purple-700 text-sm">{r.replaced_by}</span>
+                </div>
+              ) : r.replaces_employee ? (
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="font-semibold text-red-400 text-sm line-through">{r.replaces_employee}</span>
+                  <ArrowRight className="h-3 w-3 text-purple-500 shrink-0" />
+                  <span className="font-semibold text-purple-700 text-sm">{r.full_name}</span>
+                </div>
+              ) : (
+                <p className="font-semibold text-slate-800 text-sm truncate">{r.full_name}</p>
+              )}
               <p className="text-xs text-slate-400 font-mono">{r.matricule || "—"} · {r.project !== "—" ? `${r.project} / ` : ""}{r.department}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -1691,10 +1731,12 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
             <div className="mt-2 pt-2 border-t border-slate-100 space-y-1.5">
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
                 <span><span className="text-slate-400">Shift :</span> <ShiftTeamPill teamKey={r.shift_team} /></span>
-                <span><span className="text-slate-400">Entrée :</span> {r.in_time ? formatTime(r.in_time) : "—"}</span>
-                <span><span className="text-slate-400">Sortie :</span> {formatTime(r.out_time)}</span>
+                <span><span className="text-slate-400">Entrée :</span> {r.in_time ? formatTime(r.in_time) : r.replacement_in_time ? <span className="text-purple-600">{formatTime(r.replacement_in_time)}</span> : "—"}</span>
+                <span><span className="text-slate-400">Sortie :</span> {r.out_time ? formatTime(r.out_time) : r.replacement_out_time ? <span className="text-purple-600">{formatTime(r.replacement_out_time)}</span> : formatTime(r.out_time)}</span>
                 {r.computed_late_minutes > 0 && <LateBadge minutes={r.computed_late_minutes} />}
-                {r.worked_minutes > 0 && <WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} />}
+                {(r.worked_minutes > 0 || (r.replacement_worked_minutes && r.replacement_worked_minutes > 0)) && (
+                  <WorkedTimeBadge minutes={r.worked_minutes > 0 ? r.worked_minutes : (r.replacement_worked_minutes ?? 0)} expectedMin={r.expected_minutes} />
+                )}
               </div>
               <div className="flex flex-wrap gap-2 pt-1">
                 <button onClick={onAlert} disabled={r.status !== "absent" || !r.email || r.not_scheduled_rest}
@@ -2236,6 +2278,10 @@ export default function AttendanceShiftsPage() {
         is_shift_pending: r.status === "absent" && shiftNotStarted(r.shift_team),
         team_id: (r as any).team_id ?? "",
         replaced_by: (r as any).replaced_by ?? null,
+        replacement_in_time: (r as any).replacement_in_time ?? null,
+        replacement_out_time: (r as any).replacement_out_time ?? null,
+        replacement_worked_minutes: (r as any).replacement_worked_minutes ?? null,
+        replaces_employee: (r as any).replaces_employee ?? null,
       };
     }).sort((a, b) => {
       const sa = shiftOrder[a.shift_team ?? ""] ?? 3;
