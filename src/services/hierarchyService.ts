@@ -72,7 +72,30 @@ export const employeeHierarchyService = {
     });
     return res.data;
   },
+
+  getMyHierarchy: async (): Promise<MyHierarchyChain> => {
+    const res = await axios.get(`${EMP_API}/hierarchy/my/`, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
 };
+
+export interface HierarchyMini {
+  id: number;
+  matricule: string;
+  full_name: string;
+  fonction: string;
+  service: string;
+}
+
+export interface MyHierarchyChain {
+  employee: HierarchyMini;
+  requires_two_approvals: boolean;
+  n1_manager: HierarchyMini | null;
+  n2_manager: HierarchyMini | null;
+  rh_validation: boolean;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ApprovalRule  →  /api/leaves/approval-rules/

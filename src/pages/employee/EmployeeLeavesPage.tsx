@@ -6,7 +6,7 @@ import {
   Loader2, ChevronLeft, ChevronRight, TrendingUp, Filter,
   X, CalendarDays, User, Hash, MessageSquare, ShieldCheck,
   ThumbsUp, Upload, FileCheck, Paperclip, ExternalLink,
-  AlertTriangle, UserX, Trash2, Eye,
+  AlertTriangle, UserX, Trash2, Eye, ArrowDown, Building2,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -15,6 +15,7 @@ const PAGE_SIZE = 8;
 import { useAuth } from "@/contexts/useAuth";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
 import { leaveBalanceService, leaveRequestService, leaveTypeService } from "@/services/leaveService";
+import { employeeHierarchyService, MyHierarchyChain } from "@/services/hierarchyService";
 import { LeaveBalance, LeaveRequest, LeaveRequestCreate, LeaveType } from "@/types/leave";
 import toast from "react-hot-toast";
 
@@ -988,6 +989,8 @@ export default function EmployeeLeavesPage({
   const [showExport,    setShowExport]   = useState(false);
   const [filterStatus,  setFilterStatus] = useState("ALL");
   const [showBalances,  setShowBalances] = useState(true);
+  const [showHierarchy, setShowHierarchy] = useState(false);
+  const [hierarchy,     setHierarchy]    = useState<MyHierarchyChain | null>(null);
   const [currentPage,   setCurrentPage]  = useState(1);
 
   const refresh = useCallback(() => {
@@ -1007,6 +1010,12 @@ export default function EmployeeLeavesPage({
   }, [employeeId]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    employeeHierarchyService.getMyHierarchy()
+      .then(setHierarchy)
+      .catch(() => {});
+  }, []);
 
   const filtered   = filterStatus === "ALL" ? requests : requests.filter(r => r.status === filterStatus);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -1187,6 +1196,130 @@ export default function EmployeeLeavesPage({
             )}
           </AnimatePresence>
         </motion.div>
+
+        {/* ── Mon arborescence de validation ── */}
+        {hierarchy && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-6 overflow-hidden"
+          >
+            <button
+              onClick={() => setShowHierarchy(p => !p)}
+              className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition"
+            >
+              <span className="font-semibold text-gray-800 flex items-center gap-2">
+                <Building2 size={17} className="text-[#003c71]" />
+                Mon arborescence de validation
+              </span>
+              {showHierarchy
+                ? <ChevronUp size={17} className="text-gray-400" />
+                : <ChevronDown size={17} className="text-gray-400" />
+              }
+            </button>
+
+            <AnimatePresence>
+              {showHierarchy && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-5 pb-5">
+                    <p className="text-xs text-gray-400 mb-4">Voici le circuit de validation appliqué à vos demandes de congé</p>
+                    <div className="flex flex-col items-center gap-0">
+                      {/* Employé (moi) */}
+                      <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-blue-50 border border-blue-200 w-full max-w-md">
+                        <div className="p-2 rounded-lg bg-blue-100">
+                          <User size={18} className="text-blue-700" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-blue-800">{hierarchy.employee.full_name}</p>
+                          <p className="text-[10px] text-blue-500">{hierarchy.employee.matricule} · {hierarchy.employee.fonction || hierarchy.employee.service}</p>
+                        </div>
+                        <span className="ml-auto text-[10px] font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-lg">Vous</span>
+                      </div>
+
+                      {/* Connecteur */}
+                      <div className="flex flex-col items-center py-1">
+                        <div className="w-0.5 h-4 bg-gray-300" />
+                        <ArrowDown size={14} className="text-gray-400 -mt-1" />
+                      </div>
+
+                      {/* N+1 */}
+                      <div className={`flex items-center gap-3 px-5 py-3 rounded-xl w-full max-w-md ${
+                        hierarchy.n1_manager ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"
+                      }`}>
+                        <div className={`p-2 rounded-lg ${hierarchy.n1_manager ? "bg-amber-100" : "bg-gray-100"}`}>
+                          <ShieldCheck size={18} className={hierarchy.n1_manager ? "text-amber-700" : "text-gray-400"} />
+                        </div>
+                        <div className="min-w-0">
+                          {hierarchy.n1_manager ? (
+                            <>
+                              <p className="text-sm font-bold text-amber-800">{hierarchy.n1_manager.full_name}</p>
+                              <p className="text-[10px] text-amber-500">{hierarchy.n1_manager.fonction || hierarchy.n1_manager.service}</p>
+                            </>
+                          ) : (
+                            <p className="text-sm text-gray-400 italic">Non défini</p>
+                          )}
+                        </div>
+                        <span className="ml-auto text-[10px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-lg whitespace-nowrap">N+1</span>
+                      </div>
+
+                      {/* N+2 (conditionnel) */}
+                      {hierarchy.requires_two_approvals && (
+                        <>
+                          <div className="flex flex-col items-center py-1">
+                            <div className="w-0.5 h-4 bg-gray-300" />
+                            <ArrowDown size={14} className="text-gray-400 -mt-1" />
+                          </div>
+                          <div className={`flex items-center gap-3 px-5 py-3 rounded-xl w-full max-w-md ${
+                            hierarchy.n2_manager ? "bg-orange-50 border border-orange-200" : "bg-gray-50 border border-gray-200"
+                          }`}>
+                            <div className={`p-2 rounded-lg ${hierarchy.n2_manager ? "bg-orange-100" : "bg-gray-100"}`}>
+                              <ShieldCheck size={18} className={hierarchy.n2_manager ? "text-orange-700" : "text-gray-400"} />
+                            </div>
+                            <div className="min-w-0">
+                              {hierarchy.n2_manager ? (
+                                <>
+                                  <p className="text-sm font-bold text-orange-800">{hierarchy.n2_manager.full_name}</p>
+                                  <p className="text-[10px] text-orange-500">{hierarchy.n2_manager.fonction || hierarchy.n2_manager.service}</p>
+                                </>
+                              ) : (
+                                <p className="text-sm text-gray-400 italic">Non défini</p>
+                              )}
+                            </div>
+                            <span className="ml-auto text-[10px] font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-lg whitespace-nowrap">N+2</span>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Connecteur → RH */}
+                      <div className="flex flex-col items-center py-1">
+                        <div className="w-0.5 h-4 bg-gray-300" />
+                        <ArrowDown size={14} className="text-gray-400 -mt-1" />
+                      </div>
+
+                      {/* RH */}
+                      <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-emerald-50 border border-emerald-200 w-full max-w-md">
+                        <div className="p-2 rounded-lg bg-emerald-100">
+                          <CheckCircle2 size={18} className="text-emerald-700" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-emerald-800">Service RH</p>
+                          <p className="text-[10px] text-emerald-500">Validation finale</p>
+                        </div>
+                        <span className="ml-auto text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-lg whitespace-nowrap">RH</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
 
         {/* ── Liste des demandes ── */}
         <motion.div
