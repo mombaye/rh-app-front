@@ -1,7 +1,7 @@
 // src/components/leaves/LeaveRequestForm.tsx
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { leaveTypeService, leaveRequestService, holidayService } from "@/services/leaveService";
+import { leaveTypeService, leaveRequestService, leaveBalanceService, holidayService } from "@/services/leaveService";
 import { getEmployees } from "@/services/employeeService";
 import { ContractType, LeaveType, HolidayCheckResult } from "@/types/leave";
 import { Employee } from "@/types/employee";
@@ -59,6 +59,9 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   const [showEmpDrop,      setShowEmpDrop]      = useState(false);
   const empRef = useRef<HTMLDivElement>(null);
 
+  // Balance
+  const [balance, setBalance] = useState<{ acquired: number; taken: number; remaining: number } | null>(null);
+
   // Document upload step
   const [createdId,   setCreatedId]   = useState<number | null>(null);
   const [docFile,     setDocFile]     = useState<File | null>(null);
@@ -110,6 +113,19 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Load balance when employee and leave type are selected
+  useEffect(() => {
+    setBalance(null);
+    if (!form.employee_id || !form.leave_type_id) return;
+    const year = form.start_date ? new Date(form.start_date).getFullYear() : new Date().getFullYear();
+    leaveBalanceService.getByEmployee(parseInt(form.employee_id, 10), year)
+      .then((balances) => {
+        const b = balances.find((bl: any) => String(bl.leave_type?.id) === form.leave_type_id);
+        if (b) setBalance({ acquired: Number(b.acquired), taken: Number(b.taken), remaining: Number(b.remaining) });
+      })
+      .catch(() => {/* silent */});
+  }, [form.employee_id, form.leave_type_id, form.start_date]);
 
   // Auto-calculate days + check holidays
   useEffect(() => {
@@ -554,6 +570,27 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* ── Solde disponible ─────────────────────────────────── */}
+          {balance !== null && selectedType && !selectedType.is_special_leave && (
+            <div className={`rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 border ${
+              balance.remaining <= 0 ? "bg-red-50 border-red-200 text-red-700"
+              : form.days && Number(form.days) > balance.remaining ? "bg-red-50 border-red-200 text-red-700"
+              : balance.remaining <= 5 ? "bg-amber-50 border-amber-200 text-amber-700"
+              : "bg-emerald-50 border-emerald-200 text-emerald-700"
+            }`}>
+              <span>💰</span>
+              <span>
+                Solde {selectedType.label}&nbsp;: <strong>{balance.remaining.toFixed(1)}</strong>j disponibles
+                <span className="ml-1 text-xs font-normal opacity-70">
+                  (acquis&nbsp;: {balance.acquired.toFixed(1)}j · pris&nbsp;: {balance.taken.toFixed(1)}j)
+                </span>
+              </span>
+              {form.days && Number(form.days) > balance.remaining && (
+                <span className="ml-auto text-xs font-bold text-red-600">Solde insuffisant !</span>
+              )}
+            </div>
+          )}
 
           {/* ── Motif ───────────────────────────────────────────────── */}
           <div>

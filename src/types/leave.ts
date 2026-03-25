@@ -41,6 +41,7 @@ export interface EmployeeMini {
 export type LeaveStatus =
   | "PENDING"
   | "PENDING_SECOND"
+  | "PENDING_RH"
   | "APPROVED"
   | "REJECTED"
   | "CANCELLED"

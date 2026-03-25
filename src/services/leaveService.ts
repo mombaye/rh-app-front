@@ -286,6 +286,32 @@ export const leaveRequestService = {
   },
 
   /**
+   * POST /api/leaves/requests/<id>/hr_validate/
+   * Validation finale RH : PENDING_RH → APPROVED (déclenche déduction solde)
+   */
+  hrValidate: async (id: number, hr_reviewer_id?: number): Promise<LeaveRequest> => {
+    const res = await axios.post(
+      `${API}/requests/${id}/hr_validate/`,
+      hr_reviewer_id ? { hr_reviewer_id } : {},
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /api/leaves/requests/<id>/hr_reject/
+   * Rejet final RH : PENDING_RH → REJECTED
+   */
+  hrReject: async (id: number, reject_reason: string, hr_reviewer_id?: number): Promise<LeaveRequest> => {
+    const res = await axios.post(
+      `${API}/requests/${id}/hr_reject/`,
+      { reject_reason, ...(hr_reviewer_id ? { hr_reviewer_id } : {}) },
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
+  /**
    * GET /api/leaves/requests/calendar/?month=M&year=Y
    * Route manuelle dans urls.py : path('calendar/', ...)
    * Retourne les absences APPROVED du mois

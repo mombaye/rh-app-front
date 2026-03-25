@@ -21,8 +21,9 @@ const STATUS_CONFIG: Record<
   LeaveStatus,
   { label: string; color: string; bg: string; dotClass: string }
 > = {
-  PENDING:        { label: "En attente",          color: "#f59e0b", bg: "#fffbeb", dotClass: "bg-amber-400"   },
-  PENDING_SECOND: { label: "En att. 2ème valid.", color: "#7c3aed", bg: "#f5f3ff", dotClass: "bg-violet-500"  },
+  PENDING:        { label: "En attente N+1",      color: "#f59e0b", bg: "#fffbeb", dotClass: "bg-amber-400"   },
+  PENDING_SECOND: { label: "En attente N+2",      color: "#7c3aed", bg: "#f5f3ff", dotClass: "bg-violet-500"  },
+  PENDING_RH:     { label: "En attente RH",       color: "#2563eb", bg: "#eff6ff", dotClass: "bg-blue-500"    },
   APPROVED:       { label: "Approuvé",            color: "#10b981", bg: "#ecfdf5", dotClass: "bg-emerald-500" },
   REJECTED:       { label: "Rejeté",              color: "#ef4444", bg: "#fef2f2", dotClass: "bg-red-500"     },
   CANCELLED:      { label: "Annulé",              color: "#64748b", bg: "#f8fafc", dotClass: "bg-slate-400"   },
@@ -93,12 +94,19 @@ export default function LeaveRequestList({
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
-  /** POST /api/leaves/requests/<id>/approve/ */
+  /** POST approve or hr_validate based on current status */
   const handleApprove = async (id: number) => {
     setActionLoading(true);
     try {
-      await leaveRequestService.approve(id);
-      toast.success("Demande approuvée ✓");
+      if (selected?.status === "PENDING_RH") {
+        // Validation RH finale
+        await leaveRequestService.hrValidate(id);
+        toast.success("Demande validée par le RH ✓");
+      } else {
+        // Validation N+1 ou N+2
+        await leaveRequestService.approve(id);
+        toast.success("Demande approuvée ✓");
+      }
       await fetchRequests();
       setSelected(null);
     } catch (err: any) {
@@ -108,7 +116,7 @@ export default function LeaveRequestList({
     }
   };
 
-  /** POST /api/leaves/requests/<id>/reject/  body: { reject_reason } */
+  /** POST reject or hr_reject based on current status */
   const handleReject = async (id: number) => {
     if (!rejectReason.trim()) {
       toast.error("Le motif de rejet est obligatoire.");
@@ -116,8 +124,13 @@ export default function LeaveRequestList({
     }
     setActionLoading(true);
     try {
-      await leaveRequestService.reject(id, rejectReason);
-      toast.success("Demande rejetée");
+      if (selected?.status === "PENDING_RH") {
+        await leaveRequestService.hrReject(id, rejectReason);
+        toast.success("Demande rejetée par le RH");
+      } else {
+        await leaveRequestService.reject(id, rejectReason);
+        toast.success("Demande rejetée");
+      }
       await fetchRequests();
       setSelected(null);
       setRejectReason("");
@@ -426,6 +439,66 @@ export default function LeaveRequestList({
                   </p>
                 </div>
 
+                {/* ── Chaîne d'approbation hiérarchique ── */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-xs text-slate-500 uppercase font-semibold mb-3 tracking-wide">
+                    Chaîne de validation
+                  </p>
+                  <div className="space-y-2">
+                    {/* Étape 1 : N+1 */}
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
+                        selected.reviewed_by ? "bg-emerald-500" : selected.status === "PENDING" ? "bg-amber-400 animate-pulse" : "bg-slate-300"
+                      }`}>
+                        {selected.reviewed_by ? "✓" : "1"}
+                      </span>
+                      <span className="font-medium text-slate-700">N+1</span>
+                      <span className="text-slate-400">—</span>
+                      <span className={selected.reviewed_by ? "text-emerald-700 font-semibold" : "text-slate-400"}>
+                        {selected.reviewed_by
+                          ? `${selected.reviewed_by.full_name} (${selected.reviewed_at ? new Date(selected.reviewed_at).toLocaleDateString("fr") : ""})`
+                          : selected.employee?.n1_manager_name ?? "Non défini"}
+                      </span>
+                    </div>
+                    {/* Étape 2 : N+2 (si applicable) */}
+                    {(selected.requires_second_approval || selected.second_reviewer || selected.employee?.n2_manager_id) && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
+                          selected.second_reviewer && selected.second_reviewed_at ? "bg-emerald-500"
+                          : selected.status === "PENDING_SECOND" ? "bg-violet-500 animate-pulse"
+                          : "bg-slate-300"
+                        }`}>
+                          {selected.second_reviewer && selected.second_reviewed_at ? "✓" : "2"}
+                        </span>
+                        <span className="font-medium text-slate-700">N+2</span>
+                        <span className="text-slate-400">—</span>
+                        <span className={selected.second_reviewer && selected.second_reviewed_at ? "text-emerald-700 font-semibold" : "text-slate-400"}>
+                          {selected.second_reviewer
+                            ? `${selected.second_reviewer.full_name}${selected.second_reviewed_at ? ` (${new Date(selected.second_reviewed_at).toLocaleDateString("fr")})` : ""}`
+                            : selected.employee?.n2_manager_name ?? "Non défini"}
+                        </span>
+                      </div>
+                    )}
+                    {/* Étape 3 : RH */}
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
+                        selected.hr_reviewer ? "bg-emerald-500"
+                        : selected.status === "PENDING_RH" ? "bg-blue-500 animate-pulse"
+                        : "bg-slate-300"
+                      }`}>
+                        {selected.hr_reviewer ? "✓" : "3"}
+                      </span>
+                      <span className="font-medium text-slate-700">RH</span>
+                      <span className="text-slate-400">—</span>
+                      <span className={selected.hr_reviewer ? "text-emerald-700 font-semibold" : "text-slate-400"}>
+                        {selected.hr_reviewer
+                          ? `${selected.hr_reviewer.full_name} (${selected.hr_reviewed_at ? new Date(selected.hr_reviewed_at).toLocaleDateString("fr") : ""})`
+                          : "En attente"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Motif de rejet — affiché uniquement si REJECTED */}
                 {selected.status === "REJECTED" && selected.reject_reason && (
                   <div className="bg-red-50 border border-red-100 rounded-xl p-3">
@@ -438,8 +511,8 @@ export default function LeaveRequestList({
                   </div>
                 )}
 
-                {/* Zone saisie motif rejet — uniquement si PENDING */}
-                {selected.status === "PENDING" && (
+                {/* Zone saisie motif rejet — pour tout statut en attente */}
+                {(selected.status === "PENDING" || selected.status === "PENDING_SECOND" || selected.status === "PENDING_RH") && (
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5 tracking-wide">
                       Motif de rejet{" "}
@@ -457,8 +530,8 @@ export default function LeaveRequestList({
                   </div>
                 )}
 
-                {/* Boutons d'action modal */}
-                {selected.status === "PENDING" && (
+                {/* Boutons d'action modal — pour tout statut en attente */}
+                {(selected.status === "PENDING" || selected.status === "PENDING_SECOND" || selected.status === "PENDING_RH") && (
                   <div className="flex gap-3 pt-1">
                     <button
                       disabled={actionLoading || !rejectReason.trim()}
@@ -468,14 +541,25 @@ export default function LeaveRequestList({
                       {actionLoading && <ImSpinner2 className="animate-spin" size={13} />}
                       ✗ Rejeter
                     </button>
-                    <button
-                      disabled={actionLoading}
-                      onClick={() => handleApprove(selected.id)}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50"
-                    >
-                      {actionLoading && <ImSpinner2 className="animate-spin" size={13} />}
-                      ✓ Approuver
-                    </button>
+                    {selected.status === "PENDING_RH" ? (
+                      <button
+                        disabled={actionLoading}
+                        onClick={() => handleApprove(selected.id)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50"
+                      >
+                        {actionLoading && <ImSpinner2 className="animate-spin" size={13} />}
+                        ✓ Valider (RH)
+                      </button>
+                    ) : (
+                      <button
+                        disabled={actionLoading}
+                        onClick={() => handleApprove(selected.id)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50"
+                      >
+                        {actionLoading && <ImSpinner2 className="animate-spin" size={13} />}
+                        ✓ Approuver
+                      </button>
+                    )}
                   </div>
                 )}
                 {selected.status === "APPROVED" && (
