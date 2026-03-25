@@ -3,9 +3,10 @@ import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
 import EmployeesPage from "@/pages/EmployeesPage";
 import PayslipPage from "@/pages/PayslipPage";
+import LeavesPage from "@/pages/LeavesPage";
 import ChangePasswordPage from "@/components/users/ChangePasswordPage";
 import { Toaster } from "react-hot-toast";
-import ProtectedRoute from "@/components/ProtectedRoute"; // Même logique que chez toi
+import ProtectedRoute from "@/components/ProtectedRoute"; // M\u00eame logique que chez toi
 import FirstLoginGuard from "@/components/FirstLoginGuard";
 import AttendancePage from "./pages/AttendancePage";
 
@@ -26,7 +27,7 @@ function App() {
           }
         />
 
-        {/* Toutes les autres pages protégées par la FirstLoginGuard */}
+        {/* Toutes les autres pages prot\u00e9g\u00e9es par la FirstLoginGuard */}
         <Route
           path="/dashboard"
           element={
@@ -64,6 +65,17 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <AttendancePage />
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/leaves"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <LeavesPage />
               </FirstLoginGuard>
             </ProtectedRoute>
           }
