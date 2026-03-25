@@ -10,6 +10,7 @@ import {
   fetchBulletinsLogs,
   exportBulletinsLogs,
   deleteBulletinLog,
+  deleteBulletinFailedByMonth,
   type BulletinLogItem,
 } from "@/services/employeeService";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
@@ -85,6 +86,8 @@ export default function BulletinsLogsModal({
   const [rows, setRows]   = useState<BulletinLogItem[]>([]);
   const [deleteTargetId, setDeleteTargetId]   = useState<number | null>(null);
   const [deleteLoading,  setDeleteLoading]    = useState(false);
+  const [deleteFailedOpen, setDeleteFailedOpen] = useState(false);
+  const [deleteFailedLoading, setDeleteFailedLoading] = useState(false);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(count / PAGE_SIZE)), [count]);
 
@@ -159,6 +162,23 @@ export default function BulletinsLogsModal({
       toast.error(e?.response?.data?.error || "Suppression impossible", { id: t });
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const doDeleteFailed = async () => {
+    if (!scope?.year || !scope?.month) return;
+    setDeleteFailedLoading(true);
+    const t = toast.loading("Suppression des échecs…");
+    try {
+      const res = await deleteBulletinFailedByMonth(scope.year, scope.month);
+      toast.success(`${res.deleted} échec(s) supprimé(s).`, { id: t });
+      setDeleteFailedOpen(false);
+      onChanged();
+      await load(true);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors de la suppression", { id: t });
+    } finally {
+      setDeleteFailedLoading(false);
     }
   };
 
@@ -248,6 +268,15 @@ export default function BulletinsLogsModal({
             <span className="text-sm text-slate-500">
               {loading ? "Chargement…" : <span>Total : <b>{count}</b></span>}
             </span>
+            {scope?.year && scope?.month && failedCount > 0 && (
+              <button
+                onClick={() => setDeleteFailedOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Supprimer les échecs ({failedCount})
+              </button>
+            )}
             <button
               onClick={doExport}
               disabled={exporting || count === 0}
@@ -379,6 +408,15 @@ export default function BulletinsLogsModal({
       onClose={() => !deleteLoading && setDeleteTargetId(null)}
       onConfirm={doDelete}
       loading={deleteLoading}
+    />
+
+    <ConfirmDeleteModal
+      open={deleteFailedOpen}
+      title="Supprimer tous les échecs ?"
+      message={<>Tous les logs en <strong>échec</strong> de cette période seront définitivement supprimés. Les envois réussis ne seront pas affectés.</>}
+      onClose={() => !deleteFailedLoading && setDeleteFailedOpen(false)}
+      onConfirm={doDeleteFailed}
+      loading={deleteFailedLoading}
     />
     </>
   );

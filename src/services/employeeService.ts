@@ -415,7 +415,7 @@ export const exportBulletinsLogs = async (opts?: {
 
 
 export const deleteBulletinLog = async (id: number) =>
-  await api.delete(`/api/employees/bulletin-log/${id}/`);
+  (await api.delete(`/api/employees/bulletins/logs/${id}/`)).data;
 
 /** DELETE /api/employees/bulletins/logs/by-month/?year=&month= */
 export const deleteBulletinsByMonth = async (
@@ -423,6 +423,13 @@ export const deleteBulletinsByMonth = async (
   month: number,
 ): Promise<{ deleted: number }> =>
   (await api.delete("/api/employees/bulletins/logs/by-month/", { params: { year, month } })).data;
+
+/** DELETE /api/employees/bulletins/logs/by-month-failed/?year=&month= — supprime uniquement les échecs */
+export const deleteBulletinFailedByMonth = async (
+  year: number,
+  month: number,
+): Promise<{ deleted: number }> =>
+  (await api.delete("/api/employees/bulletins/logs/by-month-failed/", { params: { year, month } })).data;
 
 // ══════════════════════════════════════════════════════
 //  DOCUMENTS RH — dossiers personnels NAS
