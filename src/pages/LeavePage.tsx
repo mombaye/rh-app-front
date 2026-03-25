@@ -1400,15 +1400,15 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
           <table className="w-full text-sm border-collapse">
             <thead>
               {/* Ligne de titre des groupes */}
-              <tr className="bg-red-600 text-white">
-                <th className="px-3 py-2 text-left text-xs font-bold border border-red-700 whitespace-nowrap" rowSpan={2}>Employé</th>
-                <th className="px-3 py-2 text-left text-xs font-bold border border-red-700 whitespace-nowrap" rowSpan={2}>Type</th>
-                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700 uppercase leading-tight">Report Années<br/>Antérieures</th>
-                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700 uppercase leading-tight">Congés Payés Acquis<br/>Mois en Cours</th>
-                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700 uppercase leading-tight bg-red-700">Solde des Congés<br/>Acquis à Date</th>
-                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700 uppercase leading-tight">Congés Payés Pris<br/>en {currentYear}</th>
-                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700 uppercase leading-tight bg-amber-500 text-slate-900">Solde des Congés<br/>Payés à Prendre</th>
-                <th className="px-3 py-2 text-center text-[10px] font-black border border-red-700" rowSpan={2}>Actions</th>
+              <tr className="bg-gradient-to-r from-slate-700 to-slate-800 text-white">
+                <th className="px-3 py-2.5 text-left text-xs font-bold border-r border-slate-600 whitespace-nowrap" rowSpan={2}>Employé</th>
+                <th className="px-3 py-2.5 text-left text-xs font-bold border-r border-slate-600 whitespace-nowrap" rowSpan={2}>Type</th>
+                <th className="px-3 py-2.5 text-center text-[10px] font-bold border-r border-slate-600 uppercase leading-tight">Report Années<br/>Antérieures</th>
+                <th className="px-3 py-2.5 text-center text-[10px] font-bold border-r border-slate-600 uppercase leading-tight">Congés Payés Acquis<br/>Mois en Cours</th>
+                <th className="px-3 py-2.5 text-center text-[10px] font-bold border-r border-slate-600 uppercase leading-tight bg-slate-900/30">Solde des Congés<br/>Acquis à Date</th>
+                <th className="px-3 py-2.5 text-center text-[10px] font-bold border-r border-slate-600 uppercase leading-tight">Congés Payés Pris<br/>en {currentYear}</th>
+                <th className="px-3 py-2.5 text-center text-[10px] font-bold border-r border-slate-600 uppercase leading-tight bg-emerald-600/40">Solde des Congés<br/>Payés à Prendre</th>
+                <th className="px-3 py-2.5 text-center text-[10px] font-bold" rowSpan={2}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1456,11 +1456,17 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
                       {soldeDate.toFixed(2)}
                     </td>
                     {/* Pris en année */}
-                    <td className="px-3 py-2 text-center border border-slate-200 tabular-nums font-semibold text-red-500 text-sm">
+                    <td className="px-3 py-2 text-center border border-slate-200 tabular-nums font-semibold text-orange-600 text-sm">
                       {pris.toFixed(2)}
                     </td>
                     {/* Solde à prendre */}
-                    <td className={`px-3 py-2 text-center border border-slate-200 tabular-nums font-black text-sm ${isLow ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-800"}`}>
+                    <td className={`px-3 py-2 text-center border border-slate-200 tabular-nums font-black text-sm ${
+                      isLow
+                        ? "bg-red-50 text-red-600"
+                        : remaining >= 10
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-amber-50 text-amber-700"
+                    }`}>
                       {remaining.toFixed(2)}
                     </td>
                     <td className="px-3 py-2 text-center border border-slate-200">
@@ -1698,12 +1704,12 @@ function ImportBalancesModal({ onClose, onImported }: { onClose: () => void; onI
             <div className="overflow-x-auto">
               <table className="w-full text-[10px] border-collapse">
                 <thead>
-                  <tr className="bg-red-600 text-white">
-                    <th className="px-2 py-1 border border-red-700 font-bold text-center whitespace-nowrap">MATRICULE</th>
-                    <th className="px-2 py-1 border border-red-700 font-bold text-center whitespace-nowrap">TYPE_CONGE</th>
-                    <th className="px-2 py-1 border border-red-700 font-bold text-center leading-tight">REPORT_ANNEES<br/>_ANTERIEURES</th>
-                    <th className="px-2 py-1 border border-red-700 font-bold text-center leading-tight">CONGES_PAYES_ACQUIS<br/>_MOIS_EN_COURS</th>
-                    <th className="px-2 py-1 border border-red-700 font-bold text-center leading-tight bg-amber-500 text-slate-900">CONGES<br/>_PAYES_PRIS</th>
+                  <tr className="bg-slate-700 text-white">
+                    <th className="px-2 py-1 border-r border-slate-600 font-bold text-center whitespace-nowrap">MATRICULE</th>
+                    <th className="px-2 py-1 border-r border-slate-600 font-bold text-center whitespace-nowrap">TYPE_CONGE</th>
+                    <th className="px-2 py-1 border-r border-slate-600 font-bold text-center leading-tight">REPORT_ANNEES<br/>_ANTERIEURES</th>
+                    <th className="px-2 py-1 border-r border-slate-600 font-bold text-center leading-tight">CONGES_PAYES_ACQUIS<br/>_MOIS_EN_COURS</th>
+                    <th className="px-2 py-1 font-bold text-center leading-tight bg-emerald-600/40">CONGES<br/>_PAYES_PRIS</th>
                   </tr>
                 </thead>
                 <tbody className="font-mono text-slate-700">
