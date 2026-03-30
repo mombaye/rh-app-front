@@ -15,7 +15,7 @@ import {
   Mail, Phone, MapPin, Building2, UserCheck,
 } from "lucide-react";
 
-// ── FormData ──────────────────────────────────────────────────────────────────
+// ── Types et données par défaut ───────────────────────────────────────────────
 type FormData = {
   matricule: string; nom: string; prenom: string; sexe: SexeType;
   date_naissance: string; lieu_naissance: string; nationalite: string; adresse: string;
@@ -47,7 +47,7 @@ const EMPTY: FormData = {
   rib: "", banque: "",
 };
 
-// ── Étapes ────────────────────────────────────────────────────────────────────
+// ── Étapes du formulaire ───────────────────────────────────────────────────────
 const STEPS = [
   { id: 1, label: "Identité",       icon: User,      desc: "Informations personnelles & contact" },
   { id: 2, label: "Professionnel",  icon: Briefcase, desc: "Poste, contrat & hiérarchie"         },
@@ -62,7 +62,7 @@ function F({ label, children, req, col2 }: {
 }) {
   return (
     <div className={col2 ? "sm:col-span-2" : ""}>
-      <Label className="text-xs font-semibold text-slate-500 mb-1.5 block uppercase tracking-wide">
+      <Label className="text-sm font-medium text-gray-700 mb-2 block">
         {label}{req && <span className="text-red-500 ml-0.5">*</span>}
       </Label>
       {children}
@@ -77,7 +77,7 @@ function Sel({ name, value, onChange, opts, ph }: {
 }) {
   return (
     <select name={name} value={value} onChange={onChange}
-      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800">
+      className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 shadow-sm">
       {ph && <option value="">{ph}</option>}
       {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
     </select>
@@ -88,13 +88,13 @@ function SectionHeader({ icon: Icon, title, subtitle }: {
   icon: React.ElementType; title: string; subtitle?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-100">
-      <div className="w-8 h-8 rounded-lg bg-blue-900/10 flex items-center justify-center shrink-0">
-        <Icon className="h-4 w-4 text-blue-900" />
+    <div className="flex items-center gap-3 mb-6 pb-3 border-b border-gray-200">
+      <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center shrink-0 shadow-sm">
+        <Icon className="h-5 w-5 text-blue-600" />
       </div>
       <div>
-        <p className="text-sm font-semibold text-slate-800">{title}</p>
-        {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+        <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+        {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
       </div>
     </div>
   );
@@ -108,8 +108,8 @@ interface Props {
 
 export default function EmployeeFormModal({ open, onClose, onSuccess, initialData, defaultContractType }: Props) {
   const isEdit = !!initialData;
-  const [step, setStep]       = useState(1);
-  const [form, setForm]       = useState<FormData>({ ...EMPTY });
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState<FormData>({ ...EMPTY });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -171,21 +171,21 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
     setLoading(true);
     const payload: Partial<Employee> = {
       ...form,
-      type_contrat:           (form.type_contrat || undefined) as ContractType | undefined,
+      type_contrat: (form.type_contrat || undefined) as ContractType | undefined,
       situation_matrimoniale: (form.situation_matrimoniale || undefined) as SituationMatrimoniale | undefined,
-      type_piece:             (form.type_piece || undefined) as TypePiece | undefined,
-      date_naissance:         nullDate(form.date_naissance),
-      date_delivrance:        nullDate(form.date_delivrance),
-      date_expiration:        nullDate(form.date_expiration),
-      date_fin_cdd:           nullDate(form.date_fin_cdd),
+      type_piece: (form.type_piece || undefined) as TypePiece | undefined,
+      date_naissance: nullDate(form.date_naissance),
+      date_delivrance: nullDate(form.date_delivrance),
+      date_expiration: nullDate(form.date_expiration),
+      date_fin_cdd: nullDate(form.date_fin_cdd),
       date_fin_periode_essai: nullDate(form.date_fin_periode_essai),
     };
     try {
       if (isEdit && initialData) {
         await updateEmployee(initialData.id, payload);
         const planningSync =
-          form.nom       !== (initialData.nom       ?? "") ||
-          form.prenom    !== (initialData.prenom    ?? "") ||
+          form.nom !== (initialData.nom ?? "") ||
+          form.prenom !== (initialData.prenom ?? "") ||
           form.matricule !== (initialData.matricule ?? "");
         toast.success(
           planningSync
@@ -215,130 +215,180 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-3xl w-full max-h-[95vh] flex flex-col p-0 gap-0 overflow-hidden shadow-xl rounded-lg">
 
-        {/* ── En-tête ── */}
-        <DialogHeader className="px-6 pt-5 pb-4 shrink-0 bg-gradient-to-r from-blue-900 to-blue-800">
-          <DialogTitle className="text-base font-bold text-white">
+        {/* ── En-tête du dialogue ── */}
+        <DialogHeader className="px-8 pt-6 pb-5 bg-gradient-to-r from-blue-600 to-blue-500 text-white">
+          <DialogTitle className="text-xl font-bold">
             {isEdit ? "Modifier l'employé" : "Ajouter un employé"}
           </DialogTitle>
-          <p className="text-xs text-blue-200 mt-0.5">
+          <p className="text-sm mt-1 opacity-90">
             {isEdit ? "Mettez à jour les informations du dossier" : "Remplissez les étapes pour créer le dossier"}
           </p>
         </DialogHeader>
 
-        {/* ── Stepper ── */}
-        <div className="px-6 pt-4 pb-3 shrink-0 bg-white border-b border-slate-100">
-          <div className="flex items-center gap-0">
+        {/* ── Stepper (indicateurs d'étapes) ── */}
+        <div className="px-8 py-5 bg-white border-b border-gray-200">
+          <div className="flex items-center justify-between">
             {STEPS.map((s, i) => {
               const Icon = s.icon;
               const done = step > s.id;
-              const cur  = step === s.id;
+              const cur = step === s.id;
               return (
-                <div key={s.id} className="flex items-center flex-1 min-w-0">
+                <div key={s.id} className="flex items-center flex-1 min-w-0 relative group">
                   <button
                     type="button"
-                    onClick={() => done && setStep(s.id)}
-                    className={`flex-1 flex flex-col items-center gap-1 py-1.5 px-1 rounded-xl transition-all text-center ${
-                      cur  ? "opacity-100" :
-                      done ? "opacity-100 cursor-pointer" :
-                             "opacity-40 cursor-default"
+                    onClick={() => setStep(s.id)}
+                    className={`flex-1 flex flex-col items-center gap-1.5 py-2 px-1 rounded-lg transition-all text-center ${
+                      cur ? "opacity-100" : done ? "opacity-100 cursor-pointer" : "opacity-60 cursor-pointer hover:opacity-90"
                     }`}
                   >
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all ${
-                      cur  ? "bg-blue-900 border-blue-900 text-white shadow-md shadow-blue-200" :
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${
+                      cur ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200" :
                       done ? "bg-green-500 border-green-500 text-white" :
-                             "bg-white border-slate-200 text-slate-400"
+                             "bg-white border-gray-300 text-gray-500 group-hover:border-blue-400"
                     }`}>
-                      {done
-                        ? <Check className="h-3.5 w-3.5" />
-                        : <span className="text-[10px] font-bold">{s.id}</span>
-                      }
+                      {done ? <Check className="h-4 w-4" /> : <span className="text-xs font-bold">{s.id}</span>}
                     </div>
-                    <span className={`text-[9px] font-semibold hidden sm:block leading-tight truncate w-full ${
-                      cur  ? "text-blue-900" :
-                      done ? "text-green-600" :
-                             "text-slate-400"
+                    <span className={`text-xs font-medium ${
+                      cur ? "text-blue-600" : done ? "text-green-600" : "text-gray-500 group-hover:text-blue-500"
                     }`}>
                       {s.label}
                     </span>
                   </button>
                   {i < STEPS.length - 1 && (
-                    <div className={`h-0.5 w-3 shrink-0 rounded-full transition-colors ${
-                      step > s.id ? "bg-green-400" : "bg-slate-200"
+                    <div className={`absolute top-1/2 right-0 transform translate-y-1/2 h-0.5 w-1/3 rounded-full transition-colors ${
+                      step > s.id ? "bg-green-500" : "bg-gray-200 group-hover:bg-blue-200"
                     }`} />
                   )}
                 </div>
               );
             })}
           </div>
-          <p className="text-[11px] text-slate-400 mt-2 text-center">
-            Étape <span className="font-semibold text-blue-900">{step}</span> sur {STEPS.length}
-            <span className="mx-1.5 text-slate-300">·</span>
-            <span className="text-slate-500">{STEPS[step - 1].desc}</span>
+          <p className="text-sm text-gray-500 mt-4 text-center">
+            Étape <span className="font-semibold text-blue-600">{step}</span> sur {STEPS.length}
+            <span className="mx-2 text-gray-400">·</span>
+            <span className="text-gray-600">{STEPS[step - 1].desc}</span>
           </p>
         </div>
 
-        {/* ── Corps ── */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-
-          {/* ─── Étape 1 : Informations personnelles ─── */}
+        {/* ── Corps du formulaire ── */}
+        <div className="flex-1 overflow-y-auto px-8 py-6 bg-gray-50">
+          {/* ─── Étape 1 : Identité ─── */}
           {step === 1 && (
-            <div className="space-y-5">
+            <div className="space-y-7">
               <SectionHeader icon={User} title="État civil" subtitle="Identification de l'employé" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <F label="Matricule" req><Input name="matricule" value={form.matricule} onChange={ch} placeholder="EX-0001" /></F>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <F label="Matricule" req>
+                  <Input name="matricule" value={form.matricule} onChange={ch} placeholder="EX-0001"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
                 <F label="Sexe">
                   <Sel name="sexe" value={form.sexe} onChange={ch}
                     opts={[{v:"H",l:"Homme"},{v:"F",l:"Femme"}]} />
                 </F>
-                <F label="Nom" req><Input name="nom" value={form.nom} onChange={ch} placeholder="DIOP" /></F>
-                <F label="Prénom" req><Input name="prenom" value={form.prenom} onChange={ch} placeholder="Mamadou" /></F>
-                <F label="Date de naissance"><Input type="date" name="date_naissance" value={form.date_naissance} onChange={ch} /></F>
-                <F label="Lieu de naissance"><Input name="lieu_naissance" value={form.lieu_naissance} onChange={ch} placeholder="Dakar" /></F>
-                <F label="Nationalité"><Input name="nationalite" value={form.nationalite} onChange={ch} placeholder="Sénégalaise" /></F>
-                <F label="Adresse"><Input name="adresse" value={form.adresse} onChange={ch} placeholder="Rue, quartier, ville" /></F>
+                <F label="Nom" req>
+                  <Input name="nom" value={form.nom} onChange={ch} placeholder="DIOP"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Prénom" req>
+                  <Input name="prenom" value={form.prenom} onChange={ch} placeholder="Mamadou"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Date de naissance">
+                  <Input type="date" name="date_naissance" value={form.date_naissance} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Lieu de naissance">
+                  <Input name="lieu_naissance" value={form.lieu_naissance} onChange={ch} placeholder="Dakar"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Nationalité">
+                  <Input name="nationalite" value={form.nationalite} onChange={ch} placeholder="Sénégalaise"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Adresse">
+                  <Input name="adresse" value={form.adresse} onChange={ch} placeholder="Rue, quartier, ville"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
               </div>
 
-              <SectionHeader icon={Mail} title="Contact direct" subtitle="Coordonnées personnelles de l'employé" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <F label="Adresse e-mail"><Input type="email" name="email" value={form.email} onChange={ch} placeholder="prenom.nom@example.com" /></F>
-                <F label="Téléphone"><Input name="telephone" value={form.telephone} onChange={ch} placeholder="+221 77 000 00 00" /></F>
+              <SectionHeader icon={Mail} title="Contact direct" subtitle="Coordonnées personnelles" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <F label="Adresse e-mail">
+                  <Input type="email" name="email" value={form.email} onChange={ch} placeholder="prenom.nom@example.com"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Téléphone">
+                  <Input name="telephone" value={form.telephone} onChange={ch} placeholder="+221 77 000 00 00"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
               </div>
             </div>
           )}
 
-          {/* ─── Étape 2 : Informations professionnelles ─── */}
+          {/* ─── Étape 2 : Professionnel ─── */}
           {step === 2 && (
-            <div className="space-y-5">
+            <div className="space-y-7">
               <SectionHeader icon={Briefcase} title="Poste & contrat" subtitle="Rôle et conditions d'emploi" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <F label="Type de contrat" req>
                   <Sel name="type_contrat" value={form.type_contrat} onChange={ch} ph="— Sélectionner —"
                     opts={[{v:"CDI",l:"CDI"},{v:"CDD",l:"CDD"},{v:"STAGE",l:"Stage"},{v:"INTERIM",l:"Intérim"}]} />
                 </F>
-                <F label="Fonction"><Input name="fonction" value={form.fonction} onChange={ch} placeholder="Technicien, Ingénieur…" /></F>
-                <F label="Catégorie"><Input name="categorie" value={form.categorie} onChange={ch} placeholder="Cadre, Agent de maîtrise…" /></F>
-                <F label="Date d'embauche"><Input type="date" name="date_embauche" value={form.date_embauche} onChange={ch} /></F>
+                <F label="Fonction">
+                  <Input name="fonction" value={form.fonction} onChange={ch} placeholder="Technicien, Ingénieur…"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Catégorie">
+                  <Input name="categorie" value={form.categorie} onChange={ch} placeholder="Cadre, Agent de maîtrise…"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Date d'embauche">
+                  <Input type="date" name="date_embauche" value={form.date_embauche} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
                 {(form.type_contrat === "CDD" || form.type_contrat === "STAGE") && (
-                  <F label="Date fin CDD / Stage"><Input type="date" name="date_fin_cdd" value={form.date_fin_cdd} onChange={ch} /></F>
+                  <F label="Date fin CDD / Stage">
+                    <Input type="date" name="date_fin_cdd" value={form.date_fin_cdd} onChange={ch}
+                      className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                  </F>
                 )}
-                <F label="Date fin période d'essai"><Input type="date" name="date_fin_periode_essai" value={form.date_fin_periode_essai} onChange={ch} /></F>
+                <F label="Date fin période d'essai">
+                  <Input type="date" name="date_fin_periode_essai" value={form.date_fin_periode_essai} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
               </div>
 
               <SectionHeader icon={Building2} title="Organisation" subtitle="Rattachement dans l'entreprise" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <F label="Business Line"><Input name="business_line" value={form.business_line} onChange={ch} /></F>
-                <F label="Projet"><Input name="projet" value={form.projet} onChange={ch} /></F>
-                <F label="Service / Département"><Input name="service" value={form.service} onChange={ch} /></F>
-                <F label="Localisation"><Input name="localisation" value={form.localisation} onChange={ch} placeholder="Dakar, Abidjan…" /></F>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <F label="Business Line">
+                  <Input name="business_line" value={form.business_line} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Projet">
+                  <Input name="projet" value={form.projet} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Service / Département">
+                  <Input name="service" value={form.service} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Localisation">
+                  <Input name="localisation" value={form.localisation} onChange={ch} placeholder="Dakar, Abidjan…"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
               </div>
 
-              <SectionHeader icon={UserCheck} title="Hiérarchie" subtitle="Manager direct — utilisé pour les approbations de congés" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <F label="Nom du manager"><Input name="manager" value={form.manager} onChange={ch} placeholder="Prénom NOM" /></F>
+              <SectionHeader icon={UserCheck} title="Hiérarchie" subtitle="Manager direct" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <F label="Nom du manager">
+                  <Input name="manager" value={form.manager} onChange={ch} placeholder="Prénom NOM"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
                 <F label="Email du manager">
-                  <Input type="email" name="manager_email" value={form.manager_email} onChange={ch} placeholder="manager@example.com" />
+                  <Input type="email" name="manager_email" value={form.manager_email} onChange={ch} placeholder="manager@example.com"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                 </F>
               </div>
             </div>
@@ -346,9 +396,9 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
 
           {/* ─── Étape 3 : Pièce d'identité ─── */}
           {step === 3 && (
-            <div className="space-y-5">
+            <div className="space-y-7">
               <SectionHeader icon={FileText} title="Document officiel" subtitle="Pièce d'identité en cours de validité" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <F label="Type de pièce">
                   <Sel name="type_piece" value={form.type_piece} onChange={ch} ph="— Sélectionner —"
                     opts={[
@@ -358,34 +408,51 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                       {v:"AUTRE",l:"Autre"},
                     ]} />
                 </F>
-                <F label="Numéro de pièce"><Input name="numero_piece" value={form.numero_piece} onChange={ch} placeholder="123456789" /></F>
-                <F label="Date de délivrance"><Input type="date" name="date_delivrance" value={form.date_delivrance} onChange={ch} /></F>
-                <F label="Date d'expiration"><Input type="date" name="date_expiration" value={form.date_expiration} onChange={ch} /></F>
+                <F label="Numéro de pièce">
+                  <Input name="numero_piece" value={form.numero_piece} onChange={ch} placeholder="123456789"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Date de délivrance">
+                  <Input type="date" name="date_delivrance" value={form.date_delivrance} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Date d'expiration">
+                  <Input type="date" name="date_expiration" value={form.date_expiration} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
               </div>
             </div>
           )}
 
           {/* ─── Étape 4 : Situation familiale ─── */}
           {step === 4 && (
-            <div className="space-y-5">
+            <div className="space-y-7">
               <SectionHeader icon={Phone} title="Contact d'urgence" subtitle="Personne à joindre en cas d'urgence" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <F label="Nom complet">
-                  <Input name="contact_urgence_nom" value={form.contact_urgence_nom} onChange={ch} placeholder="Nom du contact" />
+                  <Input name="contact_urgence_nom" value={form.contact_urgence_nom} onChange={ch} placeholder="Nom du contact"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                 </F>
                 <F label="Téléphone">
-                  <Input name="contact_urgence_telephone" value={form.contact_urgence_telephone} onChange={ch} placeholder="+221 77 000 00 00" />
+                  <Input name="contact_urgence_telephone" value={form.contact_urgence_telephone} onChange={ch} placeholder="+221 77 000 00 00"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                 </F>
               </div>
 
               <SectionHeader icon={Users} title="Filiation" subtitle="Informations sur les parents" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <F label="Prénom du père"><Input name="prenom_pere" value={form.prenom_pere} onChange={ch} /></F>
-                <F label="Prénom & Nom de la mère"><Input name="nom_prenom_mere" value={form.nom_prenom_mere} onChange={ch} /></F>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <F label="Prénom du père">
+                  <Input name="prenom_pere" value={form.prenom_pere} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
+                <F label="Prénom & Nom de la mère">
+                  <Input name="nom_prenom_mere" value={form.nom_prenom_mere} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
               </div>
 
               <SectionHeader icon={Users} title="Situation familiale" subtitle="État matrimonial et enfants" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <F label="Situation matrimoniale">
                   <Sel name="situation_matrimoniale" value={form.situation_matrimoniale} onChange={ch} ph="— Sélectionner —"
                     opts={[
@@ -395,23 +462,29 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                       {v:"veuf",l:"Veuf / Veuve"},
                     ]} />
                 </F>
-                <F label="Nom & Prénom conjoint(e)"><Input name="nom_conjoint" value={form.nom_conjoint} onChange={ch} /></F>
+                <F label="Nom & Prénom conjoint(e)">
+                  <Input name="nom_conjoint" value={form.nom_conjoint} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
                 <F label="Nombre d'enfants (max 7)">
                   <Input type="number" min={0} max={7} name="nombre_enfants"
                     value={form.nombre_enfants}
-                    onChange={e => setNbEnfants(parseInt(e.target.value) || 0)} />
+                    onChange={e => setNbEnfants(parseInt(e.target.value) || 0)}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                 </F>
               </div>
               {form.nombre_enfants > 0 && (
-                <div className="space-y-2 mt-1">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Détail des enfants</p>
+                <div className="space-y-3 mt-3">
+                  <p className="text-sm font-medium text-gray-600 uppercase tracking-wider">Détail des enfants</p>
                   {Array.from({ length: form.nombre_enfants }).map((_, i) => (
-                    <div key={i} className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                    <div key={i} className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-lg bg-white border border-gray-200 shadow-sm">
                       <F label={`Enfant ${i + 1} — Nom`}>
-                        <Input value={form.enfants[i]?.nom ?? ""} onChange={e => chEnfant(i, "nom", e.target.value)} placeholder="Nom complet" />
+                        <Input value={form.enfants[i]?.nom ?? ""} onChange={e => chEnfant(i, "nom", e.target.value)} placeholder="Nom complet"
+                          className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                       </F>
                       <F label="Date de naissance">
-                        <Input type="date" value={form.enfants[i]?.date_naissance ?? ""} onChange={e => chEnfant(i, "date_naissance", e.target.value)} />
+                        <Input type="date" value={form.enfants[i]?.date_naissance ?? ""} onChange={e => chEnfant(i, "date_naissance", e.target.value)}
+                          className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                       </F>
                     </div>
                   ))}
@@ -422,48 +495,52 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
 
           {/* ─── Étape 5 : Informations bancaires ─── */}
           {step === 5 && (
-            <div className="space-y-5">
+            <div className="space-y-7">
               <SectionHeader icon={Landmark} title="Coordonnées bancaires" subtitle="Pour le versement du salaire" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <F label="Banque"><Input name="banque" value={form.banque} onChange={ch} placeholder="Nom de la banque" /></F>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <F label="Banque">
+                  <Input name="banque" value={form.banque} onChange={ch} placeholder="Nom de la banque"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                </F>
                 <F label="Relevé d'Identité Bancaire (RIB)" col2>
-                  <Input name="rib" value={form.rib} onChange={ch} placeholder="SN00 0000 0000 0000 0000 000" />
+                  <Input name="rib" value={form.rib} onChange={ch} placeholder="SN00 0000 0000 0000 0000 000"
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                 </F>
               </div>
             </div>
           )}
         </div>
 
-        {/* ── Navigation ── */}
-        <div className="px-6 py-4 border-t border-slate-100 shrink-0 flex items-center justify-between bg-slate-50">
+        {/* ── Pied de page (navigation) ── */}
+        <div className="px-8 py-5 border-t border-gray-200 bg-white flex items-center justify-between">
           <Button
             type="button" variant="outline"
             onClick={() => step > 1 ? setStep(s => s - 1) : onClose()}
-            className="flex items-center gap-2 text-slate-600"
+            className="flex items-center gap-2 text-gray-700 hover:bg-gray-100 border-gray-300"
           >
             <ChevronLeft className="h-4 w-4" />
             {step === 1 ? "Annuler" : "Précédent"}
           </Button>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             {STEPS.map(s => (
-              <div key={s.id} className={`h-1.5 rounded-full transition-all ${
-                s.id === step   ? "w-6 bg-blue-900" :
-                s.id < step     ? "w-2 bg-green-400" :
-                                  "w-2 bg-slate-200"
+              <div key={s.id} className={`h-2 rounded-full transition-all ${
+                s.id === step ? "w-8 bg-blue-600" :
+                s.id < step ? "w-2 bg-green-500" :
+                              "w-2 bg-gray-300"
               }`} />
             ))}
           </div>
 
           {isLast ? (
             <Button onClick={submit} disabled={loading}
-              className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white">
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
               <Check className="h-4 w-4" />
               {loading ? "Enregistrement…" : isEdit ? "Enregistrer" : "Créer l'employé"}
             </Button>
           ) : (
             <Button type="button" onClick={() => setStep(s => s + 1)}
-              className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white">
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
               Suivant <ChevronRight className="h-4 w-4" />
             </Button>
           )}
