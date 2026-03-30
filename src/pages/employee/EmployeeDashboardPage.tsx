@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
@@ -25,14 +25,14 @@ import { Link } from "react-router-dom";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
   PENDING:        { label: "En attente",       color: "text-amber-700",  bg: "bg-amber-50 border-amber-200",  Icon: Clock          },
-  PENDING_SECOND: { label: "2ème validation",  color: "text-orange-700", bg: "bg-orange-50 border-orange-200", Icon: Clock         },
-  APPROVED:       { label: "Approuvé",         color: "text-green-700",  bg: "bg-green-50 border-green-200",  Icon: CheckCircle2   },
-  REJECTED:       { label: "Rejeté",           color: "text-red-700",    bg: "bg-red-50 border-red-200",      Icon: XCircle        },
-  CANCELLED:      { label: "Annulé",           color: "text-gray-500",   bg: "bg-gray-50 border-gray-200",    Icon: XCircle        },
-  REVOKED:        { label: "Révoqué",          color: "text-purple-700", bg: "bg-purple-50 border-purple-200", Icon: AlertCircle   },
+  PENDING_SECOND: { label: "2\u00e8me validation",  color: "text-orange-700", bg: "bg-orange-50 border-orange-200", Icon: Clock         },
+  APPROVED:       { label: "Approuv\u00e9",         color: "text-green-700",  bg: "bg-green-50 border-green-200",  Icon: CheckCircle2   },
+  REJECTED:       { label: "Rejet\u00e9",           color: "text-red-700",    bg: "bg-red-50 border-red-200",      Icon: XCircle        },
+  CANCELLED:      { label: "Annul\u00e9",           color: "text-gray-500",   bg: "bg-gray-50 border-gray-200",    Icon: XCircle        },
+  REVOKED:        { label: "R\u00e9voqu\u00e9",          color: "text-purple-700", bg: "bg-purple-50 border-purple-200", Icon: AlertCircle   },
 };
 
-const MONTHS_FR = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
+const MONTHS_FR = ["Jan","F\u00e9v","Mar","Avr","Mai","Jun","Jul","Ao\u00fb","Sep","Oct","Nov","D\u00e9c"];
 
 export default function EmployeeDashboardPage() {
   const { user } = useAuth();
@@ -67,11 +67,20 @@ export default function EmployeeDashboardPage() {
     }).finally(() => setLoading(false));
   }, [employeeId, employeeMatricule]);
 
-  useEffect(() => {
+  // Fetch hierarchy fresh from backend on every mount and on window focus.
+  // This ensures that any change made by HR (assign/remove N+1 or N+2)
+  // becomes immediately visible to the employee when they return to the tab.
+  const fetchHierarchy = useCallback(() => {
     employeeHierarchyService.getMyHierarchy()
       .then(setHierarchy)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetchHierarchy();
+    window.addEventListener("focus", fetchHierarchy);
+    return () => window.removeEventListener("focus", fetchHierarchy);
+  }, [fetchHierarchy]);
 
   const totalRemaining = balances.reduce((s, b) => s + parseFloat(b.remaining || "0"), 0);
   const pendingCount   = requests.filter(r => r.status === "PENDING" || r.status === "PENDING_SECOND").length;
@@ -80,24 +89,24 @@ export default function EmployeeDashboardPage() {
 
   const statCards = [
     {
-      label: "Jours de congé restants",
-      value: loading ? "…" : totalRemaining.toFixed(1),
-      sub: `Année ${new Date().getFullYear()}`,
+      label: "Jours de cong\u00e9 restants",
+      value: loading ? "\u2026" : totalRemaining.toFixed(1),
+      sub: `Ann\u00e9e ${new Date().getFullYear()}`,
       icon: <CalendarDays size={22} />,
       color: "bg-blue-50 text-camublue-900",
       link: "/employee/leaves",
     },
     {
       label: "Demandes en cours",
-      value: loading ? "…" : pendingCount,
-      sub: `${approvedCount} approuvée(s)`,
+      value: loading ? "\u2026" : pendingCount,
+      sub: `${approvedCount} approuv\u00e9e(s)`,
       icon: <Clock size={22} />,
       color: "bg-amber-50 text-amber-700",
       link: "/employee/leaves",
     },
     {
       label: "Bulletins disponibles",
-      value: loading || bulletinCount === null ? "…" : bulletinCount,
+      value: loading || bulletinCount === null ? "\u2026" : bulletinCount,
       sub: "Bulletins de salaire",
       icon: <BadgeDollarSign size={22} />,
       color: "bg-green-50 text-green-700",
@@ -105,13 +114,16 @@ export default function EmployeeDashboardPage() {
     },
     {
       label: "Documents dans mon dossier",
-      value: loading || docCount === null ? "…" : docCount,
+      value: loading || docCount === null ? "\u2026" : docCount,
       sub: "Fichiers accessibles",
       icon: <FolderOpen size={22} />,
       color: "bg-purple-50 text-purple-700",
       link: "/employee/dossier",
     },
   ];
+
+  // Show N+2 when either the flag is set OR a N+2 manager is actually assigned
+  const showN2 = hierarchy ? (hierarchy.requires_two_approvals || !!hierarchy.n2_manager) : false;
 
   return (
     <EmployeeLayout>
@@ -123,10 +135,10 @@ export default function EmployeeDashboardPage() {
           className="mb-8"
         >
           <h1 className="text-2xl font-bold text-camublue-900">
-            Bonjour, {user?.employee_name?.split(" ")[0] || user?.username} 👋
+            Bonjour, {user?.employee_name?.split(" ")[0] || user?.username} \uD83D\uDC4B
           </h1>
           <p className="text-gray-500 mt-1">
-            Voici un résumé de votre situation RH.
+            Voici un r\u00e9sum\u00e9 de votre situation RH.
           </p>
         </motion.div>
 
@@ -155,7 +167,7 @@ export default function EmployeeDashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Soldes de congés */}
+          {/* Soldes de cong\u00e9s */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -165,10 +177,10 @@ export default function EmployeeDashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-800 flex items-center gap-2">
                 <TrendingUp size={18} className="text-camublue-900" />
-                Soldes de congés {new Date().getFullYear()}
+                Soldes de cong\u00e9s {new Date().getFullYear()}
               </h2>
               <Link to="/employee/leaves" className="text-xs text-camublue-900 hover:underline">
-                Voir tout →
+                Voir tout \u2192
               </Link>
             </div>
             {loading ? (
@@ -198,7 +210,7 @@ export default function EmployeeDashboardPage() {
                         />
                       </div>
                       <div className="text-xs text-gray-400 mt-0.5">
-                        Acquis : {acq.toFixed(1)}j · Pris : {parseFloat(b.taken || "0").toFixed(1)}j
+                        Acquis : {acq.toFixed(1)}j \u00b7 Pris : {parseFloat(b.taken || "0").toFixed(1)}j
                       </div>
                     </div>
                   );
@@ -207,7 +219,7 @@ export default function EmployeeDashboardPage() {
             )}
           </motion.div>
 
-          {/* Dernières demandes */}
+          {/* Derni\u00e8res demandes */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -217,10 +229,10 @@ export default function EmployeeDashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-800 flex items-center gap-2">
                 <CalendarDays size={18} className="text-camublue-900" />
-                Mes dernières demandes
+                Mes derni\u00e8res demandes
               </h2>
               <Link to="/employee/leaves" className="text-xs text-camublue-900 hover:underline">
-                Voir tout →
+                Voir tout \u2192
               </Link>
             </div>
             {loading ? (
@@ -231,7 +243,7 @@ export default function EmployeeDashboardPage() {
               </div>
             ) : recentRequests.length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-gray-400 text-sm mb-3">Aucune demande de congé</p>
+                <p className="text-gray-400 text-sm mb-3">Aucune demande de cong\u00e9</p>
                 <Link
                   to="/employee/leaves"
                   className="inline-block text-sm text-white bg-camublue-900 px-4 py-2 rounded-lg hover:bg-camublue-900/90 transition"
@@ -257,7 +269,7 @@ export default function EmployeeDashboardPage() {
                             {req.leave_type.label}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {MONTHS_FR[d.getMonth()]} {d.getFullYear()} · {req.days}j
+                            {MONTHS_FR[d.getMonth()]} {d.getFullYear()} \u00b7 {req.days}j
                           </div>
                         </div>
                       </div>
@@ -272,7 +284,7 @@ export default function EmployeeDashboardPage() {
           </motion.div>
         </div>
 
-        {/* ── Arborescence de validation ── */}
+        {/* \u2500\u2500 Arborescence de validation \u2500\u2500 */}
         {hierarchy && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -286,13 +298,13 @@ export default function EmployeeDashboardPage() {
                 Mon arborescence de validation
               </h2>
               <Link to="/employee/leaves" className="text-xs text-camublue-900 hover:underline">
-                Voir mes congés →
+                Voir mes cong\u00e9s \u2192
               </Link>
             </div>
-            <p className="text-xs text-gray-400 mb-4">Circuit de validation appliqué à vos demandes de congé</p>
+            <p className="text-xs text-gray-400 mb-4">Circuit de validation appliqu\u00e9 \u00e0 vos demandes de cong\u00e9</p>
 
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-0 sm:gap-3 justify-center">
-              {/* Employé (moi) */}
+              {/* Employ\u00e9 (moi) */}
               <div className="flex flex-col items-center text-center min-w-[140px]">
                 <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 mb-2">
                   <User size={22} className="text-blue-700" />
@@ -302,7 +314,7 @@ export default function EmployeeDashboardPage() {
                 <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded mt-1">Vous</span>
               </div>
 
-              {/* Connecteur → */}
+              {/* Connecteur \u2192 */}
               <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
                 <ArrowDown size={16} className="text-gray-300 sm:hidden" />
                 <div className="hidden sm:block w-8 h-0.5 bg-gray-300 rounded" />
@@ -320,13 +332,13 @@ export default function EmployeeDashboardPage() {
                     <span className="text-[10px] text-amber-500 mt-0.5">{hierarchy.n1_manager.fonction || hierarchy.n1_manager.service}</span>
                   </>
                 ) : (
-                  <span className="text-xs text-gray-400 italic">Non défini</span>
+                  <span className="text-xs text-gray-400 italic">Non d\u00e9fini</span>
                 )}
                 <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded mt-1">N+1</span>
               </div>
 
-              {/* N+2 (conditionnel) */}
-              {hierarchy.requires_two_approvals && (
+              {/* N+2 : affich\u00e9 si requires_two_approvals OU si un N+2 est renseign\u00e9 */}
+              {showN2 && (
                 <>
                   <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
                     <ArrowDown size={16} className="text-gray-300 sm:hidden" />
@@ -344,14 +356,14 @@ export default function EmployeeDashboardPage() {
                         <span className="text-[10px] text-orange-500 mt-0.5">{hierarchy.n2_manager.fonction || hierarchy.n2_manager.service}</span>
                       </>
                     ) : (
-                      <span className="text-xs text-gray-400 italic">Non défini</span>
+                      <span className="text-xs text-gray-400 italic">Non d\u00e9fini</span>
                     )}
                     <span className="text-[9px] font-semibold text-orange-700 bg-orange-50 px-2 py-0.5 rounded mt-1">N+2</span>
                   </div>
                 </>
               )}
 
-              {/* Connecteur → RH */}
+              {/* Connecteur \u2192 RH */}
               <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
                 <ArrowDown size={16} className="text-gray-300 sm:hidden" />
                 <div className="hidden sm:block w-8 h-0.5 bg-gray-300 rounded" />
