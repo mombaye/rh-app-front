@@ -45,6 +45,7 @@ export default function EmployeeDashboardPage() {
   const [docCount, setDocCount]     = useState<number | null>(null);
   const [loading, setLoading]       = useState(true);
   const [hierarchy, setHierarchy]   = useState<MyHierarchyChain | null>(null);
+  const [hierarchyLoading, setHierarchyLoading] = useState(true);
 
   useEffect(() => {
     if (!employeeId) { setLoading(false); return; }
@@ -67,13 +68,19 @@ export default function EmployeeDashboardPage() {
     }).finally(() => setLoading(false));
   }, [employeeId, employeeMatricule]);
 
-  // Fetch hierarchy fresh from backend on every mount and on window focus.
-  // This ensures that any change made by HR (assign/remove N+1 or N+2)
-  // becomes immediately visible to the employee when they return to the tab.
+  // Recharge la hi\u00e9rarchie \u00e0 chaque montage ET \u00e0 chaque retour sur l'onglet.
+  // Ainsi, tout changement effectu\u00e9 par le RH est imm\u00e9diatement visible.
   const fetchHierarchy = useCallback(() => {
+    setHierarchyLoading(true);
     employeeHierarchyService.getMyHierarchy()
-      .then(setHierarchy)
-      .catch(() => {});
+      .then((data) => {
+        setHierarchy(data);
+        setHierarchyLoading(false);
+      })
+      .catch(() => {
+        setHierarchy(null);
+        setHierarchyLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -122,8 +129,10 @@ export default function EmployeeDashboardPage() {
     },
   ];
 
-  // Show N+2 when either the flag is set OR a N+2 manager is actually assigned
-  const showN2 = hierarchy ? (hierarchy.requires_two_approvals || !!hierarchy.n2_manager) : false;
+  // Afficher N+2 si le flag est activ\u00e9 OU si un N+2 est r\u00e9ellement assign\u00e9
+  const showN2 = hierarchy
+    ? (hierarchy.requires_two_approvals || !!hierarchy.n2_manager)
+    : false;
 
   return (
     <EmployeeLayout>
@@ -210,7 +219,7 @@ export default function EmployeeDashboardPage() {
                         />
                       </div>
                       <div className="text-xs text-gray-400 mt-0.5">
-                        Acquis : {acq.toFixed(1)}j \u00b7 Pris : {parseFloat(b.taken || "0").toFixed(1)}j
+                        Acquis\u00a0: {acq.toFixed(1)}j \u00b7 Pris\u00a0: {parseFloat(b.taken || "0").toFixed(1)}j
                       </div>
                     </div>
                   );
@@ -285,24 +294,48 @@ export default function EmployeeDashboardPage() {
         </div>
 
         {/* \u2500\u2500 Arborescence de validation \u2500\u2500 */}
-        {hierarchy && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mt-6"
-          >
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-                <Building2 size={18} className="text-camublue-900" />
-                Mon arborescence de validation
-              </h2>
-              <Link to="/employee/leaves" className="text-xs text-camublue-900 hover:underline">
-                Voir mes cong\u00e9s \u2192
-              </Link>
-            </div>
-            <p className="text-xs text-gray-400 mb-4">Circuit de validation appliqu\u00e9 \u00e0 vos demandes de cong\u00e9</p>
+        {/* Toujours affich\u00e9e : skeleton pendant le chargement, message si indisponible */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mt-6"
+        >
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+              <Building2 size={18} className="text-camublue-900" />
+              Mon arborescence de validation
+            </h2>
+            <Link to="/employee/leaves" className="text-xs text-camublue-900 hover:underline">
+              Voir mes cong\u00e9s \u2192
+            </Link>
+          </div>
+          <p className="text-xs text-gray-400 mb-4">Circuit de validation appliqu\u00e9 \u00e0 vos demandes de cong\u00e9</p>
 
+          {/* Skeleton pendant le chargement */}
+          {hierarchyLoading && (
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="flex flex-col items-center gap-2">
+                  <div className="w-12 h-12 bg-gray-100 rounded-xl animate-pulse" />
+                  <div className="w-20 h-3 bg-gray-100 rounded animate-pulse" />
+                  <div className="w-12 h-2 bg-gray-100 rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Message si la hi\u00e9rarchie est indisponible apr\u00e8s chargement */}
+          {!hierarchyLoading && !hierarchy && (
+            <div className="text-center py-6">
+              <AlertCircle size={28} className="text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-400">Arborescence non disponible.</p>
+              <p className="text-xs text-gray-400 mt-1">Contactez le service RH si le probl\u00e8me persiste.</p>
+            </div>
+          )}
+
+          {/* Contenu r\u00e9el quand les donn\u00e9es sont charg\u00e9es */}
+          {!hierarchyLoading && hierarchy && (
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-0 sm:gap-3 justify-center">
               {/* Employ\u00e9 (moi) */}
               <div className="flex flex-col items-center text-center min-w-[140px]">
@@ -314,7 +347,7 @@ export default function EmployeeDashboardPage() {
                 <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded mt-1">Vous</span>
               </div>
 
-              {/* Connecteur \u2192 */}
+              {/* Connecteur */}
               <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
                 <ArrowDown size={16} className="text-gray-300 sm:hidden" />
                 <div className="hidden sm:block w-8 h-0.5 bg-gray-300 rounded" />
@@ -380,8 +413,8 @@ export default function EmployeeDashboardPage() {
                 <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded mt-1">RH</span>
               </div>
             </div>
-          </motion.div>
-        )}
+          )}
+        </motion.div>
 
       </div>
     </EmployeeLayout>
