@@ -6,7 +6,7 @@ import {
   Building2, Users, ShieldCheck, Plus, Pencil, Trash2,
   Search, ChevronDown, ChevronUp, X, Check, AlertCircle,
   GitBranch, UserCheck, Settings2, RefreshCw, Loader2,
-  FolderTree,
+  FolderTree, ArrowLeft, Eye, EyeOff,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Employee } from "@/types/employee";
@@ -15,14 +15,13 @@ import { Department, DepartmentCreate, ApprovalRule, ApprovalRuleCreate, Employe
 import { departmentService, employeeHierarchyService, approvalRuleService } from "@/services/hierarchyService";
 import { getEmployees } from "@/services/employeeService";
 
-// ─── Tabs ───────────────────────────────────────────────────────────────────
-type HierarchyTab = "orgchart" | "departments" | "employees" | "rules";
+// ─── Sections ───────────────────────────────────────────────────────────────
+type HierarchySection = "orgchart" | "employees" | "rules";
 
-const TABS: { id: HierarchyTab; label: string; Icon: React.ElementType }[] = [
-  { id: "orgchart",    label: "Organigramme",        Icon: GitBranch   },
-  { id: "departments", label: "Départements",        Icon: Building2   },
-  { id: "employees",   label: "Hiérarchie employés", Icon: Users       },
-  { id: "rules",       label: "Règles d'approbation", Icon: ShieldCheck },
+const SECTIONS: { id: HierarchySection; label: string; description: string; Icon: React.ElementType; color: string }[] = [
+  { id: "orgchart",  label: "Organigramme",         description: "Visualisez et gérez la structure organisationnelle, les départements et leurs membres", Icon: GitBranch,   color: "blue"   },
+  { id: "employees", label: "Hiérarchie employés",   description: "Gérez les managers N+1/N+2 et la double validation pour chaque employé",              Icon: Users,       color: "emerald" },
+  { id: "rules",     label: "Règles d'approbation",  description: "Configurez les règles automatiques de validation supplémentaire des congés",           Icon: ShieldCheck, color: "purple" },
 ];
 
 const RULE_TYPE_LABELS: Record<string, string> = {
@@ -31,35 +30,83 @@ const RULE_TYPE_LABELS: Record<string, string> = {
   DEPARTMENT: "Département spécifique",
 };
 
-// ─── Component principal ─────────────────────────────────────────────────────
-export default function HierarchyManagement() {
-  const [activeTab, setActiveTab] = useState<HierarchyTab>("orgchart");
+// ─── Component principal (Modal) ────────────────────────────────────────────
+export default function HierarchyManagement({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [activeSection, setActiveSection] = useState<HierarchySection | null>(null);
+
+  if (!open) return null;
+
+  const goBack = () => setActiveSection(null);
+  const handleClose = () => { setActiveSection(null); onClose(); };
 
   return (
-    <div className="space-y-4">
-      {/* Onglets */}
-      <div className="flex gap-0 border-b border-gray-200">
-        {TABS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-              activeTab === id
-                ? "border-blue-600 text-blue-700 bg-blue-50/50"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            <Icon size={14} />
-            {label}
-          </button>
-        ))}
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={handleClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 overflow-hidden flex flex-col"
+        style={{ maxHeight: "90vh" }}
+        onClick={e => e.stopPropagation()}>
 
-      {/* Contenu */}
-      {activeTab === "orgchart"    && <OrgChartTab />}
-      {activeTab === "departments" && <DepartmentsTab />}
-      {activeTab === "employees"   && <EmployeesHierarchyTab />}
-      {activeTab === "rules"       && <ApprovalRulesTab />}
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            {activeSection && (
+              <button onClick={goBack}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition">
+                <ArrowLeft size={18} />
+              </button>
+            )}
+            <div>
+              <h2 className="font-black text-gray-900 text-lg">
+                {activeSection ? SECTIONS.find(s => s.id === activeSection)?.label : "Hiérarchie"}
+              </h2>
+              {!activeSection && (
+                <p className="text-xs text-gray-400 mt-0.5">Choisissez une section pour gérer la structure organisationnelle</p>
+              )}
+            </div>
+          </div>
+          <button onClick={handleClose}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="overflow-y-auto flex-1 p-6">
+          {!activeSection ? (
+            /* ── Section Picker ──────────────────────────────────────────── */
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {SECTIONS.map(({ id, label, description, Icon, color }) => (
+                <button
+                  key={id}
+                  onClick={() => setActiveSection(id)}
+                  className={`flex flex-col items-center text-center p-6 rounded-2xl border-2 transition-all hover:scale-[1.02] hover:shadow-lg ${
+                    color === "blue"    ? "border-blue-200 hover:border-blue-400 hover:bg-blue-50" :
+                    color === "emerald" ? "border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50" :
+                                          "border-purple-200 hover:border-purple-400 hover:bg-purple-50"
+                  }`}
+                >
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 ${
+                    color === "blue"    ? "bg-blue-100 text-blue-600" :
+                    color === "emerald" ? "bg-emerald-100 text-emerald-600" :
+                                          "bg-purple-100 text-purple-600"
+                  }`}>
+                    <Icon size={28} />
+                  </div>
+                  <h3 className="font-bold text-gray-800 text-base mb-2">{label}</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed">{description}</p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            /* ── Active Section Content ──────────────────────────────────── */
+            <>
+              {activeSection === "orgchart"  && <OrgChartTab />}
+              {activeSection === "employees" && <EmployeesHierarchyTab />}
+              {activeSection === "rules"     && <ApprovalRulesTab />}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -72,6 +119,7 @@ function OrgChartTab() {
   const [employees,    setEmployees]    = useState<EmployeeHierarchy[]>([]);
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [loading,      setLoading]      = useState(true);
+  const [showEmployees, setShowEmployees] = useState(false);
   const [editingEmp,   setEditingEmp]   = useState<EmployeeHierarchy | null>(null);
   const [editForm,     setEditForm]     = useState<{
     n1_manager_id: number | null;
@@ -81,12 +129,14 @@ function OrgChartTab() {
   }>({ n1_manager_id: null, n2_manager_id: null, requires_two_approvals: false, service: "" });
   const [saving, setSaving] = useState(false);
 
-  // Dept en cours d'édition (depuis l'orgchart)
+  // Dept en cours d'édition (depuis l'orgchart) — null = création
   const [editingDept,   setEditingDept]   = useState<Department | null>(null);
+  const [showDeptForm,  setShowDeptForm]  = useState(false);
   const [deptForm,      setDeptForm]      = useState<{
     name: string; code: string; description: string; parent_id: number | null; head_id: number | null; dg_validator_id: number | null;
   }>({ name: "", code: "", description: "", parent_id: null, head_id: null, dg_validator_id: null });
   const [savingDept, setSavingDept] = useState(false);
+  const [deletingDept, setDeletingDept] = useState<number | null>(null);
 
   // Assignation en masse des membres d'un département
   const [bulkDept,      setBulkDept]      = useState<Department | null>(null);
@@ -164,6 +214,12 @@ function OrgChartTab() {
     }
   };
 
+  const openCreateDept = () => {
+    setEditingDept(null);
+    setDeptForm({ name: "", code: "", description: "", parent_id: null, head_id: null, dg_validator_id: null });
+    setShowDeptForm(true);
+  };
+
   const openEditDept = (dept: Department) => {
     setEditingDept(dept);
     setDeptForm({
@@ -174,23 +230,46 @@ function OrgChartTab() {
       head_id:          dept.head,
       dg_validator_id:  dept.dg_validator,
     });
+    setShowDeptForm(true);
   };
 
   const handleSaveDept = async () => {
-    if (!editingDept || !deptForm.name || !deptForm.code) {
+    if (!deptForm.name || !deptForm.code) {
       toast.error("Nom et code obligatoires.");
       return;
     }
     setSavingDept(true);
     try {
-      await departmentService.update(editingDept.id, deptForm);
-      toast.success("Département mis à jour ✓");
+      if (editingDept) {
+        await departmentService.update(editingDept.id, deptForm);
+        toast.success("Département mis à jour ✓");
+      } else {
+        await departmentService.create(deptForm);
+        toast.success("Département créé ✓");
+      }
+      setShowDeptForm(false);
       setEditingDept(null);
       load();
-    } catch {
-      toast.error("Erreur lors de la mise à jour du département.");
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { name?: string[]; code?: string[] } } })?.response?.data;
+      if (msg?.name) toast.error("Nom déjà utilisé.");
+      else if (msg?.code) toast.error("Code déjà utilisé.");
+      else toast.error("Erreur lors de la sauvegarde du département.");
     } finally {
       setSavingDept(false);
+    }
+  };
+
+  const handleDeleteDept = async (id: number) => {
+    setDeletingDept(id);
+    try {
+      await departmentService.delete(id);
+      toast.success("Département supprimé ✓");
+      load();
+    } catch {
+      toast.error("Impossible de supprimer ce département.");
+    } finally {
+      setDeletingDept(null);
     }
   };
 
@@ -239,14 +318,36 @@ function OrgChartTab() {
   return (
     <div className="space-y-6">
 
-      {/* ── Légende ──────────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
-        <div className="flex items-center gap-1.5"><span className="w-4 h-4 rounded border-2 border-indigo-400 bg-indigo-100 inline-block" />Direction Générale</div>
-        <div className="flex items-center gap-1.5"><span className="w-4 h-4 rounded border-2 border-amber-400 bg-amber-50 inline-block" />Département parent (N+2)</div>
-        <div className="flex items-center gap-1.5"><span className="w-4 h-4 rounded border-2 border-teal-400 bg-teal-50 inline-block" />Sous-département (N+1)</div>
-        <div className="flex items-center gap-1.5"><span className="w-4 h-4 rounded border-2 border-emerald-400 bg-emerald-50 inline-block" />Département simple</div>
-        <div className="flex items-center gap-1.5"><span className="w-4 h-4 rounded border-2 border-blue-300 bg-blue-50 inline-block" />Employés</div>
-        <div className="flex items-center gap-1.5 ml-auto text-gray-400 italic">Cliquez sur un employé ou un département pour le modifier</div>
+      {/* ── Toolbar : Actions + Toggle employés ──────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-indigo-400 bg-indigo-100 inline-block" />DG</div>
+          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-amber-400 bg-amber-50 inline-block" />Dept. parent</div>
+          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-teal-400 bg-teal-50 inline-block" />Sous-dept.</div>
+          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-emerald-400 bg-emerald-50 inline-block" />Dept. simple</div>
+          {showEmployees && <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-blue-300 bg-blue-50 inline-block" />Employés</div>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowEmployees(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition ${
+              showEmployees
+                ? "bg-blue-50 border-blue-300 text-blue-700"
+                : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+            }`}
+            title={showEmployees ? "Masquer les employés" : "Afficher les employés"}
+          >
+            {showEmployees ? <Eye size={14} /> : <EyeOff size={14} />}
+            {showEmployees ? "Employés visibles" : "Employés masqués"}
+          </button>
+          <button onClick={openCreateDept}
+            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition">
+            <Plus size={14} /> Nouveau département
+          </button>
+          <button onClick={load} className="p-2 border rounded-xl hover:bg-gray-50 text-gray-400 transition" title="Actualiser">
+            <RefreshCw size={14} />
+          </button>
+        </div>
       </div>
 
       {/* ── Direction Générale ────────────────────────────────────────────────── */}
@@ -290,7 +391,10 @@ function OrgChartTab() {
                   empsByDept={empsByDept}
                   onEditEmployee={openEditEmp}
                   onEditDept={openEditDept}
+                  onDeleteDept={handleDeleteDept}
+                  deletingDept={deletingDept}
                   onBulkAssign={openBulkAssign}
+                  showEmployees={showEmployees}
                 />
               ))}
             </div>
@@ -307,7 +411,10 @@ function OrgChartTab() {
                     empsByDept={empsByDept}
                     onEditEmployee={openEditEmp}
                     onEditDept={openEditDept}
+                    onDeleteDept={handleDeleteDept}
+                    deletingDept={deletingDept}
                     onBulkAssign={openBulkAssign}
+                    showEmployees={showEmployees}
                   />
                 ))}
               </div>
@@ -320,12 +427,15 @@ function OrgChartTab() {
         <div className="text-center py-8 text-gray-400">
           <Building2 size={36} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm italic">Aucun département configuré.</p>
-          <p className="text-xs mt-1">Créez des départements dans l'onglet "Départements".</p>
+          <button onClick={openCreateDept}
+            className="mt-3 flex items-center gap-1.5 mx-auto px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 transition font-semibold">
+            <Plus size={14} /> Créer un département
+          </button>
         </div>
       )}
 
       {/* ── Employés sans département ─────────────────────────────────────────── */}
-      {unassigned.length > 0 && (
+      {showEmployees && unassigned.length > 0 && (
         <div className="bg-amber-50 border border-dashed border-amber-300 rounded-2xl p-4">
           <p className="text-xs font-bold text-amber-700 mb-3 flex items-center gap-1.5">
             <AlertCircle size={13} /> {unassigned.length} employé(s) sans département assigné
@@ -440,15 +550,15 @@ function OrgChartTab() {
         </div>
       )}
 
-      {/* ── Modal : édition département ────────────────────────────────────────── */}
-      {editingDept && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
-          onClick={() => setEditingDept(null)}>
+      {/* ── Modal : création/édition département ─────────────────────────────── */}
+      {showDeptForm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+          onClick={() => { setShowDeptForm(false); setEditingDept(null); }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-800">Modifier le département</h3>
-              <button onClick={() => setEditingDept(null)}
+              <h3 className="font-bold text-gray-800">{editingDept ? "Modifier le département" : "Nouveau département"}</h3>
+              <button onClick={() => { setShowDeptForm(false); setEditingDept(null); }}
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
                 <X size={16} />
               </button>
@@ -457,12 +567,14 @@ function OrgChartTab() {
               <FormField label="Nom *">
                 <input value={deptForm.name}
                   onChange={e => setDeptForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  placeholder="ex : Ressources Humaines" />
               </FormField>
               <FormField label="Code *">
                 <input value={deptForm.code}
                   onChange={e => setDeptForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                  className="w-full border rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  placeholder="ex : RH" />
               </FormField>
               <FormField label="Département parent" className="sm:col-span-2">
                 <select
@@ -502,18 +614,19 @@ function OrgChartTab() {
                 <textarea value={deptForm.description}
                   onChange={e => setDeptForm(f => ({ ...f, description: e.target.value }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  rows={2} />
+                  rows={2}
+                  placeholder="Description optionnelle..." />
               </FormField>
             </div>
             <div className="flex gap-2 justify-end px-6 py-4 border-t border-gray-100 bg-gray-50">
-              <button onClick={() => setEditingDept(null)}
+              <button onClick={() => { setShowDeptForm(false); setEditingDept(null); }}
                 className="px-4 py-2 text-sm border rounded-xl hover:bg-gray-100 font-medium transition">
                 Annuler
               </button>
               <button onClick={handleSaveDept} disabled={savingDept}
-                className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm rounded-xl hover:bg-emerald-700 disabled:opacity-60 font-bold transition">
+                className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60 font-bold transition">
                 {savingDept ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                Enregistrer
+                {editingDept ? "Enregistrer" : "Créer"}
               </button>
             </div>
           </div>
@@ -684,7 +797,7 @@ function OrgChartTab() {
 
 // ── DeptColumn : colonne département dans l'organigramme ─────────────────────
 function DeptColumn({
-  dept, employees, subDepartments, empsByDept, onEditEmployee, onEditDept, onBulkAssign,
+  dept, employees, subDepartments, empsByDept, onEditEmployee, onEditDept, onDeleteDept, deletingDept, onBulkAssign, showEmployees,
 }: {
   dept: Department;
   employees: EmployeeHierarchy[];
@@ -692,7 +805,10 @@ function DeptColumn({
   empsByDept: Record<string, EmployeeHierarchy[]>;
   onEditEmployee: (emp: EmployeeHierarchy) => void;
   onEditDept: (dept: Department) => void;
+  onDeleteDept: (id: number) => void;
+  deletingDept: number | null;
   onBulkAssign: (dept: Department) => void;
+  showEmployees: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const hasSubDepts = subDepartments.length > 0;
@@ -740,9 +856,12 @@ function DeptColumn({
               DG : {dept.dg_validator_name}
             </p>
           )}
+          <p className={`text-[10px] mt-1 ${hasSubDepts ? "text-amber-500" : "text-emerald-500"}`}>
+            {dept.employee_count} employé(s)
+          </p>
         </button>
 
-        {/* Bouton "Gérer les membres" + toggle */}
+        {/* Boutons : Membres / Supprimer / Toggle */}
         <div className={`flex border-t ${hasSubDepts ? "border-amber-200" : "border-emerald-200"}`}>
           <button
             onClick={() => onBulkAssign(dept)}
@@ -754,6 +873,18 @@ function DeptColumn({
             title="Assigner des employés en masse"
           >
             <UserCheck size={12} /> Membres
+          </button>
+          <button
+            onClick={() => onDeleteDept(dept.id)}
+            disabled={deletingDept === dept.id}
+            className={`px-2 py-2 transition border-l ${
+              hasSubDepts
+                ? "bg-amber-100 hover:bg-red-100 text-red-400 border-amber-200"
+                : "bg-emerald-100 hover:bg-red-100 text-red-400 border-emerald-200"
+            } disabled:opacity-50`}
+            title="Supprimer le département"
+          >
+            {deletingDept === dept.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
           </button>
           <button
             onClick={() => setExpanded(e => !e)}
@@ -792,14 +923,17 @@ function DeptColumn({
                       employees={empsByDept[subDept.name] ?? []}
                       onEditEmployee={onEditEmployee}
                       onEditDept={onEditDept}
+                      onDeleteDept={onDeleteDept}
+                      deletingDept={deletingDept}
                       onBulkAssign={onBulkAssign}
+                      showEmployees={showEmployees}
                     />
                   </div>
                 ))}
               </div>
 
               {/* Employés directs du département parent (s'il y en a) */}
-              {employees.length > 0 && (
+              {showEmployees && employees.length > 0 && (
                 <>
                   <div className="w-px h-4 bg-gray-300" />
                   <EmployeeList employees={employees} onEditEmployee={onEditEmployee} />
@@ -807,10 +941,12 @@ function DeptColumn({
               )}
             </>
           ) : (
-            <>
-              <div className="w-px h-4 bg-gray-300" />
-              <EmployeeList employees={employees} onEditEmployee={onEditEmployee} />
-            </>
+            showEmployees && (
+              <>
+                <div className="w-px h-4 bg-gray-300" />
+                <EmployeeList employees={employees} onEditEmployee={onEditEmployee} />
+              </>
+            )
           )}
         </>
       )}
@@ -820,13 +956,16 @@ function DeptColumn({
 
 // ── SubDeptCard : carte sous-département dans l'organigramme ──────────────────
 function SubDeptCard({
-  dept, employees, onEditEmployee, onEditDept, onBulkAssign,
+  dept, employees, onEditEmployee, onEditDept, onDeleteDept, deletingDept, onBulkAssign, showEmployees,
 }: {
   dept: Department;
   employees: EmployeeHierarchy[];
   onEditEmployee: (emp: EmployeeHierarchy) => void;
   onEditDept: (dept: Department) => void;
+  onDeleteDept: (id: number) => void;
+  deletingDept: number | null;
   onBulkAssign: (dept: Department) => void;
+  showEmployees: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -851,6 +990,7 @@ function SubDeptCard({
               <span className="italic text-teal-400">Sans responsable</span>
             )}
           </p>
+          <p className="text-[10px] text-teal-500 mt-0.5">{dept.employee_count} employé(s)</p>
         </button>
         <div className="flex border-t border-teal-200">
           <button
@@ -858,6 +998,14 @@ function SubDeptCard({
             className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-teal-100 hover:bg-teal-600 hover:text-white text-[10px] font-semibold text-teal-700 transition"
           >
             <UserCheck size={10} /> Membres
+          </button>
+          <button
+            onClick={() => onDeleteDept(dept.id)}
+            disabled={deletingDept === dept.id}
+            className="px-2 py-1.5 bg-teal-100 hover:bg-red-100 text-red-400 border-l border-teal-200 transition disabled:opacity-50"
+            title="Supprimer"
+          >
+            {deletingDept === dept.id ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
           </button>
           <button
             onClick={() => setExpanded(e => !e)}
@@ -868,7 +1016,7 @@ function SubDeptCard({
         </div>
       </div>
 
-      {expanded && (
+      {expanded && showEmployees && (
         <>
           <div className="w-px h-3 bg-gray-300" />
           <EmployeeList employees={employees} onEditEmployee={onEditEmployee} compact />
@@ -923,446 +1071,6 @@ function EmployeeList({
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Onglet Départements
-// ─────────────────────────────────────────────────────────────────────────────
-function DepartmentsTab() {
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [employees,   setEmployees]   = useState<Employee[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [showForm,    setShowForm]    = useState(false);
-  const [editing,     setEditing]     = useState<Department | null>(null);
-  const [deleting,    setDeleting]    = useState<number | null>(null);
-
-  const [form, setForm] = useState<DepartmentCreate>({
-    name: "", code: "", description: "", parent_id: null, head_id: null, dg_validator_id: null,
-  });
-  const [saving, setSaving] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [depts, emps] = await Promise.all([
-        departmentService.getAll(),
-        getEmployees({ status: "ACTIVE" }),
-      ]);
-      setDepartments(depts);
-      setEmployees(emps);
-    } catch {
-      toast.error("Impossible de charger les départements.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  // ── Auto-détection des employés correspondants (nom OU code) ──────────────
-  const autoMatch = useMemo(() => {
-    if ((!form.name.trim() && !form.code.trim()) || editing) return [];
-    const qName = form.name.trim().toLowerCase();
-    const qCode = form.code.trim().toLowerCase();
-    return employees.filter(e => {
-      if (e.status !== "ACTIVE") return false;
-      const svc  = (e.service ?? "").toLowerCase();
-      const proj = (e.projet  ?? "").toLowerCase();
-      return (
-        (qName && (svc === qName || proj === qName)) ||
-        (qCode && (svc === qCode || proj === qCode))
-      );
-    });
-  }, [form.name, form.code, employees, editing]);
-
-  // ── Manager suggéré : n1_manager le plus fréquent parmi les matchés ────────
-  const suggestedHead = useMemo(() => {
-    if (autoMatch.length === 0) return null;
-    const freq: Record<number, number> = {};
-    autoMatch.forEach(e => {
-      if (e.n1_manager) freq[e.n1_manager] = (freq[e.n1_manager] ?? 0) + 1;
-    });
-    const topId = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0];
-    if (!topId) return null;
-    return employees.find(e => e.id === Number(topId)) ?? null;
-  }, [autoMatch, employees]);
-
-  const openCreate = () => {
-    setEditing(null);
-    setForm({ name: "", code: "", description: "", parent_id: null, head_id: null, dg_validator_id: null });
-    setShowForm(true);
-  };
-
-  const openEdit = (dept: Department) => {
-    setEditing(dept);
-    setForm({
-      name:           dept.name,
-      code:           dept.code,
-      description:    dept.description,
-      parent_id:      dept.parent,
-      head_id:        dept.head,
-      dg_validator_id: dept.dg_validator,
-    });
-    setShowForm(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.name || !form.code) {
-      toast.error("Le nom et le code sont obligatoires.");
-      return;
-    }
-    setSaving(true);
-    try {
-      if (editing) {
-        await departmentService.update(editing.id, form);
-        toast.success("Département mis à jour.");
-      } else {
-        await departmentService.create(form);
-        // Assignation automatique des employés détectés
-        if (autoMatch.length > 0) {
-          await Promise.all(autoMatch.map(e => patchEmployee(e.id, { service: form.name })));
-          toast.success(`Département créé · ${autoMatch.length} employé(s) assigné(s) automatiquement ✓`);
-        } else {
-          toast.success("Département créé.");
-        }
-      }
-      setShowForm(false);
-      load();
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { name?: string[]; code?: string[] } } })?.response?.data;
-      if (msg?.name) toast.error("Nom déjà utilisé.");
-      else if (msg?.code) toast.error("Code déjà utilisé.");
-      else toast.error("Erreur lors de la sauvegarde.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    setDeleting(id);
-    try {
-      await departmentService.delete(id);
-      toast.success("Département supprimé.");
-      load();
-    } catch {
-      toast.error("Impossible de supprimer ce département.");
-    } finally {
-      setDeleting(null);
-    }
-  };
-
-  const activeEmployees = employees.filter(e => e.status === "ACTIVE");
-
-  if (loading) return <LoadingSpinner />;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-gray-600">{departments.length} département(s) configuré(s)</p>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-        >
-          <Plus size={15} /> Nouveau département
-        </button>
-      </div>
-
-      {/* Modal Nouveau / Modifier département */}
-      {showForm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
-          onClick={() => setShowForm(false)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header modal */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-              <h3 className="font-bold text-gray-800 text-base">
-                {editing ? "Modifier le département" : "Nouveau département"}
-              </h3>
-              <button
-                onClick={() => setShowForm(false)}
-                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            {/* Corps */}
-            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormField label="Nom *">
-                  <input
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    placeholder="ex : Ressources Humaines"
-                  />
-                </FormField>
-                <FormField label="Code *">
-                  <input
-                    value={form.code}
-                    onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    placeholder="ex : RH"
-                  />
-                </FormField>
-                <FormField label="Département parent" className="sm:col-span-2">
-                  <select
-                    value={form.parent_id ?? ""}
-                    onChange={e => setForm(f => ({ ...f, parent_id: e.target.value ? Number(e.target.value) : null }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  >
-                    <option value="">— Aucun (département racine)</option>
-                    {departments
-                      .filter(d => !editing || d.id !== editing.id) // ne pas se lister soi-même
-                      .filter(d => !d.parent) // seuls les depts racines peuvent être parents
-                      .map(d => (
-                        <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
-                      ))
-                    }
-                  </select>
-                  {form.parent_id && (
-                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                      <FolderTree size={11} />
-                      Ce département sera un sous-département. Son responsable sera N+1, le responsable du parent sera N+2.
-                    </p>
-                  )}
-                </FormField>
-                <FormField label={form.parent_id ? "Responsable (N+1 du sous-département)" : "Responsable (chef de département)"}>
-                  <EmployeeSelect
-                    employees={activeEmployees}
-                    value={form.head_id ?? null}
-                    onChange={v => setForm(f => ({ ...f, head_id: v }))}
-                    placeholder="Choisir le responsable..."
-                  />
-                </FormField>
-                {!form.parent_id && (
-                  <FormField label="Validateur DG (N+2)">
-                    <EmployeeSelect
-                      employees={activeEmployees}
-                      value={form.dg_validator_id ?? null}
-                      onChange={v => setForm(f => ({ ...f, dg_validator_id: v }))}
-                      placeholder="Choisir le DG validateur..."
-                    />
-                  </FormField>
-                )}
-                <FormField label="Description" className="sm:col-span-2">
-                  <textarea
-                    value={form.description}
-                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    rows={2}
-                    placeholder="Description optionnelle..."
-                  />
-                </FormField>
-              </div>
-
-              {/* ── Preview auto-assignation (création seulement) ───────────── */}
-              {!editing && (form.name.trim() || form.code.trim()) && (
-                <div className={`rounded-xl border p-4 space-y-3 ${
-                  autoMatch.length > 0 ? "bg-emerald-50 border-emerald-200" : "bg-gray-50 border-gray-200"
-                }`}>
-                  <div className="flex items-center gap-2">
-                    <Users size={14} className={autoMatch.length > 0 ? "text-emerald-600" : "text-gray-400"} />
-                    <span className="text-xs font-semibold text-gray-700">Employés détectés automatiquement</span>
-                  </div>
-
-                  {autoMatch.length === 0 ? (
-                    <p className="text-xs text-gray-400 italic">
-                      Aucun employé avec <code className="bg-gray-100 px-1 rounded">service</code> ou <code className="bg-gray-100 px-1 rounded">projet</code> correspondant à{" "}
-                      {form.name.trim() && <strong>"{form.name}"</strong>}
-                      {form.name.trim() && form.code.trim() && <span className="text-gray-300"> / </span>}
-                      {form.code.trim() && <strong>"{form.code}"</strong>}
-                    </p>
-                  ) : (
-                    <>
-                      <p className="text-xs text-emerald-700 font-medium">
-                        <strong>{autoMatch.length}</strong> employé(s) seront automatiquement assignés à ce département
-                        {autoMatch.some(e => e.projet?.toLowerCase() === form.name.trim().toLowerCase()) && (
-                          <span className="text-emerald-500"> (via service ou projet)</span>
-                        )}
-                      </p>
-
-                      {/* Suggestion responsable */}
-                      {suggestedHead && (
-                        <div className="flex items-center justify-between bg-white border border-emerald-200 rounded-lg px-3 py-2">
-                          <div>
-                            <p className="text-[11px] text-gray-500 font-medium">Responsable suggéré</p>
-                            <p className="text-sm font-bold text-gray-800">
-                              {suggestedHead.nom} {suggestedHead.prenom}
-                            </p>
-                            <p className="text-[10px] text-gray-400">{suggestedHead.matricule} · {suggestedHead.fonction ?? "—"}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setForm(f => ({ ...f, head_id: suggestedHead.id }))}
-                            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
-                              form.head_id === suggestedHead.id
-                                ? "bg-emerald-600 text-white"
-                                : "bg-emerald-100 text-emerald-700 hover:bg-emerald-600 hover:text-white"
-                            }`}
-                          >
-                            {form.head_id === suggestedHead.id ? <Check size={11} /> : <UserCheck size={11} />}
-                            {form.head_id === suggestedHead.id ? "Sélectionné" : "Utiliser"}
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Aperçu des 4 premiers employés */}
-                      <div className="flex flex-wrap gap-1.5">
-                        {autoMatch.slice(0, 4).map(e => (
-                          <span key={e.id} className="flex items-center gap-1 text-[11px] bg-white border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-medium">
-                            <span className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[8px] font-black">
-                              {`${e.nom}${e.prenom}`.slice(0, 1).toUpperCase()}
-                            </span>
-                            {e.nom} {e.prenom}
-                            {(e.projet ?? "").toLowerCase() === form.name.trim().toLowerCase() && (e.service ?? "").toLowerCase() !== form.name.trim().toLowerCase() && (
-                              <span className="text-[9px] text-blue-500 italic">projet</span>
-                            )}
-                          </span>
-                        ))}
-                        {autoMatch.length > 4 && (
-                          <span className="text-[11px] text-emerald-600 italic px-2 py-0.5">+{autoMatch.length - 4} autres</span>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex gap-2 justify-end px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-              <button
-                onClick={() => setShowForm(false)}
-                className="px-4 py-2 text-sm border rounded-xl hover:bg-gray-100 font-medium transition"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60 font-semibold transition"
-              >
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                {!editing && autoMatch.length > 0 ? `Créer & assigner ${autoMatch.length} employé(s)` : "Enregistrer"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Liste */}
-      {departments.length === 0 ? (
-        <EmptyState icon={Building2} message="Aucun département configuré. Commencez par en créer un." />
-      ) : (() => {
-        const rootDepts = departments.filter(d => !d.parent);
-        const childMap: Record<number, Department[]> = {};
-        departments.forEach(d => {
-          if (d.parent) {
-            if (!childMap[d.parent]) childMap[d.parent] = [];
-            childMap[d.parent].push(d);
-          }
-        });
-
-        const renderDeptCard = (dept: Department, isChild = false) => (
-          <div key={dept.id} className={`bg-white border rounded-xl p-4 shadow-sm ${isChild ? "ml-6 border-l-4 border-l-teal-400" : ""}`}>
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    isChild ? "bg-teal-100 text-teal-700" : (childMap[dept.id]?.length ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700")
-                  }`}>
-                    {dept.code}
-                  </span>
-                  <span className="font-semibold text-gray-800">{dept.name}</span>
-                  {isChild && (
-                    <span className="text-[10px] text-teal-600 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded-md">
-                      Sous-dept. de {dept.parent_name}
-                    </span>
-                  )}
-                  {!isChild && (childMap[dept.id]?.length ?? 0) > 0 && (
-                    <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
-                      <FolderTree size={9} /> {childMap[dept.id].length} sous-dept.
-                    </span>
-                  )}
-                </div>
-                {dept.description && (
-                  <p className="text-xs text-gray-500 mt-1">{dept.description}</p>
-                )}
-              </div>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => openEdit(dept)}
-                  className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500"
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  onClick={() => handleDelete(dept.id)}
-                  disabled={deleting === dept.id}
-                  className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 disabled:opacity-50"
-                >
-                  {deleting === dept.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                </button>
-              </div>
-            </div>
-            <div className="space-y-1.5 text-sm">
-              <div className="flex items-center gap-2 text-gray-600">
-                <UserCheck size={13} className="text-green-500 flex-shrink-0" />
-                <span className="text-xs text-gray-500">
-                  {isChild ? "Responsable (N+1) :" : "Responsable :"}
-                </span>
-                <span className="font-medium">{dept.head_name ?? <span className="italic text-gray-400">Non défini</span>}</span>
-              </div>
-              {!isChild && (
-                <div className="flex items-center gap-2 text-gray-600">
-                  <ShieldCheck size={13} className="text-purple-500 flex-shrink-0" />
-                  <span className="text-xs text-gray-500">Validateur DG :</span>
-                  <span className="font-medium">{dept.dg_validator_name ?? <span className="italic text-gray-400">Non défini</span>}</span>
-                </div>
-              )}
-              {isChild && dept.parent_name && (
-                <div className="flex items-center gap-2 text-gray-600">
-                  <ShieldCheck size={13} className="text-amber-500 flex-shrink-0" />
-                  <span className="text-xs text-gray-500">N+2 (resp. parent) :</span>
-                  <span className="font-medium">
-                    {departments.find(d => d.id === dept.parent)?.head_name ?? <span className="italic text-gray-400">Non défini</span>}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Users size={13} className="text-blue-400 flex-shrink-0" />
-                <span className="text-xs text-gray-500">{dept.employee_count} employé(s) actif(s)</span>
-              </div>
-            </div>
-          </div>
-        );
-
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {rootDepts.map(dept => (
-              <div key={dept.id} className="space-y-3">
-                {renderDeptCard(dept)}
-                {(childMap[dept.id] ?? []).map(child => renderDeptCard(child, true))}
-              </div>
-            ))}
-            {/* Orphelins */}
-            {departments
-              .filter(d => d.parent && !departments.find(p => p.id === d.parent))
-              .map(dept => (
-                <div key={dept.id} className="space-y-3">
-                  {renderDeptCard(dept, true)}
-                </div>
-              ))
-            }
-          </div>
-        );
-      })()}
     </div>
   );
 }

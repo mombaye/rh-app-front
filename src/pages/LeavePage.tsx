@@ -72,7 +72,7 @@ const DEFAULT_EXPORT_COLUMNS: ExportColumnKey[] = [
   "start_date", "end_date", "days", "status",
 ];
 
-type TabId        = "requests" | "calendar" | "balances" | "justifications" | "hierarchy";
+type TabId        = "requests" | "calendar" | "balances" | "justifications";
 type StatusFilter = "ALL" | LeaveStatus;
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
@@ -80,7 +80,6 @@ const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
   { id: "calendar",       label: "Calendrier",    Icon: CalendarRange },
   { id: "balances",       label: "Soldes",        Icon: Wallet       },
   { id: "justifications", label: "Justificatifs", Icon: FileCheck    },
-  { id: "hierarchy",      label: "Hiérarchie",    Icon: GitBranch    },
 ];
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
@@ -140,6 +139,7 @@ export default function LeavePage() {
   const [contractType, setContractType] = useState<ContractType>("INTERNE");
   const [showForm,       setShowForm]       = useState(false);
   const [showLeaveTypes, setShowLeaveTypes] = useState(false);
+  const [showHierarchy,  setShowHierarchy]  = useState(false);
   const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [selected,       setSelected]       = useState<LeaveRequest | null>(null);
   const [editTarget,     setEditTarget]     = useState<LeaveRequest | null>(null);
@@ -312,6 +312,11 @@ export default function LeavePage() {
               <button onClick={fetchAll} disabled={loading} title="Actualiser"
                 className="p-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition">
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              </button>
+              <button onClick={() => setShowHierarchy(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-camublue-300 text-sm font-semibold transition">
+                <GitBranch className="h-4 w-4" />
+                <span className="hidden sm:inline">Hiérarchie</span>
               </button>
               <button onClick={() => setShowLeaveTypes(true)}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-camublue-300 text-sm font-semibold transition">
@@ -775,8 +780,6 @@ export default function LeavePage() {
           )}
 
           {tab === "justifications" && <JustificationsTab onOpenDetail={openDetail} />}
-
-          {tab === "hierarchy" && <HierarchyManagement />}
         </div>
       </div>
 
@@ -966,6 +969,9 @@ export default function LeavePage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── Modal Hiérarchie ──────────────────────────────────────────────── */}
+      <HierarchyManagement open={showHierarchy} onClose={() => setShowHierarchy(false)} />
 
     </AppLayout>
   );
