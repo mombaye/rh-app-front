@@ -256,7 +256,7 @@ export interface HolidayCheckResult {
 }
 
 // ── Department ────────────────────────────────────────────────────────────────
-export interface Department {
+export interface DepartmentChild {
   id:                  number;
   name:                string;
   code:                string;
@@ -270,10 +270,28 @@ export interface Department {
   updated_at:          string;
 }
 
+export interface Department {
+  id:                  number;
+  name:                string;
+  code:                string;
+  description:         string;
+  parent:              number | null;
+  parent_name:         string | null;
+  head:                number | null;
+  head_name:           string | null;
+  dg_validator:        number | null;
+  dg_validator_name:   string | null;
+  employee_count:      number;
+  children:            DepartmentChild[];
+  created_at:          string;
+  updated_at:          string;
+}
+
 export interface DepartmentCreate {
   name:           string;
   code:           string;
   description?:   string;
+  parent_id?:     number | null;
   head_id?:       number | null;
   dg_validator_id?: number | null;
 }
