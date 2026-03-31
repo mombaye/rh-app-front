@@ -3,32 +3,25 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Building2, Users, ShieldCheck, Plus, Pencil, Trash2,
+  Building2, Users, Plus, Pencil, Trash2,
   Search, ChevronDown, ChevronUp, X, Check, AlertCircle,
-  GitBranch, UserCheck, Settings2, RefreshCw, Loader2,
+  GitBranch, UserCheck, RefreshCw, Loader2,
   FolderTree, ArrowLeft, Eye, EyeOff,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Employee } from "@/types/employee";
 import { patchEmployee } from "@/services/employeeService";
-import { Department, DepartmentCreate, ApprovalRule, ApprovalRuleCreate, EmployeeHierarchy } from "@/types/leave";
-import { departmentService, employeeHierarchyService, approvalRuleService } from "@/services/hierarchyService";
+import { Department, DepartmentCreate, EmployeeHierarchy } from "@/types/leave";
+import { departmentService, employeeHierarchyService } from "@/services/hierarchyService";
 import { getEmployees } from "@/services/employeeService";
 
 // ─── Sections ───────────────────────────────────────────────────────────────
-type HierarchySection = "orgchart" | "employees" | "rules";
+type HierarchySection = "orgchart" | "employees";
 
 const SECTIONS: { id: HierarchySection; label: string; description: string; Icon: React.ElementType; color: string }[] = [
   { id: "orgchart",  label: "Organigramme",         description: "Visualisez et gérez la structure organisationnelle, les départements et leurs membres", Icon: GitBranch,   color: "blue"   },
   { id: "employees", label: "Hiérarchie employés",   description: "Gérez les managers N+1/N+2 et la double validation pour chaque employé",              Icon: Users,       color: "emerald" },
-  { id: "rules",     label: "Règles d'approbation",  description: "Configurez les règles automatiques de validation supplémentaire des congés",           Icon: ShieldCheck, color: "purple" },
 ];
-
-const RULE_TYPE_LABELS: Record<string, string> = {
-  LONG_LEAVE: "Congé longue durée",
-  LEAVE_TYPE: "Type de congé spécifique",
-  DEPARTMENT: "Département spécifique",
-};
 
 // ─── Component principal (Modal) ────────────────────────────────────────────
 export default function HierarchyManagement({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -102,7 +95,6 @@ export default function HierarchyManagement({ open, onClose }: { open: boolean; 
             <>
               {activeSection === "orgchart"  && <OrgChartTab />}
               {activeSection === "employees" && <EmployeesHierarchyTab />}
-              {activeSection === "rules"     && <ApprovalRulesTab />}
             </>
           )}
         </div>
@@ -1306,288 +1298,6 @@ function EmployeesHierarchyTab() {
           si renseigné, la validation à 2 niveaux est automatiquement activée.
         </span>
       </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Onglet Règles d'approbation
-// ─────────────────────────────────────────────────────────────────────────────
-function ApprovalRulesTab() {
-  const [rules,      setRules]      = useState<ApprovalRule[]>([]);
-  const [employees,  setEmployees]  = useState<Employee[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [showForm,   setShowForm]   = useState(false);
-  const [editing,    setEditing]    = useState<ApprovalRule | null>(null);
-  const [deleting,   setDeleting]   = useState<number | null>(null);
-  const [saving,     setSaving]     = useState(false);
-
-  const [form, setForm] = useState<ApprovalRuleCreate>({
-    name: "", rule_type: "LONG_LEAVE", min_days: 15,
-    required_approver_id: null, is_active: true, description: "",
-  });
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [r, emps] = await Promise.all([
-        approvalRuleService.getAll(),
-        getEmployees({ status: "ACTIVE" }),
-      ]);
-      setRules(r);
-      setEmployees(emps);
-    } catch {
-      toast.error("Impossible de charger les règles.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const openCreate = () => {
-    setEditing(null);
-    setForm({ name: "", rule_type: "LONG_LEAVE", min_days: 15, required_approver_id: null, is_active: true, description: "" });
-    setShowForm(true);
-  };
-
-  const openEdit = (rule: ApprovalRule) => {
-    setEditing(rule);
-    setForm({
-      name:                rule.name,
-      rule_type:           rule.rule_type,
-      min_days:            rule.min_days,
-      required_approver_id: rule.required_approver,
-      is_active:           rule.is_active,
-      description:         rule.description,
-    });
-    setShowForm(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.name) { toast.error("Le nom est obligatoire."); return; }
-    setSaving(true);
-    try {
-      if (editing) {
-        await approvalRuleService.update(editing.id, form);
-        toast.success("Règle mise à jour.");
-      } else {
-        await approvalRuleService.create(form);
-        toast.success("Règle créée.");
-      }
-      setShowForm(false);
-      load();
-    } catch {
-      toast.error("Erreur lors de la sauvegarde.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const toggleActive = async (rule: ApprovalRule) => {
-    try {
-      await approvalRuleService.update(rule.id, { is_active: !rule.is_active });
-      toast.success(rule.is_active ? "Règle désactivée." : "Règle activée.");
-      load();
-    } catch {
-      toast.error("Erreur lors de la mise à jour.");
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    setDeleting(id);
-    try {
-      await approvalRuleService.delete(id);
-      toast.success("Règle supprimée.");
-      load();
-    } catch {
-      toast.error("Impossible de supprimer cette règle.");
-    } finally {
-      setDeleting(null);
-    }
-  };
-
-  const activeEmployees = employees.filter(e => e.status === "ACTIVE");
-
-  if (loading) return <LoadingSpinner />;
-
-  return (
-    <div className="space-y-4">
-      {/* Info */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2 text-xs text-blue-800">
-        <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-        <span>
-          Les règles d'approbation déclenchent automatiquement une validation supplémentaire lors de la création
-          d'une demande de congé. Ex : tout congé de plus de 15 jours requiert une approbation du DG.
-        </span>
-      </div>
-
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-gray-600">{rules.length} règle(s) configurée(s)</p>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-        >
-          <Plus size={15} /> Nouvelle règle
-        </button>
-      </div>
-
-      {/* Formulaire */}
-      {showForm && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-4">
-          <h3 className="font-semibold text-blue-800 flex items-center gap-2">
-            <Settings2 size={16} />
-            {editing ? "Modifier la règle" : "Nouvelle règle d'approbation"}
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Nom de la règle *">
-              <input
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-                placeholder="ex : Congé longue durée → DG"
-              />
-            </FormField>
-            <FormField label="Type de règle *">
-              <select
-                value={form.rule_type}
-                onChange={e => setForm(f => ({ ...f, rule_type: e.target.value as ApprovalRuleCreate["rule_type"] }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="LONG_LEAVE">Congé longue durée (seuil de jours)</option>
-                <option value="LEAVE_TYPE">Type de congé spécifique</option>
-              </select>
-            </FormField>
-
-            {form.rule_type === "LONG_LEAVE" && (
-              <FormField label="Durée minimale déclenchante (jours)">
-                <input
-                  type="number"
-                  min={1}
-                  value={form.min_days}
-                  onChange={e => setForm(f => ({ ...f, min_days: parseInt(e.target.value) || 0 }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  placeholder="ex : 15"
-                />
-              </FormField>
-            )}
-
-            <FormField label="Approbateur requis (ex : DG)">
-              <EmployeeSelect
-                employees={activeEmployees}
-                value={form.required_approver_id ?? null}
-                onChange={v => setForm(f => ({ ...f, required_approver_id: v }))}
-                placeholder="Choisir l'approbateur supplémentaire..."
-              />
-            </FormField>
-
-            <FormField label="Description" className="sm:col-span-2">
-              <textarea
-                value={form.description}
-                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-                rows={2}
-                placeholder="Description de la règle..."
-              />
-            </FormField>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="is_active"
-                checked={form.is_active}
-                onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))}
-                className="h-4 w-4 text-blue-600 rounded"
-              />
-              <label htmlFor="is_active" className="text-sm text-gray-700">Règle active</label>
-            </div>
-          </div>
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => setShowForm(false)} className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50">
-              Annuler
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-60"
-            >
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-              Enregistrer
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Liste des règles */}
-      {rules.length === 0 ? (
-        <EmptyState icon={ShieldCheck} message="Aucune règle d'approbation configurée." />
-      ) : (
-        <div className="space-y-3">
-          {rules.map(rule => (
-            <div
-              key={rule.id}
-              className={`bg-white border rounded-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3 ${
-                !rule.is_active ? "opacity-60" : ""
-              }`}
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    rule.rule_type === "LONG_LEAVE" ? "bg-orange-100 text-orange-700"
-                    : rule.rule_type === "LEAVE_TYPE" ? "bg-purple-100 text-purple-700"
-                    : "bg-blue-100 text-blue-700"
-                  }`}>
-                    {RULE_TYPE_LABELS[rule.rule_type]}
-                  </span>
-                  {!rule.is_active && (
-                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">Désactivée</span>
-                  )}
-                  <span className="font-semibold text-gray-800">{rule.name}</span>
-                </div>
-                <div className="mt-1 text-sm text-gray-600 space-y-0.5">
-                  {rule.rule_type === "LONG_LEAVE" && rule.min_days > 0 && (
-                    <p>Déclenchée pour les congés de <strong>{rule.min_days}+ jours</strong></p>
-                  )}
-                  {rule.leave_type_label && (
-                    <p>Type de congé : <strong>{rule.leave_type_label}</strong></p>
-                  )}
-                  {rule.required_approver_name && (
-                    <p>Approbateur requis : <strong className="text-blue-700">{rule.required_approver_name}</strong></p>
-                  )}
-                  {rule.description && (
-                    <p className="text-gray-400 text-xs">{rule.description}</p>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <button
-                  onClick={() => toggleActive(rule)}
-                  className={`px-2 py-1 text-xs rounded border ${
-                    rule.is_active
-                      ? "border-red-200 text-red-600 hover:bg-red-50"
-                      : "border-green-200 text-green-600 hover:bg-green-50"
-                  }`}
-                >
-                  {rule.is_active ? "Désactiver" : "Activer"}
-                </button>
-                <button
-                  onClick={() => openEdit(rule)}
-                  className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500"
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  onClick={() => handleDelete(rule.id)}
-                  disabled={deleting === rule.id}
-                  className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 disabled:opacity-50"
-                >
-                  {deleting === rule.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
