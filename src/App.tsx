@@ -5,9 +5,10 @@ import EmployeesPage from "@/pages/EmployeesPage";
 import PayslipPage from "@/pages/PayslipPage";
 import ChangePasswordPage from "@/components/users/ChangePasswordPage";
 import { Toaster } from "react-hot-toast";
-import ProtectedRoute from "@/components/ProtectedRoute"; // Même logique que chez toi
+import ProtectedRoute from "@/components/ProtectedRoute";
 import FirstLoginGuard from "@/components/FirstLoginGuard";
 import AttendancePage from "./pages/AttendancePage";
+import HierarchyPage from "./pages/HierarchyPage";
 
 function App() {
   return (
@@ -16,7 +17,6 @@ function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Changement de mot de passe toujours accessible si first_login */}
         <Route
           path="/change-password"
           element={
@@ -26,7 +26,6 @@ function App() {
           }
         />
 
-        {/* Toutes les autres pages protégées par la FirstLoginGuard */}
         <Route
           path="/dashboard"
           element={
@@ -57,13 +56,22 @@ function App() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/attendance"
           element={
             <ProtectedRoute>
               <FirstLoginGuard>
                 <AttendancePage />
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/hierarchy"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <HierarchyPage />
               </FirstLoginGuard>
             </ProtectedRoute>
           }
