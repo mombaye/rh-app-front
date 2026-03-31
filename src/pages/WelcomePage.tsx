@@ -1,29 +1,7 @@
 // src/pages/WelcomePage.tsx
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { UserRound, Users, ShieldCheck } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
-
-const ROLES = [
-  {
-    id: "employe",
-    label: "Employé",
-    description: "Accès collaborateur",
-    icon: UserRound,
-  },
-  {
-    id: "manager",
-    label: "Manager",
-    description: "Accès encadrement",
-    icon: Users,
-  },
-  {
-    id: "rh",
-    label: "RH",
-    description: "Accès administration",
-    icon: ShieldCheck,
-  },
-] as const;
 
 export default function WelcomePage() {
   const navigate = useNavigate();
@@ -55,48 +33,18 @@ export default function WelcomePage() {
           </p>
         </motion.div>
 
-        {/* Sélection rôle */}
-        <motion.p
-          className="text-xs text-slate-400 uppercase tracking-widest font-semibold mb-6"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
+        {/* Bouton Se connecter */}
+        <motion.button
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25, duration: 0.4 }}
+          whileHover={{ y: -3, boxShadow: "0 12px 32px 0 rgba(0,60,113,0.2)" }}
+          whileTap={{ scale: 0.97 }}
+          onClick={() => navigate("/login")}
+          className="px-10 py-4 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white font-bold text-base tracking-wide transition-all duration-200 cursor-pointer"
         >
-          Sélectionnez votre espace
-        </motion.p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
-          {ROLES.map((role, i) => {
-            const Icon = role.icon;
-            return (
-              <motion.button
-                key={role.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.25 + i * 0.08, duration: 0.4 }}
-                whileHover={{ y: -3, boxShadow: "0 12px 32px 0 rgba(0,60,113,0.13)" }}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => navigate(`/login?role=${role.id}`)}
-                className="group flex flex-col items-center gap-3 px-6 py-8 rounded-2xl border-2 border-slate-200 bg-white hover:border-camublue-900/60 hover:bg-slate-50 transition-all duration-200 text-center cursor-pointer"
-              >
-                <div className="p-3 rounded-xl bg-slate-100 group-hover:bg-camublue-900/10 transition-colors duration-200">
-                  <Icon
-                    className="h-6 w-6 text-slate-500 group-hover:text-camublue-900 transition-colors duration-200"
-                    strokeWidth={1.8}
-                  />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-800 text-base group-hover:text-camublue-900 transition-colors duration-200">
-                    {role.label}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1 leading-snug whitespace-pre-line">
-                    {role.description}
-                  </p>
-                </div>
-              </motion.button>
-            );
-          })}
-        </div>
+          Se connecter
+        </motion.button>
 
       </main>
 
