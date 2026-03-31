@@ -35,7 +35,9 @@ export default function HierarchyManagement({ open, onClose }: { open: boolean; 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={handleClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 overflow-hidden flex flex-col"
+      <div className={`bg-white rounded-2xl shadow-2xl w-full mx-4 overflow-hidden flex flex-col ${
+          activeSection ? "max-w-5xl" : "max-w-lg"
+        }`}
         style={{ maxHeight: "90vh" }}
         onClick={e => e.stopPropagation()}>
 
@@ -67,7 +69,7 @@ export default function HierarchyManagement({ open, onClose }: { open: boolean; 
         <div className="overflow-y-auto flex-1 p-6">
           {!activeSection ? (
             /* ── Section Picker ──────────────────────────────────────────── */
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {SECTIONS.map(({ id, label, description, Icon, color }) => (
                 <button
                   key={id}
