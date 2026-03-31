@@ -7,14 +7,16 @@ import {
   Menu,
   X,
   Clock,
+  GitBranch,
 } from "lucide-react";
 import logo from "@/assets/images/camusat-logo.png";
 import { useState } from "react";
 
 const navItems = [
   { label: "Tableau de bord", path: "/dashboard", icon: <LayoutDashboard size={20} /> },
-  { label: "Employés", path: "/employees", icon: <Users2 size={20} /> },
-  { label: "Bulletins Salariés", path: "/payslip", icon: <BadgeDollarSign size={20} /> },
+  { label: "Hi\u00e9rarchie", path: "/hierarchy", icon: <GitBranch size={20} /> },
+  { label: "Employ\u00e9s", path: "/employees", icon: <Users2 size={20} /> },
+  { label: "Bulletins Salari\u00e9s", path: "/payslip", icon: <BadgeDollarSign size={20} /> },
   { label: "Pointages", path: "/attendance", icon: <Clock size={20} /> },
   // ... ajoute tes autres modules ici
 ];

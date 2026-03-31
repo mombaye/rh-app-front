@@ -3,6 +3,7 @@ import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
 import EmployeesPage from "@/pages/EmployeesPage";
 import PayslipPage from "@/pages/PayslipPage";
+import HierarchyPage from "@/pages/HierarchyPage";
 import ChangePasswordPage from "@/components/users/ChangePasswordPage";
 import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "@/components/ProtectedRoute"; // Même logique que chez toi
@@ -43,6 +44,16 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <EmployeesPage />
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/hierarchy"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <HierarchyPage />
               </FirstLoginGuard>
             </ProtectedRoute>
           }
