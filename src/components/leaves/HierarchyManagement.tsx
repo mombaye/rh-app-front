@@ -198,7 +198,7 @@ function OrgChartTab() {
       if (editForm.service !== (editingEmp.service ?? "")) {
         await patchEmployee(editingEmp.id, { service: editForm.service || null });
       }
-      toast.success("Hiérarchie mise à jour ✓");
+      toast.success("Hiérarchie mise à jour — profils et congés synchronisés automatiquement ✓", { duration: 3500 });
       setEditingEmp(null);
       load();
     } catch {
@@ -236,10 +236,10 @@ function OrgChartTab() {
     try {
       if (editingDept) {
         await departmentService.update(editingDept.id, deptForm);
-        toast.success("Département mis à jour ✓");
+        toast.success("Département mis à jour — hiérarchie et profils synchronisés automatiquement ✓", { duration: 3500 });
       } else {
         await departmentService.create(deptForm);
-        toast.success("Département créé ✓");
+        toast.success("Département créé — hiérarchie synchronisée automatiquement ✓", { duration: 3500 });
       }
       setShowDeptForm(false);
       setEditingDept(null);
@@ -1085,6 +1085,7 @@ function EmployeesHierarchyTab() {
     requires_two_approvals: boolean;
   }>({ n1_manager_id: null, n2_manager_id: null, requires_two_approvals: false });
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1126,7 +1127,7 @@ function EmployeesHierarchyTab() {
     setSaving(true);
     try {
       await employeeHierarchyService.update(empId, editForm);
-      toast.success("Hiérarchie mise à jour.");
+      toast.success("Hiérarchie mise à jour — profils et congés synchronisés automatiquement ✓", { duration: 3500 });
       setEditingId(null);
       load();
     } catch {
@@ -1138,10 +1139,32 @@ function EmployeesHierarchyTab() {
 
   const activeEmployees = allEmployees.filter(e => e.status === "ACTIVE");
 
+  const handleSyncAll = async () => {
+    setSyncing(true);
+    try {
+      const result = await employeeHierarchyService.syncAll();
+      toast.success(`Synchronisation terminée : ${result.employees_synced} employés, ${result.users_checked} profils vérifiés ✓`, { duration: 4000 });
+      load();
+    } catch {
+      toast.error("Erreur lors de la synchronisation.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   if (loading) return <LoadingSpinner />;
 
   return (
     <div className="space-y-4">
+      {/* Info banner */}
+      <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-700 flex items-start gap-2">
+        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+        <span>
+          La hiérarchie est le <strong>point d'entrée unique</strong>. Tout changement ici se répercute automatiquement sur les profils utilisateurs
+          (rôle Manager), les champs employé (manager, email) et les validations de congés.
+        </span>
+      </div>
+
       {/* Filtres */}
       <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-48">
@@ -1163,6 +1186,12 @@ function EmployeesHierarchyTab() {
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
+        <button onClick={handleSyncAll} disabled={syncing}
+          className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition"
+          title="Synchroniser toute la hiérarchie → employés → profils">
+          {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          {syncing ? "Sync…" : "Sync tout"}
+        </button>
         <button onClick={load} className="p-2 border rounded-lg hover:bg-gray-50">
           <RefreshCw size={14} />
         </button>

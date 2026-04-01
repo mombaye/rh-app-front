@@ -79,6 +79,14 @@ export const employeeHierarchyService = {
     });
     return res.data;
   },
+
+  /** POST /api/employees/hierarchy/sync/ — Synchronisation complète hiérarchie → employés → users */
+  syncAll: async (): Promise<{ message: string; employees_synced: number; users_checked: number }> => {
+    const res = await axios.post(`${EMP_API}/hierarchy/sync/`, {}, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
 };
 
 export interface HierarchyMini {

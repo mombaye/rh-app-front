@@ -4,15 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { createEmployee, updateEmployee } from "@/services/employeeService";
+import { createEmployee, updateEmployee, getEmployees } from "@/services/employeeService";
+import { departmentService } from "@/services/hierarchyService";
 import {
   ContractType, Employee, Enfant,
   SexeType, SituationMatrimoniale, TypePiece,
 } from "@/types/employee";
+import { Department } from "@/types/leave";
 import {
   User, FileText, Users, Landmark, Briefcase,
   ChevronLeft, ChevronRight, Check,
   Mail, Phone, MapPin, Building2, UserCheck,
+  Search,
 } from "lucide-react";
 
 // ── Types et données par défaut ───────────────────────────────────────────────
@@ -24,6 +27,7 @@ type FormData = {
   date_embauche: string; date_fin_cdd: string; date_fin_periode_essai: string;
   business_line: string; projet: string; service: string; localisation: string;
   manager: string; manager_email: string;
+  n1_manager: number | null; n2_manager: number | null;
   type_piece: TypePiece | ""; numero_piece: string; date_delivrance: string; date_expiration: string;
   contact_urgence_nom: string; contact_urgence_telephone: string;
   prenom_pere: string; nom_prenom_mere: string;
@@ -40,6 +44,7 @@ const EMPTY: FormData = {
   date_embauche: "", date_fin_cdd: "", date_fin_periode_essai: "",
   business_line: "", projet: "", service: "", localisation: "",
   manager: "", manager_email: "",
+  n1_manager: null, n2_manager: null,
   type_piece: "", numero_piece: "", date_delivrance: "", date_expiration: "",
   contact_urgence_nom: "", contact_urgence_telephone: "",
   prenom_pere: "", nom_prenom_mere: "", situation_matrimoniale: "",
@@ -112,9 +117,26 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
   const [form, setForm] = useState<FormData>({ ...EMPTY });
   const [loading, setLoading] = useState(false);
 
+  // ── Données de référence pour les dropdowns hiérarchiques ──
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [mgrSearch, setMgrSearch] = useState("");
+  const [n2Search, setN2Search] = useState("");
+  const [showN1Dropdown, setShowN1Dropdown] = useState(false);
+  const [showN2Dropdown, setShowN2Dropdown] = useState(false);
+
+  // Charger les employés et départements à l'ouverture
+  useEffect(() => {
+    if (!open) return;
+    getEmployees({ status: "ACTIVE" }).then(setAllEmployees).catch(() => {});
+    departmentService.getAll().then(setDepartments).catch(() => {});
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     setStep(1);
+    setMgrSearch("");
+    setN2Search("");
     if (isEdit && initialData) {
       const enfants: Enfant[] = (initialData.enfants ?? []).map(e => ({
         nom: String((e as Enfant).nom ?? ""),
@@ -133,6 +155,7 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
         business_line: initialData.business_line ?? "", projet: initialData.projet ?? "",
         service: initialData.service ?? "", localisation: initialData.localisation ?? "",
         manager: initialData.manager ?? "", manager_email: initialData.manager_email ?? "",
+        n1_manager: initialData.n1_manager ?? null, n2_manager: initialData.n2_manager ?? null,
         type_piece: (initialData.type_piece as TypePiece) ?? "", numero_piece: initialData.numero_piece ?? "",
         date_delivrance: initialData.date_delivrance ?? "", date_expiration: initialData.date_expiration ?? "",
         contact_urgence_nom: initialData.contact_urgence_nom ?? "",
@@ -167,6 +190,79 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
 
   const nullDate = (v: string) => v || null;
 
+  // Fermer les dropdowns au clic extérieur (délai pour permettre le clic sur l'option)
+  const closeDropdowns = () => setTimeout(() => { setShowN1Dropdown(false); setShowN2Dropdown(false); }, 200);
+
+  // Sélection N+1 manager
+  const selectN1 = (emp: Employee) => {
+    setForm(p => ({
+      ...p,
+      n1_manager: emp.id,
+      manager: `${emp.nom} ${emp.prenom}`,
+      manager_email: emp.email || "",
+    }));
+    setMgrSearch("");
+    setShowN1Dropdown(false);
+  };
+  const clearN1 = () => {
+    setForm(p => ({ ...p, n1_manager: null, manager: "", manager_email: "" }));
+    setMgrSearch("");
+  };
+
+  // Sélection N+2 manager
+  const selectN2 = (emp: Employee) => {
+    setForm(p => ({ ...p, n2_manager: emp.id }));
+    setN2Search("");
+    setShowN2Dropdown(false);
+  };
+  const clearN2 = () => {
+    setForm(p => ({ ...p, n2_manager: null }));
+    setN2Search("");
+  };
+
+  // Filtrage des employés pour les dropdowns
+  const filteredN1 = allEmployees.filter(e => {
+    if (initialData && e.id === initialData.id) return false;
+    if (!mgrSearch) return true;
+    const s = mgrSearch.toLowerCase();
+    return (
+      `${e.nom} ${e.prenom}`.toLowerCase().includes(s) ||
+      (e.matricule || "").toLowerCase().includes(s) ||
+      (e.fonction || "").toLowerCase().includes(s)
+    );
+  }).slice(0, 10);
+
+  const filteredN2 = allEmployees.filter(e => {
+    if (initialData && e.id === initialData.id) return false;
+    if (form.n1_manager && e.id === form.n1_manager) return false;
+    if (!n2Search) return true;
+    const s = n2Search.toLowerCase();
+    return (
+      `${e.nom} ${e.prenom}`.toLowerCase().includes(s) ||
+      (e.matricule || "").toLowerCase().includes(s) ||
+      (e.fonction || "").toLowerCase().includes(s)
+    );
+  }).slice(0, 10);
+
+  // Noms affichés
+  const n1Name = form.n1_manager
+    ? allEmployees.find(e => e.id === form.n1_manager)
+      ? (() => { const e = allEmployees.find(e2 => e2.id === form.n1_manager)!; return `${e.nom} ${e.prenom}`; })()
+      : form.manager || `ID: ${form.n1_manager}`
+    : "";
+  const n2Name = form.n2_manager
+    ? allEmployees.find(e => e.id === form.n2_manager)
+      ? (() => { const e = allEmployees.find(e2 => e2.id === form.n2_manager)!; return `${e.nom} ${e.prenom}`; })()
+      : `ID: ${form.n2_manager}`
+    : "";
+
+  // Départements → options pour le champ service
+  const deptOptions = departments.flatMap(d => {
+    const opts = [{ v: d.name, l: d.name }];
+    (d.children || []).forEach(c => opts.push({ v: c.name, l: `  └ ${c.name}` }));
+    return opts;
+  });
+
   const submit = async () => {
     setLoading(true);
     const payload: Partial<Employee> = {
@@ -179,6 +275,8 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
       date_expiration: nullDate(form.date_expiration),
       date_fin_cdd: nullDate(form.date_fin_cdd),
       date_fin_periode_essai: nullDate(form.date_fin_periode_essai),
+      n1_manager: form.n1_manager,
+      n2_manager: form.n2_manager,
     };
     try {
       if (isEdit && initialData) {
@@ -371,8 +469,13 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                     className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                 </F>
                 <F label="Service / Département">
-                  <Input name="service" value={form.service} onChange={ch}
-                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                  {deptOptions.length > 0 ? (
+                    <Sel name="service" value={form.service} onChange={ch}
+                      ph="— Sélectionner un département —" opts={deptOptions} />
+                  ) : (
+                    <Input name="service" value={form.service} onChange={ch}
+                      className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                  )}
                 </F>
                 <F label="Localisation">
                   <Input name="localisation" value={form.localisation} onChange={ch} placeholder="Dakar, Abidjan…"
@@ -380,16 +483,111 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                 </F>
               </div>
 
-              <SectionHeader icon={UserCheck} title="Hiérarchie" subtitle="Manager direct" />
+              <SectionHeader icon={UserCheck} title="Hiérarchie" subtitle="Managers N+1 et N+2 — synchronisés automatiquement avec le module Congés" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <F label="Nom du manager">
-                  <Input name="manager" value={form.manager} onChange={ch} placeholder="Prénom NOM"
-                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                {/* Manager N+1 (dropdown avec recherche) */}
+                <F label="Manager N+1 (supérieur direct)">
+                  <div className="relative">
+                    {form.n1_manager ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 px-4 py-2.5 text-sm">
+                        <UserCheck className="h-4 w-4 text-green-600 shrink-0" />
+                        <span className="flex-1 text-gray-800 font-medium truncate">{n1Name}</span>
+                        <button type="button" onClick={clearN1}
+                          className="text-gray-400 hover:text-red-500 transition shrink-0"
+                          title="Retirer le manager N+1">×</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <Input
+                            value={mgrSearch}
+                            onChange={e => { setMgrSearch(e.target.value); setShowN1Dropdown(true); }}
+                            onFocus={() => setShowN1Dropdown(true)}
+                            onBlur={closeDropdowns}
+                            placeholder="Rechercher un employé…"
+                            className="text-sm pl-9 p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                        </div>
+                        {showN1Dropdown && (mgrSearch || filteredN1.length > 0) && (
+                          <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {filteredN1.length === 0 ? (
+                              <p className="text-xs text-gray-400 px-4 py-3">Aucun résultat</p>
+                            ) : filteredN1.map(e => (
+                              <button key={e.id} type="button"
+                                onClick={() => selectN1(e)}
+                                className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm flex items-center gap-3 transition">
+                                <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-bold shrink-0">
+                                  {(e.prenom?.[0] || "")}{(e.nom?.[0] || "")}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="font-medium text-gray-800">{e.nom} {e.prenom}</span>
+                                  <span className="text-gray-400 text-xs ml-2">{e.matricule}</span>
+                                  {e.fonction && <span className="text-gray-400 text-xs ml-1">· {e.fonction}</span>}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </F>
-                <F label="Email du manager">
-                  <Input type="email" name="manager_email" value={form.manager_email} onChange={ch} placeholder="manager@example.com"
-                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+
+                {/* Manager N+2 (dropdown avec recherche) */}
+                <F label="Manager N+2 (supérieur N+2)">
+                  <div className="relative">
+                    {form.n2_manager ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm">
+                        <UserCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span className="flex-1 text-gray-800 font-medium truncate">{n2Name}</span>
+                        <button type="button" onClick={clearN2}
+                          className="text-gray-400 hover:text-red-500 transition shrink-0"
+                          title="Retirer le manager N+2">×</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <Input
+                            value={n2Search}
+                            onChange={e => { setN2Search(e.target.value); setShowN2Dropdown(true); }}
+                            onFocus={() => setShowN2Dropdown(true)}
+                            onBlur={closeDropdowns}
+                            placeholder="Rechercher un employé…"
+                            className="text-sm pl-9 p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                        </div>
+                        {showN2Dropdown && (n2Search || filteredN2.length > 0) && (
+                          <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {filteredN2.length === 0 ? (
+                              <p className="text-xs text-gray-400 px-4 py-3">Aucun résultat</p>
+                            ) : filteredN2.map(e => (
+                              <button key={e.id} type="button"
+                                onClick={() => selectN2(e)}
+                                className="w-full text-left px-4 py-2 hover:bg-emerald-50 text-sm flex items-center gap-3 transition">
+                                <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-xs font-bold shrink-0">
+                                  {(e.prenom?.[0] || "")}{(e.nom?.[0] || "")}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="font-medium text-gray-800">{e.nom} {e.prenom}</span>
+                                  <span className="text-gray-400 text-xs ml-2">{e.matricule}</span>
+                                  {e.fonction && <span className="text-gray-400 text-xs ml-1">· {e.fonction}</span>}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </F>
+              </div>
+              {/* Info de sync automatique */}
+              <div className="mt-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-700 flex items-start gap-2">
+                <Building2 className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  La hiérarchie est le <strong>point d'entrée unique</strong> : tout changement de manager ici se répercute automatiquement
+                  sur le profil utilisateur (rôle Manager), les validations de congés et l'organigramme.
+                </span>
               </div>
             </div>
           )}
