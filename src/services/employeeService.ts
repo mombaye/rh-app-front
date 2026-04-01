@@ -143,6 +143,26 @@ export const sendAccessCodesInterim = async (matricules?: string[]) => {
   return (await api.post("/api/employees/send-access-codes-interim/", payload)).data;
 };
 
+// ══════════════════════════════════════════════════════
+//  BASCULEMENT INTÉRIMAIRE → INTERNE
+// ══════════════════════════════════════════════════════
+export type ConvertInterimPayload = {
+  new_matricule: string;
+  new_type_contrat?: "CDI" | "CDD" | "STAGE";
+  date_embauche?: string;
+};
+
+export type ConvertInterimResult = {
+  message: string;
+  employee: Employee;
+};
+
+export const convertInterim = async (
+  employeeId: number,
+  payload: ConvertInterimPayload
+): Promise<ConvertInterimResult> =>
+  (await api.post(`/api/employees/${employeeId}/convert-interim/`, payload)).data;
+
 export const exportEmployeesExcel = async (opts?: {
   status?: "ALL" | "ACTIVE" | "EXITED";
   type_contrat?: ContractType;

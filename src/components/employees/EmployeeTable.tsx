@@ -19,6 +19,7 @@ import EmployeePayslipResendModal from "@/components/employees/EmployeePayslipRe
 import EmployeeHistoryModal from "@/components/employees/EmployeeHistoryModal";
 import CareerHistoryModal from "@/components/employees/CareerHistoryModal";
 import ContractChangeModal from "@/components/employees/ContractChangeModal";
+import InterimTransferModal from "@/components/employees/InterimTransferModal";
 
 interface Props {
   employees: Employee[];
@@ -149,6 +150,8 @@ export default function EmployeesTable({
   const [careerEmp, setCareerEmp] = useState<Employee | null>(null);
   const [contractChangeOpen, setContractChangeOpen] = useState(false);
   const [contractChangeEmp, setContractChangeEmp] = useState<Employee | null>(null);
+  const [interimTransferOpen, setInterimTransferOpen] = useState(false);
+  const [interimTransferEmp, setInterimTransferEmp] = useState<Employee | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: "asc" | "desc" } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isSendingCodes, setIsSendingCodes] = useState(false);
@@ -454,6 +457,7 @@ export default function EmployeesTable({
     const rowActions = [
       { id: "edit",            icon: <FaEdit size={15} />,            label: "Modifier les informations",    color: "text-amber-600",    show: true },
       { id: "contract-change", icon: <FaExchangeAlt size={15} />,     label: "Mutation contractuelle",       color: "text-orange-600",   show: !isExited },
+      { id: "interim-transfer", icon: <FaExchangeAlt size={15} />,    label: "Basculement intérimaire",      color: "text-violet-600",   show: !isExited && rowEmp.type_contrat === "INTERIM" },
       { id: "career",          icon: <FaBriefcase size={15} />,       label: "Parcours de carrière",         color: "text-teal-600",     show: true },
       { id: "history",         icon: <FaHistory size={15} />,         label: "Voir l'historique des modifs", color: "text-indigo-600",   show: true },
       { id: "send-code",       icon: <FaPaperPlane size={15} />,      label: "Envoyer le code d'accès",      color: "text-emerald-600",  show: true },
@@ -469,6 +473,7 @@ export default function EmployeesTable({
       if (!rowEmp) return;
       if      (id === "edit")            { onEdit(rowEmp); setRowOpen(false); }
       else if (id === "contract-change") { setContractChangeEmp(rowEmp); setContractChangeOpen(true); setRowOpen(false); }
+      else if (id === "interim-transfer") { setInterimTransferEmp(rowEmp); setInterimTransferOpen(true); setRowOpen(false); }
       else if (id === "career")          { setCareerEmp(rowEmp); setCareerOpen(true); setRowOpen(false); }
       else if (id === "history")         { setHistoryEmp(rowEmp); setHistoryOpen(true); setRowOpen(false); }
       else if (id === "send-code")       { doSendCodeSingle(rowEmp); }
@@ -900,6 +905,17 @@ export default function EmployeesTable({
         onSuccess={(updatedEmp) => {
           setContractChangeOpen(false);
           setContractChangeEmp(null);
+          if (onEmployeeUpdated) onEmployeeUpdated(updatedEmp);
+        }}
+      />
+
+      <InterimTransferModal
+        open={interimTransferOpen}
+        employee={interimTransferEmp}
+        onClose={() => { setInterimTransferOpen(false); setInterimTransferEmp(null); }}
+        onSuccess={(updatedEmp) => {
+          setInterimTransferOpen(false);
+          setInterimTransferEmp(null);
           if (onEmployeeUpdated) onEmployeeUpdated(updatedEmp);
         }}
       />

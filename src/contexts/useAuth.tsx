@@ -17,6 +17,10 @@ type User = {
   employee_id?: number | null;
   employee_matricule?: string | null;
   employee_name?: string | null;
+  employee_service?: string | null;
+  employee_fonction?: string | null;
+  is_department_head?: boolean;
+  department_name?: string | null;
   roles?: UserRole[];
 };
 
