@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";
 import EmployeesStatsHeader from "@/components/employees/EmployeesStatsHeader";
@@ -390,11 +390,10 @@ type SwitchRow = {
   prenom: string;
   oldMatricule: string;
   newMatricule: string;   // purement numérique
-  // Détails contrat définis par l'utilisateur via le panneau inline
-  contractType?: ContractTarget;
+  // Détails contrat — pré-remplis depuis les infos existantes de l'employé
+  contractType: ContractTarget;
   dateEmbauche?: string;
   dateFinContrat?: string; // CDD / STAGE uniquement
-  configOpen: boolean;    // panneau "Définir" ouvert ou non
   error?: string;
   success?: boolean;
 };
@@ -404,6 +403,113 @@ const CONTRACT_TARGET_STYLES: Record<ContractTarget, string> = {
   CDD:   "bg-blue-100 text-blue-700 border-blue-300",
   STAGE: "bg-purple-100 text-purple-700 border-purple-300",
 };
+
+// ─── ContractConfigModal ──────────────────────────────────────────────────────
+// Modal qui s'affiche quand on clique sur "Définir" ou "Modifier" pour un employé
+function ContractConfigModal({
+  row,
+  onConfirm,
+  onCancel,
+}: {
+  row: SwitchRow;
+  onConfirm: (contractType: ContractTarget, dateEmbauche: string, dateFinContrat: string) => void;
+  onCancel: () => void;
+}) {
+  const [ct, setCt] = useState<ContractTarget>(row.contractType);
+  const [de, setDe] = useState(row.dateEmbauche ?? "");
+  const [df, setDf] = useState(row.dateFinContrat ?? "");
+
+  const CONTRACT_OPTS: { value: ContractTarget; label: string }[] = [
+    { value: "CDI",   label: "CDI" },
+    { value: "CDD",   label: "CDD" },
+    { value: "STAGE", label: "Stage" },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+      onClick={onCancel}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 8 }}
+        transition={{ duration: 0.18 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-bold text-gray-900">
+            Contrat — {row.prenom} {row.nom}
+          </h3>
+          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition">
+            <FiX size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Type de contrat */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2">Type de contrat *</label>
+            <div className="flex gap-2">
+              {CONTRACT_OPTS.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => setCt(o.value)}
+                  className={`flex-1 px-3 py-2 rounded-xl border text-sm font-bold transition
+                    ${ct === o.value
+                      ? `${CONTRACT_TARGET_STYLES[o.value]} ring-2 ring-offset-1 ring-current`
+                      : "bg-white border-gray-300 text-gray-500 hover:border-gray-400"
+                    }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Date d'embauche */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Date d'embauche (interne)</label>
+            <input
+              type="date" value={de} onChange={(e) => setDe(e.target.value)}
+              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+
+          {/* Date de fin — uniquement CDD / STAGE */}
+          {ct !== "CDI" && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">
+                Date de fin {ct === "CDD" ? "CDD" : "Stage"}
+              </label>
+              <input
+                type="date" value={df} onChange={(e) => setDf(e.target.value)}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 mt-6">
+          <button
+            type="button" onClick={onCancel}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition"
+          >
+            Annuler
+          </button>
+          <button
+            type="button" onClick={() => onConfirm(ct, de, df)}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition"
+          >
+            Confirmer
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 // ─── BulkSwitchModal ──────────────────────────────────────────────────────────
 function BulkSwitchModal({
@@ -425,10 +531,17 @@ function BulkSwitchModal({
         nom: e.nom,
         prenom: e.prenom,
         oldMatricule: e.matricule,
-        newMatricule: "",
-        configOpen: false,
+        // Pré-remplir le matricule s'il est déjà numérique, sinon laisser vide
+        newMatricule: /^\d+$/.test((e.matricule || "").trim()) ? e.matricule : "",
+        // Contrat CDI par défaut + date d'embauche existante conservée
+        contractType: "CDI",
+        dateEmbauche: e.date_embauche || "",
       }))
   );
+
+  // ID de la ligne dont on configure le contrat via le modal "Définir"
+  const [configModalId, setConfigModalId] = useState<number | null>(null);
+  const configModalRow = rows.find((r) => r.id === configModalId) ?? null;
 
   const [search, setSearch]             = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -456,12 +569,7 @@ function BulkSwitchModal({
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
   const setNewMat = (id: number, value: string) =>
-    updateRow(id, { newMatricule: value, error: undefined, configOpen: false });
-
-  const toggleConfig = (id: number) =>
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, configOpen: !r.configOpen } : { ...r, configOpen: false }))
-    );
+    updateRow(id, { newMatricule: value, error: undefined });
 
   const setContractConfig = (
     id: number,
@@ -469,7 +577,8 @@ function BulkSwitchModal({
     dateEmbauche: string,
     dateFinContrat: string
   ) => {
-    updateRow(id, { contractType, dateEmbauche, dateFinContrat, configOpen: false, error: undefined });
+    updateRow(id, { contractType, dateEmbauche, dateFinContrat, error: undefined });
+    setConfigModalId(null);
   };
 
   const handleSubmit = async () => {
@@ -491,7 +600,7 @@ function BulkSwitchModal({
         prev.map((r) => {
           if (!isReady(r)) return r;
           const err = errorMap.get(r.id);
-          return err ? { ...r, error: err, configOpen: false } : { ...r, success: true, configOpen: false };
+          return err ? { ...r, error: err } : { ...r, success: true };
         })
       );
       setSummary({ switched: result.switched, errors: result.errors.length });
@@ -544,8 +653,9 @@ function BulkSwitchModal({
         <div className="mx-6 mt-4 shrink-0 flex items-start gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-xs text-indigo-700">
           <FiInfo className="shrink-0 mt-0.5 text-indigo-400" size={13} />
           <span>
-            Les matricules internes sont <strong>purement numériques</strong> (ex. 001, 123).
-            Après avoir saisi un matricule valide, cliquez sur <strong>Définir →</strong> pour configurer le contrat.
+            Toutes les informations de l'employé (service, manager, fonction…) sont conservées.
+            Seul le <strong>type de contrat</strong> change. Les matricules internes sont <strong>purement numériques</strong> (ex. 001, 123).
+            Cliquez sur <strong>Modifier →</strong> pour ajuster le type de contrat ou les dates.
           </span>
         </div>
 
@@ -591,99 +701,72 @@ function BulkSwitchModal({
                 {filteredRows.map((row) => {
                   const matOk = /^\d+$/.test(row.newMatricule.trim());
                   const matInvalid = row.newMatricule.trim() !== "" && !matOk;
-                  const configured = !!row.contractType && matOk;
+                  const configured = matOk;
 
                   return (
-                    <Fragment key={row.id}>
-                      {/* ── Ligne principale ── */}
-                      <tr className={`transition-colors ${
-                        row.success    ? "bg-emerald-50"
-                        : row.error   ? "bg-red-50"
-                        : configured  ? "bg-indigo-50/40"
-                        : ""
-                      }`}>
-                        <td className="py-3 pr-4">
-                          <span className="font-medium text-gray-800">{row.prenom} {row.nom}</span>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <span className="font-mono text-gray-500 text-xs bg-gray-100 px-2 py-0.5 rounded">
-                            {row.oldMatricule}
+                    <tr key={row.id} className={`transition-colors ${
+                      row.success  ? "bg-emerald-50"
+                      : row.error ? "bg-red-50"
+                      : configured ? "bg-indigo-50/40"
+                      : ""
+                    }`}>
+                      <td className="py-3 pr-4">
+                        <span className="font-medium text-gray-800">{row.prenom} {row.nom}</span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className="font-mono text-gray-500 text-xs bg-gray-100 px-2 py-0.5 rounded">
+                          {row.oldMatricule}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-3">
+                        {row.success ? (
+                          <span className="font-mono text-emerald-700 text-xs bg-emerald-100 px-2 py-0.5 rounded">
+                            {row.newMatricule}
                           </span>
-                        </td>
-                        <td className="py-3 pr-3">
-                          {row.success ? (
-                            <span className="font-mono text-emerald-700 text-xs bg-emerald-100 px-2 py-0.5 rounded">
-                              {row.newMatricule}
-                            </span>
-                          ) : (
-                            <div className="flex flex-col gap-0.5">
-                              <input
-                                type="text"
-                                value={row.newMatricule}
-                                onChange={(e) => setNewMat(row.id, e.target.value)}
-                                disabled={isSubmitting}
-                                placeholder="ex. 042"
-                                className={`w-full border rounded-lg px-2.5 py-1.5 font-mono text-sm focus:outline-none focus:ring-2 transition ${
-                                  row.error      ? "border-red-300 bg-red-50 focus:ring-red-300"
-                                  : matInvalid   ? "border-amber-400 focus:ring-amber-300"
-                                  : matOk        ? "border-indigo-400 focus:ring-indigo-400"
-                                  : "border-gray-300 focus:ring-indigo-400"
-                                }`}
-                              />
-                              {matInvalid && <p className="text-xs text-amber-600">Doit être numérique</p>}
-                              {row.error && <p className="text-xs text-red-600">{row.error}</p>}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3">
-                          {row.success ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-                              <FiCheckCircle size={13} />
-                              Basculé · <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${CONTRACT_TARGET_STYLES[row.contractType!]}`}>{row.contractType}</span>
-                            </span>
-                          ) : row.error ? (
-                            <span className="text-xs text-red-600 font-medium">Erreur</span>
-                          ) : configured ? (
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`px-2 py-0.5 rounded border text-xs font-bold ${CONTRACT_TARGET_STYLES[row.contractType!]}`}>
-                                {row.contractType}
-                              </span>
-                              <button
-                                onClick={() => toggleConfig(row.id)}
-                                className="text-xs text-indigo-600 hover:underline"
-                              >
-                                {row.configOpen ? "Fermer" : "Modifier"}
-                              </button>
-                            </div>
-                          ) : matOk ? (
-                            <button
-                              onClick={() => toggleConfig(row.id)}
+                        ) : (
+                          <div className="flex flex-col gap-0.5">
+                            <input
+                              type="text"
+                              value={row.newMatricule}
+                              onChange={(e) => setNewMat(row.id, e.target.value)}
                               disabled={isSubmitting}
-                              className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 px-3 py-1 rounded-lg transition"
-                            >
-                              Définir <FiChevronRight size={12} />
-                            </button>
-                          ) : (
-                            <span className="text-xs text-gray-400">—</span>
-                          )}
-                        </td>
-                      </tr>
-
-                      {/* ── Panneau inline "Définir le contrat" ── */}
-                      <AnimatePresence initial={false}>
-                        {row.configOpen && (
-                          <tr>
-                            <td colSpan={4} className="p-0">
-                              <InlineContractConfig
-                                row={row}
-                                onConfirm={(ct, de, df) => setContractConfig(row.id, ct, de, df)}
-                                onCancel={() => updateRow(row.id, { configOpen: false })}
-                              />
-                            </td>
-                          </tr>
+                              placeholder="ex. 042"
+                              className={`w-full border rounded-lg px-2.5 py-1.5 font-mono text-sm focus:outline-none focus:ring-2 transition ${
+                                row.error      ? "border-red-300 bg-red-50 focus:ring-red-300"
+                                : matInvalid   ? "border-amber-400 focus:ring-amber-300"
+                                : matOk        ? "border-indigo-400 focus:ring-indigo-400"
+                                : "border-gray-300 focus:ring-indigo-400"
+                              }`}
+                            />
+                            {matInvalid && <p className="text-xs text-amber-600">Doit être numérique</p>}
+                            {row.error && <p className="text-xs text-red-600">{row.error}</p>}
+                          </div>
                         )}
-                      </AnimatePresence>
-                    </Fragment>
+                      </td>
+                      <td className="py-3">
+                        {row.success ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                            <FiCheckCircle size={13} />
+                            Basculé · <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${CONTRACT_TARGET_STYLES[row.contractType]}`}>{row.contractType}</span>
+                          </span>
+                        ) : row.error ? (
+                          <span className="text-xs text-red-600 font-medium">Erreur</span>
+                        ) : (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded border text-xs font-bold ${CONTRACT_TARGET_STYLES[row.contractType]}`}>
+                              {row.contractType}
+                            </span>
+                            <button
+                              onClick={() => setConfigModalId(row.id)}
+                              disabled={isSubmitting}
+                              className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline transition"
+                            >
+                              Modifier
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
                   );
                 })}
                 {filteredRows.length === 0 && (
@@ -725,105 +808,18 @@ function BulkSwitchModal({
           </div>
         </div>
       </motion.div>
+
+      {/* ── Modal "Définir le contrat" — s'affiche au-dessus du BulkSwitchModal ── */}
+      <AnimatePresence>
+        {configModalRow && (
+          <ContractConfigModal
+            row={configModalRow}
+            onConfirm={(ct, de, df) => setContractConfig(configModalRow.id, ct, de, df)}
+            onCancel={() => setConfigModalId(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
-  );
-}
-
-// ─── InlineContractConfig ─────────────────────────────────────────────────────
-function InlineContractConfig({
-  row,
-  onConfirm,
-  onCancel,
-}: {
-  row: SwitchRow;
-  onConfirm: (contractType: ContractTarget, dateEmbauche: string, dateFinContrat: string) => void;
-  onCancel: () => void;
-}) {
-  const [ct, setCt]   = useState<ContractTarget>(row.contractType ?? "CDI");
-  const [de, setDe]   = useState(row.dateEmbauche ?? "");
-  const [df, setDf]   = useState(row.dateFinContrat ?? "");
-
-  const CONTRACT_OPTS: { value: ContractTarget; label: string }[] = [
-    { value: "CDI",   label: "CDI" },
-    { value: "CDD",   label: "CDD" },
-    { value: "STAGE", label: "Stage" },
-  ];
-
-  return (
-    <motion.div
-      initial={{ height: 0, opacity: 0 }}
-      animate={{ height: "auto", opacity: 1 }}
-      exit={{ height: 0, opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      className="overflow-hidden"
-    >
-      <div className="mx-4 my-2 bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-4 space-y-3">
-        <p className="text-xs font-semibold text-indigo-700">
-          Définir le contrat pour {row.prenom} {row.nom}
-        </p>
-
-        <div className="flex flex-wrap gap-3 items-end">
-          {/* Type de contrat */}
-          <div>
-            <label className="block text-xs text-indigo-600 mb-1 font-medium">Type de contrat *</label>
-            <div className="flex gap-2">
-              {CONTRACT_OPTS.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => setCt(o.value)}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition
-                    ${ct === o.value
-                      ? `${CONTRACT_TARGET_STYLES[o.value]} ring-2 ring-offset-1 ring-current`
-                      : "bg-white border-gray-300 text-gray-500 hover:border-gray-400"
-                    }`}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Date d'embauche */}
-          <div>
-            <label className="block text-xs text-indigo-600 mb-1 font-medium">Date d'embauche (interne)</label>
-            <input
-              type="date" value={de} onChange={(e) => setDe(e.target.value)}
-              className="border border-indigo-300 bg-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            />
-          </div>
-
-          {/* Date de fin — uniquement CDD / STAGE */}
-          {ct !== "CDI" && (
-            <div>
-              <label className="block text-xs text-indigo-600 mb-1 font-medium">
-                Date de fin {ct === "CDD" ? "CDD" : "Stage"}
-              </label>
-              <input
-                type="date" value={df} onChange={(e) => setDf(e.target.value)}
-                className="border border-indigo-300 bg-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-              />
-            </div>
-          )}
-
-          {/* Boutons */}
-          <div className="flex gap-2 ml-auto">
-            <button
-              type="button" onClick={onCancel}
-              className="px-3 py-1.5 rounded-lg bg-white border border-gray-300 text-gray-600 text-xs font-medium hover:bg-gray-50 transition"
-            >
-              Annuler
-            </button>
-            <button
-              type="button" onClick={() => onConfirm(ct, de, df)}
-              className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition"
-            >
-              Confirmer
-            </button>
-          </div>
-        </div>
-      </div>
-    </motion.div>
   );
 }
 
