@@ -68,10 +68,19 @@ export default function ContractChangeModal({ open, employee, onClose, onSuccess
   const [fields, setFields] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
+  // Détermine le type de contrat effectif pour masquer les champs non pertinents :
+  // 1. Ce que l'utilisateur a sélectionné dans le formulaire
+  // 2. CDI implicite pour les titularisations
+  // 3. Le contrat actuel de l'employé si l'event ne permet pas de le changer
   const effectiveContractType =
-    fields["type_contrat"] || (eventType === "TITULARISATION" ? "CDI" : null);
+    fields["type_contrat"] ||
+    (eventType === "TITULARISATION" ? "CDI" : null) ||
+    (!(FIELDS_BY_EVENT[eventType] ?? []).includes("type_contrat")
+      ? (employee?.type_contrat ?? null)
+      : null);
+
   const visibleFields = (FIELDS_BY_EVENT[eventType] ?? []).filter(
-    (f) => !(f === "date_fin_cdd" && effectiveContractType === "CDI")
+    (f) => !(f === "date_fin_cdd" && (effectiveContractType === "CDI" || effectiveContractType === "INTERIM"))
   );
 
   const handleTypeChange = (type: CareerEventType) => {

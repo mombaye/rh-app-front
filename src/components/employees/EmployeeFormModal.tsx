@@ -14,8 +14,8 @@ import { Department } from "@/types/leave";
 import {
   User, FileText, Users, Landmark, Briefcase,
   ChevronLeft, ChevronRight, Check,
-  Mail, Phone, MapPin, Building2, UserCheck,
-  Search,
+  Mail, Phone, Building2, UserCheck,
+  Search, AlertCircle,
 } from "lucide-react";
 
 // ── Types et données par défaut ───────────────────────────────────────────────
@@ -62,13 +62,15 @@ const STEPS = [
 ];
 
 // ── Composants utilitaires ───────────────────────────────────────────────────
-function F({ label, children, req, col2 }: {
-  label: string; children: React.ReactNode; req?: boolean; col2?: boolean;
+function F({ label, children, req, col2, error }: {
+  label: string; children: React.ReactNode; req?: boolean; col2?: boolean; error?: boolean;
 }) {
   return (
     <div className={col2 ? "sm:col-span-2" : ""}>
-      <Label className="text-sm font-medium text-gray-700 mb-2 block">
-        {label}{req && <span className="text-red-500 ml-0.5">*</span>}
+      <Label className={`text-sm font-medium mb-2 block ${error ? "text-red-600" : "text-gray-700"}`}>
+        {label}
+        {req && <span className={`ml-0.5 ${error ? "text-red-600" : "text-red-400"}`}>*</span>}
+        {error && <span className="ml-1 text-xs font-normal text-red-500">(requis)</span>}
       </Label>
       {children}
     </div>
@@ -116,6 +118,8 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormData>({ ...EMPTY });
   const [loading, setLoading] = useState(false);
+  const [stepErrors, setStepErrors] = useState<string[]>([]);
+  const [touchedRequired, setTouchedRequired] = useState(false);
 
   // ── Données de référence pour les dropdowns hiérarchiques ──
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
@@ -137,6 +141,8 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
     setStep(1);
     setMgrSearch("");
     setN2Search("");
+    setStepErrors([]);
+    setTouchedRequired(false);
     if (isEdit && initialData) {
       const enfants: Enfant[] = (initialData.enfants ?? []).map(e => ({
         nom: String((e as Enfant).nom ?? ""),
@@ -282,12 +288,40 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
       : `ID: ${form.n2_manager}`
     : "";
 
-  // Départements → options pour le champ service
+  // Départements → options pour les champs service et projet
   const deptOptions = departments.flatMap(d => {
     const opts = [{ v: d.name, l: d.name }];
     (d.children || []).forEach(c => opts.push({ v: c.name, l: `  └ ${c.name}` }));
     return opts;
   });
+
+  // Validation par étape — retourne les erreurs
+  const validateStep = (s: number): string[] => {
+    const errs: string[] = [];
+    if (s === 1) {
+      if (!form.matricule.trim()) errs.push("matricule");
+      if (!form.nom.trim()) errs.push("nom");
+      if (!form.prenom.trim()) errs.push("prenom");
+    }
+    if (s === 2) {
+      if (!form.type_contrat) errs.push("type_contrat");
+    }
+    return errs;
+  };
+
+  const goNext = () => {
+    const errs = validateStep(step);
+    if (errs.length > 0) {
+      setStepErrors(errs);
+      setTouchedRequired(true);
+      return;
+    }
+    setStepErrors([]);
+    setTouchedRequired(false);
+    setStep(s => s + 1);
+  };
+
+  const hasFieldError = (f: string) => touchedRequired && stepErrors.includes(f);
 
   const submit = async () => {
     setLoading(true);
@@ -352,36 +386,43 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
         </DialogHeader>
 
         {/* ── Stepper (indicateurs d'étapes) ── */}
-        <div className="px-8 py-5 bg-white border-b border-gray-200">
+        <div className="px-8 py-4 bg-white border-b border-gray-200">
           <div className="flex items-center justify-between">
             {STEPS.map((s, i) => {
               const Icon = s.icon;
               const done = step > s.id;
               const cur = step === s.id;
+              const hasErr = cur && touchedRequired && stepErrors.length > 0;
               return (
                 <div key={s.id} className="flex items-center flex-1 min-w-0 relative group">
                   <button
                     type="button"
-                    onClick={() => setStep(s.id)}
-                    className={`flex-1 flex flex-col items-center gap-1.5 py-2 px-1 rounded-lg transition-all text-center ${
+                    onClick={() => { setStepErrors([]); setTouchedRequired(false); setStep(s.id); }}
+                    className={`flex-1 flex flex-col items-center gap-1 py-2 px-1 rounded-lg transition-all text-center ${
                       cur ? "opacity-100" : done ? "opacity-100 cursor-pointer" : "opacity-60 cursor-pointer hover:opacity-90"
                     }`}
                   >
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${
-                      cur ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200" :
-                      done ? "bg-green-500 border-green-500 text-white" :
-                             "bg-white border-gray-300 text-gray-500 group-hover:border-blue-400"
+                      hasErr  ? "bg-red-500 border-red-500 text-white shadow-md shadow-red-200" :
+                      cur     ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200" :
+                      done    ? "bg-green-500 border-green-500 text-white" :
+                                "bg-white border-gray-300 text-gray-500 group-hover:border-blue-400"
                     }`}>
-                      {done ? <Check className="h-4 w-4" /> : <span className="text-xs font-bold">{s.id}</span>}
+                      {hasErr ? <AlertCircle className="h-4 w-4" /> :
+                       done   ? <Check className="h-4 w-4" /> :
+                                <span className="text-xs font-bold">{s.id}</span>}
                     </div>
                     <span className={`text-xs font-medium ${
-                      cur ? "text-blue-600" : done ? "text-green-600" : "text-gray-500 group-hover:text-blue-500"
+                      hasErr  ? "text-red-600" :
+                      cur     ? "text-blue-600" :
+                      done    ? "text-green-600" :
+                                "text-gray-500 group-hover:text-blue-500"
                     }`}>
                       {s.label}
                     </span>
                   </button>
                   {i < STEPS.length - 1 && (
-                    <div className={`absolute top-1/2 right-0 transform translate-y-1/2 h-0.5 w-1/3 rounded-full transition-colors ${
+                    <div className={`absolute top-1/4 right-0 h-0.5 w-1/3 rounded-full transition-colors ${
                       step > s.id ? "bg-green-500" : "bg-gray-200 group-hover:bg-blue-200"
                     }`} />
                   )}
@@ -389,10 +430,19 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
               );
             })}
           </div>
-          <p className="text-sm text-gray-500 mt-4 text-center">
-            Étape <span className="font-semibold text-blue-600">{step}</span> sur {STEPS.length}
-            <span className="mx-2 text-gray-400">·</span>
-            <span className="text-gray-600">{STEPS[step - 1].desc}</span>
+
+          {/* Erreurs de l'étape courante */}
+          {touchedRequired && stepErrors.length > 0 && (
+            <div className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span>Veuillez renseigner les champs obligatoires avant de continuer.</span>
+            </div>
+          )}
+
+          <p className="text-xs text-gray-400 mt-2 text-center">
+            Étape <span className="font-semibold text-blue-600">{step}</span>/{STEPS.length}
+            <span className="mx-1.5 text-gray-300">·</span>
+            <span className="text-gray-500">{STEPS[step - 1].desc}</span>
           </p>
         </div>
 
@@ -400,24 +450,36 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
         <div className="flex-1 overflow-y-auto px-8 py-6 bg-gray-50">
           {/* ─── Étape 1 : Identité ─── */}
           {step === 1 && (
-            <div className="space-y-7">
+            <div className="space-y-6">
               <SectionHeader icon={User} title="État civil" subtitle="Identification de l'employé" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <F label="Matricule" req>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <F label="Matricule" req error={hasFieldError("matricule")}>
                   <Input name="matricule" value={form.matricule} onChange={ch} placeholder="EX-0001"
-                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                    className={`text-sm p-3 shadow-sm focus:ring-2 focus:border-transparent ${
+                      hasFieldError("matricule")
+                        ? "border-red-400 focus:ring-red-400 bg-red-50"
+                        : "border-gray-300 focus:ring-blue-500"
+                    }`} />
                 </F>
                 <F label="Sexe">
                   <Sel name="sexe" value={form.sexe} onChange={ch}
                     opts={[{v:"H",l:"Homme"},{v:"F",l:"Femme"}]} />
                 </F>
-                <F label="Nom" req>
+                <F label="Nom" req error={hasFieldError("nom")}>
                   <Input name="nom" value={form.nom} onChange={ch} placeholder="DIOP"
-                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                    className={`text-sm p-3 shadow-sm focus:ring-2 focus:border-transparent ${
+                      hasFieldError("nom")
+                        ? "border-red-400 focus:ring-red-400 bg-red-50"
+                        : "border-gray-300 focus:ring-blue-500"
+                    }`} />
                 </F>
-                <F label="Prénom" req>
+                <F label="Prénom" req error={hasFieldError("prenom")}>
                   <Input name="prenom" value={form.prenom} onChange={ch} placeholder="Mamadou"
-                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                    className={`text-sm p-3 shadow-sm focus:ring-2 focus:border-transparent ${
+                      hasFieldError("prenom")
+                        ? "border-red-400 focus:ring-red-400 bg-red-50"
+                        : "border-gray-300 focus:ring-blue-500"
+                    }`} />
                 </F>
                 <F label="Date de naissance">
                   <Input type="date" name="date_naissance" value={form.date_naissance} onChange={ch}
@@ -438,7 +500,7 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
               </div>
 
               <SectionHeader icon={Mail} title="Contact direct" subtitle="Coordonnées personnelles" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <F label="Adresse e-mail">
                   <Input type="email" name="email" value={form.email} onChange={ch} placeholder="prenom.nom@example.com"
                     className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
@@ -453,12 +515,17 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
 
           {/* ─── Étape 2 : Professionnel ─── */}
           {step === 2 && (
-            <div className="space-y-7">
+            <div className="space-y-6">
               <SectionHeader icon={Briefcase} title="Poste & contrat" subtitle="Rôle et conditions d'emploi" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <F label="Type de contrat" req>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <F label="Type de contrat" req error={hasFieldError("type_contrat")}>
                   <Sel name="type_contrat" value={form.type_contrat} onChange={ch} ph="— Sélectionner —"
                     opts={[{v:"CDI",l:"CDI"},{v:"CDD",l:"CDD"},{v:"STAGE",l:"Stage"},{v:"INTERIM",l:"Intérim"}]} />
+                  {hasFieldError("type_contrat") && (
+                    <p className="mt-1 text-xs text-red-500 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />Le type de contrat est requis
+                    </p>
+                  )}
                 </F>
                 <F label="Fonction">
                   <Input name="fonction" value={form.fonction} onChange={ch} placeholder="Technicien, Ingénieur…"
@@ -472,27 +539,38 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                   <Input type="date" name="date_embauche" value={form.date_embauche} onChange={ch}
                     className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                 </F>
+                {/* Date de fin : uniquement pour CDD et Stage (pas CDI, pas INTERIM) */}
                 {(form.type_contrat === "CDD" || form.type_contrat === "STAGE") && (
-                  <F label="Date fin CDD / Stage">
+                  <F label={`Date de fin ${form.type_contrat === "STAGE" ? "Stage" : "CDD"}`}>
                     <Input type="date" name="date_fin_cdd" value={form.date_fin_cdd} onChange={ch}
                       className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                   </F>
                 )}
-                <F label="Date fin période d'essai">
-                  <Input type="date" name="date_fin_periode_essai" value={form.date_fin_periode_essai} onChange={ch}
-                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
-                </F>
+                {/* Période d'essai : CDI et CDD uniquement */}
+                {(form.type_contrat === "CDI" || form.type_contrat === "CDD") && (
+                  <F label="Date fin période d'essai">
+                    <Input type="date" name="date_fin_periode_essai" value={form.date_fin_periode_essai} onChange={ch}
+                      className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                  </F>
+                )}
               </div>
 
               <SectionHeader icon={Building2} title="Organisation" subtitle="Rattachement dans l'entreprise" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <F label="Business Line">
                   <Input name="business_line" value={form.business_line} onChange={ch}
                     className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                 </F>
                 <F label="Projet">
-                  <Input name="projet" value={form.projet} onChange={ch}
-                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                  {/* Dropdown depuis les départements + saisie libre */}
+                  {deptOptions.length > 0 ? (
+                    <Sel name="projet" value={form.projet} onChange={ch}
+                      ph="— Sélectionner ou saisir —" opts={deptOptions} />
+                  ) : (
+                    <Input name="projet" value={form.projet} onChange={ch}
+                      placeholder="Nom du projet"
+                      className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                  )}
                 </F>
                 <F label="Service / Département">
                   {deptOptions.length > 0 ? (
@@ -736,19 +814,19 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
         </div>
 
         {/* ── Pied de page (navigation) ── */}
-        <div className="px-8 py-5 border-t border-gray-200 bg-white flex items-center justify-between">
+        <div className="px-8 py-4 border-t border-gray-200 bg-white flex items-center justify-between gap-3">
           <Button
             type="button" variant="outline"
-            onClick={() => step > 1 ? setStep(s => s - 1) : onClose()}
+            onClick={() => { setStepErrors([]); setTouchedRequired(false); step > 1 ? setStep(s => s - 1) : onClose(); }}
             className="flex items-center gap-2 text-gray-700 hover:bg-gray-100 border-gray-300"
           >
             <ChevronLeft className="h-4 w-4" />
             {step === 1 ? "Annuler" : "Précédent"}
           </Button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {STEPS.map(s => (
-              <div key={s.id} className={`h-2 rounded-full transition-all ${
+              <div key={s.id} className={`h-1.5 rounded-full transition-all ${
                 s.id === step ? "w-8 bg-blue-600" :
                 s.id < step ? "w-2 bg-green-500" :
                               "w-2 bg-gray-300"
@@ -763,7 +841,7 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
               {loading ? "Enregistrement…" : isEdit ? "Enregistrer" : "Créer l'employé"}
             </Button>
           ) : (
-            <Button type="button" onClick={() => setStep(s => s + 1)}
+            <Button type="button" onClick={goNext}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
               Suivant <ChevronRight className="h-4 w-4" />
             </Button>
