@@ -851,7 +851,18 @@ function DeptColumn({
             </p>
           )}
           <p className={`text-[10px] mt-1 ${hasSubDepts ? "text-amber-500" : "text-emerald-500"}`}>
-            {dept.employee_count} employé(s)
+            {hasSubDepts ? (
+              <>
+                <span className="font-semibold">{dept.employee_count}</span> employé(s) au total
+                {(dept.children || []).length > 0 && (
+                  <span className="opacity-70 ml-1">
+                    ({(dept.children || []).reduce((sum, c) => sum + (c.employee_count || 0), 0)} dans sous-depts)
+                  </span>
+                )}
+              </>
+            ) : (
+              <>{dept.employee_count} employé(s)</>
+            )}
           </p>
         </button>
 

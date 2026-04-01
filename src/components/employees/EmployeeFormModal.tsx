@@ -173,6 +173,32 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
 
   const ch = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    if (name === "service") {
+      // Quand un département est sélectionné, auto-populer N+1/N+2 depuis la hiérarchie
+      const selectedDept = departments.find(d => d.name === value) ||
+        departments.flatMap(d => d.children || []).find(c => c.name === value);
+      if (selectedDept) {
+        // N+1 = responsable du sous-département sélectionné
+        if (selectedDept.head) {
+          const headEmp = allEmployees.find(e => e.id === selectedDept.head);
+          setForm(p => ({
+            ...p,
+            service: value,
+            n1_manager: selectedDept.head ?? null,
+            manager: headEmp ? `${headEmp.nom} ${headEmp.prenom}` : p.manager,
+            manager_email: headEmp?.email || p.manager_email,
+          }));
+        } else {
+          setForm(p => ({ ...p, service: value }));
+        }
+        // N+2 = responsable du département parent (si sous-département)
+        const parentDept = departments.find(d => d.children?.some(c => c.name === value));
+        if (parentDept?.head) {
+          setForm(p => ({ ...p, n2_manager: parentDept.head ?? null }));
+        }
+        return;
+      }
+    }
     setForm(p => ({ ...p, [name]: value }));
   };
 
