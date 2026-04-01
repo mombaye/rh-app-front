@@ -286,12 +286,25 @@ export const leaveRequestService = {
 
   /**
    * POST /api/leaves/requests/<id>/cancel/
-   * Enregistré par le router via @action(detail=True, url_path="cancel")
-   * Backend : si APPROVED → restaure balance.taken, status → CANCELLED
+   * Body optionnel : { canceller_id: number }
+   * Pour les congés APPROVED, seul le RH peut annuler (canceller_id requis).
    */
-  cancel: async (id: number): Promise<LeaveRequest> => {
+  cancel: async (id: number, cancellerId?: number): Promise<LeaveRequest> => {
     const res = await axios.post(
       `${API}/requests/${id}/cancel/`,
+      cancellerId ? { canceller_id: cancellerId } : {},
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
+  /**
+   * POST /api/leaves/requests/<id>/reminder/
+   * L'employé relance le manager qui n'a pas encore validé.
+   */
+  sendReminder: async (id: number): Promise<{ message: string }> => {
+    const res = await axios.post(
+      `${API}/requests/${id}/reminder/`,
       {},
       { headers: getAuthHeaders() }
     );

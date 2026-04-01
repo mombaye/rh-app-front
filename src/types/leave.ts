@@ -376,6 +376,7 @@ export interface ApprovalChainStep {
   level:          string;        // "N+1", "N+2", "DG"
   approver_id:    number | null;
   approver_name:  string | null;
+  is_on_leave?:   boolean;       // true si le manager est actuellement en congé
 }
 
 export interface ApprovalChainInfo {

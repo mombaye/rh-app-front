@@ -7,6 +7,7 @@ import { ContractType, LeaveRequest, LeaveStatus } from "@/types/leave";
 import { ImSpinner2 } from "react-icons/im";
 import { FiX, FiAlertCircle, FiRefreshCw } from "react-icons/fi";
 import toast from "react-hot-toast";
+import { useAuth } from "@/contexts/useAuth";
 
 // ─── Types locaux ─────────────────────────────────────────────────────────────
 type StatusFilter = "ALL" | "PENDING" | "APPROVED";
@@ -49,6 +50,7 @@ export default function LeaveRequestList({
   statusFilter = "ALL",
   contractType = "INTERNE",
 }: Props) {
+  const { user } = useAuth();
   const [requests,      setRequests]      = useState<LeaveRequest[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [fetchError,    setFetchError]    = useState<string | null>(null);
@@ -145,7 +147,7 @@ export default function LeaveRequestList({
   const handleCancel = async (id: number) => {
     setActionLoading(true);
     try {
-      await leaveRequestService.cancel(id);
+      await leaveRequestService.cancel(id, user?.employee_id ?? undefined);
       toast.success("Demande annulée");
       await fetchRequests();
       setSelected(null);

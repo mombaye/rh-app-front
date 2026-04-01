@@ -2677,7 +2677,7 @@ function DetailModal({ request: r, onClose, onDone }: {
   };
 
   const handleCancel = () =>
-    run(() => leaveRequestService.cancel(r.id).then(() => {}), "Demande annulée");
+    run(() => leaveRequestService.cancel(r.id, user?.employee_id ?? undefined).then(() => {}), "Demande annulée");
 
   const handleRevoke = async () => {
     if (!revokeReason.trim()) { toast.error("Le motif de révocation est obligatoire."); return; }

@@ -6,7 +6,7 @@ import {
   Loader2, ChevronLeft, ChevronRight, TrendingUp, Filter,
   X, CalendarDays, User, Hash, MessageSquare, ShieldCheck,
   ThumbsUp, Upload, FileCheck, Paperclip, ExternalLink,
-  AlertTriangle, UserX, Trash2, Eye, ArrowDown, Building2,
+  AlertTriangle, UserX, Trash2, Eye, ArrowDown, Building2, RefreshCw,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -794,10 +794,11 @@ interface RequestCardProps {
   onView: () => void;
   onEdit: () => void;
   onCancel: () => void;
+  onReminder: () => void;
   onSelfApprove?: () => void;
 }
 
-function RequestCard({ req, onView, onEdit, onCancel, onSelfApprove }: RequestCardProps) {
+function RequestCard({ req, onView, onEdit, onCancel, onReminder, onSelfApprove }: RequestCardProps) {
   const cfg     = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
   const Icon    = cfg.Icon;
   const canEdit = req.status === "PENDING" || req.status === "PENDING_SECOND";
@@ -940,6 +941,14 @@ function RequestCard({ req, onView, onEdit, onCancel, onSelfApprove }: RequestCa
                   </button>
                 )}
                 <button
+                  onClick={e => { e.stopPropagation(); onReminder(); }}
+                  title="Relancer le manager"
+                  className="flex items-center gap-1.5 text-xs text-amber-600 hover:bg-amber-50 px-3 py-1.5 rounded-lg transition font-medium border border-amber-200 hover:border-amber-400"
+                >
+                  <RefreshCw size={12} />
+                  <span className="hidden sm:inline">Relancer</span>
+                </button>
+                <button
                   onClick={e => { e.stopPropagation(); onEdit(); }}
                   title="Modifier"
                   className="flex items-center gap-1.5 text-xs text-[#003c71] hover:bg-[#003c71]/10 px-3 py-1.5 rounded-lg transition font-medium border border-[#003c71]/20 hover:border-[#003c71]/40"
@@ -1058,6 +1067,16 @@ export default function EmployeeLeavesPage({
       toast.error(msg);
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleReminder = async (req: LeaveRequest) => {
+    try {
+      await leaveRequestService.sendReminder(req.id);
+      toast.success("Email de relance envoyé au manager.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.response?.data?.detail || "Erreur lors de l'envoi de la relance.";
+      toast.error(msg);
     }
   };
 
@@ -1389,6 +1408,7 @@ export default function EmployeeLeavesPage({
                     onView={() => setDetailTarget(req)}
                     onEdit={() => { setEditTarget(req); setShowForm(true); }}
                     onCancel={() => setCancelTarget(req)}
+                    onReminder={() => handleReminder(req)}
                     onSelfApprove={canSelfApprove ? () => handleSelfApprove(req) : undefined}
                   />
                 ))}
