@@ -211,6 +211,48 @@ export const bulkUpdateMatricules = async (
 };
 
 // ══════════════════════════════════════════════════════
+//  BULK SWITCH INTÉRIM → INTERNE
+// ══════════════════════════════════════════════════════
+export type BulkSwitchItem = {
+  id: number;
+  matricule?: string; // nouveau matricule numérique (optionnel)
+};
+
+export type BulkSwitchPayload = {
+  items: BulkSwitchItem[];
+  contract_type: "CDI" | "CDD" | "STAGE";
+  event_date?: string;
+  date_embauche?: string | null;
+  date_fin_cdd?: string | null;
+  fonction?: string | null;
+  service?: string | null;
+  categorie?: string | null;
+  manager?: string | null;
+  business_line?: string | null;
+  localisation?: string | null;
+};
+
+export type BulkSwitchResult = {
+  switched: number;
+  errors: { id: number | null; nom?: string; prenom?: string; error: string }[];
+  results: {
+    id: number;
+    nom: string;
+    prenom: string;
+    old_matricule: string;
+    new_matricule: string;
+    contract_type: string;
+  }[];
+};
+
+export const bulkSwitchToInternal = async (
+  payload: BulkSwitchPayload
+): Promise<BulkSwitchResult> => {
+  const res = await api.post("/api/employees/bulk-switch-to-internal/", payload);
+  return res.data;
+};
+
+// ══════════════════════════════════════════════════════
 //  PREVIEW MATRICULE CHANGES
 // ══════════════════════════════════════════════════════
 export type MatriculeChangeStatus =

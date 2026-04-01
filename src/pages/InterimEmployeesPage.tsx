@@ -17,10 +17,12 @@ import {
   sendAccessCodesInterim,
   bulkUpdateMatricules,
   previewMatriculeChanges,
+  bulkSwitchToInternal,
+  BulkSwitchPayload,
   MatriculeUpdate,
   MatriculeChange,
 } from "@/services/employeeService";
-import { FaPlus, FaUserCheck, FaUserTimes, FaUsers } from "react-icons/fa";
+import { FaPlus, FaUserCheck, FaUserTimes, FaUsers, FaExchangeAlt } from "react-icons/fa";
 import {
   FiCheckCircle,
   FiAlertTriangle,
@@ -29,6 +31,7 @@ import {
   FiUploadCloud,
   FiArrowRight,
   FiChevronDown,
+  FiInfo,
 } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
@@ -377,6 +380,401 @@ function BulkMatriculeModal({
   );
 }
 
+// ─── Types switch ─────────────────────────────────────────────────────────────
+type SwitchRow = {
+  id: number;
+  nom: string;
+  prenom: string;
+  oldMatricule: string;
+  newMatricule: string; // doit être purement numérique
+  selected: boolean;
+  error?: string;
+  success?: boolean;
+};
+
+type ContractTarget = "CDI" | "CDD" | "STAGE";
+
+const CONTRACT_TARGET_OPTIONS: { value: ContractTarget; label: string; badge: string }[] = [
+  { value: "CDI",   label: "CDI",   badge: "bg-emerald-100 text-emerald-700 border-emerald-300" },
+  { value: "CDD",   label: "CDD",   badge: "bg-blue-100 text-blue-700 border-blue-300"          },
+  { value: "STAGE", label: "Stage", badge: "bg-purple-100 text-purple-700 border-purple-300"    },
+];
+
+// ─── BulkSwitchModal ──────────────────────────────────────────────────────────
+function BulkSwitchModal({
+  employees,
+  onClose,
+  onSuccess,
+}: {
+  employees: Employee[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [rows, setRows] = useState<SwitchRow[]>(
+    employees
+      .filter((e) => e.type_contrat === "INTERIM" && e.status !== "EXITED")
+      .map((e) => ({
+        id: e.id,
+        nom: e.nom,
+        prenom: e.prenom,
+        oldMatricule: e.matricule,
+        newMatricule: "",
+        selected: false,
+      }))
+  );
+
+  const [contractType, setContractType] = useState<ContractTarget>("CDI");
+  const [eventDate, setEventDate]       = useState(() => new Date().toISOString().slice(0, 10));
+  const [dateEmbauche, setDateEmbauche] = useState("");
+  const [dateFinCdd, setDateFinCdd]     = useState("");
+  const [fonction, setFonction]         = useState("");
+  const [service, setService]           = useState("");
+  const [categorie, setCategorie]       = useState("");
+  const [manager, setManager]           = useState("");
+  const [search, setSearch]             = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDone, setIsDone]             = useState(false);
+  const [summary, setSummary]           = useState<{ switched: number; errors: number } | null>(null);
+
+  const selectedRows  = rows.filter((r) => r.selected);
+  const selectedCount = selectedRows.length;
+  const allActive     = rows.filter((r) => !r.success);
+  const allSelected   = allActive.length > 0 && allActive.every((r) => r.selected);
+
+  const filteredRows = rows.filter((r) => {
+    const q = search.toLowerCase();
+    return (
+      r.nom.toLowerCase().includes(q) ||
+      r.prenom.toLowerCase().includes(q) ||
+      r.oldMatricule.toLowerCase().includes(q)
+    );
+  });
+
+  const toggleAll = () => {
+    const newVal = !allSelected;
+    setRows((prev) => prev.map((r) => (r.success ? r : { ...r, selected: newVal })));
+  };
+
+  const toggleRow = (id: number) =>
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, selected: !r.selected } : r)));
+
+  const setNewMat = (id: number, value: string) =>
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, newMatricule: value, error: undefined } : r)));
+
+  const handleSubmit = async () => {
+    // Validation
+    for (const r of selectedRows) {
+      if (r.newMatricule.trim() && !/^\d+$/.test(r.newMatricule.trim())) {
+        toast.error(`Matricule "${r.newMatricule}" invalide pour ${r.prenom} ${r.nom} — doit être numérique`);
+        return;
+      }
+    }
+
+    const items = selectedRows.map((r) => ({
+      id: r.id,
+      ...(r.newMatricule.trim() ? { matricule: r.newMatricule.trim() } : {}),
+    }));
+
+    const payload: BulkSwitchPayload = {
+      items,
+      contract_type: contractType,
+      event_date:    eventDate || undefined,
+      ...(dateEmbauche ? { date_embauche: dateEmbauche }   : {}),
+      ...(dateFinCdd   ? { date_fin_cdd:  dateFinCdd }     : {}),
+      ...(fonction     ? { fonction }                       : {}),
+      ...(service      ? { service }                        : {}),
+      ...(categorie    ? { categorie }                      : {}),
+      ...(manager      ? { manager }                        : {}),
+    };
+
+    setIsSubmitting(true);
+    try {
+      const result = await bulkSwitchToInternal(payload);
+      const errorMap = new Map(result.errors.map((e) => [e.id, e.error]));
+      setRows((prev) =>
+        prev.map((r) => {
+          if (!r.selected) return r;
+          const err = errorMap.get(r.id);
+          return err ? { ...r, error: err } : { ...r, success: true, selected: false };
+        })
+      );
+      setSummary({ switched: result.switched, errors: result.errors.length });
+      setIsDone(true);
+      if (result.errors.length === 0) {
+        toast.success(`${result.switched} employé(s) basculé(s) vers la liste interne (${contractType})`);
+        onSuccess();
+      } else {
+        toast.error(`${result.errors.length} erreur(s) — ${result.switched} succès`);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors du basculement");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 10 }}
+        transition={{ duration: 0.2 }}
+        className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[92vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+              <FaExchangeAlt className="text-indigo-600" size={17} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Basculement massif vers la liste interne</h2>
+              <p className="text-sm text-gray-400 mt-0.5">
+                Sélectionnez les intérimaires à convertir, choisissez le type de contrat et les champs à appliquer.
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition p-1.5 rounded-lg hover:bg-gray-100">
+            <FiX size={18} />
+          </button>
+        </div>
+
+        {/* ── Config commune ── */}
+        <div className="px-6 pt-5 pb-4 border-b border-gray-100 shrink-0 space-y-4">
+          {/* Type de contrat cible */}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-semibold text-gray-700 mr-1">Type de contrat cible *</span>
+            {CONTRACT_TARGET_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setContractType(opt.value)}
+                className={`px-4 py-1.5 rounded-lg border text-sm font-semibold transition
+                  ${contractType === opt.value
+                    ? `${opt.badge} ring-2 ring-offset-1 ring-current`
+                    : "bg-white border-gray-300 text-gray-500 hover:border-gray-400"
+                  }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Champs communs en grille */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1 font-medium">Date d'effet *</label>
+              <input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1 font-medium">Date d'embauche</label>
+              <input type="date" value={dateEmbauche} onChange={(e) => setDateEmbauche(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+            {contractType === "CDD" && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1 font-medium">Date fin CDD</label>
+                <input type="date" value={dateFinCdd} onChange={(e) => setDateFinCdd(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              </div>
+            )}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1 font-medium">Fonction</label>
+              <input type="text" value={fonction} onChange={(e) => setFonction(e.target.value)} placeholder="Laisser vide = inchangé"
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1 font-medium">Service</label>
+              <input type="text" value={service} onChange={(e) => setService(e.target.value)} placeholder="Laisser vide = inchangé"
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1 font-medium">Catégorie</label>
+              <input type="text" value={categorie} onChange={(e) => setCategorie(e.target.value)} placeholder="Laisser vide = inchangé"
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1 font-medium">Manager</label>
+              <input type="text" value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Laisser vide = inchangé"
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+          </div>
+
+          {/* Info matricule */}
+          <div className="flex items-start gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-xs text-indigo-700">
+            <FiInfo className="shrink-0 mt-0.5 text-indigo-400" size={13} />
+            <span>
+              Les matricules internes sont <strong>purement numériques</strong> (ex. 001, 123).
+              Laissez vide pour conserver l'ancien matricule — ou saisissez un nouveau matricule numérique par employé.
+            </span>
+          </div>
+        </div>
+
+        {/* ── Barre de recherche + résumé ── */}
+        {summary && (
+          <div className={`mx-6 mt-4 shrink-0 rounded-xl px-4 py-3 flex items-center gap-3 text-sm ${
+            summary.errors === 0 ? "bg-emerald-50 border border-emerald-200" : "bg-amber-50 border border-amber-200"
+          }`}>
+            {summary.errors === 0
+              ? <FiCheckCircle className="text-emerald-500 shrink-0" size={16} />
+              : <FiAlertTriangle className="text-amber-500 shrink-0" size={16} />}
+            <p className="font-semibold text-gray-800">
+              {summary.switched} employé(s) basculé(s) vers la liste interne ({contractType}).
+              {summary.errors > 0 && ` ${summary.errors} erreur(s) — voir le tableau.`}
+            </p>
+          </div>
+        )}
+
+        <div className="px-6 pt-4 pb-2 shrink-0">
+          <input
+            type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher par nom, prénom ou matricule…"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          />
+        </div>
+
+        {/* ── Table des intérimaires ── */}
+        <div className="flex-1 overflow-y-auto px-6 pb-2 min-h-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[620px]">
+              <thead className="sticky top-0 bg-white z-10">
+                <tr className="border-b border-gray-200">
+                  <th className="py-3 pr-3 w-9">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      disabled={isSubmitting}
+                      className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                    />
+                  </th>
+                  <th className="text-left py-3 pr-4 font-semibold text-gray-600">Employé</th>
+                  <th className="text-left py-3 pr-4 font-semibold text-gray-600 w-36">Matricule actuel</th>
+                  <th className="text-left py-3 pr-4 font-semibold text-gray-600 w-48">
+                    Nouveau matricule <span className="font-normal text-gray-400">(numérique)</span>
+                  </th>
+                  <th className="text-left py-3 font-semibold text-gray-600 w-28">Statut</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredRows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={`transition-colors ${
+                      row.success ? "bg-emerald-50" : row.error ? "bg-red-50" : row.selected ? "bg-indigo-50" : ""
+                    }`}
+                  >
+                    <td className="py-3 pr-3">
+                      <input
+                        type="checkbox"
+                        checked={row.selected}
+                        onChange={() => toggleRow(row.id)}
+                        disabled={isSubmitting || !!row.success}
+                        className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                      />
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className="font-medium text-gray-800">{row.prenom} {row.nom}</span>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className="font-mono text-gray-500 text-xs bg-gray-100 px-2 py-0.5 rounded">
+                        {row.oldMatricule}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4">
+                      {row.success ? (
+                        <span className="font-mono text-emerald-700 text-xs bg-emerald-100 px-2 py-0.5 rounded">
+                          {row.newMatricule || row.oldMatricule}
+                        </span>
+                      ) : (
+                        <div className="flex flex-col gap-0.5">
+                          <input
+                            type="text"
+                            value={row.newMatricule}
+                            onChange={(e) => setNewMat(row.id, e.target.value)}
+                            disabled={isSubmitting}
+                            placeholder="ex. 042"
+                            className={`w-full border rounded-lg px-2.5 py-1.5 font-mono text-sm focus:outline-none focus:ring-2 transition ${
+                              row.error
+                                ? "border-red-300 bg-red-50 focus:ring-red-300"
+                                : row.newMatricule && !/^\d*$/.test(row.newMatricule)
+                                ? "border-amber-400 focus:ring-amber-300"
+                                : "border-gray-300 focus:ring-indigo-400"
+                            }`}
+                          />
+                          {row.newMatricule && !/^\d*$/.test(row.newMatricule) && (
+                            <p className="text-xs text-amber-600">Doit être numérique</p>
+                          )}
+                          {row.error && <p className="text-xs text-red-600">{row.error}</p>}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3">
+                      {row.success ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium">
+                          <FiCheckCircle size={12} /> Basculé
+                        </span>
+                      ) : row.error ? (
+                        <span className="text-xs text-red-600 font-medium">Erreur</span>
+                      ) : row.selected ? (
+                        <span className="text-xs text-indigo-600 font-medium">Sélectionné</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {filteredRows.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="text-center py-10 text-gray-400 text-sm">
+                      Aucun intérimaire actif trouvé.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="px-6 py-4 border-t border-gray-100 shrink-0 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-gray-400">
+            {rows.filter((r) => !r.success).length} intérimaire(s) actif(s)
+            {selectedCount > 0 && (
+              <span className="ml-2 font-semibold text-indigo-700">· {selectedCount} sélectionné(s)</span>
+            )}
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition"
+            >
+              {isDone && summary?.errors === 0 ? "Fermer" : "Annuler"}
+            </button>
+            {(!isDone || (summary && summary.errors > 0)) && (
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting || selectedCount === 0}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting
+                  ? <><ImSpinner2 className="animate-spin" size={14} />Basculement…</>
+                  : <><FaExchangeAlt size={12} />Basculer {selectedCount > 0 ? `(${selectedCount})` : ""}</>
+                }
+              </button>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function InterimEmployeesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -407,7 +805,8 @@ export default function InterimEmployeesPage() {
   const [missionOpen, setMissionOpen] = useState(false);
   const [missionTarget, setMissionTarget] = useState<Employee | null>(null);
   const [isSendingCodes, setIsSendingCodes] = useState(false);
-  const [bulkMatOpen, setBulkMatOpen] = useState(false);
+  const [bulkMatOpen, setBulkMatOpen]         = useState(false);
+  const [bulkSwitchOpen, setBulkSwitchOpen]   = useState(false);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -603,6 +1002,15 @@ export default function InterimEmployeesPage() {
             </button>
 
             <button
+              onClick={() => setBulkSwitchOpen(true)}
+              disabled={isLoading || allEmployees.filter((e) => e.type_contrat === "INTERIM" && e.status !== "EXITED").length === 0}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FaExchangeAlt size={13} />
+              Basculer vers interne
+            </button>
+
+            <button
               onClick={handleCreate}
               className="bg-camublue-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-camublue-800 transition"
             >
@@ -657,6 +1065,16 @@ export default function InterimEmployeesPage() {
               employees={allEmployees}
               onClose={() => setBulkMatOpen(false)}
               onSuccess={() => { fetchInterimEmployees(); setBulkMatOpen(false); }}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {bulkSwitchOpen && (
+            <BulkSwitchModal
+              employees={allEmployees}
+              onClose={() => setBulkSwitchOpen(false)}
+              onSuccess={() => { fetchInterimEmployees(); setBulkSwitchOpen(false); }}
             />
           )}
         </AnimatePresence>
