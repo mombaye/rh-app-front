@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTimes, FaExchangeAlt } from "react-icons/fa";
+import { FaTimes, FaExchangeAlt, FaInfoCircle } from "react-icons/fa";
 import { ImSpinner2 } from "react-icons/im";
 import { Employee } from "@/types/employee";
 import {
@@ -219,6 +219,20 @@ export default function ContractChangeModal({ open, employee, onClose, onSuccess
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Notice basculement intérim → interne */}
+              {employee.type_contrat === "INTERIM" &&
+               visibleFields.includes("type_contrat") &&
+               fields["type_contrat"] &&
+               fields["type_contrat"] !== "INTERIM" && (
+                <div className="flex items-start gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2.5 text-xs text-indigo-700">
+                  <FaInfoCircle className="shrink-0 mt-0.5 text-indigo-400" size={12} />
+                  <span>
+                    Ce changement de contrat basculera automatiquement cet employé
+                    de la <strong>liste intérimaires</strong> vers la <strong>liste interne</strong>.
+                  </span>
                 </div>
               )}
 
