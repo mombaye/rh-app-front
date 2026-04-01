@@ -2089,7 +2089,7 @@ function useApprovalSteps(r: LeaveRequest) {
   const blockReason   = blockedByDoc
     ? "Justificatif manquant — l'employé doit fournir le document avant approbation"
     : blockedByN1
-      ? "En attente de validation N+1 — la hiérarchie doit valider avant que le RH puisse agir"
+      ? "En attente de validation N+1 — le manager N+1 doit valider en premier"
       : "";
 
   const currentStepNum = steps.findIndex((s) => s.current) + 1;
@@ -2460,6 +2460,15 @@ function ValidationChain({ r }: { r: LeaveRequest }) {
     status:  StepStatus;
   }
 
+  // Détecter si c'est un flux DG (responsable de département)
+  // On le détecte si : pas de N+1 défini mais un reviewed_by existe avec un status APPROVED direct,
+  // ou si l'API a marqué le reviewed_by comme DG
+  const hasN1 = !!r.employee?.n1_manager_id;
+  const hasN2 = r.requires_second_approval || !!r.second_reviewer || !!r.employee?.n2_manager_id;
+
+  // Flux DG : pas de N+1/N+2 défini dans la hiérarchie standard mais une validation directe
+  const isDgFlow = !hasN1 && !hasN2 && r.status === "APPROVED" && !!r.reviewed_by;
+
   const steps: Step[] = [];
 
   // Étape 0 — Soumission par l'employé
@@ -2471,47 +2480,59 @@ function ValidationChain({ r }: { r: LeaveRequest }) {
     status: "done",
   });
 
-  // Étape 1 — Validation N+1
-  const n1Done    = !!r.reviewed_at;
-  const n1Waiting = r.status === "PENDING";
-  const n1Status: StepStatus =
-    r.status === "REJECTED" && !r.requires_second_approval && !r.second_reviewer
-      ? (n1Done ? "done" : "rejected")  // rejected at N+1 after reviewing
-      : n1Done
-        ? "done"
-        : n1Waiting ? "waiting" : "pending";
+  if (isDgFlow) {
+    // Flux responsable de département → validation DG directe
+    steps.push({
+      label:  "Validation DG",
+      name:   r.reviewed_by?.full_name ?? null,
+      email:  r.reviewed_by?.email ?? null,
+      date:   fmtDt(r.reviewed_at),
+      note:   r.status === "REJECTED" ? r.reject_reason : null,
+      status: r.status === "APPROVED" ? "done" : r.status === "REJECTED" ? "rejected" : "waiting",
+    });
+  } else {
+    // Flux hiérarchique standard : N+1 puis N+2 si existe
 
-  steps.push({
-    label:  "Validation N+1",
-    name:   r.reviewed_by?.full_name ?? r.employee?.n1_manager_name ?? null,
-    email:  r.reviewed_by?.email ?? null,
-    date:   fmtDt(r.reviewed_at),
-    // Afficher le motif de rejet si N+2 n'existe pas (c'est N+1 qui a rejeté)
-    note:   r.status === "REJECTED" && !r.second_reviewer ? r.reject_reason : null,
-    status: n1Status,
-  });
-
-  // Étape 2 — Validation N+2 (si chaîne à 2 niveaux)
-  const hasN2 = r.requires_second_approval || !!r.second_reviewer || !!r.employee?.n2_manager_id;
-  if (hasN2) {
-    const n2Done    = !!r.second_reviewed_at;
-    const n2Waiting = r.status === "PENDING_SECOND";
-    const n2Rejected = r.status === "REJECTED" && !!r.second_reviewer;
-
-    const n2Status: StepStatus =
-      n2Rejected ? "rejected"
-      : n2Done    ? "done"
-      : n2Waiting ? "waiting"
-      : "pending";
+    // Étape 1 — Validation N+1
+    const n1Done    = !!r.reviewed_at;
+    const n1Waiting = r.status === "PENDING";
+    const n1Status: StepStatus =
+      r.status === "REJECTED" && !r.requires_second_approval && !r.second_reviewer
+        ? (n1Done ? "done" : "rejected")
+        : n1Done
+          ? "done"
+          : n1Waiting ? "waiting" : "pending";
 
     steps.push({
-      label:  "Validation N+2",
-      name:   r.second_reviewer?.full_name ?? r.employee?.n2_manager_name ?? null,
-      email:  r.second_reviewer?.email ?? null,
-      date:   fmtDt(r.second_reviewed_at),
-      note:   n2Rejected ? r.reject_reason : null,
-      status: n2Status,
+      label:  "Validation N+1",
+      name:   r.reviewed_by?.full_name ?? r.employee?.n1_manager_name ?? null,
+      email:  r.reviewed_by?.email ?? null,
+      date:   fmtDt(r.reviewed_at),
+      note:   r.status === "REJECTED" && !r.second_reviewer ? r.reject_reason : null,
+      status: n1Status,
     });
+
+    // Étape 2 — Validation N+2 (si chaîne à 2 niveaux)
+    if (hasN2) {
+      const n2Done    = !!r.second_reviewed_at;
+      const n2Waiting = r.status === "PENDING_SECOND";
+      const n2Rejected = r.status === "REJECTED" && !!r.second_reviewer;
+
+      const n2Status: StepStatus =
+        n2Rejected ? "rejected"
+        : n2Done    ? "done"
+        : n2Waiting ? "waiting"
+        : "pending";
+
+      steps.push({
+        label:  "Validation N+2",
+        name:   r.second_reviewer?.full_name ?? r.employee?.n2_manager_name ?? null,
+        email:  r.second_reviewer?.email ?? null,
+        date:   fmtDt(r.second_reviewed_at),
+        note:   n2Rejected ? r.reject_reason : null,
+        status: n2Status,
+      });
+    }
   }
 
   const dot: Record<StepStatus, string> = {
@@ -2966,10 +2987,10 @@ function DetailModal({ request: r, onClose, onDone }: {
               <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
                 <Clock className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold text-blue-800">En attente de validation manager</p>
+                  <p className="text-sm font-semibold text-blue-800">En attente de validation hiérarchique</p>
                   <p className="text-xs text-blue-600 mt-0.5 leading-relaxed">
-                    Cette demande suit le circuit d'approbation des managers (N+1 puis N+2 si applicable).
-                    Le RH ne peut pas approuver ou rejeter — seul le manager concerné peut valider.
+                    Cette demande suit le circuit d'approbation hiérarchique (N+1 puis N+2 si applicable,
+                    ou DG pour les responsables de département).
                   </p>
                 </div>
               </div>

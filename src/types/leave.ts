@@ -18,6 +18,7 @@ export interface LeaveType {
   carry_forward_days:       number;   // jours reportables max (0 = pas de report)
   exclude_weekends:         boolean;  // exclure sam/dim du décompte
   allow_negative_balance:   boolean;  // autoriser solde négatif
+  deducts_from_balance:     boolean;  // seuls les congés annuels déduisent du solde
 }
 
 // ── EmployeeMini ── mirrors EmployeeMiniSerializer ────────────────────────────
@@ -368,6 +369,20 @@ export interface ManagerDelegationCreate {
   reason?:       string;
   is_active?:    boolean;
   created_by_id?: number;
+}
+
+// ── ApprovalChainStep ─────────────────────────────────────────────────────────
+export interface ApprovalChainStep {
+  level:          string;        // "N+1", "N+2", "DG"
+  approver_id:    number | null;
+  approver_name:  string | null;
+}
+
+export interface ApprovalChainInfo {
+  is_department_head: boolean;
+  department:         string | null;
+  approval_flow:      "HIERARCHY" | "DG_ONLY";
+  steps:              ApprovalChainStep[];
 }
 
 // ── ApprovePayload ────────────────────────────────────────────────────────────

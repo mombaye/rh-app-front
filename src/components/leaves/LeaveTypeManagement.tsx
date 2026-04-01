@@ -19,6 +19,7 @@ const EMPTY_FORM = {
   color:                     "#3b82f6",
   monthly_accrual:           "0",
   max_days_per_request:      "0",
+  deducts_from_balance:      false,
 };
 
 type FormState = typeof EMPTY_FORM;
@@ -79,6 +80,7 @@ export default function LeaveTypeManagement() {
       color:                     t.color,
       monthly_accrual:           t.monthly_accrual ?? "0",
       max_days_per_request:      String(t.max_days_per_request ?? 0),
+      deducts_from_balance:      t.deducts_from_balance ?? false,
     });
     setFormError(null);
     setShowForm(true);
@@ -116,6 +118,7 @@ export default function LeaveTypeManagement() {
         color:                     form.color,
         monthly_accrual:           parseFloat(form.monthly_accrual) || 0,
         max_days_per_request:      parseInt(form.max_days_per_request) || 0,
+        deducts_from_balance:      form.deducts_from_balance,
       };
       if (editTarget) {
         await leaveTypeService.update(editTarget.id, payload);
@@ -249,6 +252,9 @@ export default function LeaveTypeManagement() {
                         ? <span className="text-xs text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded">Payé</span>
                         : <span className="text-xs text-gray-500 font-medium bg-gray-100 px-1.5 py-0.5 rounded">Non payé</span>
                       }
+                      {t.deducts_from_balance && (
+                        <span className="text-xs text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded">Déduit solde</span>
+                      )}
                     </div>
                     <p className="font-semibold text-gray-900 text-sm truncate">{t.label}</p>
                   </div>
@@ -411,6 +417,13 @@ export default function LeaveTypeManagement() {
                       className="w-4 h-4 rounded accent-camublue-900"
                     />
                     <span className="text-sm text-gray-700 font-medium">Congé payé</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input type="checkbox" name="deducts_from_balance" checked={form.deducts_from_balance} onChange={handleChange}
+                      className="w-4 h-4 rounded accent-emerald-600"
+                    />
+                    <span className="text-sm text-gray-700 font-medium">Déduit du solde de congé</span>
+                    <span className="text-xs text-gray-400">(uniquement pour congés annuels)</span>
                   </label>
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <input type="checkbox" name="requires_justification" checked={form.requires_justification} onChange={handleChange}

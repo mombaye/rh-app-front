@@ -15,6 +15,7 @@ import {
   LeaveCalendarEntry,
   LeavePlanningEntry,
   AbsenceRateRow,
+  ApprovalChainInfo,
   ApprovePayload,
   RevokePayload,
   ExportColumnKey,
@@ -202,6 +203,18 @@ export const leaveRequestService = {
     const res = await axios.get(`${API}/requests/employee/${employeeId}/`, {
       headers: getAuthHeaders(),
       params:  filters,
+    });
+    return res.data;
+  },
+
+  /**
+   * GET /api/leaves/requests/approval-chain/<employeeId>/
+   * Retourne la chaîne de validation applicable pour cet employé
+   * (hiérarchie N+1/N+2 ou DG pour les responsables de département).
+   */
+  getApprovalChain: async (employeeId: number): Promise<ApprovalChainInfo> => {
+    const res = await axios.get(`${API}/requests/approval-chain/${employeeId}/`, {
+      headers: getAuthHeaders(),
     });
     return res.data;
   },
