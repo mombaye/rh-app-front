@@ -227,8 +227,16 @@ function BulkMatriculeModal({
         const err = errorMap.get(r.id);
         return err ? { ...r, error: err } : { ...r, oldMatricule: r.newMatricule.trim(), success: true, previewStatus: undefined };
       }));
-      if (result.errors.length === 0) { toast.success(`${result.updated} matricule(s) mis à jour avec succès`); onSuccess(); }
-      else toast.error(`${result.errors.length} erreur(s) — voir le détail dans le tableau`);
+      if (result.errors.length === 0) {
+        // Compter les intérimaires basculés vers la liste interne (matricule purement numérique)
+        const switchedCount = updates.filter((u) => /^\d+$/.test(u.matricule)).length;
+        if (switchedCount > 0) {
+          toast.success(`${result.updated} matricule(s) mis à jour · ${switchedCount} employé(s) basculé(s) vers la liste interne`);
+        } else {
+          toast.success(`${result.updated} matricule(s) mis à jour avec succès`);
+        }
+        onSuccess();
+      } else toast.error(`${result.errors.length} erreur(s) — voir le détail dans le tableau`);
     } catch (err: any) {
       toast.error(err?.response?.data?.error ?? "Erreur lors de la mise à jour");
     } finally {
@@ -297,6 +305,8 @@ function BulkMatriculeModal({
                 const isChanged = row.newMatricule.trim() !== row.oldMatricule && !row.success;
                 const isConflict = row.previewStatus === "conflict";
                 const isNotFound = row.previewStatus === "not_found";
+                // Un matricule purement numérique = format interne → basculement automatique
+                const willSwitchToInternal = isChanged && /^\d+$/.test(row.newMatricule.trim());
                 return (
                   <tr key={row.id ?? row.oldMatricule} className={`transition-colors ${row.success ? "bg-emerald-50" : row.error || isConflict ? "bg-red-50" : isNotFound ? "bg-amber-50" : isChanged ? "bg-blue-50" : ""}`}>
                     <td className="py-2.5 pr-4">
@@ -317,7 +327,13 @@ function BulkMatriculeModal({
                         />
                         {isConflict && <p className="text-xs text-red-600">{row.conflictDetail ?? "Conflit : matricule déjà utilisé"}</p>}
                         {row.error && !isConflict && <p className="text-xs text-red-600">{row.error}</p>}
-                        {row.success && <p className="text-xs text-emerald-600 flex items-center gap-1"><FiCheckCircle size={11} /> Mis à jour</p>}
+                        {row.success && !willSwitchToInternal && <p className="text-xs text-emerald-600 flex items-center gap-1"><FiCheckCircle size={11} /> Mis à jour</p>}
+                        {row.success && willSwitchToInternal && <p className="text-xs text-emerald-600 flex items-center gap-1"><FiCheckCircle size={11} /> Basculé en interne</p>}
+                        {willSwitchToInternal && !row.success && (
+                          <p className="text-xs text-indigo-600 flex items-center gap-1">
+                            <FiChevronRight size={11} /> Sera basculé vers la liste interne
+                          </p>
+                        )}
                       </div>
                     </td>
                     <td className="py-2.5 text-center">
