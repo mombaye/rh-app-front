@@ -235,21 +235,15 @@ export const bulkUpdateMatricules = async (
 // ══════════════════════════════════════════════════════
 export type BulkSwitchItem = {
   id: number;
-  matricule?: string; // nouveau matricule numérique (optionnel)
+  matricule: string;          // nouveau matricule numérique obligatoire
+  contract_type: "CDI" | "CDD" | "STAGE";
+  event_date?: string;
+  date_embauche?: string;
+  date_fin_contrat?: string;  // uniquement pour CDD / STAGE
 };
 
 export type BulkSwitchPayload = {
   items: BulkSwitchItem[];
-  contract_type: "CDI" | "CDD" | "STAGE";
-  event_date?: string;
-  date_embauche?: string | null;
-  date_fin_cdd?: string | null;
-  fonction?: string | null;
-  service?: string | null;
-  categorie?: string | null;
-  manager?: string | null;
-  business_line?: string | null;
-  localisation?: string | null;
 };
 
 export type BulkSwitchResult = {

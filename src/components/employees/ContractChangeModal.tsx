@@ -68,7 +68,11 @@ export default function ContractChangeModal({ open, employee, onClose, onSuccess
   const [fields, setFields] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
-  const visibleFields = FIELDS_BY_EVENT[eventType] ?? [];
+  const effectiveContractType =
+    fields["type_contrat"] || (eventType === "TITULARISATION" ? "CDI" : null);
+  const visibleFields = (FIELDS_BY_EVENT[eventType] ?? []).filter(
+    (f) => !(f === "date_fin_cdd" && effectiveContractType === "CDI")
+  );
 
   const handleTypeChange = (type: CareerEventType) => {
     setEventType(type);
