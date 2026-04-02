@@ -2,10 +2,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { createEmployee, updateEmployee, getEmployees } from "@/services/employeeService";
-import { departmentService } from "@/services/hierarchyService";
+import { departmentService, employeeHierarchyService, DepartmentManagerMini } from "@/services/hierarchyService";
 import {
   ContractType, Employee, Enfant,
   SexeType, SituationMatrimoniale, TypePiece,
@@ -128,6 +128,9 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
   const [n2Search, setN2Search] = useState("");
   const [showN1Dropdown, setShowN1Dropdown] = useState(false);
   const [showN2Dropdown, setShowN2Dropdown] = useState(false);
+  // Infos enrichies du manager N+2 (email non stocké sur Employee pour N+2)
+  const [n2ManagerInfo, setN2ManagerInfo] = useState<DepartmentManagerMini | null>(null);
+  const [detectingManagers, setDetectingManagers] = useState(false);
 
   // Charger les employés et départements à l'ouverture
   useEffect(() => {
@@ -143,6 +146,8 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
     setN2Search("");
     setStepErrors([]);
     setTouchedRequired(false);
+    setN2ManagerInfo(null);
+    setDetectingManagers(false);
     if (isEdit && initialData) {
       const enfants: Enfant[] = (initialData.enfants ?? []).map(e => ({
         nom: String((e as Enfant).nom ?? ""),
@@ -177,36 +182,82 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
     }
   }, [open, initialData, isEdit, defaultContractType]);
 
+  /**
+   * Détecte automatiquement N+1 et N+2 depuis un nom de service/département.
+   * 1) Cherche d'abord dans les départements déjà chargés (synchrone).
+   * 2) Appelle l'API si non trouvé en local.
+   */
+  const autoDetectManagers = useCallback(async (deptName: string, fieldUpdated: "service" | "projet") => {
+    if (!deptName) return;
+
+    // ── Recherche locale ──────────────────────────────────────────────────────
+    const allDepts = [...departments, ...departments.flatMap(d => d.children || [])];
+    const selectedDept = allDepts.find(d => d.name === deptName);
+
+    if (selectedDept) {
+      const n1Emp = allEmployees.find(e => e.id === selectedDept.head);
+      const parentDept = departments.find(d => d.children?.some(c => c.name === deptName));
+      const n2Emp = parentDept ? allEmployees.find(e => e.id === parentDept.head) : null;
+
+      if (n2Emp) {
+        setN2ManagerInfo({ id: n2Emp.id, full_name: `${n2Emp.nom} ${n2Emp.prenom}`, email: n2Emp.email || "", fonction: n2Emp.fonction || "", matricule: n2Emp.matricule || "" });
+      }
+
+      setForm(p => ({
+        ...p,
+        [fieldUpdated]: deptName,
+        n1_manager: selectedDept.head ?? p.n1_manager,
+        manager: n1Emp ? `${n1Emp.nom} ${n1Emp.prenom}` : p.manager,
+        manager_email: n1Emp?.email || p.manager_email,
+        n2_manager: n2Emp?.id ?? (parentDept?.head ?? p.n2_manager),
+      }));
+      return;
+    }
+
+    // ── Appel API si non trouvé en local ─────────────────────────────────────
+    setDetectingManagers(true);
+    try {
+      const { n1_manager, n2_manager } = await employeeHierarchyService.getManagersByDepartment(deptName);
+      if (n2_manager) setN2ManagerInfo(n2_manager);
+      setForm(p => ({
+        ...p,
+        [fieldUpdated]: deptName,
+        n1_manager: n1_manager?.id ?? p.n1_manager,
+        manager: n1_manager?.full_name ?? p.manager,
+        manager_email: n1_manager?.email ?? p.manager_email,
+        n2_manager: n2_manager?.id ?? p.n2_manager,
+      }));
+    } catch {
+      // Pas de correspondance dans la hiérarchie → laisser la saisie libre
+      setForm(p => ({ ...p, [fieldUpdated]: deptName }));
+    } finally {
+      setDetectingManagers(false);
+    }
+  }, [departments, allEmployees]);
+
   const ch = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    if (name === "service") {
-      // Quand un département est sélectionné, auto-populer N+1/N+2 depuis la hiérarchie
-      const selectedDept = departments.find(d => d.name === value) ||
-        departments.flatMap(d => d.children || []).find(c => c.name === value);
-      if (selectedDept) {
-        // N+1 = responsable du sous-département sélectionné
-        if (selectedDept.head) {
-          const headEmp = allEmployees.find(e => e.id === selectedDept.head);
-          setForm(p => ({
-            ...p,
-            service: value,
-            n1_manager: selectedDept.head ?? null,
-            manager: headEmp ? `${headEmp.nom} ${headEmp.prenom}` : p.manager,
-            manager_email: headEmp?.email || p.manager_email,
-          }));
-        } else {
-          setForm(p => ({ ...p, service: value }));
-        }
-        // N+2 = responsable du département parent (si sous-département)
-        const parentDept = departments.find(d => d.children?.some(c => c.name === value));
-        if (parentDept?.head) {
-          setForm(p => ({ ...p, n2_manager: parentDept.head ?? null }));
-        }
-        return;
-      }
+    // Auto-détection des managers depuis la hiérarchie pour service et projet
+    if ((name === "service" || name === "projet") && value) {
+      autoDetectManagers(value, name as "service" | "projet");
+      return;
     }
     setForm(p => ({ ...p, [name]: value }));
   };
+
+  // Auto-sync hiérarchie lors de l'ouverture en mode édition
+  // (si l'employé a un service/projet mais pas encore de n1/n2)
+  useEffect(() => {
+    if (!open || !isEdit || !initialData) return;
+    if (initialData.n1_manager) return; // hiérarchie déjà renseignée
+    const deptName = initialData.service || initialData.projet;
+    if (deptName) {
+      // On attend que departments soit chargé
+      if (departments.length > 0) {
+        autoDetectManagers(deptName, initialData.service ? "service" : "projet");
+      }
+    }
+  }, [open, isEdit, initialData, departments, autoDetectManagers]);
 
   const setNbEnfants = (n: number) => {
     const nb = Math.max(0, Math.min(7, n));
@@ -250,6 +301,7 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
   const clearN2 = () => {
     setForm(p => ({ ...p, n2_manager: null }));
     setN2Search("");
+    setN2ManagerInfo(null);
   };
 
   // Filtrage des employés pour les dropdowns
@@ -587,18 +639,34 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                 </F>
               </div>
 
-              <SectionHeader icon={UserCheck} title="Hiérarchie" subtitle="Managers N+1 et N+2 — synchronisés automatiquement avec le module Congés" />
+              <SectionHeader icon={UserCheck} title="Hiérarchie"
+                subtitle={detectingManagers ? "Détection des managers en cours…" : "Managers N+1 et N+2 — détectés automatiquement depuis le département sélectionné"} />
+
+              {detectingManagers && (
+                <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-2">
+                  <span className="inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                  Récupération de la hiérarchie depuis la configuration…
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {/* Manager N+1 (dropdown avec recherche) */}
                 <F label="Manager N+1 (supérieur direct)">
                   <div className="relative">
                     {form.n1_manager ? (
-                      <div className="flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 px-4 py-2.5 text-sm">
-                        <UserCheck className="h-4 w-4 text-green-600 shrink-0" />
-                        <span className="flex-1 text-gray-800 font-medium truncate">{n1Name}</span>
-                        <button type="button" onClick={clearN1}
-                          className="text-gray-400 hover:text-red-500 transition shrink-0"
-                          title="Retirer le manager N+1">×</button>
+                      <div className="flex flex-col gap-1 rounded-lg border border-green-300 bg-green-50 px-4 py-2.5 text-sm">
+                        <div className="flex items-center gap-2">
+                          <UserCheck className="h-4 w-4 text-green-600 shrink-0" />
+                          <span className="flex-1 text-gray-800 font-medium truncate">{n1Name}</span>
+                          <button type="button" onClick={clearN1}
+                            className="text-gray-400 hover:text-red-500 transition shrink-0"
+                            title="Retirer le manager N+1">×</button>
+                        </div>
+                        {form.manager_email && (
+                          <span className="text-xs text-gray-500 ml-6 truncate flex items-center gap-1">
+                            <Mail className="h-3 w-3 text-gray-400 shrink-0" />{form.manager_email}
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <>
@@ -641,12 +709,20 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                 <F label="Manager N+2 (supérieur N+2)">
                   <div className="relative">
                     {form.n2_manager ? (
-                      <div className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm">
-                        <UserCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                        <span className="flex-1 text-gray-800 font-medium truncate">{n2Name}</span>
-                        <button type="button" onClick={clearN2}
-                          className="text-gray-400 hover:text-red-500 transition shrink-0"
-                          title="Retirer le manager N+2">×</button>
+                      <div className="flex flex-col gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm">
+                        <div className="flex items-center gap-2">
+                          <UserCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                          <span className="flex-1 text-gray-800 font-medium truncate">{n2Name}</span>
+                          <button type="button" onClick={clearN2}
+                            className="text-gray-400 hover:text-red-500 transition shrink-0"
+                            title="Retirer le manager N+2">×</button>
+                        </div>
+                        {(n2ManagerInfo?.email || allEmployees.find(e => e.id === form.n2_manager)?.email) && (
+                          <span className="text-xs text-gray-500 ml-6 truncate flex items-center gap-1">
+                            <Mail className="h-3 w-3 text-gray-400 shrink-0" />
+                            {n2ManagerInfo?.email || allEmployees.find(e => e.id === form.n2_manager)?.email}
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <>

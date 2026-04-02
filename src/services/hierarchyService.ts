@@ -87,6 +87,19 @@ export const employeeHierarchyService = {
     });
     return res.data;
   },
+
+  /**
+   * GET /api/employees/hierarchy/by-department/?name=<nom>
+   * Retourne les managers N+1 et N+2 pour un département/service/projet donné.
+   * Utilisé par le formulaire employé pour auto-remplir la hiérarchie.
+   */
+  getManagersByDepartment: async (name: string): Promise<DepartmentManagers> => {
+    const res = await axios.get(`${EMP_API}/hierarchy/by-department/`, {
+      headers: getAuthHeaders(),
+      params: { name },
+    });
+    return res.data;
+  },
 };
 
 export interface HierarchyMini {
@@ -95,6 +108,19 @@ export interface HierarchyMini {
   full_name: string;
   fonction: string;
   service: string;
+}
+
+export interface DepartmentManagerMini {
+  id: number;
+  full_name: string;
+  email: string;
+  fonction: string;
+  matricule: string;
+}
+
+export interface DepartmentManagers {
+  n1_manager: DepartmentManagerMini | null;
+  n2_manager: DepartmentManagerMini | null;
 }
 
 export interface MyHierarchyChain {
