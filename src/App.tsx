@@ -29,9 +29,11 @@ import ManagerDossierPage    from "@/pages/manager/ManagerDossierPage";
 import ManagerApprovalsPage  from "@/pages/manager/ManagerApprovalsPage";
 import { useAuth } from "@/contexts/useAuth";
 // RH espace employé
-import RhLeavesPage   from "@/pages/rh/RhLeavesPage";
-import RhPayslipPage  from "@/pages/rh/RhPayslipPage";
-import RhDossierPage  from "@/pages/rh/RhDossierPage";
+import RhLeavesPage      from "@/pages/rh/RhLeavesPage";
+import RhPayslipPage     from "@/pages/rh/RhPayslipPage";
+import RhDossierPage     from "@/pages/rh/RhDossierPage";
+import RhAttendancePage  from "@/pages/rh/RhAttendancePage";
+import RhApprovalsPage   from "@/pages/rh/RhApprovalsPage";
 
 // ── Helpers de rôles basés sur activeRole ────────────────────────────────────
 
@@ -165,9 +167,11 @@ function App() {
         } />
 
         {/* ── Espace RH — espace employé ───────────────────────── */}
-        <Route path="/rh/my-leaves"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhLeavesPage  /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
-        <Route path="/rh/my-payslips" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhPayslipPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
-        <Route path="/rh/my-dossier"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDossierPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-leaves"      element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhLeavesPage     /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-payslips"    element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhPayslipPage    /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-dossier"     element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDossierPage    /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-attendance"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttendancePage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-approvals"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhApprovalsPage  /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
 
         {/* ── Espace RH ────────────────────────────────────────── */}
         <Route path="/dashboard" element={

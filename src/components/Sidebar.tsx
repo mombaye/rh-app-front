@@ -13,62 +13,82 @@ import {
   CalendarRange,
   UserCircle,
   FolderOpen,
+  ClipboardCheck,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
 
-const navItems = [
-  {
-    label: "Tableau de bord",
-    path: "/dashboard",
-    icon: <LayoutDashboard size={20} />,
-  },
-  {
-    label: "Employés",
-    path: "/employees",
-    icon: <Users2 size={20} />,
-    subItems: [
-      { label: "Internes", path: "/employees/internes" },
-      { label: "Intérimaires", path: "/employees/interims" },
-    ],
-  },
-  {
-    label: "Pointages",
-    path: "/attendance",
-    icon: <Clock size={20} />,
-    subItems: [
-      { label: "Normales", path: "/attendance/normales" },
-      { label: "Shifts", path: "/attendance/shifts" },
-    ],
-  },
-  {
-    label: "Congés/Absences",
-    path: "/leaves",
-    icon: <CalendarDays size={20} />,
-  },
-  {
-    label: "Bulletins Salariés",
-    path: "/payslip",
-    icon: <BadgeDollarSign size={20} />,
-  },
-  {
-    label: "Mon espace",
-    path: "/rh/my",
-    icon: <UserCircle size={20} />,
-    subItems: [
-      { label: "Mes Congés",   path: "/rh/my-leaves"   },
-      { label: "Mes Bulletins", path: "/rh/my-payslips" },
-      { label: "Mon Dossier",  path: "/rh/my-dossier"  },
-    ],
-  },
-];
-
-type NavItem = typeof navItems[0];
+type NavItem = {
+  label: string;
+  path: string;
+  icon: React.ReactNode;
+  subItems?: { label: string; path: string }[];
+};
 
 export default function Sidebar() {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, availableRoles } = useAuth();
+
+  const isRhManager = availableRoles.includes("manager1") || availableRoles.includes("manager2");
+
+  const navItems: NavItem[] = [
+    {
+      label: "Tableau de bord",
+      path: "/dashboard",
+      icon: <LayoutDashboard size={20} />,
+    },
+    {
+      label: "Employés",
+      path: "/employees",
+      icon: <Users2 size={20} />,
+      subItems: [
+        { label: "Internes", path: "/employees/internes" },
+        { label: "Intérimaires", path: "/employees/interims" },
+      ],
+    },
+    {
+      label: "Pointages",
+      path: "/attendance",
+      icon: <Clock size={20} />,
+      subItems: [
+        { label: "Normales", path: "/attendance/normales" },
+        { label: "Shifts", path: "/attendance/shifts" },
+      ],
+    },
+    {
+      label: "Congés/Absences",
+      path: "/leaves",
+      icon: <CalendarDays size={20} />,
+    },
+    {
+      label: "Bulletins Salariés",
+      path: "/payslip",
+      icon: <BadgeDollarSign size={20} />,
+    },
+    ...(isRhManager
+      ? [
+          {
+            label: "Approbation",
+            path: "/rh/my-approvals",
+            icon: <ClipboardCheck size={20} />,
+          },
+        ]
+      : []),
+    {
+      label: "Mon espace",
+      path: "/rh/my",
+      icon: <UserCircle size={20} />,
+      subItems: [
+        { label: "Mes Congés",    path: "/rh/my-leaves"    },
+        { label: "Mes Bulletins", path: "/rh/my-payslips"  },
+        { label: "Mon Dossier",   path: "/rh/my-dossier"   },
+        ...(isRhManager
+          ? [{ label: "Mes Pointages", path: "/rh/my-attendance" }]
+          : []),
+      ],
+    },
+  ];
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() => {

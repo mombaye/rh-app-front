@@ -659,7 +659,11 @@ function ApprovalCard({
 // ─── Page principale ─────────────────────────────────────────────────────────
 type Tab = "pending" | "history";
 
-export default function ManagerApprovalsPage() {
+interface ManagerApprovalsPageProps {
+  layout?: React.ComponentType<{ children: React.ReactNode }>;
+}
+
+export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }: ManagerApprovalsPageProps) {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
 
@@ -773,7 +777,7 @@ export default function ManagerApprovalsPage() {
   ];
 
   return (
-    <ManagerLayout>
+    <Layout>
       <div className="px-4 md:px-6 pb-10">
 
         {/* ── Header ── */}
@@ -1000,6 +1004,6 @@ export default function ManagerApprovalsPage() {
           />
         )}
       </AnimatePresence>
-    </ManagerLayout>
+    </Layout>
   );
 }
