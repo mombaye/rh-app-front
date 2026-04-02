@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AnimatePresence, motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ import {
 import { Department } from "@/types/leave";
 import {
   User, FileText, Users, Landmark, Briefcase,
-  ChevronLeft, ChevronRight, Check,
+  ChevronLeft, ChevronRight, Check, X,
   Mail, Phone, Building2, UserCheck,
   Search, AlertCircle,
 } from "lucide-react";
@@ -443,22 +443,49 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
 
   const isLast = step === STEPS.length;
 
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl w-full max-h-[95vh] flex flex-col p-0 gap-0 overflow-hidden shadow-xl rounded-lg">
+  if (!open) return null;
 
-        {/* ── En-tête du dialogue ── */}
-        <DialogHeader className="px-8 pt-6 pb-5 bg-gradient-to-r from-blue-600 to-blue-500 text-white">
-          <DialogTitle className="text-xl font-bold">
-            {isEdit ? "Modifier l'employé" : "Ajouter un employé"}
-          </DialogTitle>
-          <p className="text-sm mt-1 opacity-90">
-            {isEdit ? "Mettez à jour les informations du dossier" : "Remplissez les étapes pour créer le dossier"}
-          </p>
-        </DialogHeader>
+  return (
+    <AnimatePresence>
+      {open && (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 12 }}
+        transition={{ duration: 0.2 }}
+        className="max-w-3xl w-full max-h-[95vh] flex flex-col bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+
+        {/* ── En-tête ── */}
+        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-500 text-white flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-white/20">
+              <User className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold">
+                {isEdit ? "Modifier l'employé" : "Ajouter un employé"}
+              </h2>
+              <p className="text-sm opacity-80">
+                {isEdit ? "Mettez à jour les informations du dossier" : "Remplissez les étapes pour créer le dossier"}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
         {/* ── Stepper (indicateurs d'étapes) ── */}
-        <div className="px-8 py-4 bg-white border-b border-gray-200">
+        <div className="px-8 py-4 bg-white border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center justify-between">
             {STEPS.map((s, i) => {
               const Icon = s.icon;
@@ -627,22 +654,31 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                 )}
               </div>
 
-              <SectionHeader icon={Building2} title="Organisation" subtitle="Rattachement dans l'entreprise — sélectionner le service pour auto-détecter la hiérarchie" />
+              <SectionHeader icon={Building2} title="Organisation"
+                subtitle={deptOptions.length > 0 ? "Sélectionnez le service — managers N+1/N+2 seront détectés automatiquement depuis la hiérarchie" : "Rattachement dans l'entreprise"} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <F label="Service / Département">
                   {deptOptions.length > 0 ? (
                     <>
-                      <Sel name="service" value={form.service} onChange={ch}
-                        ph="— Sélectionner un département —" opts={deptOptions} />
-                      {form.service && form.n1_manager && (
+                      <div className="relative">
+                        <Sel name="service" value={form.service} onChange={ch}
+                          ph="— Sélectionner un département —" opts={deptOptions} />
+                        {detectingManagers && (
+                          <div className="absolute right-8 top-1/2 -translate-y-1/2">
+                            <span className="inline-block w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        )}
+                      </div>
+                      {form.service && form.n1_manager && !detectingManagers && (
                         <p className="mt-1 text-xs text-emerald-600 flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                          Hiérarchie détectée automatiquement
+                          <UserCheck className="h-3 w-3 shrink-0" />
+                          Manager N+1 détecté automatiquement depuis la hiérarchie
                         </p>
                       )}
                     </>
                   ) : (
                     <Input name="service" value={form.service} onChange={ch}
+                      placeholder="Ex : Informatique, Finance…"
                       className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                   )}
                 </F>
@@ -926,7 +962,7 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
         </div>
 
         {/* ── Pied de page (navigation) ── */}
-        <div className="px-8 py-4 border-t border-gray-200 bg-white flex items-center justify-between gap-3">
+        <div className="px-8 py-4 border-t border-gray-200 bg-white flex items-center justify-between gap-3 flex-shrink-0">
           <Button
             type="button" variant="outline"
             onClick={() => { setStepErrors([]); setTouchedRequired(false); step > 1 ? setStep(s => s - 1) : onClose(); }}
@@ -959,7 +995,9 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
             </Button>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </motion.div>
+    </div>
+      )}
+    </AnimatePresence>
   );
 }
