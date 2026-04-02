@@ -131,6 +131,7 @@ function OrgChartTab() {
   }>({ name: "", code: "", description: "", parent_id: null, head_id: null, dg_validator_id: null });
   const [savingDept, setSavingDept] = useState(false);
   const [deletingDept, setDeletingDept] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   // Assignation en masse des membres d'un département
   const [bulkDept,      setBulkDept]      = useState<Department | null>(null);
@@ -235,11 +236,18 @@ function OrgChartTab() {
     setSavingDept(true);
     try {
       if (editingDept) {
+        const headChanged = editingDept.head !== deptForm.head_id;
         await departmentService.update(editingDept.id, deptForm);
-        toast.success("Département mis à jour — hiérarchie et profils synchronisés automatiquement ✓", { duration: 3500 });
+        // Si le responsable a changé, forcer la synchronisation de tous les employés du département
+        if (headChanged) {
+          await employeeHierarchyService.syncAll();
+          toast.success("Département mis à jour — managers des employés synchronisés ✓", { duration: 4000 });
+        } else {
+          toast.success("Département mis à jour ✓", { duration: 2500 });
+        }
       } else {
         await departmentService.create(deptForm);
-        toast.success("Département créé — hiérarchie synchronisée automatiquement ✓", { duration: 3500 });
+        toast.success("Département créé ✓", { duration: 2500 });
       }
       setShowDeptForm(false);
       setEditingDept(null);
@@ -264,6 +272,24 @@ function OrgChartTab() {
       toast.error("Impossible de supprimer ce département.");
     } finally {
       setDeletingDept(null);
+    }
+  };
+
+  // ── Synchronisation hiérarchie → employés ──────────────────────────────────
+  const handleSync = async () => {
+    setSyncing(true);
+    const toastId = toast.loading("Synchronisation en cours — mise à jour des managers…");
+    try {
+      const result = await employeeHierarchyService.syncAll();
+      toast.success(
+        `Synchronisation terminée — ${result.employees_synced} employé(s) mis à jour`,
+        { id: toastId, duration: 4000 }
+      );
+      load();
+    } catch {
+      toast.error("Erreur lors de la synchronisation.", { id: toastId });
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -294,7 +320,13 @@ function OrgChartTab() {
       ]);
 
       const changed = toAdd.length + toRemove.length;
-      toast.success(`${changed} employé(s) mis à jour ✓`);
+      if (changed > 0) {
+        // Synchroniser la hiérarchie pour que les managers soient auto-assignés aux nouveaux membres
+        await employeeHierarchyService.syncAll();
+        toast.success(`${changed} employé(s) mis à jour — managers synchronisés ✓`, { duration: 4000 });
+      } else {
+        toast.success("Aucun changement.");
+      }
       setBulkDept(null);
       load();
     } catch {
@@ -338,8 +370,14 @@ function OrgChartTab() {
             className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition">
             <Plus size={14} /> Nouveau département
           </button>
-          <button onClick={load} className="p-2 border rounded-xl hover:bg-gray-50 text-gray-400 transition" title="Actualiser">
-            <RefreshCw size={14} />
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 transition disabled:opacity-50"
+            title="Synchroniser la hiérarchie vers les employés — met à jour les managers automatiquement"
+          >
+            {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            {syncing ? "Sync…" : "Synchroniser"}
           </button>
         </div>
       </div>

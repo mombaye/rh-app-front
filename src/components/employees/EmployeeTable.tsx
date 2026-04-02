@@ -738,7 +738,12 @@ export default function EmployeesTable({
                   {(() => {
                     const fromHierarchy = emp.n1_manager_name;
                     const display = fromHierarchy || emp.manager;
-                    if (!display) return <span className="text-slate-300">—</span>;
+                    if (!display) return (
+                      <span className="inline-flex items-center gap-1 text-xs text-amber-500 font-medium italic">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                        Non défini
+                      </span>
+                    );
                     return (
                       <div className="flex items-center gap-1.5 min-w-0">
                         {fromHierarchy && (
