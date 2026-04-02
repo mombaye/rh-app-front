@@ -24,8 +24,7 @@ import {
   EmployeeDocumentsResult,
   ZipImportResult,
 } from "@/services/employeeService";
-import { FaPlus, FaUserCheck, FaUserTimes, FaUsers, FaSync } from "react-icons/fa";
-import { employeeHierarchyService } from "@/services/hierarchyService";
+import { FaPlus, FaUserCheck, FaUserTimes, FaUsers } from "react-icons/fa";
 import {
   FiCheckCircle,
   FiAlertTriangle,
@@ -1226,7 +1225,6 @@ export default function InterneEmployeesPage() {
   const [missionTarget, setMissionTarget]     = useState<Employee | null>(null);
   const [bulkMatOpen, setBulkMatOpen]         = useState(false);
   const [docsOpen, setDocsOpen]               = useState(false);
-  const [syncingHierarchy, setSyncingHierarchy] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -1260,22 +1258,6 @@ export default function InterneEmployeesPage() {
   const handleEdit      = (emp: Employee) => { setSelected(emp); setShowModal(true); };
   const handleCreate    = () => { setSelected(null); setShowModal(true); };
 
-  const handleSyncHierarchy = async () => {
-    setSyncingHierarchy(true);
-    const toastId = toast.loading("Synchronisation hiérarchie → managers en cours…");
-    try {
-      const result = await employeeHierarchyService.syncAll();
-      toast.success(
-        `Managers mis à jour : ${result.employees_synced} employé(s) synchronisé(s)`,
-        { id: toastId, duration: 4000 }
-      );
-      fetchInternalEmployees();
-    } catch {
-      toast.error("Erreur lors de la synchronisation.", { id: toastId });
-    } finally {
-      setSyncingHierarchy(false);
-    }
-  };
   const handleExitClick    = (emp: Employee) => { setExitTarget(emp); setExitOpen(true); };
   const handleMissionClick = (emp: Employee) => { setMissionTarget(emp); setMissionOpen(true); };
 
@@ -1486,16 +1468,6 @@ export default function InterneEmployeesPage() {
               className="hidden"
               onChange={handleFileChange}
             />
-
-            <button
-              onClick={handleSyncHierarchy}
-              disabled={syncingHierarchy}
-              title="Synchroniser les managers depuis la hiérarchie — met à jour automatiquement le manager de chaque employé"
-              className="bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-700 transition disabled:opacity-60"
-            >
-              <FaSync className={syncingHierarchy ? "animate-spin" : ""} />
-              {syncingHierarchy ? "Sync…" : "Sync hiérarchie"}
-            </button>
 
             <button
               onClick={handleCreate}

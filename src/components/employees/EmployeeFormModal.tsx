@@ -1,6 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
@@ -13,7 +12,7 @@ import {
 import { Department } from "@/types/leave";
 import {
   User, FileText, Users, Landmark, Briefcase,
-  ChevronLeft, ChevronRight, Check, X,
+  ChevronRight, Check, X,
   Mail, Phone, Building2, UserCheck,
   Search, AlertCircle,
 } from "lucide-react";
@@ -449,104 +448,79 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
     <AnimatePresence>
       {open && (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.97, y: 12 }}
+        initial={{ opacity: 0, scale: 0.97, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97, y: 12 }}
+        exit={{ opacity: 0, scale: 0.97, y: 10 }}
         transition={{ duration: 0.2 }}
-        className="max-w-3xl w-full max-h-[95vh] flex flex-col bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+        className="w-full max-w-3xl max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
 
-        {/* ── En-tête ── */}
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-500 text-white flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-white/20">
-              <User className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold">
-                {isEdit ? "Modifier l'employé" : "Ajouter un employé"}
-              </h2>
-              <p className="text-sm opacity-80">
-                {isEdit ? "Mettez à jour les informations du dossier" : "Remplissez les étapes pour créer le dossier"}
-              </p>
-            </div>
+        {/* ── En-tête (style BulkMatriculeModal) ── */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">
+              {isEdit ? "Modifier l'employé" : "Ajouter un employé"}
+            </h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {STEPS[step - 1].desc}
+              {touchedRequired && stepErrors.length > 0 && (
+                <span className="ml-2 text-red-500 font-medium">· Champs requis manquants</span>
+              )}
+            </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition"
+            className="text-gray-400 hover:text-gray-600 transition p-1.5 rounded-lg hover:bg-gray-100"
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* ── Stepper (indicateurs d'étapes) ── */}
-        <div className="px-8 py-4 bg-white border-b border-gray-200 flex-shrink-0">
-          <div className="flex items-center justify-between">
+        {/* ── Stepper compact ── */}
+        <div className="px-6 pt-4 pb-3 border-b border-gray-100 shrink-0">
+          <div className="flex items-center gap-1">
             {STEPS.map((s, i) => {
-              const Icon = s.icon;
               const done = step > s.id;
-              const cur = step === s.id;
+              const cur  = step === s.id;
               const hasErr = cur && touchedRequired && stepErrors.length > 0;
               return (
-                <div key={s.id} className="flex items-center flex-1 min-w-0 relative group">
+                <div key={s.id} className="flex items-center flex-1 min-w-0">
                   <button
                     type="button"
                     onClick={() => { setStepErrors([]); setTouchedRequired(false); setStep(s.id); }}
-                    className={`flex-1 flex flex-col items-center gap-1 py-2 px-1 rounded-lg transition-all text-center ${
-                      cur ? "opacity-100" : done ? "opacity-100 cursor-pointer" : "opacity-60 cursor-pointer hover:opacity-90"
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all w-full justify-center ${
+                      hasErr ? "bg-red-50 text-red-600 border border-red-200" :
+                      cur    ? "bg-blue-50 text-blue-700 border border-blue-200" :
+                      done   ? "text-emerald-600 hover:bg-emerald-50" :
+                               "text-gray-400 hover:bg-gray-50"
                     }`}
                   >
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${
-                      hasErr  ? "bg-red-500 border-red-500 text-white shadow-md shadow-red-200" :
-                      cur     ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200" :
-                      done    ? "bg-green-500 border-green-500 text-white" :
-                                "bg-white border-gray-300 text-gray-500 group-hover:border-blue-400"
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                      hasErr ? "bg-red-500 text-white" :
+                      cur    ? "bg-blue-600 text-white" :
+                      done   ? "bg-emerald-500 text-white" :
+                               "bg-gray-200 text-gray-500"
                     }`}>
-                      {hasErr ? <AlertCircle className="h-4 w-4" /> :
-                       done   ? <Check className="h-4 w-4" /> :
-                                <span className="text-xs font-bold">{s.id}</span>}
-                    </div>
-                    <span className={`text-xs font-medium ${
-                      hasErr  ? "text-red-600" :
-                      cur     ? "text-blue-600" :
-                      done    ? "text-green-600" :
-                                "text-gray-500 group-hover:text-blue-500"
-                    }`}>
-                      {s.label}
+                      {hasErr ? "!" : done ? <Check className="h-2.5 w-2.5" /> : s.id}
                     </span>
+                    <span className="truncate hidden sm:block">{s.label}</span>
                   </button>
                   {i < STEPS.length - 1 && (
-                    <div className={`absolute top-1/4 right-0 h-0.5 w-1/3 rounded-full transition-colors ${
-                      step > s.id ? "bg-green-500" : "bg-gray-200 group-hover:bg-blue-200"
-                    }`} />
+                    <div className={`h-px w-3 shrink-0 mx-0.5 rounded-full ${done ? "bg-emerald-400" : "bg-gray-200"}`} />
                   )}
                 </div>
               );
             })}
           </div>
-
-          {/* Erreurs de l'étape courante */}
-          {touchedRequired && stepErrors.length > 0 && (
-            <div className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
-              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-              <span>Veuillez renseigner les champs obligatoires avant de continuer.</span>
-            </div>
-          )}
-
-          <p className="text-xs text-gray-400 mt-2 text-center">
-            Étape <span className="font-semibold text-blue-600">{step}</span>/{STEPS.length}
-            <span className="mx-1.5 text-gray-300">·</span>
-            <span className="text-gray-500">{STEPS[step - 1].desc}</span>
-          </p>
         </div>
 
         {/* ── Corps du formulaire ── */}
-        <div className="flex-1 overflow-y-auto px-8 py-6 bg-gray-50">
+        <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
           {/* ─── Étape 1 : Identité ─── */}
           {step === 1 && (
             <div className="space-y-6">
@@ -962,38 +936,39 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
         </div>
 
         {/* ── Pied de page (navigation) ── */}
-        <div className="px-8 py-4 border-t border-gray-200 bg-white flex items-center justify-between gap-3 flex-shrink-0">
-          <Button
-            type="button" variant="outline"
-            onClick={() => { setStepErrors([]); setTouchedRequired(false); step > 1 ? setStep(s => s - 1) : onClose(); }}
-            className="flex items-center gap-2 text-gray-700 hover:bg-gray-100 border-gray-300"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            {step === 1 ? "Annuler" : "Précédent"}
-          </Button>
-
-          <div className="flex items-center gap-1.5">
-            {STEPS.map(s => (
-              <div key={s.id} className={`h-1.5 rounded-full transition-all ${
-                s.id === step ? "w-8 bg-blue-600" :
-                s.id < step ? "w-2 bg-green-500" :
-                              "w-2 bg-gray-300"
-              }`} />
-            ))}
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3 shrink-0">
+          <p className="text-xs text-gray-400">
+            Étape <span className="font-semibold text-gray-600">{step}</span> / {STEPS.length}
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => { setStepErrors([]); setTouchedRequired(false); step > 1 ? setStep(s => s - 1) : onClose(); }}
+              className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition"
+            >
+              {step === 1 ? "Annuler" : "Précédent"}
+            </button>
+            {isLast ? (
+              <button
+                type="button"
+                onClick={submit}
+                disabled={loading}
+                className="px-5 py-2 rounded-lg bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold flex items-center gap-2 transition disabled:opacity-50"
+              >
+                {loading
+                  ? <><span className="inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />Enregistrement…</>
+                  : <><Check className="h-4 w-4" />{isEdit ? "Enregistrer" : "Créer l'employé"}</>}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={goNext}
+                className="px-5 py-2 rounded-lg bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold flex items-center gap-2 transition"
+              >
+                Suivant <ChevronRight className="h-4 w-4" />
+              </button>
+            )}
           </div>
-
-          {isLast ? (
-            <Button onClick={submit} disabled={loading}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
-              <Check className="h-4 w-4" />
-              {loading ? "Enregistrement…" : isEdit ? "Enregistrer" : "Créer l'employé"}
-            </Button>
-          ) : (
-            <Button type="button" onClick={goNext}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
-              Suivant <ChevronRight className="h-4 w-4" />
-            </Button>
-          )}
         </div>
       </motion.div>
     </div>
