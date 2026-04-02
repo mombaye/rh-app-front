@@ -131,6 +131,8 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
   // Infos enrichies du manager N+2 (email non stocké sur Employee pour N+2)
   const [n2ManagerInfo, setN2ManagerInfo] = useState<DepartmentManagerMini | null>(null);
   const [detectingManagers, setDetectingManagers] = useState(false);
+  // Indique si le projet a été auto-rempli depuis la hiérarchie
+  const [projetFromHierarchy, setProjetFromHierarchy] = useState(false);
 
   // Charger les employés et départements à l'ouverture
   useEffect(() => {
@@ -148,6 +150,7 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
     setTouchedRequired(false);
     setN2ManagerInfo(null);
     setDetectingManagers(false);
+    setProjetFromHierarchy(false);
     if (isEdit && initialData) {
       const enfants: Enfant[] = (initialData.enfants ?? []).map(e => ({
         nom: String((e as Enfant).nom ?? ""),
@@ -203,9 +206,14 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
         setN2ManagerInfo({ id: n2Emp.id, full_name: `${n2Emp.nom} ${n2Emp.prenom}`, email: n2Emp.email || "", fonction: n2Emp.fonction || "", matricule: n2Emp.matricule || "" });
       }
 
+      // Détecter si le projet sera auto-rempli
+      const willFillProjet = fieldUpdated === "service" && !!parentDept;
+      if (willFillProjet) setProjetFromHierarchy(true);
       setForm(p => ({
         ...p,
         [fieldUpdated]: deptName,
+        // Si on sélectionne un sous-département comme service, suggérer le département parent comme projet
+        ...(willFillProjet && !p.projet ? { projet: parentDept!.name } : {}),
         n1_manager: selectedDept.head ?? p.n1_manager,
         manager: n1Emp ? `${n1Emp.nom} ${n1Emp.prenom}` : p.manager,
         manager_email: n1Emp?.email || p.manager_email,
@@ -219,9 +227,19 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
     try {
       const { n1_manager, n2_manager } = await employeeHierarchyService.getManagersByDepartment(deptName);
       if (n2_manager) setN2ManagerInfo(n2_manager);
+      // Rechercher le département parent depuis les données locales (même si le dept n'était pas dans allDepts)
+      const allDepts2 = [...departments, ...departments.flatMap(d => d.children || [])];
+      const selectedDept2 = allDepts2.find(d => d.name === deptName);
+      const parentDept2 = selectedDept2
+        ? departments.find(d => d.children?.some(c => c.name === deptName))
+        : null;
+      const willFillProjet2 = fieldUpdated === "service" && !!parentDept2;
+      if (willFillProjet2) setProjetFromHierarchy(true);
       setForm(p => ({
         ...p,
         [fieldUpdated]: deptName,
+        // Si service = sous-département, suggérer le département parent comme projet
+        ...(willFillProjet2 && !p.projet ? { projet: parentDept2!.name } : {}),
         n1_manager: n1_manager?.id ?? p.n1_manager,
         manager: n1_manager?.full_name ?? p.manager,
         manager_email: n1_manager?.email ?? p.manager_email,
@@ -240,6 +258,8 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
     // Auto-détection des managers depuis la hiérarchie pour service et projet
     if ((name === "service" || name === "projet") && value) {
       autoDetectManagers(value, name as "service" | "projet");
+      // Si l'utilisateur change manuellement le projet, effacer l'indicateur hiérarchie
+      if (name === "projet") setProjetFromHierarchy(false);
       return;
     }
     setForm(p => ({ ...p, [name]: value }));
@@ -607,31 +627,47 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                 )}
               </div>
 
-              <SectionHeader icon={Building2} title="Organisation" subtitle="Rattachement dans l'entreprise" />
+              <SectionHeader icon={Building2} title="Organisation" subtitle="Rattachement dans l'entreprise — sélectionner le service pour auto-détecter la hiérarchie" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <F label="Business Line">
-                  <Input name="business_line" value={form.business_line} onChange={ch}
-                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                <F label="Service / Département">
+                  {deptOptions.length > 0 ? (
+                    <>
+                      <Sel name="service" value={form.service} onChange={ch}
+                        ph="— Sélectionner un département —" opts={deptOptions} />
+                      {form.service && form.n1_manager && (
+                        <p className="mt-1 text-xs text-emerald-600 flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                          Hiérarchie détectée automatiquement
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <Input name="service" value={form.service} onChange={ch}
+                      className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
+                  )}
                 </F>
-                <F label="Projet">
+                <F label={projetFromHierarchy && form.projet ? "Projet (depuis hiérarchie)" : "Projet"}>
                   {/* Dropdown depuis les départements + saisie libre */}
                   {deptOptions.length > 0 ? (
-                    <Sel name="projet" value={form.projet} onChange={ch}
-                      ph="— Sélectionner ou saisir —" opts={deptOptions} />
+                    <>
+                      <Sel name="projet" value={form.projet} onChange={ch}
+                        ph="— Sélectionner ou saisir —" opts={deptOptions} />
+                      {projetFromHierarchy && form.projet && (
+                        <p className="mt-1 text-xs text-emerald-600 flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                          Auto-rempli depuis le département parent
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <Input name="projet" value={form.projet} onChange={ch}
                       placeholder="Nom du projet"
                       className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                   )}
                 </F>
-                <F label="Service / Département">
-                  {deptOptions.length > 0 ? (
-                    <Sel name="service" value={form.service} onChange={ch}
-                      ph="— Sélectionner un département —" opts={deptOptions} />
-                  ) : (
-                    <Input name="service" value={form.service} onChange={ch}
-                      className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
-                  )}
+                <F label="Business Line">
+                  <Input name="business_line" value={form.business_line} onChange={ch}
+                    className="text-sm p-3 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" />
                 </F>
                 <F label="Localisation">
                   <Input name="localisation" value={form.localisation} onChange={ch} placeholder="Dakar, Abidjan…"

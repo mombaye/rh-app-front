@@ -734,7 +734,24 @@ export default function EmployeesTable({
                 <td className="px-4 py-3">
                   <ServiceBadge emp={emp} />
                 </td>
-                <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.manager || <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-sm whitespace-nowrap">
+                  {(() => {
+                    const fromHierarchy = emp.n1_manager_name;
+                    const display = fromHierarchy || emp.manager;
+                    if (!display) return <span className="text-slate-300">—</span>;
+                    return (
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {fromHierarchy && (
+                          <span
+                            title="Manager défini dans la hiérarchie"
+                            className="flex-shrink-0 w-2 h-2 rounded-full bg-emerald-400"
+                          />
+                        )}
+                        <span className="truncate max-w-[150px]" title={display}>{display}</span>
+                      </div>
+                    );
+                  })()}
+                </td>
                 <td className="px-4 py-3 text-sm">{emp.email || <span className="text-slate-300">—</span>}</td>
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.telephone || <span className="text-slate-300">—</span>}</td>
 
