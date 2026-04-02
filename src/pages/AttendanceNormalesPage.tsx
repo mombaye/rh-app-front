@@ -9,6 +9,7 @@ import {
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import {
   getDailyStats, getWeeklyStats, getMonthlyStats, getEmployeePeriodDetail, getShiftDailyStats,
+  sendAttendanceAlert,
 } from "@/services/attendanceService";
 import { getEmployees } from "@/services/employeeService";
 import type {
@@ -81,7 +82,7 @@ interface FlatRecord {
   compensation: CompensationResult; deficit_minutes: number;
   in_time: string | null; out_time: string | null;
   worked_minutes: number; delta_minutes: number; expected_minutes: number;
-  email: string | null;
+  email: string | null; telephone: string | null;
 }
 
 interface SummaryRecord {
@@ -186,11 +187,6 @@ const NORM_DAILY_COLS = ["Matricule","Nom","Projet","Service","Statut","Retard",
 const NORM_SUMM_COLS  = ["Matricule","Nom","Projet","Service","Nb jours","Heures travaillées","% quota (40h)"] as const;
 type NormDailyCol = typeof NORM_DAILY_COLS[number];
 type NormSummCol  = typeof NORM_SUMM_COLS[number];
-
-async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ success: boolean }> {
-  await new Promise((r) => setTimeout(r, 500));
-  return { success: !!emp.email };
-}
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const STATUS_CFG = {
@@ -1132,10 +1128,18 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
 // ─── Modal alerte ─────────────────────────────────────────────────────────────
 function AlertModal({ open, onClose, employee, onConfirm, sending }: {
   open: boolean; onClose: () => void; employee: FlatRecord | null;
-  onConfirm: (m: MotifType) => void; sending: boolean;
+  onConfirm: (m: MotifType, channel: "email" | "sms") => void; sending: boolean;
 }) {
-  const [motif, setMotif] = useState<MotifType>("absent");
-  useEffect(() => { if (employee) setMotif(employee.status === "absent" ? "absent" : "not_pointing"); }, [employee]);
+  const [motif,   setMotif]   = useState<MotifType>("absent");
+  const [channel, setChannel] = useState<"email" | "sms">("email");
+  useEffect(() => {
+    if (employee) {
+      setMotif(employee.status === "absent" ? "absent" : "not_pointing");
+      setChannel(employee.email ? "email" : employee.telephone ? "sms" : "email");
+    }
+  }, [employee]);
+
+  const canSend = channel === "email" ? !!employee?.email : !!employee?.telephone;
 
   return (
     <AnimatePresence>
@@ -1147,6 +1151,7 @@ function AlertModal({ open, onClose, employee, onConfirm, sending }: {
             initial={{ y: 40, scale: 0.97, opacity: 0 }} animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 40, scale: 0.97, opacity: 0 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100 shrink-0">
               <div>
                 <div className="font-bold text-slate-800">Envoyer une alerte</div>
@@ -1154,12 +1159,32 @@ function AlertModal({ open, onClose, employee, onConfirm, sending }: {
               </div>
               <button onClick={onClose} disabled={sending} className="p-1.5 rounded-xl hover:bg-slate-100 transition disabled:opacity-40"><X className="h-4 w-4 text-slate-400" /></button>
             </div>
+
             <div className="px-4 sm:px-6 py-5 space-y-5 overflow-y-auto flex-1">
-              <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${employee.email ? "bg-slate-50" : "bg-red-50 border border-red-100"}`}>
-                <Mail className={`h-4 w-4 shrink-0 ${employee.email ? "text-slate-400" : "text-red-400"}`} />
-                {employee.email ? <span className="text-sm font-mono text-slate-700 truncate">{employee.email}</span>
-                  : <span className="text-sm text-red-500 font-medium flex items-center gap-1.5"><XCircle className="h-3.5 w-3.5" />Aucun email</span>}
+              {/* Canal : Email / SMS */}
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Canal d'envoi</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => setChannel("email")}
+                    className={`flex flex-col items-center gap-2 py-4 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${channel === "email" ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                    <div className={`p-2 rounded-xl ${channel === "email" ? "bg-blue-100" : "bg-slate-100"}`}><Mail className="h-4 w-4" /></div>
+                    <span>Email</span>
+                    {employee.email
+                      ? <span className="text-[10px] font-mono truncate max-w-full px-1 opacity-70">{employee.email}</span>
+                      : <span className="text-[10px] text-red-400 flex items-center gap-0.5"><XCircle className="h-3 w-3" />Aucun</span>}
+                  </button>
+                  <button onClick={() => setChannel("sms")}
+                    className={`flex flex-col items-center gap-2 py-4 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${channel === "sms" ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                    <div className={`p-2 rounded-xl ${channel === "sms" ? "bg-emerald-100" : "bg-slate-100"}`}><Bell className="h-4 w-4" /></div>
+                    <span>SMS</span>
+                    {employee.telephone
+                      ? <span className="text-[10px] font-mono truncate max-w-full px-1 opacity-70">{employee.telephone}</span>
+                      : <span className="text-[10px] text-red-400 flex items-center gap-0.5"><XCircle className="h-3 w-3" />Aucun</span>}
+                  </button>
+                </div>
               </div>
+
+              {/* Motif */}
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Motif</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -1174,11 +1199,12 @@ function AlertModal({ open, onClose, employee, onConfirm, sending }: {
                 </div>
               </div>
             </div>
+
             <div className="px-4 sm:px-6 pb-5 sm:pb-6 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
               <button onClick={onClose} disabled={sending} className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50">Annuler</button>
-              <button onClick={() => onConfirm(motif)} disabled={sending || !employee.email}
+              <button onClick={() => onConfirm(motif, channel)} disabled={sending || !canSend}
                 className={`flex-1 py-2.5 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 disabled:opacity-60 ${
-                  !employee.email ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-camublue-900 hover:bg-camublue-800 text-white"
+                  !canSend ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-camublue-900 hover:bg-camublue-800 text-white"
                 }`}>
                 {sending ? <><Loader2 className="h-4 w-4 animate-spin" />Envoi…</> : <><Send className="h-4 w-4" />Envoyer</>}
               </button>
@@ -1240,8 +1266,8 @@ function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
         <td className="px-4 py-3"><div className="flex justify-center"><CompensationCell c={r.compensation} viewMode={viewMode} /></div></td>
         <td className="px-4 py-3">
           <div className="flex gap-2 justify-center">
-            <button onClick={onAlert} disabled={r.status !== "absent" || !r.email}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
+            <button onClick={onAlert} disabled={r.status !== "absent" || (!r.email && !r.telephone)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && (r.email || r.telephone) ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
               <Bell className="h-3 w-3" />Alerter
             </button>
             <button onClick={onDetail} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
@@ -1274,8 +1300,8 @@ function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
                 <OvertimeBadge minutes={r.overtime_minutes} />
               </div>
               <div className="flex gap-2 pt-1">
-                <button onClick={onAlert} disabled={r.status !== "absent" || !r.email}
-                  className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email ? "bg-red-50 hover:bg-red-100 text-red-700" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
+                <button onClick={onAlert} disabled={r.status !== "absent" || (!r.email && !r.telephone)}
+                  className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && (r.email || r.telephone) ? "bg-red-50 hover:bg-red-100 text-red-700" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
                   <Bell className="h-3 w-3" />Alerter
                 </button>
                 <button onClick={onDetail} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
@@ -1375,6 +1401,7 @@ export default function AttendanceNormalesPage() {
   const [exportSummaryCols,setExportSummaryCols]= useState<NormSummCol[]>([...NORM_SUMM_COLS]);
 
   const [emailMap,      setEmailMap]      = useState<Map<string,string>>(new Map());
+  const [phoneMap,      setPhoneMap]      = useState<Map<string,string>>(new Map());
   const [departmentMap, setDepartmentMap] = useState<Map<string,string>>(new Map());
   const [projectMap,    setProjectMap]    = useState<Map<string,string>>(new Map());
   const [shiftMatricules, setShiftMatricules] = useState<Set<string>>(new Set());
@@ -1433,10 +1460,12 @@ export default function AttendanceNormalesPage() {
     getEmployees()
       .then((list: Employee[]) => {
         const m  = new Map<string,string>();
+        const ph = new Map<string,string>();
         const dm = new Map<string,string>();
         const pm = new Map<string,string>();
         list.forEach((e) => {
           if (e.matricule && e.email)       m.set(e.matricule, e.email);
+          if (e.matricule && (e as any).telephone) ph.set(e.matricule, (e as any).telephone);
           if (e.matricule && (e.department ?? (e as any).service))
             dm.set(e.matricule, (e.department ?? (e as any).service).toUpperCase());
           const proj = (e as any).project ?? (e as any).projet ?? (e as any).project_name ?? (e as any).site ?? null;
@@ -1444,6 +1473,7 @@ export default function AttendanceNormalesPage() {
             pm.set(e.matricule, String(proj).toUpperCase());
         });
         setEmailMap(m);
+        setPhoneMap(ph);
         setDepartmentMap(dm);
         setProjectMap(pm);
       }).catch(console.error);
@@ -1503,6 +1533,7 @@ export default function AttendanceNormalesPage() {
         delta_minutes: r.delta_minutes ?? 0,
         expected_minutes: isDaily ? effectiveWorkMin : (r.expected_minutes ?? 0),
         email: r.email ?? emailMap.get(mat) ?? null,
+        telephone: r.telephone ?? phoneMap.get(mat) ?? null,
       };
     };
 
@@ -1510,7 +1541,7 @@ export default function AttendanceNormalesPage() {
     if (viewMode === "weekly"  && weekly)  return weekly.by_employee.filter(isNormal).map((r: any) => map(r, false));
     if (viewMode === "monthly" && monthly) return monthly.by_employee.filter(isNormal).map((r: any) => map(r, false));
     return [];
-  }, [viewMode, daily, weekly, monthly, emailMap, effectiveSchedule, shiftMatricules, projectMap]);
+  }, [viewMode, daily, weekly, monthly, emailMap, phoneMap, effectiveSchedule, shiftMatricules, projectMap]);
 
   // ── Transformation → SummaryRecord (hebdo / mensuel) ─────────────────────
   const summaryRecords = useMemo((): SummaryRecord[] => {
@@ -1595,13 +1626,22 @@ export default function AttendanceNormalesPage() {
     return pages;
   };
 
-  const handleSendAlert = async (motif: MotifType) => {
+  const handleSendAlert = async (motif: MotifType, channel: "email" | "sms") => {
     if (!selectedEmployee) return;
     setSendingAlert(true);
-    const res = await sendAlertEmail(selectedEmployee, motif);
-    setSendingAlert(false);
-    alert(res.success ? `Alerte envoyée à ${selectedEmployee.email}` : "Échec de l'envoi.");
-    setAlertModalOpen(false); setSelectedEmployee(null);
+    try {
+      const res = await sendAttendanceAlert({ employee_id: selectedEmployee.employee_id, motif, channel });
+      if (res.ok) {
+        alert(`Alerte envoyée avec succès via ${channel === "sms" ? "SMS" : "Email"} à ${res.recipient ?? "—"}`);
+        setAlertModalOpen(false); setSelectedEmployee(null);
+      } else {
+        alert(`Échec de l'envoi : ${res.error ?? "Erreur inconnue"}`);
+      }
+    } catch {
+      alert("Erreur lors de l'envoi de l'alerte.");
+    } finally {
+      setSendingAlert(false);
+    }
   };
 
   const handleExport = () => setShowExportDlg(true);

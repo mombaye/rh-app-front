@@ -15,7 +15,7 @@ import {
   getShiftDailyStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning,
   getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
-  updateAttendanceRecord,
+  updateAttendanceRecord, sendAttendanceAlert,
 } from "@/services/attendanceService";
 import type { PlanningEntry } from "@/services/attendanceService";
 import { parseNOCPlanningExcel, cellToDateStr, extractMonthYearFromSheetName } from "@/utils/planningParser";
@@ -52,7 +52,7 @@ interface FlatRecord {
   computed_late_minutes: number; overtime_minutes: number;
   compensation: CompensationResult; deficit_minutes: number;
   in_time: string | null; out_time: string | null;
-  worked_minutes: number; expected_minutes: number; email: string | null;
+  worked_minutes: number; expected_minutes: number; email: string | null; telephone: string | null;
   shift_team: ShiftTeamKey | null; shift_team_label: string;
   is_scheduled: boolean;
   is_replacement: boolean;
@@ -357,11 +357,6 @@ const SHIFT_DAILY_COLS = ["Matricule","Nom","Projet","Département","Équipe","S
 const SHIFT_SUMM_COLS  = ["Matricule","Nom","Projet","Département","Équipe","Jours présents","Jours absents","Jours retard","Jours anomalie","Heures travaillées","Heures attendues","Delta","% quota"] as const;
 type ShiftDailyCol = typeof SHIFT_DAILY_COLS[number];
 type ShiftSummCol  = typeof SHIFT_SUMM_COLS[number];
-
-async function sendAlertEmail(emp: FlatRecord, motif: MotifType): Promise<{ success: boolean }> {
-  await new Promise((r) => setTimeout(r, 500));
-  return { success: !!emp.email };
-}
 
 
 
@@ -1443,32 +1438,63 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
 // ============================================================================
 
 function AlertModal({ open, onClose, employee, onConfirm, sending }: {
-  open: boolean; onClose: () => void; employee: FlatRecord | null; onConfirm: (m: MotifType) => void; sending: boolean;
+  open: boolean; onClose: () => void; employee: FlatRecord | null;
+  onConfirm: (m: MotifType, channel: "email" | "sms") => void; sending: boolean;
 }) {
-  const [motif, setMotif] = useState<MotifType>("absent");
-  useEffect(() => { if (employee) setMotif(employee.status === "absent" ? "absent" : "not_pointing"); }, [employee]);
+  const [motif,   setMotif]   = useState<MotifType>("absent");
+  const [channel, setChannel] = useState<"email" | "sms">("email");
+  useEffect(() => {
+    if (employee) {
+      setMotif(employee.status === "absent" ? "absent" : "not_pointing");
+      setChannel(employee.email ? "email" : employee.telephone ? "sms" : "email");
+    }
+  }, [employee]);
+
+  const canSend = channel === "email" ? !!employee?.email : !!employee?.telephone;
+
   return (
     <AnimatePresence>
       {open && employee && (
         <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !sending && onClose()}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <motion.div className="relative bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-sm overflow-hidden z-10"
+          <motion.div className="relative bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-sm overflow-hidden z-10 max-h-[90vh] flex flex-col"
             initial={{ y: 40, scale: 0.97, opacity: 0 }} animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 40, scale: 0.97, opacity: 0 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
               <div><div className="font-bold text-slate-800">Envoyer une alerte</div><div className="text-xs text-slate-400 mt-0.5 truncate max-w-[230px]">{employee.full_name}</div></div>
               <button onClick={onClose} disabled={sending} className="p-1.5 rounded-xl hover:bg-slate-100 transition disabled:opacity-40"><X className="h-4 w-4 text-slate-400" /></button>
             </div>
-            <div className="px-5 py-4 space-y-4">
-              <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${employee.email ? "bg-slate-50" : "bg-red-50 border border-red-100"}`}>
-                <Mail className={`h-4 w-4 shrink-0 ${employee.email ? "text-slate-400" : "text-red-400"}`} />
-                {employee.email
-                  ? <span className="text-sm font-mono text-slate-700 truncate">{employee.email}</span>
-                  : <span className="text-sm text-red-500 font-medium flex items-center gap-1.5"><XCircle className="h-3.5 w-3.5" />Aucun email</span>}
+
+            <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
+              {/* Canal : Email / SMS */}
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Canal d'envoi</p>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  <button onClick={() => setChannel("email")}
+                    className={`flex flex-col items-center gap-2 py-4 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${channel === "email" ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                    <div className={`p-2 rounded-xl ${channel === "email" ? "bg-blue-100" : "bg-slate-100"}`}><Mail className="h-4 w-4" /></div>
+                    <span>Email</span>
+                    {employee.email
+                      ? <span className="text-[10px] font-mono truncate max-w-full px-1 opacity-70">{employee.email}</span>
+                      : <span className="text-[10px] text-red-400 flex items-center gap-0.5"><XCircle className="h-3 w-3" />Aucun</span>}
+                  </button>
+                  <button onClick={() => setChannel("sms")}
+                    className={`flex flex-col items-center gap-2 py-4 px-3 rounded-2xl border-2 text-sm font-semibold transition-all ${channel === "sms" ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                    <div className={`p-2 rounded-xl ${channel === "sms" ? "bg-emerald-100" : "bg-slate-100"}`}><Bell className="h-4 w-4" /></div>
+                    <span>SMS</span>
+                    {employee.telephone
+                      ? <span className="text-[10px] font-mono truncate max-w-full px-1 opacity-70">{employee.telephone}</span>
+                      : <span className="text-[10px] text-red-400 flex items-center gap-0.5"><XCircle className="h-3 w-3" />Aucun</span>}
+                  </button>
+                </div>
               </div>
+
+              {/* Motif */}
               <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <p className="col-span-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Motif</p>
                 {[
                   { id: "absent", icon: <UserMinus className="h-4 w-4" />, label: "Absence", border: "border-red-400 bg-red-50 text-red-700" },
                   { id: "not_pointing", icon: <AlertTriangle className="h-4 w-4" />, label: "Non pointage", border: "border-amber-400 bg-amber-50 text-amber-700" },
@@ -1480,10 +1506,11 @@ function AlertModal({ open, onClose, employee, onConfirm, sending }: {
                 ))}
               </div>
             </div>
-            <div className="px-5 pb-6 flex gap-3">
+
+            <div className="px-5 pb-6 flex gap-3 shrink-0">
               <button onClick={onClose} disabled={sending} className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50">Annuler</button>
-              <button onClick={() => onConfirm(motif)} disabled={sending || !employee.email}
-                className={`flex-1 py-2.5 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 ${!employee.email ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-camublue-900 hover:bg-camublue-800 text-white"} disabled:opacity-60`}>
+              <button onClick={() => onConfirm(motif, channel)} disabled={sending || !canSend}
+                className={`flex-1 py-2.5 rounded-2xl text-sm font-semibold transition flex items-center justify-center gap-2 ${!canSend ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-camublue-900 hover:bg-camublue-800 text-white"} disabled:opacity-60`}>
                 {sending ? <><Loader2 className="h-4 w-4 animate-spin" />Envoi…</> : <><Send className="h-4 w-4" />Envoyer</>}
               </button>
             </div>
@@ -1687,9 +1714,9 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
         <td className="hidden xl:table-cell px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center"><CompensationCell c={r.compensation} /></div></td>
         <td className="px-2 py-2 lg:px-4 lg:py-3">
           <div className="flex gap-1 lg:gap-2 justify-center">
-            <button onClick={onAlert} disabled={r.status !== "absent" || !r.email || r.not_scheduled_rest}
+            <button onClick={onAlert} disabled={r.status !== "absent" || (!r.email && !r.telephone) || r.not_scheduled_rest}
               title="Alerter"
-              className={`inline-flex items-center gap-1 px-2 py-1.5 lg:px-3 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email && !r.not_scheduled_rest ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
+              className={`inline-flex items-center gap-1 px-2 py-1.5 lg:px-3 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && (r.email || r.telephone) && !r.not_scheduled_rest ? "bg-red-50 hover:bg-red-100 text-red-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
               <Bell className="h-3 w-3" /><span className="hidden xl:inline">Alerter</span>
             </button>
             <button onClick={onDetail} title="Détail" className="inline-flex items-center gap-1 px-2 py-1.5 lg:px-3 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
@@ -1739,8 +1766,8 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
                 )}
               </div>
               <div className="flex flex-wrap gap-2 pt-1">
-                <button onClick={onAlert} disabled={r.status !== "absent" || !r.email || r.not_scheduled_rest}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && r.email && !r.not_scheduled_rest ? "bg-red-50 hover:bg-red-100 text-red-700" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
+                <button onClick={onAlert} disabled={r.status !== "absent" || (!r.email && !r.telephone) || r.not_scheduled_rest}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${r.status === "absent" && (r.email || r.telephone) && !r.not_scheduled_rest ? "bg-red-50 hover:bg-red-100 text-red-700" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
                   <Bell className="h-3 w-3" />Alerter
                 </button>
                 <button onClick={onDetail} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">Détail</button>
@@ -2074,6 +2101,7 @@ export default function AttendanceShiftsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [emailMap, setEmailMap] = useState<Map<string, string>>(new Map());
+  const [phoneMap, setPhoneMap] = useState<Map<string, string>>(new Map());
   const [departmentMap, setDepartmentMap] = useState<Map<string, string>>(new Map());
   const [projectMap, setProjectMap] = useState<Map<string, string>>(new Map());
   const [showExportDlg,    setShowExportDlg]    = useState(false);
@@ -2167,19 +2195,21 @@ export default function AttendanceShiftsPage() {
   useEffect(() => {
     getEmployees().then((list: Employee[]) => {
       setEmployeesList(list);
-      const m = new Map<string, string>();
+      const m  = new Map<string, string>();
+      const ph = new Map<string, string>();
       const dm = new Map<string, string>();
       const pm = new Map<string, string>();
       const apiAssignments: AssignmentMap = {};
       list.forEach((e) => {
         if (e.matricule && e.email) m.set(e.matricule, e.email);
+        if (e.matricule && (e as any).telephone) ph.set(e.matricule, (e as any).telephone);
         if (e.matricule && (e.department ?? (e as any).service))
           dm.set(e.matricule, (e.department ?? (e as any).service).toUpperCase());
         const proj = (e as any).project ?? (e as any).projet ?? (e as any).project_name ?? (e as any).site ?? null;
         if (e.matricule && proj) pm.set(e.matricule, String(proj).toUpperCase());
         if (e.matricule && (e as any).shift_team) apiAssignments[e.matricule] = (e as any).shift_team;
       });
-      setEmailMap(m); setDepartmentMap(dm); setProjectMap(pm);
+      setEmailMap(m); setPhoneMap(ph); setDepartmentMap(dm); setProjectMap(pm);
       setAssignments((prev) => ({ ...apiAssignments, ...prev }));
     }).catch(console.error);
   }, []);
@@ -2270,6 +2300,7 @@ export default function AttendanceShiftsPage() {
         worked_minutes: r.worked_minutes,
         expected_minutes: r.expected_minutes,
         email: emailMap.get(r.matricule) ?? (r as any).email ?? null,
+        telephone: phoneMap.get(r.matricule) ?? (r as any).telephone ?? null,
         shift_team: r.shift_team,
         shift_team_label: SHIFT_TEAMS.find(t => t.key === r.shift_team)?.label ?? "",
         is_scheduled: r.is_planned,
@@ -2289,7 +2320,7 @@ export default function AttendanceShiftsPage() {
       if (sa !== sb) return sa - sb;
       return a.full_name.localeCompare(b.full_name);
     });
-  }, [shiftData, emailMap, viewMode, projectMap, departmentMap]);
+  }, [shiftData, emailMap, phoneMap, viewMode, projectMap, departmentMap]);
 
   const summaryRecords = useMemo((): SummaryRecord[] => {
     const resolveDept = (r: any) => (r.department ?? r.service ?? departmentMap.get(r.matricule ?? "") ?? "—").toUpperCase();
@@ -2441,13 +2472,22 @@ export default function AttendanceShiftsPage() {
     return pages;
   };
 
-  const handleSendAlert = async (motif: MotifType) => {
+  const handleSendAlert = async (motif: MotifType, channel: "email" | "sms") => {
     if (!selectedEmployee) return;
     setSendingAlert(true);
-    const res = await sendAlertEmail(selectedEmployee, motif);
-    setSendingAlert(false);
-    alert(res.success ? `Alerte envoyée à ${selectedEmployee.email}` : "Échec de l'envoi.");
-    setAlertModalOpen(false); setSelectedEmployee(null);
+    try {
+      const res = await sendAttendanceAlert({ employee_id: selectedEmployee.employee_id, motif, channel });
+      if (res.ok) {
+        alert(`Alerte envoyée avec succès via ${channel === "sms" ? "SMS" : "Email"} à ${res.recipient ?? "—"}`);
+        setAlertModalOpen(false); setSelectedEmployee(null);
+      } else {
+        alert(`Échec de l'envoi : ${res.error ?? "Erreur inconnue"}`);
+      }
+    } catch {
+      alert("Erreur lors de l'envoi de l'alerte.");
+    } finally {
+      setSendingAlert(false);
+    }
   };
 
   const handleExport = () => setShowExportDlg(true);

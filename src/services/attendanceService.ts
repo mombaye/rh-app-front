@@ -159,3 +159,13 @@ export async function updateAttendanceRecord(params: {
   const { data } = await api.patch("/api/attendance/record/update/", params);
   return data;
 }
+
+/** Envoi manuel d'une alerte (Email ou SMS) à un employé. */
+export async function sendAttendanceAlert(params: {
+  employee_id: number;
+  motif: "absent" | "not_pointing";
+  channel: "email" | "sms";
+}): Promise<{ ok: boolean; channel: string; recipient?: string; error?: string }> {
+  const { data } = await api.post("/api/attendance/alerts/send/", params);
+  return data;
+}
