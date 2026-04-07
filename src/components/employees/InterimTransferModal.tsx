@@ -22,7 +22,6 @@ interface Props {
 export default function InterimTransferModal({ open, employee, onClose, onSuccess }: Props) {
   const [newMatricule,        setNewMatricule]        = useState("");
   const [newTypeContrat,      setNewTypeContrat]       = useState<"CDI" | "CDD" | "STAGE">("CDI");
-  const [dateEmbauche,        setDateEmbauche]         = useState(() => new Date().toISOString().slice(0, 10));
   const [dateFinCdd,          setDateFinCdd]           = useState("");
   const [dateFinPeriodeEssai, setDateFinPeriodeEssai]  = useState("");
   const [description,         setDescription]          = useState("");
@@ -32,7 +31,6 @@ export default function InterimTransferModal({ open, employee, onClose, onSucces
     if (open) {
       setNewMatricule("");
       setNewTypeContrat("CDI");
-      setDateEmbauche(new Date().toISOString().slice(0, 10));
       setDateFinCdd("");
       setDateFinPeriodeEssai("");
       setDescription("");
@@ -54,12 +52,11 @@ export default function InterimTransferModal({ open, employee, onClose, onSucces
     setLoading(true);
     try {
       const result = await convertInterim(employee!.id, {
-        new_matricule:           newMatricule.trim(),
-        new_type_contrat:        newTypeContrat,
-        date_embauche:           dateEmbauche,
-        date_fin_cdd:            isCdd   ? dateFinCdd            : undefined,
-        date_fin_periode_essai:  (isCdd || isStage) ? dateFinPeriodeEssai || undefined : undefined,
-        description:             description.trim() || undefined,
+        new_matricule:          newMatricule.trim(),
+        new_type_contrat:       newTypeContrat,
+        date_fin_cdd:           isCdd ? dateFinCdd : undefined,
+        date_fin_periode_essai: (isCdd || isStage) ? dateFinPeriodeEssai || undefined : undefined,
+        description:            description.trim() || undefined,
       });
       toast.success(result.message);
       onSuccess(result.employee);
@@ -236,7 +233,7 @@ export default function InterimTransferModal({ open, employee, onClose, onSucces
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={loading || !newMatricule.trim() || !dateEmbauche || (isCdd && !dateFinCdd)}
+                disabled={loading || !newMatricule.trim() || (isCdd && !dateFinCdd)}
                 className="flex items-center gap-2 px-5 py-2 rounded-lg bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-medium transition-colors disabled:opacity-50"
               >
                 {loading
