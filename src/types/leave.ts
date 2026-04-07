@@ -75,6 +75,10 @@ export interface LeaveRequest {
   second_reviewer:          EmployeeMini | null;
   second_reviewed_at:       string | null;
 
+  // Validation RH finale
+  hr_reviewer:    EmployeeMini | null;
+  hr_reviewed_at: string | null;
+
   // Révocation
   revoke_reason:                string;
   revoked_by:                   EmployeeMini | null;

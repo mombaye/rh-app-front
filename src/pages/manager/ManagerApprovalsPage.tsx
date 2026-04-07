@@ -531,14 +531,302 @@ function InProgressAlertModal({ req, onClose }: { req: LeaveRequest; onClose: ()
   );
 }
 
+// ─── Modal Détails Demande ────────────────────────────────────────────────────
+function LeaveDetailModal({
+  req, onClose, onApprove, onReject,
+}: {
+  req: LeaveRequest;
+  onClose: () => void;
+  onApprove?: () => void;
+  onReject?: () => void;
+}) {
+  const cfg  = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
+  const Icon = cfg.Icon;
+  const days = parseFloat(req.days) || 0;
+  const isPending = req.status === "PENDING" || req.status === "PENDING_SECOND";
+
+  const initials = req.employee.full_name
+    .split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+
+  const BASE_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8030";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0,  scale: 1    }}
+        exit={{    opacity: 0, y: 24, scale: 0.97 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col"
+      >
+        {/* ── Header ── */}
+        <div className="bg-gradient-to-r from-[#003c71] to-blue-700 px-6 py-5 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0"
+              style={{ backgroundColor: "rgba(255,255,255,0.25)" }}
+            >
+              {initials}
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-base leading-tight">{req.employee.full_name}</h3>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                  style={{ backgroundColor: cfg.bg, color: cfg.color }}
+                >
+                  <Icon size={9} />
+                  {cfg.label}
+                </span>
+                <span className="text-blue-200 text-xs">#{req.id}</span>
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white transition">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* ── Body scrollable ── */}
+        <div className="overflow-y-auto flex-1 p-5 space-y-4">
+
+          {/* Employé */}
+          <div className="bg-gray-50 rounded-xl p-4 space-y-1.5">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Employé</p>
+            <div className="flex items-center gap-2 text-sm">
+              <Hash size={13} className="text-gray-400 shrink-0" />
+              <span className="font-semibold text-gray-700">{req.employee.matricule}</span>
+            </div>
+            {req.employee.fonction && (
+              <div className="flex items-center gap-2 text-sm">
+                <Briefcase size={13} className="text-gray-400 shrink-0" />
+                <span className="text-gray-600">{req.employee.fonction}</span>
+              </div>
+            )}
+            {req.employee.service && (
+              <div className="flex items-center gap-2 text-sm">
+                <Building2 size={13} className="text-gray-400 shrink-0" />
+                <span className="text-gray-600">{req.employee.service}</span>
+              </div>
+            )}
+            {req.employee.n1_manager_name && (
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <User size={12} className="text-gray-300 shrink-0" />
+                Manager N+1 : <span className="font-medium">{req.employee.n1_manager_name}</span>
+              </div>
+            )}
+            {req.employee.n2_manager_name && (
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <User size={12} className="text-gray-300 shrink-0" />
+                Manager N+2 : <span className="font-medium">{req.employee.n2_manager_name}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Congé */}
+          <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Congé</p>
+            <div className="flex items-center gap-2">
+              <span
+                className="w-3 h-3 rounded-full shrink-0"
+                style={{ backgroundColor: req.leave_type.color || "#3b82f6" }}
+              />
+              <span className="font-semibold text-gray-800 text-sm">{req.leave_type.label}</span>
+              <span className="text-xs text-gray-400">({req.leave_type.code})</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Calendar size={13} className="text-gray-400 shrink-0" />
+              {fmt(req.start_date)}
+              {req.half_day_start && <span className="text-xs text-gray-400">(après-midi)</span>}
+              <span className="text-gray-400">→</span>
+              {fmt(req.end_date)}
+              {req.half_day_end && <span className="text-xs text-gray-400">(matin)</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">
+                {days} jour{days > 1 ? "s" : ""}
+              </span>
+              {!req.leave_type.is_paid && (
+                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md">Non payé</span>
+              )}
+            </div>
+            {req.motif && (
+              <div className="flex items-start gap-2 mt-1 pt-1 border-t border-gray-200">
+                <MessageSquare size={13} className="text-gray-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-gray-500 italic">"{req.motif}"</p>
+              </div>
+            )}
+          </div>
+
+          {/* Workflow */}
+          <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Workflow d'approbation</p>
+
+            {/* N+1 */}
+            <div className="flex items-center gap-2">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                req.reviewed_by ? "bg-green-100" : req.status === "REJECTED" ? "bg-red-100" : "bg-amber-100"
+              }`}>
+                {req.reviewed_by
+                  ? <CheckCircle2 size={13} className="text-green-600" />
+                  : req.status === "REJECTED"
+                    ? <XCircle size={13} className="text-red-500" />
+                    : <Clock size={13} className="text-amber-500" />
+                }
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-700">
+                  Validation N+1 {req.reviewed_by ? `— ${req.reviewed_by.full_name}` : req.status === "PENDING" ? "— En attente" : ""}
+                </p>
+                {req.reviewed_at && (
+                  <p className="text-[11px] text-gray-400">{fmt(req.reviewed_at.slice(0, 10))}</p>
+                )}
+                {req.reject_reason && (
+                  <p className="text-[11px] text-red-500 mt-0.5">Motif : {req.reject_reason}</p>
+                )}
+              </div>
+            </div>
+
+            {/* N+2 si applicable */}
+            {req.requires_second_approval && (
+              <div className="flex items-center gap-2">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                  req.second_reviewer ? "bg-green-100" : "bg-orange-100"
+                }`}>
+                  {req.second_reviewer
+                    ? <CheckCircle2 size={13} className="text-green-600" />
+                    : <Clock size={13} className="text-orange-500" />
+                  }
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-700">
+                    Validation N+2 {req.second_reviewer ? `— ${req.second_reviewer.full_name}` : "— En attente"}
+                  </p>
+                  {req.second_reviewed_at && (
+                    <p className="text-[11px] text-gray-400">{fmt(req.second_reviewed_at.slice(0, 10))}</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Justificatif */}
+          {req.leave_type.requires_justification && (
+            <div className={`rounded-xl p-4 space-y-1.5 ${
+              req.justification_document
+                ? "bg-emerald-50 border border-emerald-200"
+                : req.justification_pending
+                  ? "bg-amber-50 border border-amber-200"
+                  : "bg-gray-50"
+            }`}>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Justificatif</p>
+              {req.justification_document ? (
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-emerald-700">Document soumis</p>
+                    {req.justification_validated && (
+                      <p className="text-[11px] text-emerald-600">
+                        Validé{req.justification_validated_by ? ` par ${req.justification_validated_by.full_name}` : ""}
+                      </p>
+                    )}
+                  </div>
+                  <a
+                    href={req.justification_document.startsWith("http") ? req.justification_document : `${BASE_URL}${req.justification_document}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-emerald-700 hover:underline flex items-center gap-1 font-medium"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <FileText size={12} />
+                    Voir
+                  </a>
+                </div>
+              ) : req.justification_pending ? (
+                <div className="flex items-center gap-2">
+                  <AlertCircle size={14} className="text-amber-500 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-700">Justificatif non soumis</p>
+                    {req.justification_deadline && (
+                      <p className="text-[11px] text-amber-600">Délai : {fmt(req.justification_deadline)}</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">Justificatif à fournir après le congé</p>
+              )}
+            </div>
+          )}
+
+          {/* Document optionnel si pas requis */}
+          {!req.leave_type.requires_justification && req.justification_document && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-center gap-2">
+              <FileText size={14} className="text-blue-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-blue-700">Document joint</p>
+              </div>
+              <a
+                href={req.justification_document.startsWith("http") ? req.justification_document : `${BASE_URL}${req.justification_document}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-700 hover:underline flex items-center gap-1 font-medium"
+                onClick={e => e.stopPropagation()}
+              >
+                <FileText size={12} />
+                Voir
+              </a>
+            </div>
+          )}
+
+          {/* Date de demande */}
+          <p className="text-[11px] text-gray-400 text-right">
+            Demande créée le {fmt(req.created_at.slice(0, 10))}
+          </p>
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="shrink-0 px-5 pb-5 pt-3 border-t border-gray-100">
+          {isPending && onApprove && onReject ? (
+            <div className="flex gap-3">
+              <button
+                onClick={() => { onClose(); onReject(); }}
+                className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 transition flex items-center justify-center gap-2"
+              >
+                <ThumbsDown size={14} /> Rejeter
+              </button>
+              <button
+                onClick={() => { onClose(); onApprove(); }}
+                className="flex-[2] py-2.5 rounded-xl bg-green-500 text-white text-sm font-bold hover:bg-green-600 transition flex items-center justify-center gap-2 shadow-sm"
+              >
+                <ThumbsUp size={14} /> Approuver
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onClose}
+              className="w-full py-2.5 rounded-xl bg-[#003c71] text-white text-sm font-bold hover:bg-[#002d56] transition"
+            >
+              Fermer
+            </button>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Carte de demande ────────────────────────────────────────────────────────
 function ApprovalCard({
-  req, onApprove, onReject, onCancel, isHistory,
+  req, onApprove, onReject, onCancel, onDetail, isHistory,
 }: {
   req: LeaveRequest;
   onApprove?: () => void;
   onReject?: () => void;
   onCancel?: () => void;
+  onDetail?: () => void;
   isHistory?: boolean;
 }) {
   const cfg  = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
@@ -552,7 +840,8 @@ function ApprovalCard({
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+      onClick={onDetail}
+      className={`bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden ${onDetail ? "cursor-pointer" : ""}`}
     >
       <div className="p-4">
         <div className="flex items-start gap-3">
@@ -626,13 +915,13 @@ function ApprovalCard({
           {!isHistory && onApprove && onReject && (
             <div className="flex flex-col gap-2 shrink-0">
               <button
-                onClick={onApprove}
+                onClick={e => { e.stopPropagation(); onApprove(); }}
                 className="flex items-center gap-1.5 text-xs text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-lg transition font-medium border border-green-200 hover:border-green-400 whitespace-nowrap"
               >
                 <ThumbsUp size={12} /> Approuver
               </button>
               <button
-                onClick={onReject}
+                onClick={e => { e.stopPropagation(); onReject(); }}
                 className="flex items-center gap-1.5 text-xs text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition font-medium border border-red-200 hover:border-red-400 whitespace-nowrap"
               >
                 <ThumbsDown size={12} /> Rejeter
@@ -643,7 +932,7 @@ function ApprovalCard({
           {isHistory && req.status === "APPROVED" && onCancel && (
             <div className="shrink-0">
               <button
-                onClick={onCancel}
+                onClick={e => { e.stopPropagation(); onCancel(); }}
                 className="flex items-center gap-1.5 text-xs text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition font-medium border border-gray-200 hover:border-gray-400 whitespace-nowrap"
               >
                 <Ban size={12} /> Annuler
@@ -675,6 +964,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
   const [currentPage,  setCurrentPage]  = useState(1);
   const [showExport,   setShowExport]   = useState(false);
 
+  const [detailTarget,     setDetailTarget]     = useState<LeaveRequest | null>(null);
   const [approveTarget,    setApproveTarget]    = useState<LeaveRequest | null>(null);
   const [rejectTarget,     setRejectTarget]     = useState<LeaveRequest | null>(null);
   const [cancelTarget,     setCancelTarget]     = useState<LeaveRequest | null>(null);
@@ -917,6 +1207,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
                     key={req.id}
                     req={req}
                     isHistory={tab === "history"}
+                    onDetail={() => setDetailTarget(req)}
                     onApprove={tab === "pending" ? () => setApproveTarget(req) : undefined}
                     onReject={tab  === "pending" ? () => setRejectTarget(req)  : undefined}
                     onCancel={tab  === "history" && req.status === "APPROVED" ? () => setCancelTarget(req) : undefined}
@@ -967,6 +1258,14 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
 
       {/* Modals */}
       <AnimatePresence>
+        {detailTarget && (
+          <LeaveDetailModal
+            req={detailTarget}
+            onClose={() => setDetailTarget(null)}
+            onApprove={(detailTarget.status === "PENDING" || detailTarget.status === "PENDING_SECOND") ? () => { setDetailTarget(null); setApproveTarget(detailTarget); } : undefined}
+            onReject={(detailTarget.status === "PENDING" || detailTarget.status === "PENDING_SECOND") ? () => { setDetailTarget(null); setRejectTarget(detailTarget); } : undefined}
+          />
+        )}
         {showExport && (
           <ExportModal
             onClose={() => setShowExport(false)}
