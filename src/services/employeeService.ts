@@ -147,9 +147,12 @@ export const sendAccessCodesInterim = async (matricules?: string[]) => {
 //  BASCULEMENT INTÉRIMAIRE → INTERNE
 // ══════════════════════════════════════════════════════
 export type ConvertInterimPayload = {
-  new_matricule: string;
-  new_type_contrat?: "CDI" | "CDD" | "STAGE";
-  date_embauche?: string;
+  new_matricule:          string;
+  new_type_contrat?:      "CDI" | "CDD" | "STAGE";
+  date_embauche?:         string;
+  date_fin_cdd?:          string;
+  date_fin_periode_essai?: string;
+  description?:           string;
 };
 
 export type ConvertInterimResult = {
