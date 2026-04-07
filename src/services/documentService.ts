@@ -28,7 +28,7 @@ export const downloadDocument = (id: number): void => {
   const token = localStorage.getItem('access_token');
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const url = `${baseUrl}/api/hr-documents/${id}/download/`;
-  
+
   fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   })
