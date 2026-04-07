@@ -4,23 +4,30 @@ import {
   LayoutDashboard,
   Users2,
   BadgeDollarSign,
-  Menu,
   X,
   Clock,
+  FileText,
+  ClipboardCheck,
 } from "lucide-react";
 import logo from "@/assets/images/camusat-logo.png";
-import { useState } from "react";
-
-const navItems = [
-  { label: "Tableau de bord", path: "/dashboard", icon: <LayoutDashboard size={20} /> },
-  { label: "Employés", path: "/employees", icon: <Users2 size={20} /> },
-  { label: "Bulletins Salariés", path: "/payslip", icon: <BadgeDollarSign size={20} /> },
-  { label: "Pointages", path: "/attendance", icon: <Clock size={20} /> },
-  // ... ajoute tes autres modules ici
-];
+import { useAuth } from "@/contexts/useAuth";
 
 export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boolean, setMobileOpen: (open: boolean) => void }) {
   const location = useLocation();
+  const { user } = useAuth();
+
+  const canSeeApprovals = user?.is_manager || user?.is_staff || user?.is_global_admin;
+
+  const navItems = [
+    { label: "Tableau de bord", path: "/dashboard", icon: <LayoutDashboard size={20} /> },
+    { label: "Employés", path: "/employees", icon: <Users2 size={20} /> },
+    { label: "Bulletins Salariés", path: "/payslip", icon: <BadgeDollarSign size={20} /> },
+    { label: "Pointages", path: "/attendance", icon: <Clock size={20} /> },
+    { label: "Documents RH", path: "/documents", icon: <FileText size={20} /> },
+    ...(canSeeApprovals
+      ? [{ label: "Approbations Congés", path: "/manager-approvals", icon: <ClipboardCheck size={20} /> }]
+      : []),
+  ];
 
   return (
     <>

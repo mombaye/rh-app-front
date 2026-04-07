@@ -8,6 +8,8 @@ import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "@/components/ProtectedRoute"; // Même logique que chez toi
 import FirstLoginGuard from "@/components/FirstLoginGuard";
 import AttendancePage from "./pages/AttendancePage";
+import DocumentsPage from "./pages/DocumentsPage";
+import ManagerApprovalsPage from "./pages/ManagerApprovalsPage";
 
 function App() {
   return (
@@ -64,6 +66,28 @@ function App() {
             <ProtectedRoute>
               <FirstLoginGuard>
                 <AttendancePage />
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/documents"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <DocumentsPage />
+              </FirstLoginGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/manager-approvals"
+          element={
+            <ProtectedRoute>
+              <FirstLoginGuard>
+                <ManagerApprovalsPage />
               </FirstLoginGuard>
             </ProtectedRoute>
           }
