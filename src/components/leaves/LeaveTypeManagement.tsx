@@ -168,50 +168,81 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
   return (
     <div className="space-y-3">
 
-      {/* ── Chips des types existants ── */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* ── Grille des types ── */}
+      {types.length === 0 ? (
+        <div className="py-12 flex flex-col items-center gap-2 text-gray-400">
+          <p className="text-sm">Aucun type de congé configuré.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {types.map((t) => {
+            const accent = t.color || "#1d4ed8";
+            return (
+              <motion.div
+                key={t.id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+                className="group relative bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+              >
+                {/* Barre de couleur en haut */}
+                <div className="h-1.5 w-full" style={{ backgroundColor: accent }} />
 
-        {types.map((t) => (
-          <motion.div
-            key={t.id}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.12 }}
-            className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm hover:shadow transition-shadow"
-          >
-            {/* Dot couleur */}
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: t.color || "#3b82f6" }}
-            />
-            {/* Code + label */}
-            <span className="text-xs font-bold text-gray-500 uppercase">{t.code}</span>
-            <span className="text-xs text-gray-700 font-medium">{t.label}</span>
-            {/* Badges */}
-            {t.is_paid && (
-              <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded-md">Payé</span>
-            )}
-            {t.requires_justification && (
-              <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.5 rounded-md">Justif.</span>
-            )}
-            {/* Actions */}
-            <button
-              onClick={() => openEdit(t)}
-              className="ml-1 p-1 rounded-lg text-gray-400 hover:text-camublue-900 hover:bg-gray-100 transition"
-              title="Modifier"
-            >
-              <FiEdit2 size={11} />
-            </button>
-            <button
-              onClick={() => setDeleteTarget(t)}
-              className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
-              title="Supprimer"
-            >
-              <FiTrash2 size={11} />
-            </button>
-          </motion.div>
-        ))}
-      </div>
+                <div className="px-4 pt-3 pb-3 flex flex-col gap-2">
+                  {/* Code + label */}
+                  <div>
+                    <span
+                      className="inline-block text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md mb-1"
+                      style={{ color: accent, backgroundColor: `${accent}18` }}
+                    >
+                      {t.code}
+                    </span>
+                    <p className="text-sm font-semibold text-gray-800 leading-tight">{t.label}</p>
+                  </div>
+
+                  {/* Badges + actions */}
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {t.is_paid && (
+                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full">
+                          Payé
+                        </span>
+                      )}
+                      {!t.is_paid && (
+                        <span className="text-[10px] font-semibold text-gray-500 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded-full">
+                          Non payé
+                        </span>
+                      )}
+                      {t.requires_justification && (
+                        <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded-full">
+                          Justif.
+                        </span>
+                      )}
+                    </div>
+                    {/* Actions (visibles au hover) */}
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => openEdit(t)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-camublue-900 hover:bg-blue-50 transition"
+                        title="Modifier"
+                      >
+                        <FiEdit2 size={12} />
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(t)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+                        title="Supprimer"
+                      >
+                        <FiTrash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Modal Formulaire ──────────────────────────────────────────────── */}
       <AnimatePresence>
