@@ -11,15 +11,14 @@ import toast from "react-hot-toast";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 
 const EMPTY_FORM = {
-  code:                      "",
-  label:                     "",
-  is_paid:                   true,
-  requires_justification:    false,
-  justification_grace_days:  "7",
-  color:                     "#3b82f6",
-  monthly_accrual:           "0",
-  max_days_per_request:      "0",
-  deducts_from_balance:      false,
+  code:                     "",
+  label:                    "",
+  is_paid:                  true,
+  requires_justification:   false,
+  justification_grace_days: "7",
+  monthly_accrual:          "0",
+  max_days_per_request:     "0",
+  deducts_from_balance:     false,
 };
 
 type FormState = typeof EMPTY_FORM;
@@ -72,15 +71,14 @@ export default function LeaveTypeManagement() {
   const openEdit = (t: LeaveType) => {
     setEditTarget(t);
     setForm({
-      code:                      t.code,
-      label:                     t.label,
-      is_paid:                   t.is_paid,
-      requires_justification:    t.requires_justification,
-      justification_grace_days:  String(t.justification_grace_days ?? 7),
-      color:                     t.color,
-      monthly_accrual:           t.monthly_accrual ?? "0",
-      max_days_per_request:      String(t.max_days_per_request ?? 0),
-      deducts_from_balance:      t.deducts_from_balance ?? false,
+      code:                     t.code,
+      label:                    t.label,
+      is_paid:                  t.is_paid,
+      requires_justification:   t.requires_justification,
+      justification_grace_days: String(t.justification_grace_days ?? 7),
+      monthly_accrual:          t.monthly_accrual ?? "0",
+      max_days_per_request:     String(t.max_days_per_request ?? 0),
+      deducts_from_balance:     t.deducts_from_balance ?? false,
     });
     setFormError(null);
     setShowForm(true);
@@ -110,15 +108,14 @@ export default function LeaveTypeManagement() {
     setFormError(null);
     try {
       const payload = {
-        code:                      form.code.toUpperCase().trim(),
-        label:                     form.label.trim(),
-        is_paid:                   form.is_paid,
-        requires_justification:    form.requires_justification,
-        justification_grace_days:  parseInt(form.justification_grace_days) || 7,
-        color:                     form.color,
-        monthly_accrual:           parseFloat(form.monthly_accrual) || 0,
-        max_days_per_request:      parseInt(form.max_days_per_request) || 0,
-        deducts_from_balance:      form.deducts_from_balance,
+        code:                     form.code.toUpperCase().trim(),
+        label:                    form.label.trim(),
+        is_paid:                  form.is_paid,
+        requires_justification:   form.requires_justification,
+        justification_grace_days: parseInt(form.justification_grace_days) || 7,
+        monthly_accrual:          parseFloat(form.monthly_accrual) || 0,
+        max_days_per_request:     parseInt(form.max_days_per_request) || 0,
+        deducts_from_balance:     form.deducts_from_balance,
       };
       if (editTarget) {
         await leaveTypeService.update(editTarget.id, payload);
@@ -164,15 +161,15 @@ export default function LeaveTypeManagement() {
   };
 
   if (loading) return (
-    <div className="py-24 flex flex-col items-center gap-3 text-gray-400">
-      <ImSpinner2 className="animate-spin" size={26} />
-      <p className="text-sm">Chargement des types de congé…</p>
+    <div className="py-16 flex flex-col items-center gap-3 text-gray-400">
+      <ImSpinner2 className="animate-spin" size={24} />
+      <p className="text-sm">Chargement…</p>
     </div>
   );
 
   if (fetchError) return (
-    <div className="py-24 flex flex-col items-center gap-4">
-      <FiAlertCircle size={30} className="text-red-400" />
+    <div className="py-16 flex flex-col items-center gap-4">
+      <FiAlertCircle size={28} className="text-red-400" />
       <p className="text-sm text-red-500">{fetchError}</p>
       <button onClick={fetchTypes} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-sm font-medium hover:bg-gray-200 transition">
         <FiRefreshCw size={13} /> Réessayer
@@ -181,150 +178,92 @@ export default function LeaveTypeManagement() {
   );
 
   return (
-    <div className="space-y-5">
-      {/* Barre d'outils */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-bold text-gray-900">Types de congés</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Configurez les types, l'accrual mensuel et les limites.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Déclenchement manuel accrual */}
-          <button
-            onClick={handleTriggerAccrual}
-            disabled={accrualLoading}
-            title="Déclencher manuellement l'accrual mensuel pour tous les employés actifs"
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm font-medium transition disabled:opacity-50"
-          >
-            {accrualLoading
-              ? <ImSpinner2 className="animate-spin" size={14} />
-              : <FiZap size={14} />
-            }
-            Accrual mensuel
-          </button>
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
-          >
-            <FiPlus size={14} />
-            Nouveau type
-          </button>
-        </div>
-      </div>
+    <div className="space-y-3">
 
-      {/* Légende accrual */}
-      <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700">
-        <strong>Accrual mensuel :</strong> Le 1er de chaque mois, chaque employé actif reçoit automatiquement
-        le nombre de jours configuré sur chaque type. Exemple : 2j/mois pour les Congés Payés.
-        Vous pouvez aussi déclencher manuellement le calcul via le bouton ci-dessus.
-      </div>
+      {/* ── Ligne : bouton Nouveau type + chips des types existants ── */}
+      <div className="flex flex-wrap items-center gap-2">
 
-      {/* Grille des types */}
-      {types.length === 0 ? (
-        <div className="py-20 text-center text-gray-400 bg-white rounded-2xl border border-gray-100">
-          <p className="text-4xl mb-3">📋</p>
-          <p className="font-medium text-sm">Aucun type de congé configuré</p>
-          <p className="text-xs mt-1">Créez votre premier type pour commencer.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {types.map((t) => (
-            <motion.div
-              key={t.id}
-              initial={{ opacity: 0, scale: 0.97 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.15 }}
-              className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+        {/* Bouton Nouveau type */}
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-1.5 bg-camublue-900 hover:bg-camublue-800 text-white px-3 py-2 rounded-xl text-sm font-semibold transition shrink-0"
+        >
+          <FiPlus size={14} />
+          Nouveau type
+        </button>
+
+        {/* Chips des types existants */}
+        {types.map((t) => (
+          <motion.div
+            key={t.id}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.12 }}
+            className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm hover:shadow transition-shadow"
+          >
+            {/* Dot couleur */}
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: t.color || "#3b82f6" }}
+            />
+            {/* Code + label */}
+            <span className="text-xs font-bold text-gray-500 uppercase">{t.code}</span>
+            <span className="text-xs text-gray-700 font-medium">{t.label}</span>
+            {/* Badges */}
+            {t.is_paid && (
+              <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded-md">Payé</span>
+            )}
+            {t.requires_justification && (
+              <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.5 rounded-md">Justif.</span>
+            )}
+            {/* Actions */}
+            <button
+              onClick={() => openEdit(t)}
+              className="ml-1 p-1 rounded-lg text-gray-400 hover:text-camublue-900 hover:bg-gray-100 transition"
+              title="Modifier"
             >
-              {/* Bandeau couleur */}
-              <div className="h-1.5" style={{ backgroundColor: t.color }} />
-              <div className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span
-                        className="text-xs font-bold px-2 py-0.5 rounded-md"
-                        style={{ backgroundColor: t.color + "20", color: t.color }}
-                      >
-                        {t.code}
-                      </span>
-                      {t.is_paid
-                        ? <span className="text-xs text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded">Payé</span>
-                        : <span className="text-xs text-gray-500 font-medium bg-gray-100 px-1.5 py-0.5 rounded">Non payé</span>
-                      }
-                      {t.deducts_from_balance && (
-                        <span className="text-xs text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded">Déduit solde</span>
-                      )}
-                    </div>
-                    <p className="font-semibold text-gray-900 text-sm truncate">{t.label}</p>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    <button
-                      onClick={() => openEdit(t)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-camublue-900 hover:bg-gray-100 transition"
-                      title="Modifier"
-                    >
-                      <FiEdit2 size={13} />
-                    </button>
-                    <button
-                      onClick={() => setDeleteTarget(t)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
-                      title="Supprimer"
-                    >
-                      <FiTrash2 size={13} />
-                    </button>
-                  </div>
-                </div>
+              <FiEdit2 size={11} />
+            </button>
+            <button
+              onClick={() => setDeleteTarget(t)}
+              className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+              title="Supprimer"
+            >
+              <FiTrash2 size={11} />
+            </button>
+          </motion.div>
+        ))}
 
-                <div className="mt-3 space-y-1.5 text-xs text-gray-600">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Accrual mensuel</span>
-                    <span className="font-semibold text-gray-800">
-                      {parseFloat(t.monthly_accrual) > 0 ? `+${t.monthly_accrual}j/mois` : "Aucun"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Max par demande</span>
-                    <span className="font-semibold text-gray-800">
-                      {t.max_days_per_request > 0 ? `${t.max_days_per_request}j` : "Illimité"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Justificatif requis</span>
-                    <span className={`font-semibold ${t.requires_justification ? "text-amber-600" : "text-gray-500"}`}>
-                      {t.requires_justification ? "Oui" : "Non"}
-                    </span>
-                  </div>
-                  {t.requires_justification && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Délai justificatif</span>
-                      <span className="font-semibold text-amber-700">
-                        {t.justification_grace_days ?? 7}j après congé
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      )}
+        {/* Bouton accrual manuel (discret, en fin de ligne) */}
+        <button
+          onClick={handleTriggerAccrual}
+          disabled={accrualLoading}
+          title="Déclencher manuellement l'accrual mensuel pour tous les employés actifs"
+          className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-xs font-medium hover:bg-gray-50 transition disabled:opacity-50 shrink-0"
+        >
+          {accrualLoading ? <ImSpinner2 className="animate-spin" size={12} /> : <FiZap size={12} />}
+          Accrual
+        </button>
+      </div>
 
-      {/* ── Modal Formulaire ───────────────────────────────────────────────── */}
+      {/* ── Modal Formulaire ──────────────────────────────────────────────── */}
       <AnimatePresence>
         {showForm && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={closeForm}>
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+            onClick={closeForm}
+          >
             <motion.div
               initial={{ opacity: 0, scale: 0.97, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 10 }}
               transition={{ duration: 0.2 }}
-              className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-[500px] max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-[480px] max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-start px-6 pt-6 pb-0">
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900">
+                  <h2 className="text-base font-bold text-gray-900">
                     {editTarget ? "Modifier le type" : "Nouveau type de congé"}
                   </h2>
                   {editTarget && <p className="text-xs text-gray-400 mt-0.5">{editTarget.label}</p>}
@@ -345,6 +284,7 @@ export default function LeaveTypeManagement() {
                   )}
                 </AnimatePresence>
 
+                {/* Code + Libellé */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
@@ -358,32 +298,19 @@ export default function LeaveTypeManagement() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">Couleur</label>
-                    <div className="flex items-center gap-2">
-                      <input type="color" name="color" value={form.color} onChange={handleChange}
-                        className="w-10 h-10 rounded-lg border border-gray-200 p-0.5 cursor-pointer"
-                      />
-                      <input
-                        name="color" value={form.color} onChange={handleChange}
-                        placeholder="#3b82f6"
-                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-camublue-900 transition"
-                      />
-                    </div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
+                      Libellé <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      name="label" value={form.label}
+                      onChange={handleChange}
+                      placeholder="Ex : Congés Payés"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition"
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
-                    Libellé <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    name="label" value={form.label}
-                    onChange={handleChange}
-                    placeholder="Ex : Congés Payés, Congé Maladie…"
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition"
-                  />
-                </div>
-
+                {/* Accrual + Max jours */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
@@ -393,9 +320,9 @@ export default function LeaveTypeManagement() {
                       type="number" name="monthly_accrual" value={form.monthly_accrual}
                       onChange={handleChange} min={0} step={0.5}
                       placeholder="0 = pas d'accrual"
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 transition"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-camublue-900 transition"
                     />
-                    <p className="text-xs text-gray-400 mt-1">2 = 2j crédités le 1er du mois</p>
+                    <p className="text-xs text-gray-400 mt-1">0 = pas d'accrual automatique</p>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
@@ -405,13 +332,14 @@ export default function LeaveTypeManagement() {
                       type="number" name="max_days_per_request" value={form.max_days_per_request}
                       onChange={handleChange} min={0}
                       placeholder="0 = illimité"
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 transition"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-camublue-900 transition"
                     />
                     <p className="text-xs text-gray-400 mt-1">0 = pas de limite</p>
                   </div>
                 </div>
 
-                <div className="space-y-2.5">
+                {/* Cases à cocher */}
+                <div className="space-y-2.5 pt-1">
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <input type="checkbox" name="is_paid" checked={form.is_paid} onChange={handleChange}
                       className="w-4 h-4 rounded accent-camublue-900"
@@ -420,30 +348,29 @@ export default function LeaveTypeManagement() {
                   </label>
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <input type="checkbox" name="deducts_from_balance" checked={form.deducts_from_balance} onChange={handleChange}
-                      className="w-4 h-4 rounded accent-emerald-600"
+                      className="w-4 h-4 rounded accent-camublue-900"
                     />
                     <span className="text-sm text-gray-700 font-medium">Déduit du solde de congé</span>
-                    <span className="text-xs text-gray-400">(uniquement pour congés annuels)</span>
                   </label>
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <input type="checkbox" name="requires_justification" checked={form.requires_justification} onChange={handleChange}
-                      className="w-4 h-4 rounded accent-amber-500"
+                      className="w-4 h-4 rounded accent-camublue-900"
                     />
                     <span className="text-sm text-gray-700 font-medium">Justificatif requis après le congé</span>
                   </label>
                   {form.requires_justification && (
-                    <div className="ml-6.5 pl-1">
+                    <div className="ml-6 pt-1">
                       <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">
-                        Délai de dépôt (jours calendaires après fin du congé)
+                        Délai de dépôt (jours après fin du congé)
                       </label>
                       <input
                         type="number" name="justification_grace_days"
                         value={form.justification_grace_days}
                         onChange={handleChange} min={1} max={90}
-                        className="w-full border border-amber-200 bg-amber-50 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition"
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition"
                       />
-                      <p className="text-xs text-amber-600 mt-1">
-                        L'employé aura {form.justification_grace_days || 7} jours après la fin de son congé pour soumettre le justificatif. Passé ce délai, le RH peut le marquer absent.
+                      <p className="text-xs text-gray-400 mt-1">
+                        {form.justification_grace_days || 7} jours calendaires après la fin du congé
                       </p>
                     </div>
                   )}
@@ -460,7 +387,7 @@ export default function LeaveTypeManagement() {
                   >
                     {formLoading
                       ? <><ImSpinner2 className="animate-spin" size={13} /> En cours…</>
-                      : editTarget ? "✓ Enregistrer" : "✓ Créer le type"
+                      : editTarget ? "Enregistrer" : "Créer le type"
                     }
                   </button>
                 </div>
@@ -470,13 +397,13 @@ export default function LeaveTypeManagement() {
         )}
       </AnimatePresence>
 
-      {/* ── Modal Suppression ─────────────────────────────────────────────── */}
+      {/* ── Modal Suppression ──────────────────────────────────────────────── */}
       <ConfirmDeleteModal
         open={deleteTarget !== null}
         title="Supprimer ce type de congé ?"
         message={
           deleteTarget
-            ? <><strong>{deleteTarget.label}</strong> ({deleteTarget.code}) sera supprimé. Les demandes existantes référençant ce type ne seront <strong>pas</strong> supprimées. Cette action est irréversible.</>
+            ? <><strong>{deleteTarget.label}</strong> ({deleteTarget.code}) sera supprimé. Les demandes existantes ne seront pas supprimées. Cette action est irréversible.</>
             : null
         }
         onClose={() => !deleteLoading && setDeleteTarget(null)}
