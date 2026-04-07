@@ -35,10 +35,11 @@ export default function HierarchyManagement({ open, onClose }: { open: boolean; 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={handleClose}>
-      <div className={`bg-white rounded-2xl shadow-2xl w-full mx-4 overflow-hidden flex flex-col ${
-          activeSection ? "max-w-5xl" : "max-w-lg"
+      <div className={`bg-white rounded-2xl shadow-2xl w-full overflow-hidden flex flex-col ${
+          activeSection === "orgchart" ? "mx-2" : activeSection ? "max-w-5xl mx-4" : "max-w-lg mx-4"
         }`}
-        style={{ maxHeight: "90vh" }}
+        style={{ maxHeight: activeSection === "orgchart" ? "97vh" : "90vh",
+                 width: activeSection === "orgchart" ? "calc(100vw - 16px)" : undefined }}
         onClick={e => e.stopPropagation()}>
 
         {/* Header */}
@@ -66,7 +67,7 @@ export default function HierarchyManagement({ open, onClose }: { open: boolean; 
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto flex-1 p-6">
+        <div className={`overflow-y-auto flex-1 ${activeSection === "orgchart" ? "p-3" : "p-6"}`}>
           {!activeSection ? (
             /* ── Section Picker ──────────────────────────────────────────── */
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -342,7 +343,7 @@ function OrgChartTab() {
   const activeEmps = allEmployees.filter(e => e.status === "ACTIVE");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
 
       {/* ── Toolbar : Actions + Toggle employés ──────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -413,33 +414,14 @@ function OrgChartTab() {
         return (
           <>
             <p className="text-center text-xs text-gray-400 italic -mt-4">Responsables de département</p>
-            <div className="flex flex-wrap gap-6 justify-center">
-              {rootDepts.map(dept => (
-                <DeptColumn
-                  key={dept.id}
-                  dept={dept}
-                  employees={empsByDept[dept.name] ?? []}
-                  subDepartments={childDeptMap[dept.id] ?? []}
-                  empsByDept={empsByDept}
-                  onEditEmployee={openEditEmp}
-                  onEditDept={openEditDept}
-                  onDeleteDept={handleDeleteDept}
-                  deletingDept={deletingDept}
-                  onBulkAssign={openBulkAssign}
-                  showEmployees={showEmployees}
-                />
-              ))}
-            </div>
-
-            {/* Sous-départements orphelins (parent supprimé) */}
-            {departments.filter(d => d.parent && !departments.find(p => p.id === d.parent)).length > 0 && (
-              <div className="flex flex-wrap gap-6 justify-center mt-4">
-                {departments.filter(d => d.parent && !departments.find(p => p.id === d.parent)).map(dept => (
+            <div className="overflow-x-auto pb-2">
+              <div className="flex gap-6 justify-start min-w-max px-2">
+                {rootDepts.map(dept => (
                   <DeptColumn
                     key={dept.id}
                     dept={dept}
                     employees={empsByDept[dept.name] ?? []}
-                    subDepartments={[]}
+                    subDepartments={childDeptMap[dept.id] ?? []}
                     empsByDept={empsByDept}
                     onEditEmployee={openEditEmp}
                     onEditDept={openEditDept}
@@ -449,6 +431,29 @@ function OrgChartTab() {
                     showEmployees={showEmployees}
                   />
                 ))}
+              </div>
+            </div>
+
+            {/* Sous-départements orphelins (parent supprimé) */}
+            {departments.filter(d => d.parent && !departments.find(p => p.id === d.parent)).length > 0 && (
+              <div className="overflow-x-auto pb-2 mt-4">
+                <div className="flex gap-6 justify-start min-w-max px-2">
+                  {departments.filter(d => d.parent && !departments.find(p => p.id === d.parent)).map(dept => (
+                    <DeptColumn
+                      key={dept.id}
+                      dept={dept}
+                      employees={empsByDept[dept.name] ?? []}
+                      subDepartments={[]}
+                      empsByDept={empsByDept}
+                      onEditEmployee={openEditEmp}
+                      onEditDept={openEditDept}
+                      onDeleteDept={handleDeleteDept}
+                      deletingDept={deletingDept}
+                      onBulkAssign={openBulkAssign}
+                      showEmployees={showEmployees}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </>
