@@ -3,10 +3,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { leaveTypeService, leaveRequestService } from "@/services/leaveService";
+import { leaveTypeService } from "@/services/leaveService";
 import { LeaveType } from "@/types/leave";
 import { ImSpinner2 } from "react-icons/im";
-import { FiPlus, FiEdit2, FiTrash2, FiX, FiAlertCircle, FiRefreshCw, FiZap } from "react-icons/fi";
+import { FiEdit2, FiTrash2, FiX, FiAlertCircle, FiRefreshCw } from "react-icons/fi";
 import toast from "react-hot-toast";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 
@@ -33,7 +33,7 @@ function parseErrors(data: unknown): string {
   return msgs.join(" ") || "Une erreur est survenue.";
 }
 
-export default function LeaveTypeManagement() {
+export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: number }) {
   const [types,         setTypes]         = useState<LeaveType[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [fetchError,    setFetchError]    = useState<string | null>(null);
@@ -44,7 +44,6 @@ export default function LeaveTypeManagement() {
   const [formError,     setFormError]     = useState<string | null>(null);
   const [deleteTarget,  setDeleteTarget]  = useState<LeaveType | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [accrualLoading,setAccrualLoading]= useState(false);
 
   const fetchTypes = useCallback(async () => {
     setLoading(true);
@@ -60,6 +59,7 @@ export default function LeaveTypeManagement() {
   }, []);
 
   useEffect(() => { fetchTypes(); }, [fetchTypes]);
+  useEffect(() => { if (triggerNew > 0) openCreate(); }, [triggerNew]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openCreate = () => {
     setEditTarget(null);
@@ -148,18 +148,6 @@ export default function LeaveTypeManagement() {
     }
   };
 
-  const handleTriggerAccrual = async () => {
-    setAccrualLoading(true);
-    try {
-      const res = await leaveRequestService.triggerMonthlyCredit();
-      toast.success(res.message ?? "Accrual mensuel lancé ✓");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error ?? "Erreur lors du lancement");
-    } finally {
-      setAccrualLoading(false);
-    }
-  };
-
   if (loading) return (
     <div className="py-16 flex flex-col items-center gap-3 text-gray-400">
       <ImSpinner2 className="animate-spin" size={24} />
@@ -180,19 +168,9 @@ export default function LeaveTypeManagement() {
   return (
     <div className="space-y-3">
 
-      {/* ── Ligne : bouton Nouveau type + chips des types existants ── */}
+      {/* ── Chips des types existants ── */}
       <div className="flex flex-wrap items-center gap-2">
 
-        {/* Bouton Nouveau type */}
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-1.5 bg-camublue-900 hover:bg-camublue-800 text-white px-3 py-2 rounded-xl text-sm font-semibold transition shrink-0"
-        >
-          <FiPlus size={14} />
-          Nouveau type
-        </button>
-
-        {/* Chips des types existants */}
         {types.map((t) => (
           <motion.div
             key={t.id}
@@ -233,17 +211,6 @@ export default function LeaveTypeManagement() {
             </button>
           </motion.div>
         ))}
-
-        {/* Bouton accrual manuel (discret, en fin de ligne) */}
-        <button
-          onClick={handleTriggerAccrual}
-          disabled={accrualLoading}
-          title="Déclencher manuellement l'accrual mensuel pour tous les employés actifs"
-          className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-xs font-medium hover:bg-gray-50 transition disabled:opacity-50 shrink-0"
-        >
-          {accrualLoading ? <ImSpinner2 className="animate-spin" size={12} /> : <FiZap size={12} />}
-          Accrual
-        </button>
       </div>
 
       {/* ── Modal Formulaire ──────────────────────────────────────────────── */}

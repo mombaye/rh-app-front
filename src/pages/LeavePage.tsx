@@ -139,6 +139,7 @@ export default function LeavePage() {
   const [contractType, setContractType] = useState<ContractType>("INTERNE");
   const [showForm,       setShowForm]       = useState(false);
   const [showLeaveTypes, setShowLeaveTypes] = useState(false);
+  const [newTypeTrigger, setNewTypeTrigger] = useState(0);
   const [showHierarchy,  setShowHierarchy]  = useState(false);
   const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [selected,       setSelected]       = useState<LeaveRequest | null>(null);
@@ -940,15 +941,24 @@ export default function LeavePage() {
                   </div>
                   <h2 className="font-black text-slate-800 text-base">Types de congés</h2>
                 </div>
-                <button onClick={() => setShowLeaveTypes(false)}
-                  className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition">
-                  <X className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setNewTypeTrigger(c => c + 1)}
+                    className="flex items-center gap-1.5 bg-camublue-900 hover:bg-camublue-800 text-white px-3 py-1.5 rounded-xl text-sm font-semibold transition"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Nouveau type
+                  </button>
+                  <button onClick={() => setShowLeaveTypes(false)}
+                    className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Contenu scrollable */}
               <div className="flex-1 overflow-y-auto px-6 py-5">
-                <LeaveTypeManagement />
+                <LeaveTypeManagement triggerNew={newTypeTrigger} />
               </div>
             </motion.div>
           </div>
