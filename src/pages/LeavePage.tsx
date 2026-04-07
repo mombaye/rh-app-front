@@ -929,7 +929,7 @@ export default function LeavePage() {
             <motion.div
               initial={{ opacity: 0, scale: 0.97, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 20 }} transition={{ duration: 0.2 }}
-              className="bg-slate-50 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden"
+              className="bg-slate-50 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-5xl max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden"
               onClick={(e) => e.stopPropagation()}>
 
               {/* Header */}
@@ -938,10 +938,7 @@ export default function LeavePage() {
                   <div className="p-2 rounded-xl bg-camublue-900 text-white">
                     <Settings2 className="h-4 w-4" />
                   </div>
-                  <div>
-                    <h2 className="font-black text-slate-800 text-base">Types de congés</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Configurez les types avant de créer une demande</p>
-                  </div>
+                  <h2 className="font-black text-slate-800 text-base">Types de congés</h2>
                 </div>
                 <button onClick={() => setShowLeaveTypes(false)}
                   className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition">
@@ -952,18 +949,6 @@ export default function LeavePage() {
               {/* Contenu scrollable */}
               <div className="flex-1 overflow-y-auto px-6 py-5">
                 <LeaveTypeManagement />
-              </div>
-
-              {/* Footer */}
-              <div className="shrink-0 border-t border-slate-100 bg-white px-6 py-4 flex items-center justify-between">
-                <p className="text-xs text-slate-400">
-                  Les types configurés ici seront disponibles lors de la création d'une demande.
-                </p>
-                <button onClick={() => { setShowLeaveTypes(false); setShowForm(true); }}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-bold rounded-xl transition whitespace-nowrap ml-4">
-                  <Plus className="h-4 w-4" />
-                  Nouvelle demande
-                </button>
               </div>
             </motion.div>
           </div>
