@@ -22,8 +22,8 @@ const fmt = (d: string) =>
 const PAGE_SIZE = 8;
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; Icon: React.ElementType; textColor: string; borderColor: string }> = {
-  PENDING:        { label: "En attente",      color: "#d97706", bg: "#fffbeb", Icon: Clock,        textColor: "text-amber-700",  borderColor: "border-amber-200"  },
-  PENDING_SECOND: { label: "2ème validation", color: "#ea580c", bg: "#fff7ed", Icon: Clock,        textColor: "text-orange-700", borderColor: "border-orange-200" },
+  PENDING:        { label: "En attente",      color: "#1d4ed8", bg: "#eff6ff", Icon: Clock,        textColor: "text-blue-700",   borderColor: "border-blue-200"  },
+  PENDING_SECOND: { label: "2ème validation", color: "#1e40af", bg: "#dbeafe", Icon: Clock,        textColor: "text-blue-800",   borderColor: "border-blue-300"  },
   APPROVED:       { label: "Approuvé",        color: "#059669", bg: "#f0fdf4", Icon: CheckCircle2, textColor: "text-green-700",  borderColor: "border-green-200"  },
   REJECTED:       { label: "Rejeté",          color: "#dc2626", bg: "#fef2f2", Icon: XCircle,      textColor: "text-red-700",    borderColor: "border-red-200"    },
   CANCELLED:      { label: "Annulé",          color: "#64748b", bg: "#f8fafc", Icon: XCircle,      textColor: "text-gray-500",   borderColor: "border-gray-200"   },
@@ -262,11 +262,11 @@ function ApproveModal({
           </div>
 
           {!isPendingSecond && hasN2 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
-              <AlertCircle size={15} className="text-amber-500 mt-0.5 shrink-0" />
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
+              <AlertCircle size={15} className="text-blue-500 mt-0.5 shrink-0" />
               <div>
-                <p className="text-xs text-amber-700 font-medium">Validation en 2 niveaux requise</p>
-                <p className="text-xs text-amber-600 mt-0.5">
+                <p className="text-xs text-blue-700 font-medium">Validation en 2 niveaux requise</p>
+                <p className="text-xs text-blue-600 mt-0.5">
                   Votre approbation (N+1) enverra la demande à <strong>{req.employee.n2_manager_name}</strong> (N+2) pour validation finale.
                 </p>
               </div>
@@ -442,9 +442,9 @@ function CancelModal({
             <div className="text-xs text-gray-500">{fmt(req.start_date)} → {fmt(req.end_date)}</div>
           </div>
 
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
-            <AlertCircle size={15} className="text-amber-500 mt-0.5 shrink-0" />
-            <p className="text-xs text-amber-700">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
+            <AlertCircle size={15} className="text-blue-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-blue-700">
               L'annulation restituera les jours de congé au solde de l'employé. Cette action est irréversible.
             </p>
           </div>
@@ -483,14 +483,14 @@ function InProgressAlertModal({ req, onClose }: { req: LeaveRequest; onClose: ()
         onClick={e => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
       >
-        <div className="bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-5">
+        <div className="bg-gradient-to-r from-[#003c71] to-blue-700 px-6 py-5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
               <AlertCircle size={20} className="text-white" />
             </div>
             <div>
               <h3 className="text-white font-bold text-base">Annulation impossible</h3>
-              <p className="text-orange-100 text-xs">{req.employee.full_name}</p>
+              <p className="text-blue-100 text-xs">{req.employee.full_name}</p>
             </div>
           </div>
         </div>
@@ -506,11 +506,11 @@ function InProgressAlertModal({ req, onClose }: { req: LeaveRequest; onClose: ()
             <div className="text-xs text-gray-500">{fmt(req.start_date)} → {fmt(req.end_date)}</div>
           </div>
 
-          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
-            <AlertCircle size={18} className="text-orange-500 mt-0.5 shrink-0" />
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+            <AlertCircle size={18} className="text-blue-500 mt-0.5 shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-orange-800">Congé en cours de consommation</p>
-              <p className="text-xs text-orange-600 mt-1">
+              <p className="text-sm font-semibold text-blue-800">Congé en cours de consommation</p>
+              <p className="text-xs text-blue-600 mt-1">
                 Ce congé a déjà débuté et est en cours de consommation. Il ne peut pas être annulé.
                 Si vous devez rappeler l'employé en urgence, utilisez la fonctionnalité de <strong>révocation</strong>.
               </p>
@@ -668,13 +668,13 @@ function LeaveDetailModal({
             {/* N+1 */}
             <div className="flex items-center gap-2">
               <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                req.reviewed_by ? "bg-green-100" : req.status === "REJECTED" ? "bg-red-100" : "bg-amber-100"
+                req.reviewed_by ? "bg-green-100" : req.status === "REJECTED" ? "bg-red-100" : "bg-blue-100"
               }`}>
                 {req.reviewed_by
                   ? <CheckCircle2 size={13} className="text-green-600" />
                   : req.status === "REJECTED"
                     ? <XCircle size={13} className="text-red-500" />
-                    : <Clock size={13} className="text-amber-500" />
+                    : <Clock size={13} className="text-blue-600" />
                 }
               </div>
               <div>
@@ -694,11 +694,11 @@ function LeaveDetailModal({
             {req.requires_second_approval && (
               <div className="flex items-center gap-2">
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                  req.second_reviewer ? "bg-green-100" : "bg-orange-100"
+                  req.second_reviewer ? "bg-green-100" : "bg-blue-100"
                 }`}>
                   {req.second_reviewer
                     ? <CheckCircle2 size={13} className="text-green-600" />
-                    : <Clock size={13} className="text-orange-500" />
+                    : <Clock size={13} className="text-blue-600" />
                   }
                 </div>
                 <div>
@@ -875,10 +875,10 @@ function ApprovalCard({
                 <><span className="text-gray-200">·</span><span className="flex items-center gap-1"><Briefcase size={10} />{req.employee.fonction}</span></>
               )}
               {req.status === "PENDING_SECOND" && (
-                <span className="px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-semibold text-[10px] border border-orange-200">Validation N+2</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold text-[10px] border border-blue-300">Validation N+2</span>
               )}
               {req.status === "PENDING" && req.employee.n2_manager_id && (
-                <span className="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold text-[10px] border border-amber-200">2 niveaux requis</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold text-[10px] border border-blue-200">2 niveaux requis</span>
               )}
             </div>
 
@@ -1060,7 +1060,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
   };
 
   const statsCards = [
-    { label: "En attente",    count: pending.length,                                     color: "text-amber-600", bg: "bg-amber-50",  border: "border-amber-100",  tab: "pending" as Tab },
+    { label: "En attente",    count: pending.length,                                     color: "text-blue-700",  bg: "bg-blue-50",   border: "border-blue-100",   tab: "pending" as Tab },
     { label: "Approuvées",    count: history.filter(r => r.status === "APPROVED").length, color: "text-green-600", bg: "bg-green-50",  border: "border-green-100",  tab: "history" as Tab },
     { label: "Rejetées",      count: history.filter(r => r.status === "REJECTED").length, color: "text-red-600",   bg: "bg-red-50",    border: "border-red-100",    tab: "history" as Tab },
     { label: "Total traités", count: history.length,                                      color: "text-gray-600",  bg: "bg-gray-50",   border: "border-gray-100",   tab: "history" as Tab },
