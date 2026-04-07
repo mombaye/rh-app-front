@@ -13,7 +13,6 @@ import {
   CalendarRange,
   UserCircle,
   FolderOpen,
-  ClipboardCheck,
   FileStack,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
@@ -72,15 +71,6 @@ export default function Sidebar() {
       path: "/rh/documents",
       icon: <FileStack size={20} />,
     },
-    ...(isRhManager
-      ? [
-          {
-            label: "Approbation",
-            path: "/rh/my-approvals",
-            icon: <ClipboardCheck size={20} />,
-          },
-        ]
-      : []),
     {
       label: "Mon espace",
       path: "/rh/my",
@@ -90,7 +80,10 @@ export default function Sidebar() {
         { label: "Mes Bulletins", path: "/rh/my-payslips"  },
         { label: "Mon Dossier",   path: "/rh/my-dossier"   },
         ...(isRhManager
-          ? [{ label: "Mes Pointages", path: "/rh/my-attendance" }]
+          ? [
+              { label: "Mes Pointages", path: "/rh/my-attendance" },
+              { label: "Approbation",   path: "/rh/my-approvals"  },
+            ]
           : []),
       ],
     },
