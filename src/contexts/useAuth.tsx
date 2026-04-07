@@ -6,6 +6,8 @@ type User = {
   username: string;
   email: string;
   is_global_admin?: boolean;
+  is_staff?: boolean;
+  is_manager?: boolean;
   country?: any;
   first_login?: boolean;
 };
