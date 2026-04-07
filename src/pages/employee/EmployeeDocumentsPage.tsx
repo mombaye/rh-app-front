@@ -28,28 +28,62 @@ const CATEGORIES = [
 const fmt = (d: string) =>
   new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
 
-/** Détermine le type de prévisualisation selon l'extension du fichier */
-function getPreviewType(fileName: string): "pdf" | "image" | "none" {
-  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+/**
+ * Corrige les URLs qui pointent vers localhost en remplaçant le host
+ * par celui configuré dans VITE_API_URL.
+ * Cela se produit quand Django est derrière un proxy sans BACKEND_URL configuré.
+ */
+function fixUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const apiBase = (import.meta.env.VITE_API_URL as string) || "";
+    if (url.includes("://localhost") && apiBase && !apiBase.includes("localhost")) {
+      const u = new URL(url);
+      const api = new URL(apiBase);
+      u.protocol = api.protocol;
+      u.host = api.host;
+      return u.toString();
+    }
+  } catch {
+    // URL invalide → on retourne telle quelle
+  }
+  return url;
+}
+
+function getExt(fileName: string): string {
+  return fileName.split(".").pop()?.toLowerCase() ?? "";
+}
+
+type PreviewKind = "pdf" | "image" | "office" | "none";
+
+function getPreviewKind(fileName: string): PreviewKind {
+  const ext = getExt(fileName);
   if (ext === "pdf") return "pdf";
   if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext)) return "image";
+  if (["doc", "docx", "xls", "xlsx", "ppt", "pptx"].includes(ext)) return "office";
   return "none";
 }
 
-function FileIcon({ fileName, size = 20 }: { fileName: string; size?: number }) {
-  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+function FileIcon({ fileName, size = 20, className = "text-camublue-900" }: { fileName: string; size?: number; className?: string }) {
+  const ext = getExt(fileName);
   if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext))
-    return <FileImage size={size} className="text-camublue-900" />;
+    return <FileImage size={size} className={className} />;
   if (["xls", "xlsx", "csv"].includes(ext))
     return <FileSpreadsheet size={size} className="text-green-700" />;
   if (["ppt", "pptx"].includes(ext))
     return <Presentation size={size} className="text-orange-600" />;
-  return <FileText size={size} className="text-camublue-900" />;
+  return <FileText size={size} className={className} />;
 }
 
 // ── Modale de prévisualisation ────────────────────────────────────────────────
 function PreviewModal({ doc, onClose }: { doc: HRDocument; onClose: () => void }) {
-  const type = getPreviewType(doc.file_name || doc.file_url || "");
+  const url = fixUrl(doc.file_url);
+  const kind = getPreviewKind(doc.file_name || url || "");
+
+  // URL Microsoft Office Viewer (Word, Excel, PPT)
+  const officeViewerUrl = url
+    ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`
+    : null;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/80" onClick={onClose}>
@@ -59,16 +93,16 @@ function PreviewModal({ doc, onClose }: { doc: HRDocument; onClose: () => void }
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <FileIcon fileName={doc.file_name} size={18} />
+          <FileIcon fileName={doc.file_name} size={18} className="text-gray-300" />
           <div className="min-w-0">
             <p className="font-semibold text-sm truncate">{doc.title}</p>
             <p className="text-xs text-gray-400 truncate">{doc.file_name}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-4">
-          {doc.file_url && (
+          {url && (
             <a
-              href={doc.file_url}
+              href={url}
               download
               target="_blank"
               rel="noreferrer"
@@ -78,9 +112,9 @@ function PreviewModal({ doc, onClose }: { doc: HRDocument; onClose: () => void }
               Télécharger
             </a>
           )}
-          {doc.file_url && (
+          {url && (
             <a
-              href={doc.file_url}
+              href={url}
               target="_blank"
               rel="noreferrer"
               className="p-1.5 rounded-lg hover:bg-white/10 text-gray-300 transition"
@@ -92,7 +126,7 @@ function PreviewModal({ doc, onClose }: { doc: HRDocument; onClose: () => void }
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-white/10 text-gray-300 transition"
-            title="Fermer"
+            title="Fermer (Echap)"
           >
             <X size={18} />
           </button>
@@ -101,43 +135,72 @@ function PreviewModal({ doc, onClose }: { doc: HRDocument; onClose: () => void }
 
       {/* Zone de prévisualisation */}
       <div
-        className="flex-1 overflow-hidden flex items-center justify-center p-4"
+        className="flex-1 overflow-hidden flex items-center justify-center p-2"
         onClick={(e) => e.stopPropagation()}
       >
-        {type === "pdf" && doc.file_url && (
-          <iframe
-            src={doc.file_url}
+        {/* PDF → <object> natif du navigateur */}
+        {kind === "pdf" && url && (
+          <object
+            data={url}
+            type="application/pdf"
             className="w-full h-full rounded-lg bg-white"
-            title={doc.title}
-          />
+            aria-label={doc.title}
+          >
+            {/* Fallback si le navigateur ne supporte pas l'objet PDF */}
+            <div className="flex flex-col items-center gap-4 text-white text-center py-12">
+              <FileText size={48} className="opacity-40" />
+              <p className="text-base font-medium">Le PDF ne peut pas être affiché ici.</p>
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-camublue-900 text-white font-medium hover:bg-camublue-900/90 transition"
+              >
+                <ExternalLink size={15} />
+                Ouvrir le PDF
+              </a>
+            </div>
+          </object>
         )}
 
-        {type === "image" && doc.file_url && (
+        {/* Image */}
+        {kind === "image" && url && (
           <img
-            src={doc.file_url}
+            src={url}
             alt={doc.title}
             className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
           />
         )}
 
-        {type === "none" && (
+        {/* Office (Word / Excel / PowerPoint) → Microsoft Viewer */}
+        {kind === "office" && officeViewerUrl && (
+          <iframe
+            src={officeViewerUrl}
+            className="w-full h-full rounded-lg bg-white"
+            title={doc.title}
+            allow="fullscreen"
+          />
+        )}
+
+        {/* Autres formats non prévisualisables */}
+        {kind === "none" && (
           <div className="flex flex-col items-center gap-4 text-white text-center">
             <FileText size={56} className="opacity-40" />
             <p className="text-lg font-medium">Aperçu non disponible</p>
             <p className="text-sm text-gray-400 max-w-xs">
-              Ce type de fichier ne peut pas être prévisualisé directement.<br />
-              Téléchargez-le pour l'ouvrir.
+              Ce format ne peut pas être prévisualisé directement.
+              <br />Téléchargez le fichier pour l'ouvrir.
             </p>
-            {doc.file_url && (
+            {url && (
               <a
-                href={doc.file_url}
+                href={url}
                 download
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-camublue-900 text-white font-medium hover:bg-camublue-900/90 transition"
               >
                 <Download size={16} />
-                Télécharger le fichier
+                Télécharger
               </a>
             )}
           </div>
@@ -169,7 +232,6 @@ export default function EmployeeDocumentsPage() {
 
   useEffect(() => { load(); }, []);
 
-  // Fermer la modale avec Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setPreview(null); };
     window.addEventListener("keydown", handler);
@@ -243,7 +305,7 @@ export default function EmployeeDocumentsPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((doc) => {
-              const canPreview = getPreviewType(doc.file_name || doc.file_url || "") !== "none";
+              const kind = getPreviewKind(doc.file_name || fixUrl(doc.file_url) || "");
               return (
                 <div
                   key={doc.id}
@@ -275,22 +337,21 @@ export default function EmployeeDocumentsPage() {
                     <button
                       onClick={() => setPreview(doc)}
                       className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition ${
-                        canPreview
+                        kind !== "none"
                           ? "border-camublue-900 text-camublue-900 hover:bg-camublue-900/10"
                           : "border-gray-200 text-gray-400 hover:bg-gray-50"
                       }`}
-                      title={canPreview ? "Visualiser" : "Aperçu non disponible pour ce format"}
                     >
                       <Eye size={15} />
                       Visualiser
                     </button>
-                    {doc.file_url && (
+                    {fixUrl(doc.file_url) && (
                       <a
-                        href={doc.file_url}
+                        href={fixUrl(doc.file_url)!}
                         target="_blank"
                         rel="noreferrer"
                         download
-                        className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-camublue-900 text-white text-sm font-medium hover:bg-camublue-900/90 transition"
+                        className="flex items-center justify-center px-3 py-2 rounded-lg bg-camublue-900 text-white text-sm font-medium hover:bg-camublue-900/90 transition"
                         title="Télécharger"
                       >
                         <Download size={15} />
@@ -304,7 +365,6 @@ export default function EmployeeDocumentsPage() {
         )}
       </div>
 
-      {/* Modale de prévisualisation */}
       {preview && <PreviewModal doc={preview} onClose={() => setPreview(null)} />}
     </EmployeeLayout>
   );
