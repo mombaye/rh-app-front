@@ -8,12 +8,14 @@ import {
   Menu,
   UserCircle2,
   Clock,
+  FileStack,
+  ClipboardCheck,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
 
-const navItems = [
+const baseNavItems = [
   {
     label: "Vue d'ensemble",
     path: "/employee/dashboard",
@@ -39,13 +41,34 @@ const navItems = [
     path: "/employee/attendance",
     icon: <Clock size={20} />,
   },
+  {
+    label: "Documents",
+    path: "/employee/documents",
+    icon: <FileStack size={20} />,
+  },
 ];
 
-type NavItem = (typeof navItems)[0];
+type NavItem = (typeof baseNavItems)[0];
 
 export default function EmployeeSidebar() {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, availableRoles } = useAuth();
+
+  const isManager =
+    availableRoles.includes("manager1") || availableRoles.includes("manager2");
+
+  const navItems: NavItem[] = [
+    ...baseNavItems,
+    ...(isManager
+      ? [
+          {
+            label: "Approbations",
+            path: "/manager/approvals",
+            icon: <ClipboardCheck size={20} />,
+          },
+        ]
+      : []),
+  ];
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 

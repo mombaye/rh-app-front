@@ -21,12 +21,14 @@ import EmployeeLeavesPage     from "@/pages/employee/EmployeeLeavesPage";
 import EmployeePayslipPage    from "@/pages/employee/EmployeePayslipPage";
 import EmployeeDossierPage    from "@/pages/employee/EmployeeDossierPage";
 import EmployeeAttendancePage from "@/pages/employee/EmployeeAttendancePage";
+import EmployeeDocumentsPage  from "@/pages/employee/EmployeeDocumentsPage";
 // Manager pages
 import ManagerDashboardPage  from "@/pages/manager/ManagerDashboardPage";
 import ManagerLeavesPage     from "@/pages/manager/ManagerLeavesPage";
 import ManagerPayslipPage    from "@/pages/manager/ManagerPayslipPage";
 import ManagerDossierPage    from "@/pages/manager/ManagerDossierPage";
 import ManagerApprovalsPage  from "@/pages/manager/ManagerApprovalsPage";
+import ManagerDocumentsPage  from "@/pages/manager/ManagerDocumentsPage";
 import { useAuth } from "@/contexts/useAuth";
 // RH espace employé
 import RhLeavesPage      from "@/pages/rh/RhLeavesPage";
@@ -34,6 +36,7 @@ import RhPayslipPage     from "@/pages/rh/RhPayslipPage";
 import RhDossierPage     from "@/pages/rh/RhDossierPage";
 import RhAttendancePage  from "@/pages/rh/RhAttendancePage";
 import RhApprovalsPage   from "@/pages/rh/RhApprovalsPage";
+import RhDocumentsPage   from "@/pages/rh/RhDocumentsPage";
 
 // ── Helpers de rôles basés sur activeRole ────────────────────────────────────
 
@@ -151,6 +154,11 @@ function App() {
             <EmployeeAttendancePage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
+        <Route path="/employee/documents" element={
+          <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
+            <EmployeeDocumentsPage />
+          </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />
 
         {/* ── Espace Manager ───────────────────────────────────── */}
         <Route path="/manager/dashboard"  element={<MgrRoute><ManagerDashboardPage  /></MgrRoute>} />
@@ -158,6 +166,7 @@ function App() {
         <Route path="/manager/payslips"   element={<MgrRoute><ManagerPayslipPage    /></MgrRoute>} />
         <Route path="/manager/dossier"    element={<MgrRoute><ManagerDossierPage    /></MgrRoute>} />
         <Route path="/manager/approvals"  element={<MgrRoute><ManagerApprovalsPage  /></MgrRoute>} />
+        <Route path="/manager/documents"  element={<MgrRoute><ManagerDocumentsPage  /></MgrRoute>} />
 
         {/* ── Planning Manager ─────────────────────────────────── */}
         <Route path="/planning" element={
@@ -172,6 +181,7 @@ function App() {
         <Route path="/rh/my-dossier"     element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDossierPage    /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-attendance"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttendancePage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-approvals"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhApprovalsPage  /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/documents"      element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDocumentsPage  /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
 
         {/* ── Espace RH ────────────────────────────────────────── */}
         <Route path="/dashboard" element={

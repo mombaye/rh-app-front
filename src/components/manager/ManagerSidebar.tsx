@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, CalendarDays, BadgeDollarSign,
-  FolderOpen, ClipboardCheck, X, Menu, UserCircle2,
+  FolderOpen, ClipboardCheck, X, Menu, UserCircle2, FileStack,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -30,6 +30,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
     { label: "Mes Congés",    path: "/manager/leaves",    icon: <CalendarDays size={20} /> },
     { label: "Mes Bulletins", path: "/manager/payslips",  icon: <BadgeDollarSign size={20} /> },
     { label: "Mon Dossier",   path: "/manager/dossier",   icon: <FolderOpen size={20} /> },
+    { label: "Documents",     path: "/manager/documents", icon: <FileStack size={20} /> },
   ];
 
   useEffect(() => {

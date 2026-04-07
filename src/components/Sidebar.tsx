@@ -14,6 +14,7 @@ import {
   UserCircle,
   FolderOpen,
   ClipboardCheck,
+  FileStack,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -65,6 +66,11 @@ export default function Sidebar() {
       label: "Bulletins Salariés",
       path: "/payslip",
       icon: <BadgeDollarSign size={20} />,
+    },
+    {
+      label: "Documents RH",
+      path: "/rh/documents",
+      icon: <FileStack size={20} />,
     },
     ...(isRhManager
       ? [
