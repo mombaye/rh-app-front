@@ -57,7 +57,7 @@ export default function ManagerDocumentsPage() {
 
   return (
     <ManagerLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="space-y-6">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-[#003c71]/10">
             <FolderOpen size={24} className="text-[#003c71]" />
