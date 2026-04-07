@@ -2,23 +2,15 @@ import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   FolderOpen, FileText, Download, ChevronRight, Loader2,
-  Home, Folder, File,
+  Home, Folder, Eye, X, ExternalLink,
+  FileImage, FileSpreadsheet,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
 import { getEmployeeDocuments, downloadEmployeeDocument, DocumentItem } from "@/services/employeeService";
 import toast from "react-hot-toast";
 
-const FILE_ICONS: Record<string, { icon: React.ElementType; color: string }> = {
-  pdf:  { icon: FileText, color: "text-red-500" },
-  doc:  { icon: FileText, color: "text-blue-600" },
-  docx: { icon: FileText, color: "text-blue-600" },
-  xls:  { icon: FileText, color: "text-green-600" },
-  xlsx: { icon: FileText, color: "text-green-600" },
-  png:  { icon: File,     color: "text-purple-500" },
-  jpg:  { icon: File,     color: "text-purple-500" },
-  jpeg: { icon: File,     color: "text-purple-500" },
-};
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getExt(name: string) {
   return name.split(".").pop()?.toLowerCase() ?? "";
@@ -36,16 +28,169 @@ function fmtDate(d?: string) {
   return new Date(d).toLocaleDateString("fr-FR");
 }
 
+type PreviewKind = "pdf" | "image" | "office" | "none";
+
+function getPreviewKind(name: string): PreviewKind {
+  const ext = getExt(name);
+  if (ext === "pdf") return "pdf";
+  if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext)) return "image";
+  if (["doc", "docx", "xls", "xlsx", "ppt", "pptx"].includes(ext)) return "office";
+  return "none";
+}
+
+function FileIcon({ name, size = 20 }: { name: string; size?: number }) {
+  const ext = getExt(name);
+  if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext))
+    return <FileImage size={size} className="text-purple-500" />;
+  if (["xls", "xlsx", "csv"].includes(ext))
+    return <FileSpreadsheet size={size} className="text-green-600" />;
+  if (ext === "pdf")
+    return <FileText size={size} className="text-red-500" />;
+  if (["doc", "docx"].includes(ext))
+    return <FileText size={size} className="text-blue-600" />;
+  if (["ppt", "pptx"].includes(ext))
+    return <FileText size={size} className="text-orange-500" />;
+  return <FileText size={size} className="text-gray-500" />;
+}
+
+// ── Récupère le fichier comme Blob (requête authentifiée) ─────────────────────
+async function fetchFileBlob(employeeId: number, filePath: string): Promise<Blob> {
+  const token = localStorage.getItem("access_token");
+  const base = (import.meta.env.VITE_API_URL as string) || "http://localhost:8030";
+  const url = `${base}/api/employees/${employeeId}/documents/download/?path=${encodeURIComponent(filePath)}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}
+
+// ── Modale de prévisualisation ────────────────────────────────────────────────
+interface PreviewState {
+  title: string;
+  kind: PreviewKind;
+  blobUrl: string;      // blob: URL créée localement
+}
+
+function PreviewModal({ state, onClose }: { state: PreviewState; onClose: () => void }) {
+  const { title, kind, blobUrl } = state;
+
+  // Libérer la Blob URL quand la modale se ferme
+  useEffect(() => {
+    return () => URL.revokeObjectURL(blobUrl);
+  }, [blobUrl]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/80" onClick={onClose}>
+      {/* Barre supérieure */}
+      <div
+        className="flex items-center justify-between px-4 py-3 bg-gray-900 text-white shrink-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <FileText size={18} className="text-gray-300 shrink-0" />
+          <p className="font-semibold text-sm truncate">{title}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 ml-4">
+          <a
+            href={blobUrl}
+            download={title}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-camublue-900 text-white text-xs font-medium hover:bg-camublue-900/80 transition"
+          >
+            <Download size={13} />
+            Télécharger
+          </a>
+          {kind === "pdf" && (
+            <a
+              href={blobUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="p-1.5 rounded-lg hover:bg-white/10 text-gray-300 transition"
+              title="Ouvrir dans un nouvel onglet"
+            >
+              <ExternalLink size={16} />
+            </a>
+          )}
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-white/10 text-gray-300 transition"
+            title="Fermer (Echap)"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* Zone de visualisation */}
+      <div
+        className="flex-1 overflow-hidden flex items-center justify-center p-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {kind === "pdf" && (
+          <object
+            data={blobUrl}
+            type="application/pdf"
+            className="w-full h-full rounded-lg bg-white"
+            aria-label={title}
+          >
+            <div className="flex flex-col items-center gap-4 text-white text-center py-12">
+              <FileText size={48} className="opacity-40" />
+              <p className="font-medium">Le PDF ne peut pas être affiché ici.</p>
+              <a href={blobUrl} target="_blank" rel="noreferrer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-camublue-900 text-white font-medium hover:bg-camublue-900/90 transition">
+                <ExternalLink size={15} /> Ouvrir le PDF
+              </a>
+            </div>
+          </object>
+        )}
+
+        {kind === "image" && (
+          <img
+            src={blobUrl}
+            alt={title}
+            className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
+          />
+        )}
+
+        {/* Word / Excel / PPT — les Blob URLs ne fonctionnent pas avec MS Viewer.
+            On affiche le fichier en iframe via blob: ce qui ouvre le viewer natif
+            du navigateur si disponible, sinon propose de télécharger. */}
+        {kind === "office" && (
+          <div className="w-full h-full flex flex-col items-center justify-center gap-5 text-white text-center">
+            <FileText size={60} className="opacity-30" />
+            <div>
+              <p className="text-lg font-semibold">Aperçu Office</p>
+              <p className="text-sm text-gray-400 mt-1 max-w-sm">
+                Les fichiers Word, Excel et PowerPoint ne peuvent pas être prévisualisés
+                directement dans le navigateur. Téléchargez le fichier pour l'ouvrir.
+              </p>
+            </div>
+            <a
+              href={blobUrl}
+              download={title}
+              className="flex items-center gap-2 px-6 py-3 rounded-lg bg-camublue-900 text-white font-medium hover:bg-camublue-900/90 transition"
+            >
+              <Download size={16} />
+              Télécharger {title}
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Page principale ───────────────────────────────────────────────────────────
 export default function EmployeeDossierPage() {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
 
-  const [items, setItems]           = useState<DocumentItem[]>([]);
-  const [currentPath, setCurrentPath] = useState<string>("");
-  const [pathHistory, setPathHistory] = useState<{ label: string; path: string }[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [downloading, setDownloading] = useState<string | null>(null);
-  const [folderFound, setFolderFound] = useState(true);
+  const [items, setItems]               = useState<DocumentItem[]>([]);
+  const [currentPath, setCurrentPath]   = useState<string>("");
+  const [pathHistory, setPathHistory]   = useState<{ label: string; path: string }[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [downloading, setDownloading]   = useState<string | null>(null);
+  const [previewing, setPreviewing]     = useState<string | null>(null);
+  const [folderFound, setFolderFound]   = useState(true);
+  const [previewState, setPreviewState] = useState<PreviewState | null>(null);
 
   const navigate = useCallback((path: string, label: string, pushHistory = true) => {
     if (!employeeId) return;
@@ -55,13 +200,9 @@ export default function EmployeeDossierPage() {
         setItems(res.items);
         setFolderFound(res.folder_found);
         setCurrentPath(path);
-        if (pushHistory) {
-          setPathHistory(prev => [...prev, { label, path }]);
-        }
+        if (pushHistory) setPathHistory(prev => [...prev, { label, path }]);
       })
-      .catch(() => {
-        toast.error("Impossible d'accéder à ce dossier.");
-      })
+      .catch(() => toast.error("Impossible d'accéder à ce dossier."))
       .finally(() => setLoading(false));
   }, [employeeId]);
 
@@ -77,6 +218,13 @@ export default function EmployeeDossierPage() {
       .finally(() => setLoading(false));
   }, [employeeId]);
 
+  // Fermer avec Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setPreviewState(null); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const handleDownload = async (item: DocumentItem) => {
     if (!employeeId || item.type !== "file") return;
     const filePath = currentPath ? `${currentPath}/${item.name}` : item.name;
@@ -91,6 +239,22 @@ export default function EmployeeDossierPage() {
     }
   };
 
+  const handlePreview = async (item: DocumentItem) => {
+    if (!employeeId || item.type !== "file") return;
+    const filePath = currentPath ? `${currentPath}/${item.name}` : item.name;
+    const kind = getPreviewKind(item.name);
+    setPreviewing(item.name);
+    try {
+      const blob = await fetchFileBlob(employeeId, filePath);
+      const blobUrl = URL.createObjectURL(blob);
+      setPreviewState({ title: item.name, kind, blobUrl });
+    } catch {
+      toast.error("Impossible de charger le fichier.");
+    } finally {
+      setPreviewing(null);
+    }
+  };
+
   const handleFolder = (item: DocumentItem) => {
     const newPath = currentPath ? `${currentPath}/${item.name}` : item.name;
     navigate(newPath, item.name);
@@ -102,10 +266,7 @@ export default function EmployeeDossierPage() {
     if (!employeeId) return;
     setLoading(true);
     getEmployeeDocuments(employeeId, crumb.path)
-      .then(res => {
-        setItems(res.items);
-        setCurrentPath(crumb.path);
-      })
+      .then(res => { setItems(res.items); setCurrentPath(crumb.path); })
       .finally(() => setLoading(false));
   };
 
@@ -116,21 +277,13 @@ export default function EmployeeDossierPage() {
     <EmployeeLayout>
       <div className="px-4 md:px-6">
         {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
           <h1 className="text-2xl font-bold text-camublue-900">Mon Dossier</h1>
           <p className="text-gray-500 text-sm mt-0.5">Accédez à vos documents personnels</p>
         </motion.div>
 
         {/* Breadcrumb */}
-        <motion.nav
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex items-center gap-1 mb-4 flex-wrap"
-        >
+        <motion.nav initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1 mb-4 flex-wrap">
           {pathHistory.map((crumb, idx) => (
             <div key={idx} className="flex items-center gap-1">
               {idx > 0 && <ChevronRight size={14} className="text-gray-400" />}
@@ -213,32 +366,45 @@ export default function EmployeeDossierPage() {
                   </div>
                   <div className="divide-y divide-gray-50">
                     {files.map(item => {
-                      const ext = getExt(item.name);
-                      const cfg = FILE_ICONS[ext] ?? { icon: FileText, color: "text-gray-500" };
-                      const Icon = cfg.icon;
-                      const isLoading = downloading === item.name;
+                      const isDownloading = downloading === item.name;
+                      const isPreviewing  = previewing  === item.name;
                       return (
                         <div
                           key={item.name}
                           className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/50 transition"
                         >
-                          <Icon size={20} className={`shrink-0 ${cfg.color}`} />
+                          <FileIcon name={item.name} />
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium text-gray-800 truncate">{item.name}</div>
                             <div className="text-xs text-gray-400">
                               {[fmtSize(item.size), fmtDate(item.modified)].filter(Boolean).join(" · ")}
                             </div>
                           </div>
-                          <button
-                            onClick={() => handleDownload(item)}
-                            disabled={isLoading}
-                            className="flex items-center gap-1.5 text-sm text-camublue-900 hover:bg-camublue-900/10 px-3 py-1.5 rounded-lg transition disabled:opacity-50 shrink-0"
-                          >
-                            {isLoading
-                              ? <Loader2 size={14} className="animate-spin" />
-                              : <Download size={14} />}
-                            Télécharger
-                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* Bouton Visualiser */}
+                            <button
+                              onClick={() => handlePreview(item)}
+                              disabled={isPreviewing || isDownloading}
+                              className="flex items-center gap-1.5 text-sm text-camublue-900 border border-camublue-900/30 hover:bg-camublue-900/10 px-3 py-1.5 rounded-lg transition disabled:opacity-50"
+                              title="Visualiser"
+                            >
+                              {isPreviewing
+                                ? <Loader2 size={14} className="animate-spin" />
+                                : <Eye size={14} />}
+                              Visualiser
+                            </button>
+                            {/* Bouton Télécharger */}
+                            <button
+                              onClick={() => handleDownload(item)}
+                              disabled={isDownloading || isPreviewing}
+                              className="flex items-center gap-1.5 text-sm text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition disabled:opacity-50"
+                              title="Télécharger"
+                            >
+                              {isDownloading
+                                ? <Loader2 size={14} className="animate-spin" />
+                                : <Download size={14} />}
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -249,6 +415,11 @@ export default function EmployeeDossierPage() {
           )}
         </motion.div>
       </div>
+
+      {/* Modale de prévisualisation */}
+      {previewState && (
+        <PreviewModal state={previewState} onClose={() => setPreviewState(null)} />
+      )}
     </EmployeeLayout>
   );
 }
