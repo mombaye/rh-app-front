@@ -119,6 +119,7 @@ interface LeaveFormProps {
   initial?: Partial<LeaveRequestCreate & { id: number }>;
   leaveTypes: LeaveType[];
   employeeId: number;
+  balances?: LeaveBalance[];
   onClose: () => void;
   onSaved: () => void;
 }
@@ -162,7 +163,7 @@ function parseLeaveError(err: any): string {
   return "Une erreur inattendue s'est produite. Veuillez réessayer.";
 }
 
-function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSaved }: LeaveFormProps) {
+function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClose, onSaved }: LeaveFormProps) {
   const [form, setForm] = useState<Partial<LeaveRequestCreate>>({
     employee_id:    employeeId,
     leave_type_id:  initial?.leave_type_id,
@@ -175,6 +176,17 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Solde disponible pour le type sélectionné
+  const selectedType   = leaveTypes.find(t => t.id === form.leave_type_id);
+  const typeBalance    = selectedType?.deducts_from_balance
+    ? balances?.find(b => b.leave_type.id === form.leave_type_id)
+    : null;
+  const availableDays  = typeBalance ? parseFloat(typeBalance.remaining) : null;
+  const requestedDays  = typeof form.days === "number" ? form.days : 0;
+  const balanceShortfall = selectedType?.deducts_from_balance
+    && requestedDays > 0
+    && (availableDays === null || requestedDays > availableDays);
 
   useEffect(() => {
     if (form.start_date && form.end_date && form.end_date >= form.start_date) {
@@ -207,6 +219,24 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
     if (!form.days || form.days <= 0) {
       setFormError("Impossible de calculer la durée. Vérifiez les dates saisies.");
       return;
+    }
+
+    // Vérification du solde avant envoi
+    if (selectedType?.deducts_from_balance && mode === "create") {
+      if (availableDays === null) {
+        setFormError(
+          `Solde insuffisant pour ${selectedType.label} : 0j disponibles, ` +
+          `${form.days}j demandés. Contactez les RH pour configurer votre solde.`
+        );
+        return;
+      }
+      if (form.days > availableDays) {
+        setFormError(
+          `Solde insuffisant pour ${selectedType.label} : ` +
+          `${availableDays.toFixed(1)}j disponibles, ${form.days}j demandés.`
+        );
+        return;
+      }
     }
 
     setSaving(true);
@@ -266,6 +296,26 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, onClose, onSave
                 <option key={lt.id} value={lt.id}>{lt.label}</option>
               ))}
             </select>
+
+            {/* Solde disponible */}
+            {selectedType?.deducts_from_balance && (
+              <div className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border ${
+                balanceShortfall
+                  ? "bg-red-50 border-red-200 text-red-700"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-700"
+              }`}>
+                <TrendingUp size={14} className="shrink-0" />
+                {availableDays !== null
+                  ? <>Solde disponible : <strong className="ml-1">{availableDays.toFixed(1)} j</strong></>
+                  : <span className="text-amber-700">Aucun solde configuré — contactez les RH</span>
+                }
+                {balanceShortfall && requestedDays > 0 && availableDays !== null && (
+                  <span className="ml-auto text-xs font-normal opacity-80">
+                    ({requestedDays}j demandés)
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -1509,6 +1559,7 @@ export default function EmployeeLeavesPage({
           } : undefined}
           leaveTypes={leaveTypes}
           employeeId={employeeId}
+          balances={balances}
           onClose={() => { setShowForm(false); setEditTarget(null); }}
           onSaved={() => { setShowForm(false); setEditTarget(null); refresh(); }}
         />
