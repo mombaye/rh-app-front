@@ -66,6 +66,21 @@ export const documentService = {
     return res.data;
   },
 
+  /**
+   * Récupère le fichier en tant que Blob via l'endpoint /preview/ authentifié.
+   * Crée une URL objet locale utilisable dans un <iframe> ou <img> sans CORS.
+   * L'appelant est responsable de révoquer l'URL avec URL.revokeObjectURL().
+   */
+  fetchBlobUrl: async (id: number): Promise<{ objectUrl: string; contentType: string }> => {
+    const res = await axios.get(`${API}/${id}/preview/`, {
+      headers: getAuthHeaders(),
+      responseType: "blob",
+    });
+    const contentType: string = res.headers["content-type"] || "application/octet-stream";
+    const objectUrl = URL.createObjectURL(res.data as Blob);
+    return { objectUrl, contentType };
+  },
+
   formatSize: (bytes: number): string => {
     if (bytes === 0) return "—";
     if (bytes < 1024) return `${bytes} o`;

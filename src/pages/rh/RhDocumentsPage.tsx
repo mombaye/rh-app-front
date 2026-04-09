@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import AppLayout from "@/layouts/AppLayout";
 import { documentService, HRDocument, CATEGORY_LABELS } from "@/services/documentService";
+import DocumentPreviewModal, { getDocKind } from "@/components/documents/DocumentPreviewModal";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 
@@ -36,6 +37,7 @@ export default function RhDocumentsPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<HRDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [preview, setPreview] = useState<HRDocument | null>(null);
 
   // Upload form state
   const [title, setTitle] = useState("");
@@ -234,6 +236,17 @@ export default function RhDocumentsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1">
+                        <button
+                          onClick={() => setPreview(doc)}
+                          className={`p-1.5 rounded-lg transition ${
+                            getDocKind(doc) !== "download-only"
+                              ? "hover:bg-camublue-900/10 text-camublue-900"
+                              : "hover:bg-gray-50 text-gray-400"
+                          }`}
+                          title="Visualiser"
+                        >
+                          <Eye size={15} />
+                        </button>
                         {doc.file_url && (
                           <a
                             href={doc.file_url}
@@ -387,6 +400,14 @@ export default function RhDocumentsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {preview && (
+        <DocumentPreviewModal
+          doc={preview}
+          onClose={() => setPreview(null)}
+          accentClass="camublue-900"
+        />
       )}
     </AppLayout>
   );

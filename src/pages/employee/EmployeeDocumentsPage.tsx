@@ -1,11 +1,12 @@
 // pages/employee/EmployeeDocumentsPage.tsx
 import { useEffect, useState } from "react";
-import {
-  FolderOpen, FileText, Download, Search, RefreshCw,
-  Eye, X, ExternalLink, FileImage, FileSpreadsheet, Presentation,
-} from "lucide-react";
+import { FolderOpen, Download, Search, RefreshCw, Eye } from "lucide-react";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
 import { documentService, HRDocument, CATEGORY_LABELS } from "@/services/documentService";
+import DocumentPreviewModal, {
+  FileTypeIcon,
+  getDocKind,
+} from "@/components/documents/DocumentPreviewModal";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 
@@ -28,195 +29,12 @@ const CATEGORIES = [
 const fmt = (d: string) =>
   new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
 
-/**
- * Corrige les URLs qui pointent vers localhost en remplaçant le host
- * par celui configuré dans VITE_API_URL.
- * Cela se produit quand Django est derrière un proxy sans BACKEND_URL configuré.
- */
-function fixUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const apiBase = (import.meta.env.VITE_API_URL as string) || "";
-    if (url.includes("://localhost") && apiBase && !apiBase.includes("localhost")) {
-      const u = new URL(url);
-      const api = new URL(apiBase);
-      u.protocol = api.protocol;
-      u.host = api.host;
-      return u.toString();
-    }
-  } catch {
-    // URL invalide → on retourne telle quelle
-  }
-  return url;
-}
-
-function getExt(fileName: string): string {
-  return fileName.split(".").pop()?.toLowerCase() ?? "";
-}
-
-type PreviewKind = "pdf" | "image" | "office" | "none";
-
-function getPreviewKind(fileName: string): PreviewKind {
-  const ext = getExt(fileName);
-  if (ext === "pdf") return "pdf";
-  if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext)) return "image";
-  if (["doc", "docx", "xls", "xlsx", "ppt", "pptx"].includes(ext)) return "office";
-  return "none";
-}
-
-function FileIcon({ fileName, size = 20, className = "text-camublue-900" }: { fileName: string; size?: number; className?: string }) {
-  const ext = getExt(fileName);
-  if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext))
-    return <FileImage size={size} className={className} />;
-  if (["xls", "xlsx", "csv"].includes(ext))
-    return <FileSpreadsheet size={size} className="text-green-700" />;
-  if (["ppt", "pptx"].includes(ext))
-    return <Presentation size={size} className="text-orange-600" />;
-  return <FileText size={size} className={className} />;
-}
-
-// ── Modale de prévisualisation ────────────────────────────────────────────────
-function PreviewModal({ doc, onClose }: { doc: HRDocument; onClose: () => void }) {
-  const url = fixUrl(doc.file_url);
-  const kind = getPreviewKind(doc.file_name || url || "");
-
-  // URL Microsoft Office Viewer (Word, Excel, PPT)
-  const officeViewerUrl = url
-    ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`
-    : null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/80" onClick={onClose}>
-      {/* Barre supérieure */}
-      <div
-        className="flex items-center justify-between px-4 py-3 bg-gray-900 text-white shrink-0"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <FileIcon fileName={doc.file_name} size={18} className="text-gray-300" />
-          <div className="min-w-0">
-            <p className="font-semibold text-sm truncate">{doc.title}</p>
-            <p className="text-xs text-gray-400 truncate">{doc.file_name}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0 ml-4">
-          {url && (
-            <a
-              href={url}
-              download
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-camublue-900 text-white text-xs font-medium hover:bg-camublue-900/80 transition"
-            >
-              <Download size={13} />
-              Télécharger
-            </a>
-          )}
-          {url && (
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              className="p-1.5 rounded-lg hover:bg-white/10 text-gray-300 transition"
-              title="Ouvrir dans un nouvel onglet"
-            >
-              <ExternalLink size={16} />
-            </a>
-          )}
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-gray-300 transition"
-            title="Fermer (Echap)"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      </div>
-
-      {/* Zone de prévisualisation */}
-      <div
-        className="flex-1 overflow-hidden flex items-center justify-center p-2"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* PDF → <object> natif du navigateur */}
-        {kind === "pdf" && url && (
-          <object
-            data={url}
-            type="application/pdf"
-            className="w-full h-full rounded-lg bg-white"
-            aria-label={doc.title}
-          >
-            {/* Fallback si le navigateur ne supporte pas l'objet PDF */}
-            <div className="flex flex-col items-center gap-4 text-white text-center py-12">
-              <FileText size={48} className="opacity-40" />
-              <p className="text-base font-medium">Le PDF ne peut pas être affiché ici.</p>
-              <a
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-camublue-900 text-white font-medium hover:bg-camublue-900/90 transition"
-              >
-                <ExternalLink size={15} />
-                Ouvrir le PDF
-              </a>
-            </div>
-          </object>
-        )}
-
-        {/* Image */}
-        {kind === "image" && url && (
-          <img
-            src={url}
-            alt={doc.title}
-            className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
-          />
-        )}
-
-        {/* Office (Word / Excel / PowerPoint) → Microsoft Viewer */}
-        {kind === "office" && officeViewerUrl && (
-          <iframe
-            src={officeViewerUrl}
-            className="w-full h-full rounded-lg bg-white"
-            title={doc.title}
-            allow="fullscreen"
-          />
-        )}
-
-        {/* Autres formats non prévisualisables */}
-        {kind === "none" && (
-          <div className="flex flex-col items-center gap-4 text-white text-center">
-            <FileText size={56} className="opacity-40" />
-            <p className="text-lg font-medium">Aperçu non disponible</p>
-            <p className="text-sm text-gray-400 max-w-xs">
-              Ce format ne peut pas être prévisualisé directement.
-              <br />Téléchargez le fichier pour l'ouvrir.
-            </p>
-            {url && (
-              <a
-                href={url}
-                download
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-camublue-900 text-white font-medium hover:bg-camublue-900/90 transition"
-              >
-                <Download size={16} />
-                Télécharger
-              </a>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Page principale ───────────────────────────────────────────────────────────
 export default function EmployeeDocumentsPage() {
-  const [docs, setDocs] = useState<HRDocument[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [docs,      setDocs]      = useState<HRDocument[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [search,    setSearch]    = useState("");
   const [catFilter, setCatFilter] = useState("ALL");
-  const [preview, setPreview] = useState<HRDocument | null>(null);
+  const [preview,   setPreview]   = useState<HRDocument | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -231,12 +49,6 @@ export default function EmployeeDocumentsPage() {
   };
 
   useEffect(() => { load(); }, []);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setPreview(null); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
 
   const filtered = docs.filter((d) => {
     const matchSearch =
@@ -276,7 +88,7 @@ export default function EmployeeDocumentsPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher un document..."
+              placeholder="Rechercher un document…"
               className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-camublue-900/20 focus:border-camublue-900 outline-none"
             />
           </div>
@@ -305,7 +117,8 @@ export default function EmployeeDocumentsPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((doc) => {
-              const kind = getPreviewKind(doc.file_name || fixUrl(doc.file_url) || "");
+              const kind = getDocKind(doc);
+              const isPreviewable = kind !== "download-only";
               return (
                 <div
                   key={doc.id}
@@ -313,7 +126,7 @@ export default function EmployeeDocumentsPage() {
                 >
                   <div className="flex items-start gap-3">
                     <div className="p-2.5 rounded-lg bg-camublue-900/10 shrink-0">
-                      <FileIcon fileName={doc.file_name} />
+                      <FileTypeIcon fileName={doc.file_name} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-800 leading-tight">{doc.title}</p>
@@ -337,17 +150,17 @@ export default function EmployeeDocumentsPage() {
                     <button
                       onClick={() => setPreview(doc)}
                       className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition ${
-                        kind !== "none"
+                        isPreviewable
                           ? "border-camublue-900 text-camublue-900 hover:bg-camublue-900/10"
-                          : "border-gray-200 text-gray-400 hover:bg-gray-50"
+                          : "border-gray-200 text-gray-500 hover:bg-gray-50"
                       }`}
                     >
                       <Eye size={15} />
-                      Visualiser
+                      {isPreviewable ? "Visualiser" : "Voir"}
                     </button>
-                    {fixUrl(doc.file_url) && (
+                    {doc.file_url && (
                       <a
-                        href={fixUrl(doc.file_url)!}
+                        href={doc.file_url}
                         target="_blank"
                         rel="noreferrer"
                         download
@@ -365,7 +178,13 @@ export default function EmployeeDocumentsPage() {
         )}
       </div>
 
-      {preview && <PreviewModal doc={preview} onClose={() => setPreview(null)} />}
+      {preview && (
+        <DocumentPreviewModal
+          doc={preview}
+          onClose={() => setPreview(null)}
+          accentClass="camublue-900"
+        />
+      )}
     </EmployeeLayout>
   );
 }
