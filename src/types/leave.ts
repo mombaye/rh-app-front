@@ -166,7 +166,6 @@ export interface CarryoverResult {
 export interface LeaveSummary {
   total:               number;
   pending:             number;
-  pending_rh:          number;
   approved:            number;
   rejected:            number;
   cancelled:           number;

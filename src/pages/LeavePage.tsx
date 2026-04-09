@@ -36,7 +36,6 @@ const STATUS_CFG: Record<
 > = {
   PENDING:        { label: "En attente",          color: "#d97706", bg: "#fffbeb", border: "#fde68a", dot: "bg-amber-400"   },
   PENDING_SECOND: { label: "En att. 2ème valid.", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe", dot: "bg-violet-500"  },
-  PENDING_RH:     { label: "Validation RH",       color: "#0369a1", bg: "#eff6ff", border: "#bfdbfe", dot: "bg-blue-500"    },
   APPROVED:       { label: "Approuvé",            color: "#059669", bg: "#ecfdf5", border: "#a7f3d0", dot: "bg-emerald-500" },
   REJECTED:       { label: "Rejeté",              color: "#dc2626", bg: "#fef2f2", border: "#fecaca", dot: "bg-red-500"     },
   CANCELLED:      { label: "Annulé",              color: "#64748b", bg: "#f8fafc", border: "#e2e8f0", dot: "bg-slate-400"   },
@@ -87,7 +86,6 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "ALL",            label: "Toutes"          },
   { value: "PENDING",        label: "En attente"      },
   { value: "PENDING_SECOND", label: "2ème validation" },
-  { value: "PENDING_RH",     label: "Validation RH"  },
   { value: "APPROVED",       label: "Approuvées"      },
   { value: "REJECTED",       label: "Rejetées"        },
   { value: "CANCELLED",      label: "Annulées"        },
@@ -459,9 +457,6 @@ export default function LeavePage() {
                       onClick={() => setStatusFilter(
                         (statusFilter === "PENDING" || statusFilter === "PENDING_SECOND") ? "ALL" : "PENDING"
                       )} />
-                    <KpiCard label="Validation RH" value={summary.pending_rh ?? 0} color="#0369a1"
-                      active={statusFilter === "PENDING_RH"}
-                      onClick={() => setStatusFilter(statusFilter === "PENDING_RH" ? "ALL" : "PENDING_RH")} />
                     <KpiCard label="Approuvés"  value={summary.approved} color="#059669"
                       sub={`${summary.total_days_approved}j accordés`}
                       active={statusFilter === "APPROVED"}
@@ -2467,7 +2462,7 @@ function ValidationChain({ r }: { r: LeaveRequest }) {
   const hasN2 = r.requires_second_approval || !!r.second_reviewer || !!r.employee?.n2_manager_id;
 
   // Flux DG : pas de N+1/N+2 défini dans la hiérarchie standard mais une validation directe
-  const isDgFlow = !hasN1 && !hasN2 && (r.status === "APPROVED" || r.status === "PENDING_RH") && !!r.reviewed_by;
+  const isDgFlow = !hasN1 && !hasN2 && r.status === "APPROVED" && !!r.reviewed_by;
 
   const steps: Step[] = [];
 
@@ -2488,7 +2483,7 @@ function ValidationChain({ r }: { r: LeaveRequest }) {
       email:  r.reviewed_by?.email ?? null,
       date:   fmtDt(r.reviewed_at),
       note:   r.status === "REJECTED" ? r.reject_reason : null,
-      status: (r.status === "APPROVED" || r.status === "PENDING_RH") ? "done" : r.status === "REJECTED" ? "rejected" : "waiting",
+      status: r.status === "APPROVED" ? "done" : r.status === "REJECTED" ? "rejected" : "waiting",
     });
   } else {
     // Flux hiérarchique standard : N+1 puis N+2 si existe
@@ -2534,25 +2529,6 @@ function ValidationChain({ r }: { r: LeaveRequest }) {
       });
     }
   }
-
-  // Étape finale — Validation RH (toujours présente)
-  const rhDone    = !!r.hr_reviewed_at;
-  const rhWaiting = r.status === "PENDING_RH";
-  const rhRejected = r.status === "REJECTED" && rhDone;
-  const rhStatus: StepStatus =
-    rhRejected ? "rejected"
-    : rhDone    ? "done"
-    : rhWaiting ? "waiting"
-    : "pending";
-
-  steps.push({
-    label:  "Validation RH",
-    name:   r.hr_reviewer?.full_name ?? null,
-    email:  r.hr_reviewer?.email ?? null,
-    date:   fmtDt(r.hr_reviewed_at),
-    note:   rhRejected ? r.reject_reason : null,
-    status: rhStatus,
-  });
 
   const dot: Record<StepStatus, string> = {
     done:     "bg-emerald-500 border-emerald-300 shadow-emerald-200",
@@ -2749,22 +2725,11 @@ function DetailModal({ request: r, onClose, onDone }: {
     } finally { setMarkAbsentLoading(false); }
   };
 
-  const isPending   = r.status === "PENDING" || r.status === "PENDING_SECOND";
-  const isPendingRH = r.status === "PENDING_RH";
-  const lc          = r.leave_type?.color ?? "#6b7280";
-  const needsDoc    = r.leave_type?.requires_justification;
+  const isPending = r.status === "PENDING" || r.status === "PENDING_SECOND";
+  const lc        = r.leave_type?.color ?? "#6b7280";
+  const needsDoc  = r.leave_type?.requires_justification;
 
-  const handleHrValidate = () =>
-    run(() => leaveRequestService.hrValidate(r.id, user?.employee_id ?? undefined).then(() => {}),
-        "Congé approuvé RH — solde mis à jour ✓");
-
-  const handleHrReject = () => {
-    if (!rejectReason.trim()) { toast.error("Le motif de rejet est obligatoire."); return; }
-    run(() => leaveRequestService.hrReject(r.id, rejectReason, user?.employee_id ?? undefined).then(() => {}),
-        "Demande rejetée par le RH");
-  };
-
-  // (RH ne peut pas approuver via le bouton manager — l'approbation RH se fait via hrValidate)
+  // (RH ne peut pas approuver — approbation réservée aux managers)
 
   const infoRows: [string, string][] = [
     ["Employé",   r.employee?.full_name ?? "—"],
@@ -3124,54 +3089,6 @@ function DetailModal({ request: r, onClose, onDone }: {
                 </div>
               )}
 
-            </div>
-          )}
-
-          {/* ── Actions PENDING_RH ────────────────────────────────────────────── */}
-          {isPendingRH && (
-            <div className="pt-2 border-t border-slate-100 space-y-3">
-              <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
-                <CheckCircle className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-blue-800">En attente de validation RH</p>
-                  <p className="text-xs text-blue-600 mt-0.5 leading-relaxed">
-                    Tous les managers ont approuvé. La validation RH va décrémenter le solde de congé de l'employé.
-                  </p>
-                </div>
-              </div>
-
-              {/* Approuver RH */}
-              <button
-                disabled={actionLoading}
-                onClick={handleHrValidate}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition disabled:opacity-50">
-                {actionLoading
-                  ? <ImSpinner2 className="animate-spin" size={14} />
-                  : <CheckCircle2 className="h-4 w-4" />
-                }
-                Approuver (validation RH finale)
-              </button>
-
-              {/* Rejeter RH */}
-              <div className="space-y-2">
-                <textarea
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Motif de rejet RH (obligatoire)…"
-                  rows={2}
-                  className="w-full border border-red-200 rounded-xl p-3 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 resize-none transition bg-white"
-                />
-                <button
-                  disabled={actionLoading || !rejectReason.trim()}
-                  onClick={handleHrReject}
-                  className="w-full flex items-center justify-center gap-2 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-bold rounded-xl transition border border-red-200 disabled:opacity-50">
-                  {actionLoading
-                    ? <ImSpinner2 className="animate-spin" size={14} />
-                    : <XCircle className="h-4 w-4" />
-                  }
-                  Rejeter (RH)
-                </button>
-              </div>
             </div>
           )}
 
