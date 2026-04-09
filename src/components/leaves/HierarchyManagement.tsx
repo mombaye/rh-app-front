@@ -413,7 +413,7 @@ function OrgChartTab() {
 
         return (
           <>
-            <p className="text-center text-xs text-gray-400 italic -mt-4">Responsables de département</p>
+            <p className="text-center text-xs text-gray-400 italic -mt-4">Niveau Managers — validés directement par le DG</p>
             <div className="overflow-x-auto pb-2">
               <div className="flex gap-6 justify-start min-w-max px-2">
                 {rootDepts.map(dept => (
@@ -544,7 +544,7 @@ function OrgChartTab() {
               </FormField>
 
               {/* N+2 */}
-              <FormField label="Manager N+2 (Direction)">
+              <FormField label="Manager N+2 (sous-département uniquement)">
                 <EmployeeSelect
                   employees={activeEmps.filter(e => e.id !== editingEmp.id)}
                   value={editForm.n2_manager_id}
@@ -555,6 +555,10 @@ function OrgChartTab() {
                   }))}
                   placeholder="Choisir le N+2..."
                 />
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Requis uniquement pour les employés dans un sous-département (ex : BACK OFFICE, NOC).
+                  Les employés directement sous un département racine (ex : Support IT) n'ont besoin que du N+1.
+                </p>
               </FormField>
 
               {/* Double validation */}
@@ -567,7 +571,7 @@ function OrgChartTab() {
                 />
                 <div>
                   <p className="text-sm font-semibold text-gray-700">Double validation requise</p>
-                  <p className="text-xs text-gray-400">N+1 et N+2 doivent tous deux approuver le congé</p>
+                  <p className="text-xs text-gray-400">N+1 et N+2 doivent tous deux approuver — uniquement pour les sous-départements</p>
                 </div>
               </label>
             </div>

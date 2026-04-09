@@ -128,6 +128,8 @@ export interface MyHierarchyChain {
   requires_two_approvals: boolean;
   n1_manager: HierarchyMini | null;
   n2_manager: HierarchyMini | null;
+  /** DG_ONLY = responsable dept racine | N1_ONLY = employé sous dept racine | HIERARCHY = employé sous-département */
+  approval_flow: "DG_ONLY" | "N1_ONLY" | "HIERARCHY";
   rh_validation: boolean;
 }
 

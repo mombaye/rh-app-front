@@ -309,24 +309,35 @@ export default function EmployeeDashboardPage() {
                 <div className="hidden sm:block w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[6px] border-l-gray-300" />
               </div>
 
-              {/* N+1 */}
-              <div className="flex flex-col items-center text-center min-w-[140px]">
-                <div className={`p-3 rounded-xl mb-2 ${hierarchy.n1_manager ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
-                  <ShieldCheck size={22} className={hierarchy.n1_manager ? "text-amber-700" : "text-gray-400"} />
+              {/* Approbateur principal : DG (responsable dept racine) ou N+1 */}
+              {hierarchy.approval_flow === "DG_ONLY" ? (
+                <div className="flex flex-col items-center text-center min-w-[140px]">
+                  <div className="p-3 rounded-xl mb-2 bg-indigo-50 border border-indigo-300">
+                    <ShieldCheck size={22} className="text-indigo-700" />
+                  </div>
+                  <span className="text-xs font-bold text-indigo-800 leading-tight">Direction Générale</span>
+                  <span className="text-[10px] text-indigo-500 mt-0.5">Validation directe</span>
+                  <span className="text-[9px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded mt-1">DG</span>
                 </div>
-                {hierarchy.n1_manager ? (
-                  <>
-                    <span className="text-xs font-bold text-amber-800 leading-tight">{hierarchy.n1_manager.full_name}</span>
-                    <span className="text-[10px] text-amber-500 mt-0.5">{hierarchy.n1_manager.fonction || hierarchy.n1_manager.service}</span>
-                  </>
-                ) : (
-                  <span className="text-xs text-gray-400 italic">Non défini</span>
-                )}
-                <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded mt-1">N+1</span>
-              </div>
+              ) : (
+                <div className="flex flex-col items-center text-center min-w-[140px]">
+                  <div className={`p-3 rounded-xl mb-2 ${hierarchy.n1_manager ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
+                    <ShieldCheck size={22} className={hierarchy.n1_manager ? "text-amber-700" : "text-gray-400"} />
+                  </div>
+                  {hierarchy.n1_manager ? (
+                    <>
+                      <span className="text-xs font-bold text-amber-800 leading-tight">{hierarchy.n1_manager.full_name}</span>
+                      <span className="text-[10px] text-amber-500 mt-0.5">{hierarchy.n1_manager.fonction || hierarchy.n1_manager.service}</span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-gray-400 italic">Non défini</span>
+                  )}
+                  <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded mt-1">N+1</span>
+                </div>
+              )}
 
-              {/* N+2 (conditionnel) */}
-              {hierarchy.requires_two_approvals && (
+              {/* N+2 — uniquement pour les employés dans un sous-département */}
+              {hierarchy.approval_flow === "HIERARCHY" && hierarchy.requires_two_approvals && (
                 <>
                   <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
                     <ArrowDown size={16} className="text-gray-300 sm:hidden" />

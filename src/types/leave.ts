@@ -386,7 +386,8 @@ export interface ApprovalChainStep {
 export interface ApprovalChainInfo {
   is_department_head: boolean;
   department:         string | null;
-  approval_flow:      "HIERARCHY" | "DG_ONLY";
+  /** DG_ONLY = responsable dept racine | N1_ONLY = employé sous dept racine | HIERARCHY = employé sous-département */
+  approval_flow:      "HIERARCHY" | "DG_ONLY" | "N1_ONLY";
   steps:              ApprovalChainStep[];
 }
 

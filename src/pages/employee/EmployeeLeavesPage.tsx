@@ -1267,28 +1267,41 @@ export default function EmployeeLeavesPage({
                         <ArrowDown size={14} className="text-gray-400 -mt-1" />
                       </div>
 
-                      {/* N+1 */}
-                      <div className={`flex items-center gap-3 px-5 py-3 rounded-xl w-full max-w-md ${
-                        hierarchy.n1_manager ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"
-                      }`}>
-                        <div className={`p-2 rounded-lg ${hierarchy.n1_manager ? "bg-amber-100" : "bg-gray-100"}`}>
-                          <ShieldCheck size={18} className={hierarchy.n1_manager ? "text-amber-700" : "text-gray-400"} />
+                      {/* Approbateur principal : DG (responsable dept racine) ou N+1 */}
+                      {hierarchy.approval_flow === "DG_ONLY" ? (
+                        <div className="flex items-center gap-3 px-5 py-3 rounded-xl w-full max-w-md bg-indigo-50 border border-indigo-200">
+                          <div className="p-2 rounded-lg bg-indigo-100">
+                            <ShieldCheck size={18} className="text-indigo-700" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-indigo-800">Direction Générale</p>
+                            <p className="text-[10px] text-indigo-500">Validation directe DG</p>
+                          </div>
+                          <span className="ml-auto text-[10px] font-semibold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-lg whitespace-nowrap">DG</span>
                         </div>
-                        <div className="min-w-0">
-                          {hierarchy.n1_manager ? (
-                            <>
-                              <p className="text-sm font-bold text-amber-800">{hierarchy.n1_manager.full_name}</p>
-                              <p className="text-[10px] text-amber-500">{hierarchy.n1_manager.fonction || hierarchy.n1_manager.service}</p>
-                            </>
-                          ) : (
-                            <p className="text-sm text-gray-400 italic">Non défini</p>
-                          )}
+                      ) : (
+                        <div className={`flex items-center gap-3 px-5 py-3 rounded-xl w-full max-w-md ${
+                          hierarchy.n1_manager ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"
+                        }`}>
+                          <div className={`p-2 rounded-lg ${hierarchy.n1_manager ? "bg-amber-100" : "bg-gray-100"}`}>
+                            <ShieldCheck size={18} className={hierarchy.n1_manager ? "text-amber-700" : "text-gray-400"} />
+                          </div>
+                          <div className="min-w-0">
+                            {hierarchy.n1_manager ? (
+                              <>
+                                <p className="text-sm font-bold text-amber-800">{hierarchy.n1_manager.full_name}</p>
+                                <p className="text-[10px] text-amber-500">{hierarchy.n1_manager.fonction || hierarchy.n1_manager.service}</p>
+                              </>
+                            ) : (
+                              <p className="text-sm text-gray-400 italic">Non défini</p>
+                            )}
+                          </div>
+                          <span className="ml-auto text-[10px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-lg whitespace-nowrap">N+1</span>
                         </div>
-                        <span className="ml-auto text-[10px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-lg whitespace-nowrap">N+1</span>
-                      </div>
+                      )}
 
-                      {/* N+2 (conditionnel) */}
-                      {hierarchy.requires_two_approvals && (
+                      {/* N+2 — uniquement pour les employés dans un sous-département */}
+                      {hierarchy.approval_flow === "HIERARCHY" && hierarchy.requires_two_approvals && (
                         <>
                           <div className="flex flex-col items-center py-1">
                             <div className="w-0.5 h-4 bg-gray-300" />
