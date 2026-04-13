@@ -80,6 +80,22 @@ export const employeeHierarchyService = {
     return res.data;
   },
 
+  /**
+   * GET /api/employees/hierarchy/dg/
+   * Retourne le Directeur Général du système, auto-détecté via is_global_admin=True.
+   * Le DG (ex : Eduard MAIRET) est fixe — aucune config par département requise.
+   */
+  getDgEmployee: async (): Promise<HierarchyMini | null> => {
+    try {
+      const res = await axios.get(`${EMP_API}/hierarchy/dg/`, {
+        headers: getAuthHeaders(),
+      });
+      return res.data;
+    } catch {
+      return null;
+    }
+  },
+
   /** POST /api/employees/hierarchy/sync/ — Synchronisation complète hiérarchie → employés → users */
   syncAll: async (): Promise<{ message: string; employees_synced: number; users_checked: number }> => {
     const res = await axios.post(`${EMP_API}/hierarchy/sync/`, {}, {
@@ -128,6 +144,8 @@ export interface MyHierarchyChain {
   requires_two_approvals: boolean;
   n1_manager: HierarchyMini | null;
   n2_manager: HierarchyMini | null;
+  /** DG du système (auto-détecté via is_global_admin) — présent uniquement pour DG_ONLY flow */
+  dg: HierarchyMini | null;
   /** DG_ONLY = responsable dept racine | N1_ONLY = employé sous dept racine | HIERARCHY = employé sous-département */
   approval_flow: "DG_ONLY" | "N1_ONLY" | "HIERARCHY";
   rh_validation: boolean;
