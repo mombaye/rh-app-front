@@ -100,6 +100,18 @@ export const employeeHierarchyService = {
     });
     return res.data;
   },
+
+  /**
+   * GET /api/employees/hierarchy/dg/
+   * Retourne le DG (Directeur Général) auto-détecté via is_superuser.
+   * Permet d'afficher Eduard MAIRET dans l'organigramme sans saisie manuelle.
+   */
+  getGlobalDG: async (): Promise<{ dg: GlobalDGInfo | null; message?: string }> => {
+    const res = await axios.get(`${EMP_API}/hierarchy/dg/`, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
 };
 
 export interface HierarchyMini {
@@ -123,6 +135,15 @@ export interface DepartmentManagers {
   n2_manager: DepartmentManagerMini | null;
 }
 
+export interface GlobalDGInfo {
+  id: number;
+  matricule: string;
+  full_name: string;
+  fonction: string;
+  service: string;
+  email: string;
+}
+
 export interface MyHierarchyChain {
   employee: HierarchyMini;
   requires_two_approvals: boolean;
@@ -131,6 +152,8 @@ export interface MyHierarchyChain {
   /** DG_ONLY = responsable dept racine | N1_ONLY = employé sous dept racine | HIERARCHY = employé sous-département */
   approval_flow: "DG_ONLY" | "N1_ONLY" | "HIERARCHY";
   rh_validation: boolean;
+  /** Info DG (Direction Générale) — présent quand approval_flow = "DG_ONLY" */
+  dg_info: HierarchyMini | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
