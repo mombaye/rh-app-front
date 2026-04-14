@@ -57,7 +57,7 @@ export default function Sidebar() {
       ],
     },
     {
-      label: "Congés/Absences",
+      label: "Congés",
       path: "/leaves",
       icon: <CalendarDays size={20} />,
     },
