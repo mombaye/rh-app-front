@@ -47,13 +47,13 @@ export default function Sidebar() {
       ],
     },
     {
-      label: "Congés et Absences",
+      label: "Congés",
       path: "/leaves",
       icon: <CalendarDays size={20} />,
       subItems: [
-        { label: "Internes", path: "/leaves" },
-        { label: "Intérimaires", path: "/leaves" },
-        { label: "Hiérarchie", path: "/leaves" },
+        { label: "Internes",     path: "/leaves/internes"   },
+        { label: "Intérimaires", path: "/leaves/interims"   },
+        { label: "Hiérarchie",   path: "/leaves/hierarchie" },
       ],
     },
     {
