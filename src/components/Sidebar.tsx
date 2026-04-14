@@ -38,7 +38,7 @@ export default function Sidebar() {
       icon: <LayoutDashboard size={20} />,
     },
     {
-      label: "Gestion Employers",
+      label: "Gestion Employés",
       path: "/employees",
       icon: <Users2 size={20} />,
       subItems: [
@@ -71,7 +71,7 @@ export default function Sidebar() {
       icon: <BadgeDollarSign size={20} />,
     },
     {
-      label: "Document RH",
+      label: "Documents RH",
       path: "/rh/documents",
       icon: <FileStack size={20} />,
     },
@@ -86,7 +86,7 @@ export default function Sidebar() {
         ...(isRhManager
           ? [
               { label: "Mes Pointages", path: "/rh/my-attendance" },
-              { label: "Approbation", path: "/rh/my-approvals" },
+              { label: "Approbations", path: "/rh/my-approvals" },
             ]
           : []),
       ],
@@ -142,7 +142,7 @@ export default function Sidebar() {
           >
             <div className="flex items-center gap-3">
               {item.icon}
-              {item.label}
+              <span className="whitespace-nowrap">{item.label}</span>
             </div>
             {isOpen ? (
               <ChevronDown size={15} className="shrink-0 text-gray-400" />
@@ -152,7 +152,7 @@ export default function Sidebar() {
           </button>
 
           {isOpen && (
-            <div className="mt-1 ml-9 flex flex-col gap-0.5 border-l-2 border-camublue-900/20 pl-3">
+            <div className="mt-1 ml-2 flex flex-col gap-0.5">
               {item.subItems!.map((sub) => {
                 const isActive = location.pathname.startsWith(sub.path);
                 return (
@@ -160,18 +160,19 @@ export default function Sidebar() {
                     key={sub.path}
                     to={sub.path}
                     onClick={onClose}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                    className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
                       isActive
                         ? "bg-camublue-900 text-white shadow-sm"
                         : "text-gray-600 hover:bg-camublue-900/10 hover:text-camublue-900"
                     }`}
                   >
+                    <span className="w-5"></span>
                     <span
                       className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                         isActive ? "bg-white" : "bg-gray-400"
                       }`}
                     />
-                    {sub.label}
+                    <span className="whitespace-nowrap">{sub.label}</span>
                   </Link>
                 );
               })}
@@ -193,7 +194,7 @@ export default function Sidebar() {
         }`}
       >
         {item.icon}
-        {item.label}
+        <span className="whitespace-nowrap">{item.label}</span>
       </Link>
     );
   };
@@ -207,7 +208,7 @@ export default function Sidebar() {
       {user?.is_planning_manager && (
         <div className="mx-4 mt-2 px-3 py-2 rounded-lg bg-camublue-900/10 text-camublue-900 text-xs font-semibold flex items-center gap-2">
           <CalendarRange size={14} />
-          Gestionnaire de Planning
+          <span className="whitespace-nowrap">Gestionnaire de Planning</span>
         </div>
       )}
       <nav className="flex-1 px-4 py-6 space-y-1">
@@ -220,7 +221,7 @@ export default function Sidebar() {
           className="flex items-center gap-3 px-4 py-2 rounded-lg w-full text-left text-gray-700 hover:bg-camublue-900/10 transition-all"
           onClick={() => setShowLogoutModal(true)}
         >
-          <span className="font-medium text-sm truncate">
+          <span className="font-medium text-sm truncate whitespace-nowrap">
             {user?.username || user?.email}
           </span>
         </button>
