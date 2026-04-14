@@ -47,13 +47,13 @@ export default function Sidebar() {
       ],
     },
     {
-      label: "Congés et Absences",
+      label: "Congés",
       path: "/leaves",
       icon: <CalendarDays size={20} />,
       subItems: [
-        { label: "Internes", path: "/leaves" },
-        { label: "Intérimaires", path: "/leaves" },
-        { label: "Hiérarchie", path: "/leaves" },
+        { label: "Internes",     path: "/leaves/internes"   },
+        { label: "Intérimaires", path: "/leaves/interims"   },
+        { label: "Hiérarchie",   path: "/leaves/hierarchy" },
       ],
     },
     {
@@ -62,7 +62,7 @@ export default function Sidebar() {
       icon: <Clock size={20} />,
       subItems: [
         { label: "Normales", path: "/attendance/normales" },
-        { label: "Shifts", path: "/attendance/shifts" },
+        { label: "Shifts",   path: "/attendance/shifts"   },
       ],
     },
     {
@@ -80,13 +80,13 @@ export default function Sidebar() {
       path: "/rh/my",
       icon: <UserCircle size={20} />,
       subItems: [
-        { label: "Mes Congés", path: "/rh/my-leaves" },
+        { label: "Mes Congés",   path: "/rh/my-leaves"   },
         { label: "Mes Bulletins", path: "/rh/my-payslips" },
-        { label: "Mon Dossier", path: "/rh/my-dossier" },
+        { label: "Mon Dossier",  path: "/rh/my-dossier"  },
         ...(isRhManager
           ? [
               { label: "Mes Pointages", path: "/rh/my-attendance" },
-              { label: "Approbations", path: "/rh/my-approvals" },
+              { label: "Approbations",  path: "/rh/my-approvals"  },
             ]
           : []),
       ],
