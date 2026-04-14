@@ -7,6 +7,7 @@ import AdminProtectedRoute from "@/components/admin/AdminProtectedRoute";
 import DashboardPage from "@/pages/DashboardPage";
 import PayslipPage from "@/pages/PayslipPage";
 import LeavePage from "@/pages/LeavePage";
+import LeaveHierarchiePage from "@/pages/LeaveHierarchiePage";
 import ChangePasswordPage from "@/components/users/ChangePasswordPage";
 import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -215,9 +216,22 @@ function App() {
             <AttendanceShiftsPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
-        <Route path="/leaves" element={
+
+        {/* ── Congés — sous-sections séparées ──────────────────── */}
+        <Route path="/leaves" element={<Navigate to="/leaves/internes" replace />} />
+        <Route path="/leaves/internes" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
-            <LeavePage />
+            <LeavePage defaultContractType="INTERNE" />
+          </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/leaves/interims" element={
+          <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
+            <LeavePage defaultContractType="INTERIM" />
+          </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/leaves/hierarchie" element={
+          <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
+            <LeaveHierarchiePage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
 
