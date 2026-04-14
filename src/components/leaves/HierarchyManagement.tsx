@@ -133,6 +133,7 @@ function OrgChartTab() {
   const [savingDept, setSavingDept] = useState(false);
   const [deletingDept, setDeletingDept] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [zoom, setZoom] = useState(1.0);
 
   // Assignation en masse des membres d'un département
   const [bulkDept,      setBulkDept]      = useState<Department | null>(null);
@@ -247,16 +248,20 @@ function OrgChartTab() {
           toast.success("Département mis à jour ✓", { duration: 2500 });
         }
       } else {
-        await departmentService.create(deptForm);
-        toast.success("Département créé ✓", { duration: 2500 });
+        const created = await departmentService.create(deptForm);
+        setShowDeptForm(false);
+        setEditingDept(null);
+        load();
+        openBulkAssign(created);
+        toast.success("Département créé — sélectionnez maintenant les membres ✓", { duration: 3500 });
+        return;
       }
       setShowDeptForm(false);
       setEditingDept(null);
       load();
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { name?: string[]; code?: string[] } } })?.response?.data;
-      if (msg?.name) toast.error("Nom déjà utilisé.");
-      else if (msg?.code) toast.error("Code déjà utilisé.");
+      if (msg?.code) toast.error("Code déjà utilisé.");
       else toast.error("Erreur lors de la sauvegarde du département.");
     } finally {
       setSavingDept(false);
@@ -380,10 +385,24 @@ function OrgChartTab() {
             {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             {syncing ? "Sync…" : "Synchroniser"}
           </button>
+          {/* Zoom controls */}
+          <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+            <button onClick={() => setZoom(z => Math.max(+(z - 0.1).toFixed(1), 0.3))}
+              className="px-2.5 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 transition" title="Dézoomer">−</button>
+            <span className="px-2 text-xs font-semibold text-gray-600 min-w-[42px] text-center">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom(z => Math.min(+(z + 0.1).toFixed(1), 2.0))}
+              className="px-2.5 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 transition" title="Zoomer">+</button>
+            <button onClick={() => setZoom(1.0)}
+              className="px-2.5 py-2 text-xs text-gray-400 hover:bg-gray-100 transition border-l border-gray-200" title="Réinitialiser le zoom">↺</button>
+          </div>
         </div>
       </div>
 
-      {/* ── Direction Générale ────────────────────────────────────────────────── */}
+      {/* ── Org chart avec zoom/dézoom ──────────────────────────────────────────── */}
+      <div className="overflow-auto rounded-xl border border-gray-100 bg-gray-50/30 p-2" style={{ minHeight: 240 }}>
+        <div style={{ zoom: zoom, transition: "zoom 0.15s ease" }}>
+
+      {/* ── Direction Générale ────────────────────────────────────────────────── */}}
       <div className="flex flex-col items-center gap-0">
         <div className="bg-indigo-100 border-2 border-indigo-400 rounded-2xl px-10 py-4 text-center min-w-[240px]">
           <p className="text-xs font-bold uppercase tracking-widest text-indigo-500 mb-1">Direction Générale</p>
@@ -495,7 +514,10 @@ function OrgChartTab() {
         </div>
       )}
 
-      {/* ── Modal : édition hiérarchie employé ────────────────────────────────── */}
+        </div>{/* end zoom inner */}
+      </div>{/* end zoom container */}
+
+      {/* ── Modal : édition hiérarchie employé ────────────────────────────────── */}}
       {editingEmp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
           onClick={() => setEditingEmp(null)}>
@@ -676,31 +698,18 @@ function OrgChartTab() {
 
       {/* ── Modal : assignation en masse des membres ─────────────────────────── */}
       {bulkDept && (() => {
-        const deptName = bulkDept.name.trim().toLowerCase();
-        const deptCode = bulkDept.code.trim().toLowerCase();
         const q = bulkSearch.trim().toLowerCase();
 
-        // Base : employés dont service ou projet correspond à ce département
-        const deptEmps = allEmployees.filter(e => {
-          if (e.status !== "ACTIVE") return false;
-          const svc  = (e.service ?? "").toLowerCase();
-          const proj = (e.projet  ?? "").toLowerCase();
-          return svc === deptName || svc === deptCode || proj === deptName || proj === deptCode;
-        });
-
-        // Aussi inclure ceux déjà assignés dans l'organigramme (au cas où leur service diffère légèrement)
-        const alreadyAssigned = employees.filter(e => e.service === bulkDept.name);
-        const alreadyIds = new Set(alreadyAssigned.map(e => e.id));
-        const extraEmps = allEmployees.filter(e => alreadyIds.has(e.id) && !deptEmps.find(d => d.id === e.id));
-        const baseEmps = [...deptEmps, ...extraEmps];
+        // Tous les employés actifs — la RH sélectionne manuellement qui appartient au département
+        const allActive = allEmployees.filter(e => e.status === "ACTIVE");
 
         const visibleEmps = q
-          ? baseEmps.filter(e =>
+          ? allActive.filter(e =>
               `${e.nom} ${e.prenom}`.toLowerCase().includes(q) ||
               (e.matricule ?? "").toLowerCase().includes(q) ||
               (e.service ?? "").toLowerCase().includes(q)
             )
-          : baseEmps;
+          : allActive;
         const allChecked  = visibleEmps.length > 0 && visibleEmps.every(e => bulkSelected.has(e.id));
         const someChecked = visibleEmps.some(e => bulkSelected.has(e.id));
         return (
