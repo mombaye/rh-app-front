@@ -402,7 +402,7 @@ function OrgChartTab() {
       <div className="overflow-auto rounded-xl border border-gray-100 bg-gray-50/30 p-2" style={{ minHeight: 240 }}>
         <div style={{ zoom: zoom, transition: "zoom 0.15s ease" }}>
 
-      {/* ── Direction Générale ────────────────────────────────────────────────── */}}
+      {/* ── Direction Générale ────────────────────────────────────────────────── */}
       <div className="flex flex-col items-center gap-0">
         <div className="bg-indigo-100 border-2 border-indigo-400 rounded-2xl px-10 py-4 text-center min-w-[240px]">
           <p className="text-xs font-bold uppercase tracking-widest text-indigo-500 mb-1">Direction Générale</p>
@@ -517,7 +517,7 @@ function OrgChartTab() {
         </div>{/* end zoom inner */}
       </div>{/* end zoom container */}
 
-      {/* ── Modal : édition hiérarchie employé ────────────────────────────────── */}}
+      {/* ── Modal : édition hiérarchie employé ────────────────────────────────── */}
       {editingEmp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
           onClick={() => setEditingEmp(null)}>
