@@ -12,7 +12,6 @@ import {
   Menu,
   CalendarRange,
   UserCircle,
-  FolderOpen,
   FileStack,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
@@ -39,7 +38,7 @@ export default function Sidebar() {
       icon: <LayoutDashboard size={20} />,
     },
     {
-      label: "Employés",
+      label: "Gestion Employers",
       path: "/employees",
       icon: <Users2 size={20} />,
       subItems: [
@@ -48,7 +47,17 @@ export default function Sidebar() {
       ],
     },
     {
-      label: "Pointages",
+      label: "Congés et Absences",
+      path: "/leaves",
+      icon: <CalendarDays size={20} />,
+      subItems: [
+        { label: "Internes", path: "/leaves" },
+        { label: "Intérimaires", path: "/leaves" },
+        { label: "Hiérarchie", path: "/leaves" },
+      ],
+    },
+    {
+      label: "Gestion Pointages",
       path: "/attendance",
       icon: <Clock size={20} />,
       subItems: [
@@ -57,17 +66,12 @@ export default function Sidebar() {
       ],
     },
     {
-      label: "Congés",
-      path: "/leaves",
-      icon: <CalendarDays size={20} />,
-    },
-    {
-      label: "Bulletins Salariés",
+      label: "Bulletins de Salaire",
       path: "/payslip",
       icon: <BadgeDollarSign size={20} />,
     },
     {
-      label: "Documents RH",
+      label: "Document RH",
       path: "/rh/documents",
       icon: <FileStack size={20} />,
     },
@@ -76,18 +80,19 @@ export default function Sidebar() {
       path: "/rh/my",
       icon: <UserCircle size={20} />,
       subItems: [
-        { label: "Mes Congés",    path: "/rh/my-leaves"    },
-        { label: "Mes Bulletins", path: "/rh/my-payslips"  },
-        { label: "Mon Dossier",   path: "/rh/my-dossier"   },
+        { label: "Mes Congés", path: "/rh/my-leaves" },
+        { label: "Mes Bulletins", path: "/rh/my-payslips" },
+        { label: "Mon Dossier", path: "/rh/my-dossier" },
         ...(isRhManager
           ? [
               { label: "Mes Pointages", path: "/rh/my-attendance" },
-              { label: "Approbation",   path: "/rh/my-approvals"  },
+              { label: "Approbation", path: "/rh/my-approvals" },
             ]
           : []),
       ],
     },
   ];
+
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() => {
@@ -100,7 +105,6 @@ export default function Sidebar() {
     return initial;
   });
 
-  // Fermer le menu mobile si la taille de l'écran change (ex: passage en desktop)
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 768) {
@@ -194,7 +198,6 @@ export default function Sidebar() {
     );
   };
 
-  // Navigation filtrée selon le rôle de l'utilisateur
   const visibleNavItems = user?.is_planning_manager
     ? [{ label: "Planning Shifts", path: "/planning", icon: <CalendarRange size={20} /> }]
     : navItems;
@@ -227,7 +230,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Bouton pour ouvrir le menu mobile (visible uniquement sur mobile/tablette) */}
       <button
         className="md:hidden fixed top-4 left-4 z-40 p-2 rounded-lg bg-white shadow-md border"
         onClick={() => setMobileOpen(true)}
@@ -235,7 +237,6 @@ export default function Sidebar() {
         <Menu size={20} className="text-camublue-900" />
       </button>
 
-      {/* Overlay pour le menu mobile */}
       <div
         className={`fixed z-40 inset-0 bg-black/40 transition-opacity ${
           mobileOpen ? "block md:hidden" : "hidden"
@@ -243,17 +244,15 @@ export default function Sidebar() {
         onClick={() => setMobileOpen(false)}
       />
 
-      {/* Sidebar Desktop */}
-      <aside className="bg-white shadow-md w-64 min-h-screen hidden md:flex md:flex-col border-r">
+      <aside className="bg-white shadow-md w-72 min-h-screen hidden md:flex md:flex-col border-r">
         <div className="py-6 px-4 flex justify-center items-center">
           <img src={logo} alt="Camusat" className="w-full max-h-24 object-contain" />
         </div>
         <SidebarContent />
       </aside>
 
-      {/* Sidebar Mobile/Tablette (Drawer) */}
       <aside
-        className={`fixed z-50 top-0 left-0 h-full w-64 bg-white shadow-md border-r transition-transform duration-300 flex flex-col ${
+        className={`fixed z-50 top-0 left-0 h-full w-72 bg-white shadow-md border-r transition-transform duration-300 flex flex-col ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:hidden`}
       >
@@ -266,7 +265,6 @@ export default function Sidebar() {
         <SidebarContent onClose={() => setMobileOpen(false)} />
       </aside>
 
-      {/* Modale de déconnexion */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl shadow-lg p-6 w-80">
