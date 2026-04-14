@@ -16,11 +16,12 @@ import { departmentService, employeeHierarchyService } from "@/services/hierarch
 import { getEmployees } from "@/services/employeeService";
 
 // ─── Sections ───────────────────────────────────────────────────────────────
-type HierarchySection = "orgchart" | "employees";
+type HierarchySection = "orgchart" | "employees" | "interimaires";
 
 const SECTIONS: { id: HierarchySection; label: string; description: string; Icon: React.ElementType; color: string }[] = [
-  { id: "orgchart",  label: "Organigramme",         description: "Visualisez et gérez la structure organisationnelle, les départements et leurs membres", Icon: GitBranch,   color: "blue"   },
-  { id: "employees", label: "Hiérarchie employés",   description: "Gérez les managers N+1/N+2 et la double validation pour chaque employé",              Icon: Users,       color: "emerald" },
+  { id: "orgchart",     label: "Organigramme",        description: "Visualisez et gérez la structure organisationnelle, les départements et leurs membres",                     Icon: GitBranch, color: "blue"    },
+  { id: "employees",    label: "Hiérarchie Internes",  description: "Gérez les managers N+1/N+2 et la double validation pour chaque employé interne (CDI/CDD/Stage)",           Icon: Users,     color: "emerald" },
+  { id: "interimaires", label: "Intérimaires",          description: "Consultez la hiérarchie et les managers assignés pour les employés intérimaires",                         Icon: UserCheck, color: "purple"  },
 ];
 
 // ─── Component principal (Modal) ────────────────────────────────────────────
@@ -96,8 +97,9 @@ export default function HierarchyManagement({ open, onClose }: { open: boolean; 
           ) : (
             /* ── Active Section Content ──────────────────────────────────── */
             <>
-              {activeSection === "orgchart"  && <OrgChartTab />}
-              {activeSection === "employees" && <EmployeesHierarchyTab />}
+              {activeSection === "orgchart"     && <OrgChartTab />}
+              {activeSection === "employees"    && <EmployeesHierarchyTab filterContractTypes={["CDI","CDD","STAGE"]} />}
+              {activeSection === "interimaires" && <EmployeesHierarchyTab filterContractTypes={["INTERIM"]} />}
             </>
           )}
         </div>
@@ -161,16 +163,35 @@ function OrgChartTab() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Regrouper les employés par département (service = nom du département)
+  // Clé spéciale pour afficher les responsables de depts racines au niveau DG
+  const DG_LEVEL_KEY = "__DG_LEVEL__";
+
+  // Regrouper les employés par département selon la règle hiérarchique :
+  // Un responsable de département appartient VISUELLEMENT au département PARENT, pas au sien.
+  // Exemple : Manager NOC → affiché dans ESCO (parent de NOC)
+  //           Manager ESCO → affiché au niveau Direction Générale
   const empsByDept = useMemo(() => {
+    const headToVisualDept = new Map<number, string>();
+    departments.forEach(d => {
+      if (d.head) {
+        if (d.parent) {
+          const parentDept = departments.find(p => p.id === d.parent);
+          headToVisualDept.set(d.head, parentDept?.name ?? "");
+        } else {
+          headToVisualDept.set(d.head, DG_LEVEL_KEY);
+        }
+      }
+    });
+
     const map: Record<string, EmployeeHierarchy[]> = {};
     employees.forEach(emp => {
-      const key = emp.service ?? "";
+      const overrideKey = headToVisualDept.get(emp.id);
+      const key = overrideKey !== undefined ? overrideKey : (emp.service ?? "");
       if (!map[key]) map[key] = [];
       map[key].push(emp);
     });
     return map;
-  }, [employees]);
+  }, [employees, departments]);
 
   // Noms des DG validators (dédupliqués)
   const dgNames = useMemo(() =>
@@ -414,8 +435,38 @@ function OrgChartTab() {
           )}
         </div>
 
-        {/* Connecteur vertical */}
-        {departments.length > 0 && <div className="w-px h-8 bg-gray-300" />}
+        {/* Responsables de depts racines affichés au niveau DG */}
+        {showEmployees && (empsByDept[DG_LEVEL_KEY] ?? []).length > 0 && (
+          <>
+            <div className="flex flex-col items-center">
+              <div className="w-0.5 h-3 bg-indigo-400" />
+              <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-indigo-400" />
+            </div>
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-2 py-1.5 min-w-[180px] max-w-[260px]">
+              <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-wider mb-1 px-1">Resp. principaux</p>
+              {(empsByDept[DG_LEVEL_KEY] ?? []).map(emp => (
+                <button key={emp.id} onClick={() => openEditEmp(emp)}
+                  className="w-full flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-indigo-100 transition text-left">
+                  <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[8px] font-black flex-shrink-0">
+                    {emp.full_name.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold text-indigo-900 truncate">{emp.full_name}</p>
+                    <p className="text-[9px] text-indigo-500 truncate">{emp.fonction ?? "—"}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Connecteur vertical vers départements */}
+        {departments.length > 0 && (
+          <div className="flex flex-col items-center">
+            <div className="w-0.5 h-8 bg-indigo-400" />
+            <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-t-[8px] border-l-transparent border-r-transparent border-t-indigo-400" />
+          </div>
+        )}
       </div>
 
       {/* ── Responsables de département ───────────────────────────────────────── */}
@@ -434,8 +485,8 @@ function OrgChartTab() {
           <>
             <p className="text-center text-xs text-gray-400 italic -mt-4">Niveau Managers — validés directement par le DG</p>
             <div className="overflow-x-auto pb-2">
-              <div className="flex gap-6 justify-start min-w-max px-2">
-                {rootDepts.map(dept => (
+              <div className="flex justify-start min-w-max px-2">
+                {rootDepts.map((dept, idx) => (
                   <DeptColumn
                     key={dept.id}
                     dept={dept}
@@ -448,6 +499,7 @@ function OrgChartTab() {
                     deletingDept={deletingDept}
                     onBulkAssign={openBulkAssign}
                     showEmployees={showEmployees}
+                    treePosition={{ isFirst: idx === 0, isLast: idx === rootDepts.length - 1, isOnly: rootDepts.length === 1 }}
                   />
                 ))}
               </div>
@@ -662,9 +714,19 @@ function OrgChartTab() {
                 )}
               </FormField>
               <FormField label={deptForm.parent_id ? "Responsable (N+1)" : "Responsable N+1"}>
-                <EmployeeSelect employees={activeEmps} value={deptForm.head_id ?? null}
+                <EmployeeSelect
+                  employees={activeEmps.filter(e =>
+                    // Exclure les employés déjà responsables d'un AUTRE département
+                    !departments.some(d => d.head === e.id && d.id !== (editingDept?.id ?? -1))
+                  )}
+                  value={deptForm.head_id ?? null}
                   onChange={v => setDeptForm(f => ({ ...f, head_id: v }))}
                   placeholder="Chef de département..." />
+                {deptForm.head_id !== null && departments.some(d => d.head === deptForm.head_id && d.id !== (editingDept?.id ?? -1)) && (
+                  <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                    <AlertCircle size={11} /> Cet employé est déjà responsable d&apos;un autre département.
+                  </p>
+                )}
               </FormField>
               {!deptForm.parent_id && (
                 <FormField label="Validateur DG (N+2)">
@@ -847,7 +909,7 @@ function OrgChartTab() {
 
 // ── DeptColumn : colonne département dans l'organigramme ─────────────────────
 function DeptColumn({
-  dept, employees, subDepartments, empsByDept, onEditEmployee, onEditDept, onDeleteDept, deletingDept, onBulkAssign, showEmployees,
+  dept, employees, subDepartments, empsByDept, onEditEmployee, onEditDept, onDeleteDept, deletingDept, onBulkAssign, showEmployees, treePosition,
 }: {
   dept: Department;
   employees: EmployeeHierarchy[];
@@ -859,14 +921,24 @@ function DeptColumn({
   deletingDept: number | null;
   onBulkAssign: (dept: Department) => void;
   showEmployees: boolean;
+  treePosition?: { isFirst: boolean; isLast: boolean; isOnly: boolean };
 }) {
   const [expanded, setExpanded] = useState(true);
   const hasSubDepts = subDepartments.length > 0;
 
   return (
-    <div className="flex flex-col items-center">
-      {/* Connecteur depuis DG */}
-      <div className="w-px h-8 bg-gray-300" />
+    <div className="flex flex-col items-center relative px-4">
+      {/* Barre horizontale en T reliant les départements frères */}
+      {treePosition && !treePosition.isOnly && (
+        <div className={`absolute top-0 h-0.5 bg-indigo-300 ${
+          treePosition.isFirst ? "left-1/2 right-0" :
+          treePosition.isLast  ? "left-0 right-1/2" :
+          "inset-x-0"
+        }`} />
+      )}
+      {/* Connecteur vertical + flèche vers le bas */}
+      <div className="w-0.5 h-8 bg-indigo-400 relative z-10" />
+      <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-indigo-400" />
 
       {/* Carte département */}
       <div className={`border-2 rounded-2xl min-w-[175px] max-w-[240px] overflow-hidden shadow-sm ${
@@ -967,7 +1039,7 @@ function DeptColumn({
           {/* Sous-départements */}
           {hasSubDepts ? (
             <>
-              <div className="w-px h-4 bg-gray-300" />
+              <div className="w-0.5 h-4 bg-amber-400" />
               <div className="flex">
                 {subDepartments.map((subDept, idx) => {
                   const isFirst = idx === 0;
@@ -975,18 +1047,19 @@ function DeptColumn({
                   const isOnly = subDepartments.length === 1;
                   return (
                     <div key={subDept.id} className="flex flex-col items-center px-3 relative">
-                      {/* Connecteur en T : barre horizontale visible */}
+                      {/* Barre horizontale en T entre sous-départements */}
                       {!isOnly && (
                         <div
-                          className={`absolute top-0 h-px bg-gray-400 ${
+                          className={`absolute top-0 h-0.5 bg-amber-400 ${
                             isFirst ? "left-1/2 right-0" :
                             isLast  ? "left-0 right-1/2" :
                             "inset-x-0"
                           }`}
                         />
                       )}
-                      {/* Connecteur vertical */}
-                      <div className="w-px h-4 bg-gray-300" />
+                      {/* Connecteur vertical + flèche */}
+                      <div className="w-0.5 h-4 bg-amber-400 relative z-10" />
+                      <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-amber-400" />
                       {/* Carte sous-département */}
                       <SubDeptCard
                         dept={subDept}
@@ -1006,7 +1079,10 @@ function DeptColumn({
               {/* Employés directs du département parent (s'il y en a) */}
               {showEmployees && employees.length > 0 && (
                 <>
-                  <div className="w-px h-4 bg-gray-300" />
+                  <div className="flex flex-col items-center">
+                    <div className="w-0.5 h-4 bg-emerald-400" />
+                    <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-emerald-400" />
+                  </div>
                   <EmployeeList employees={employees} onEditEmployee={onEditEmployee} />
                 </>
               )}
@@ -1014,7 +1090,10 @@ function DeptColumn({
           ) : (
             showEmployees && (
               <>
-                <div className="w-px h-4 bg-gray-300" />
+                <div className="flex flex-col items-center">
+                  <div className="w-0.5 h-4 bg-emerald-400" />
+                  <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-emerald-400" />
+                </div>
                 <EmployeeList employees={employees} onEditEmployee={onEditEmployee} />
               </>
             )
@@ -1089,7 +1168,10 @@ function SubDeptCard({
 
       {expanded && showEmployees && (
         <>
-          <div className="w-px h-3 bg-gray-300" />
+          <div className="flex flex-col items-center">
+            <div className="w-0.5 h-3 bg-teal-400" />
+            <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-teal-400" />
+          </div>
           <EmployeeList employees={employees} onEditEmployee={onEditEmployee} compact />
         </>
       )}
@@ -1149,7 +1231,7 @@ function EmployeeList({
 // ─────────────────────────────────────────────────────────────────────────────
 // Onglet Hiérarchie employés
 // ─────────────────────────────────────────────────────────────────────────────
-function EmployeesHierarchyTab() {
+function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: string[] }) {
   const [employees,   setEmployees]   = useState<EmployeeHierarchy[]>([]);
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -1184,7 +1266,16 @@ function EmployeesHierarchyTab() {
 
   const services = [...new Set(employees.map(e => e.service).filter(Boolean))].sort() as string[];
 
-  const filtered = employees.filter(e => {
+  // Filtrer par type de contrat si spécifié
+  const displayEmployees = useMemo(() => {
+    if (!filterContractTypes || filterContractTypes.length === 0) return employees;
+    const validIds = new Set(
+      allEmployees.filter(e => filterContractTypes.includes(e.type_contrat ?? "")).map(e => e.id)
+    );
+    return employees.filter(e => validIds.has(e.id));
+  }, [employees, allEmployees, filterContractTypes]);
+
+  const filtered = displayEmployees.filter(e => {
     const q = search.toLowerCase();
     const matchSearch = !q || e.full_name.toLowerCase().includes(q) || e.matricule.toLowerCase().includes(q);
     const matchService = !filterService || e.service === filterService;
@@ -1231,14 +1322,18 @@ function EmployeesHierarchyTab() {
 
   if (loading) return <LoadingSpinner />;
 
+  const isInterim = filterContractTypes?.includes("INTERIM");
+
   return (
     <div className="space-y-4">
       {/* Info banner */}
-      <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-700 flex items-start gap-2">
+      <div className={`p-3 rounded-lg border text-xs flex items-start gap-2 ${isInterim ? "bg-purple-50 border-purple-200 text-purple-700" : "bg-blue-50 border-blue-200 text-blue-700"}`}>
         <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
         <span>
-          La hiérarchie est le <strong>point d'entrée unique</strong>. Tout changement ici se répercute automatiquement sur les profils utilisateurs
-          (rôle Manager), les champs employé (manager, email) et les validations de congés.
+          {isInterim
+            ? <>Hiérarchie des <strong>intérimaires</strong>. Consultez et modifiez les managers N+1/N+2 assignés aux employés intérimaires.</>
+            : <>La hiérarchie est le <strong>point d'entrée unique</strong>. Tout changement ici se répercute automatiquement sur les profils utilisateurs (rôle Manager), les champs employé (manager, email) et les validations de congés.</>
+          }
         </span>
       </div>
 
@@ -1274,7 +1369,7 @@ function EmployeesHierarchyTab() {
         </button>
       </div>
 
-      <p className="text-sm text-gray-500">{filtered.length} employé(s)</p>
+      <p className="text-sm text-gray-500">{filtered.length} / {displayEmployees.length} employé(s){filterContractTypes ? ` (${filterContractTypes.join(", ")})` : ""}</p>
 
       {/* Tableau */}
       <div className="overflow-x-auto rounded-xl border">
