@@ -968,29 +968,39 @@ function DeptColumn({
           {hasSubDepts ? (
             <>
               <div className="w-px h-4 bg-gray-300" />
-              <div className="flex gap-4">
-                {subDepartments.map((subDept, idx) => (
-                  <div key={subDept.id} className="flex flex-col items-center">
-                    {/* Connecteur horizontal entre sous-depts */}
-                    <div className="flex items-start">
-                      {idx === 0 && subDepartments.length > 1 && <div className="w-8" />}
+              <div className="flex">
+                {subDepartments.map((subDept, idx) => {
+                  const isFirst = idx === 0;
+                  const isLast = idx === subDepartments.length - 1;
+                  const isOnly = subDepartments.length === 1;
+                  return (
+                    <div key={subDept.id} className="flex flex-col items-center px-3 relative">
+                      {/* Connecteur en T : barre horizontale visible */}
+                      {!isOnly && (
+                        <div
+                          className={`absolute top-0 h-px bg-gray-400 ${
+                            isFirst ? "left-1/2 right-0" :
+                            isLast  ? "left-0 right-1/2" :
+                            "inset-x-0"
+                          }`}
+                        />
+                      )}
+                      {/* Connecteur vertical */}
                       <div className="w-px h-4 bg-gray-300" />
-                      {idx === subDepartments.length - 1 && subDepartments.length > 1 && <div className="w-8" />}
+                      {/* Carte sous-département */}
+                      <SubDeptCard
+                        dept={subDept}
+                        employees={empsByDept[subDept.name] ?? []}
+                        onEditEmployee={onEditEmployee}
+                        onEditDept={onEditDept}
+                        onDeleteDept={onDeleteDept}
+                        deletingDept={deletingDept}
+                        onBulkAssign={onBulkAssign}
+                        showEmployees={showEmployees}
+                      />
                     </div>
-
-                    {/* Carte sous-département */}
-                    <SubDeptCard
-                      dept={subDept}
-                      employees={empsByDept[subDept.name] ?? []}
-                      onEditEmployee={onEditEmployee}
-                      onEditDept={onEditDept}
-                      onDeleteDept={onDeleteDept}
-                      deletingDept={deletingDept}
-                      onBulkAssign={onBulkAssign}
-                      showEmployees={showEmployees}
-                    />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Employés directs du département parent (s'il y en a) */}
