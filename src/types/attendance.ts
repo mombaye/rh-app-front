@@ -267,3 +267,42 @@ export interface ShiftDailyStatsResponse {
   };
   records: ShiftRecord[];
 }
+
+// ─── Shift Period Stats (filtre par période personnalisée) ────────────────────
+
+export interface ShiftPeriodDayKpis {
+  total: number;
+  present: number;
+  absent: number;
+  incomplete: number;
+  anomalies: number;
+  late: number;
+  not_working: number;
+  by_team: Record<ShiftTeamKey, ShiftTeamKpi>;
+}
+
+export interface ShiftPeriodDay {
+  date: string;
+  weekday: number;
+  weekday_label: string;
+  has_planning: boolean;
+  kpis: ShiftPeriodDayKpis;
+  records: ShiftRecord[];
+}
+
+export interface ShiftPeriodSummary {
+  total_days: number;
+  days_with_planning: number;
+  total_planned: number;
+  total_present: number;
+  total_absent: number;
+}
+
+export interface ShiftPeriodStatsResponse {
+  date_from: string;
+  date_to: string;
+  team_filter: ShiftTeamKey | null;
+  teams_info: Record<ShiftTeamKey, ShiftTeamInfo>;
+  summary: ShiftPeriodSummary;
+  dates: ShiftPeriodDay[];
+}

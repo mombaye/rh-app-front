@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import {
-  getShiftDailyStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
+  getShiftDailyStats, getShiftPeriodStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning,
   getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
   updateAttendanceRecord, sendAttendanceAlert,
@@ -22,7 +22,7 @@ import { parseNOCPlanningExcel, cellToDateStr, extractMonthYearFromSheetName } f
 import type { ParsedSheet } from "@/utils/planningParser";
 import { getEmployees } from "@/services/employeeService";
 import type {
-  ShiftDailyStatsResponse, ShiftTeamKey, ShiftRecord,
+  ShiftDailyStatsResponse, ShiftPeriodStatsResponse, ShiftTeamKey, ShiftRecord,
   EmployeePeriodDetailResponse, DayDetail,
   WeeklyStatsResponse, MonthlyStatsResponse, WeeklyDayEntry,
 } from "@/types/attendance";
@@ -37,7 +37,7 @@ import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" | "deficit" | "pending" | "replacement";
 type MotifType = "absent" | "not_pointing";
 type AssignmentMap = Record<string, ShiftTeamKey | null>;
-type ViewMode = "daily" | "weekly" | "monthly";
+type ViewMode = "daily" | "weekly" | "monthly" | "period";
 type CycleType = "M" | "S" | "N" | "R";
 
 interface CompensationResult {
@@ -353,10 +353,12 @@ function exportXLSX(filename: string, rows: Record<string, any>[]) {
 }
 
 // ─── Colonnes export personnalisé ─────────────────────────────────────────────
-const SHIFT_DAILY_COLS = ["Matricule","Nom","Projet","Département","Équipe","Statut","Retard","Entrée","Sortie","Heure travaillée","HS","Compensation","Email"] as const;
-const SHIFT_SUMM_COLS  = ["Matricule","Nom","Projet","Département","Équipe","Jours présents","Jours absents","Jours retard","Jours anomalie","Heures travaillées","Heures attendues","Delta","% quota"] as const;
-type ShiftDailyCol = typeof SHIFT_DAILY_COLS[number];
-type ShiftSummCol  = typeof SHIFT_SUMM_COLS[number];
+const SHIFT_DAILY_COLS  = ["Matricule","Nom","Projet","Département","Équipe","Statut","Retard","Entrée","Sortie","Heure travaillée","HS","Compensation","Email"] as const;
+const SHIFT_SUMM_COLS   = ["Matricule","Nom","Projet","Département","Équipe","Jours présents","Jours absents","Jours retard","Jours anomalie","Heures travaillées","Heures attendues","Delta","% quota"] as const;
+const SHIFT_PERIOD_COLS = ["Date","Jour","Matricule","Nom","Équipe","Statut","Retard","Entrée","Sortie","Heures travaillées","Remplacé par","Remplaçant de"] as const;
+type ShiftDailyCol  = typeof SHIFT_DAILY_COLS[number];
+type ShiftSummCol   = typeof SHIFT_SUMM_COLS[number];
+type ShiftPeriodCol = typeof SHIFT_PERIOD_COLS[number];
 
 
 
@@ -2014,6 +2016,7 @@ function FilterModal({
                     { k: "daily"   as ViewMode, label: "Journalier",   icon: "📅" },
                     { k: "weekly"  as ViewMode, label: "Hebdomadaire", icon: "📆" },
                     { k: "monthly" as ViewMode, label: "Mensuel",      icon: "🗓️" },
+                    { k: "period"  as ViewMode, label: "Période",      icon: "📊" },
                   ].map((v) => (
                     <button key={v.k} onClick={() => setViewMode(v.k)}
                       className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl border-2 text-xs font-semibold transition-all ${
@@ -2029,6 +2032,7 @@ function FilterModal({
                 {viewMode === "daily"   && <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
                 {viewMode === "weekly"  && <input value={week} onChange={(e) => setWeek(e.target.value)} placeholder="2026-W09" className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
                 {viewMode === "monthly" && <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
+                {viewMode === "period"  && <p className="text-xs text-slate-400 italic">Utilisez les filtres directement dans la vue Période.</p>}
               </div>
               {/* Weekend / accès rapide (vue journalière uniquement) */}
               {viewMode === "daily" && (
@@ -2107,6 +2111,19 @@ export default function AttendanceShiftsPage() {
   const [showExportDlg,    setShowExportDlg]    = useState(false);
   const [exportDailyCols,  setExportDailyCols]  = useState<ShiftDailyCol[]>([...SHIFT_DAILY_COLS]);
   const [exportSummaryCols,setExportSummaryCols]= useState<ShiftSummCol[]>([...SHIFT_SUMM_COLS]);
+  const [exportPeriodCols, setExportPeriodCols] = useState<ShiftPeriodCol[]>([...SHIFT_PERIOD_COLS]);
+
+  // ── Vue période personnalisée ──────────────────────────────────────────────
+  const todayStr = todayISO();
+  const firstDayOfMonth = todayStr.slice(0, 8) + "01";
+  const [periodFrom,       setPeriodFrom]       = useState(firstDayOfMonth);
+  const [periodTo,         setPeriodTo]         = useState(todayStr);
+  const [periodData,       setPeriodData]       = useState<ShiftPeriodStatsResponse | null>(null);
+  const [periodLoading,    setPeriodLoading]    = useState(false);
+  const [periodTeam,       setPeriodTeam]       = useState<ShiftTeamKey | null>(null);
+  const [periodStatus,     setPeriodStatus]     = useState<string>("");
+  const [periodSearch,     setPeriodSearch]     = useState("");
+  const [periodMatricule,  setPeriodMatricule]  = useState<string>("");
 
   const [alertModalOpen, setAlertModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -2235,8 +2252,31 @@ export default function AttendanceShiftsPage() {
     }
   }, [viewMode, date, week, month]);
 
+  const fetchPeriodData = useCallback(async () => {
+    if (!periodFrom || !periodTo) return;
+    setPeriodLoading(true);
+    try {
+      const res = await getShiftPeriodStats({
+        date_from:  periodFrom,
+        date_to:    periodTo,
+        team:       periodTeam,
+        matricule:  periodMatricule || null,
+        status:     periodStatus || null,
+      });
+      setPeriodData(res);
+    } catch (e) {
+      console.error("fetchPeriodData error:", e);
+    } finally {
+      setPeriodLoading(false);
+    }
+  }, [periodFrom, periodTo, periodTeam, periodMatricule, periodStatus]);
+
   // Fetch on mount + view change
   useEffect(() => { fetchData(); }, [viewMode, date, week, month]);
+
+  useEffect(() => {
+    if (viewMode === "period") fetchPeriodData();
+  }, [viewMode]);
 
   // Auto-refresh every 60s in daily mode (silent = no spinner)
   useEffect(() => {
@@ -2512,6 +2552,42 @@ export default function AttendanceShiftsPage() {
       exportXLSX(`shift_${selectedTeam ?? "all"}_journalier`,
         filtered.map((r) => Object.fromEntries(exportDailyCols.map((k) => [k, ALL[k](r)])))
       );
+    } else if (viewMode === "period" && periodData) {
+      // Export période : une ligne par date × employé avec info remplacement
+      const WEEKDAYS = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
+      const STATUS_LABELS: Record<string, string> = {
+        ok: "Présent", absent: "Absent", incomplete: "Incomplet",
+        anomaly: "Anomalie", not_working: "Pas de service",
+        on_leave: "En congé", on_mission: "En mission",
+      };
+      const ALL: Record<ShiftPeriodCol, (r: ShiftRecord, d: { date: string; weekday: number; weekday_label: string }) => any> = {
+        "Date":              (_r, d) => new Date(d.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
+        "Jour":              (_r, d) => d.weekday_label,
+        "Matricule":         (r)     => r.matricule || "—",
+        "Nom":               (r)     => r.full_name,
+        "Équipe":            (r)     => r.shift_team_label || r.shift_team || "—",
+        "Statut":            (r)     => STATUS_LABELS[r.status] ?? r.status,
+        "Retard":            (r)     => r.late_minutes > 0 ? `${r.late_label ?? r.late_minutes + " min"}` : "—",
+        "Entrée":            (r)     => r.in_time ? formatTime(r.in_time) : "—",
+        "Sortie":            (r)     => r.out_time ? formatTime(r.out_time) : "—",
+        "Heures travaillées":(r)     => r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
+        "Remplacé par":      (r)     => r.replaced_by ?? "—",
+        "Remplaçant de":     (r)     => r.replaces_employee ?? "—",
+      };
+      const rows: Record<string, any>[] = [];
+      for (const day of periodData.dates) {
+        if (!day.has_planning) continue;
+        for (const rec of day.records) {
+          rows.push(Object.fromEntries(
+            exportPeriodCols.map((k) => [k, ALL[k](rec, day)])
+          ));
+        }
+        // Séparateur visuel entre les dates
+        if (day.records.length > 0) {
+          rows.push({});
+        }
+      }
+      exportXLSX(`shift_periode_${periodFrom}_${periodTo}`, rows);
     } else {
       const MAX_MIN = viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33);
       const ALL: Record<ShiftSummCol, (r: any) => any> = {
@@ -2608,15 +2684,15 @@ export default function AttendanceShiftsPage() {
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
             </button>
-            <button onClick={() => fetchData(false)}
+            <button onClick={() => viewMode === "period" ? fetchPeriodData() : fetchData(false)}
               className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
+              <RefreshCw className={`h-4 w-4 ${(loading || periodLoading) ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
             </button>
           </div>
         </div>
 
-        {/* ── Sélecteur équipe ── */}
-        <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+        {/* ── Sélecteur équipe (masqué en mode période) ── */}
+        {viewMode !== "period" && <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
           <button onClick={() => setSelectedTeam(null)}
             className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${selectedTeam === null ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
             <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" /><span className="truncate text-xs sm:text-sm">Infomation Journalière</span>
@@ -2648,16 +2724,16 @@ export default function AttendanceShiftsPage() {
               </button>
             );
           })}
-        </div>
+        </div>}
 
-        {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 shrink-0">
+        {/* ── KPI Cards (masquées en mode période) ── */}
+        {viewMode !== "period" && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 shrink-0">
           <AbsentsCard total={kpis.total} absent={kpis.absent} loading={loading} delay={0.05} />
           <StatCard icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
             active={statusFilter === "late"} sub="Cliquer pour filtrer"
             onClick={() => setStatusFilter((f) => f === "late" ? "all" : "late")} />
           <StatCard icon={AlertTriangle} label="Anomalies" value={kpis.anomaly} color="violet" delay={0.15} loading={loading} />
-        </div>
+        </div>}
 
         {/* ── Contenu principal ── */}
         {viewMode === "daily" ? (
@@ -2839,6 +2915,289 @@ export default function AttendanceShiftsPage() {
               </div>
             </div>
           </>
+        ) : viewMode === "period" ? (
+          // ── Vue Période personnalisée ──────────────────────────────────────
+          <div className="flex-1 min-h-0 flex flex-col gap-4">
+            {/* Panneau filtre période */}
+            <div className="shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+              <div className="flex flex-wrap gap-3 items-end">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-500">Du</label>
+                  <input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-500">Au</label>
+                  <input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)}
+                    max={todayISO()}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-500">Équipe</label>
+                  <select value={periodTeam ?? ""} onChange={(e) => setPeriodTeam((e.target.value as ShiftTeamKey) || null)}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none min-w-[120px]">
+                    <option value="">Toutes</option>
+                    <option value="jour">Journée</option>
+                    <option value="soir1">Soir 1</option>
+                    <option value="soir2">Soir 2</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-500">Statut</label>
+                  <select value={periodStatus} onChange={(e) => setPeriodStatus(e.target.value)}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none min-w-[130px]">
+                    <option value="">Tous</option>
+                    <option value="ok">Présent</option>
+                    <option value="absent">Absent</option>
+                    <option value="incomplete">Incomplet</option>
+                    <option value="anomaly">Anomalie</option>
+                    <option value="late">Retard</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
+                  <label className="text-xs font-semibold text-slate-500">Recherche employé</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <input type="text" value={periodSearch} onChange={(e) => setPeriodSearch(e.target.value)}
+                      placeholder="Nom ou matricule..."
+                      className="w-full rounded-xl border border-slate-300 pl-8 pr-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
+                  </div>
+                </div>
+                <button onClick={fetchPeriodData} disabled={periodLoading}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-60 transition shrink-0">
+                  {periodLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Appliquer
+                </button>
+              </div>
+
+              {/* Raccourcis de période */}
+              <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100">
+                <span className="text-xs font-semibold text-slate-400 self-center">Raccourcis :</span>
+                {[
+                  { label: "Cette semaine", fn: () => {
+                    const now = new Date(); const day = now.getDay() || 7;
+                    const mon = new Date(now); mon.setDate(now.getDate() - day + 1);
+                    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+                    setPeriodFrom(mon.toISOString().slice(0, 10));
+                    setPeriodTo(sun > new Date() ? todayISO() : sun.toISOString().slice(0, 10));
+                  }},
+                  { label: "Ce mois", fn: () => {
+                    const now = new Date();
+                    setPeriodFrom(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`);
+                    setPeriodTo(todayISO());
+                  }},
+                  { label: "Mois dernier", fn: () => {
+                    const now = new Date(); const y = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+                    const m = now.getMonth() === 0 ? 12 : now.getMonth();
+                    const last = new Date(y, m, 0);
+                    setPeriodFrom(`${y}-${String(m).padStart(2, "0")}-01`);
+                    setPeriodTo(last.toISOString().slice(0, 10));
+                  }},
+                  { label: "7 derniers jours", fn: () => {
+                    const end = new Date(); const start = new Date();
+                    start.setDate(end.getDate() - 6);
+                    setPeriodFrom(start.toISOString().slice(0, 10));
+                    setPeriodTo(todayISO());
+                  }},
+                  { label: "30 derniers jours", fn: () => {
+                    const end = new Date(); const start = new Date();
+                    start.setDate(end.getDate() - 29);
+                    setPeriodFrom(start.toISOString().slice(0, 10));
+                    setPeriodTo(todayISO());
+                  }},
+                ].map(({ label, fn }) => (
+                  <button key={label} onClick={() => { fn(); }}
+                    className="px-3 py-1 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-camublue-50 hover:border-camublue-200 hover:text-camublue-800 transition">
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Résumé période */}
+            {periodData && (
+              <div className="shrink-0 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {[
+                  { label: "Jours avec planning", value: periodData.summary.days_with_planning, color: "text-slate-700" },
+                  { label: "Total planifiés", value: periodData.summary.total_planned, color: "text-camublue-700" },
+                  { label: "Total présents", value: periodData.summary.total_present, color: "text-emerald-600" },
+                  { label: "Total absents", value: periodData.summary.total_absent, color: "text-red-500" },
+                  { label: "Taux présence", value: periodData.summary.total_planned > 0
+                    ? `${Math.round((periodData.summary.total_present / periodData.summary.total_planned) * 100)}%`
+                    : "—", color: "text-orange-600" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-col gap-1">
+                    <span className="text-xs text-slate-400 font-medium leading-tight">{label}</span>
+                    <span className={`text-xl font-black tabular-nums ${color}`}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Table période : par date */}
+            <div className="flex-1 min-h-0 overflow-auto flex flex-col gap-4">
+              {periodLoading ? (
+                <div className="flex items-center justify-center py-20 text-slate-400">
+                  <Loader2 className="h-8 w-8 animate-spin mr-3" />
+                  <span className="text-sm font-medium">Chargement des données...</span>
+                </div>
+              ) : !periodData ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+                  <CalendarRange className="h-12 w-12 text-slate-200" />
+                  <p className="text-sm font-medium">Sélectionnez une période et cliquez sur <strong>Appliquer</strong></p>
+                </div>
+              ) : periodData.dates.filter((d) => d.has_planning).length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+                  <CalendarDays className="h-12 w-12 text-slate-200" />
+                  <p className="text-sm font-medium">Aucun planning trouvé sur cette période</p>
+                </div>
+              ) : (
+                periodData.dates
+                  .filter((d) => d.has_planning && d.records.length > 0)
+                  .map((day) => {
+                    const searchLower = periodSearch.toLowerCase();
+                    const visibleRecs = searchLower
+                      ? day.records.filter((r) =>
+                          r.full_name.toLowerCase().includes(searchLower) ||
+                          (r.matricule || "").toLowerCase().includes(searchLower)
+                        )
+                      : day.records;
+                    if (visibleRecs.length === 0) return null;
+
+                    const dateLabel = new Date(day.date + "T00:00:00").toLocaleDateString("fr-FR", {
+                      weekday: "long", day: "2-digit", month: "long", year: "numeric",
+                    });
+
+                    const STATUS_STYLES: Record<string, string> = {
+                      ok: "bg-emerald-100 text-emerald-700 ring-emerald-200",
+                      absent: "bg-red-100 text-red-700 ring-red-200",
+                      incomplete: "bg-amber-100 text-amber-700 ring-amber-200",
+                      anomaly: "bg-violet-100 text-violet-700 ring-violet-200",
+                      not_working: "bg-slate-100 text-slate-500 ring-slate-200",
+                      on_leave: "bg-sky-100 text-sky-700 ring-sky-200",
+                      on_mission: "bg-indigo-100 text-indigo-700 ring-indigo-200",
+                    };
+                    const STATUS_LABELS_FR: Record<string, string> = {
+                      ok: "Présent", absent: "Absent", incomplete: "Incomplet",
+                      anomaly: "Anomalie", not_working: "Pas de service",
+                      on_leave: "En congé", on_mission: "En mission",
+                    };
+
+                    return (
+                      <div key={day.date} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        {/* En-tête date */}
+                        <div className="px-4 py-3 bg-camublue-900 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <CalendarDays className="h-4 w-4 text-white/70" />
+                            <span className="font-bold text-white capitalize">{dateLabel}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-white/70 bg-white/10 px-2 py-0.5 rounded-full">
+                              {day.kpis.present}/{day.kpis.total} présents
+                            </span>
+                            {day.kpis.absent > 0 && (
+                              <span className="text-xs font-bold text-red-300 bg-red-900/40 px-2 py-0.5 rounded-full">
+                                {day.kpis.absent} abs
+                              </span>
+                            )}
+                            {day.kpis.late > 0 && (
+                              <span className="text-xs font-bold text-orange-300 bg-orange-900/40 px-2 py-0.5 rounded-full">
+                                {day.kpis.late} retard
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Table employés */}
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-sm">
+                            <thead className="bg-slate-50 border-b border-slate-200">
+                              <tr>
+                                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 w-28">Matricule</th>
+                                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500">Nom</th>
+                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Équipe</th>
+                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Statut</th>
+                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Retard</th>
+                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Entrée</th>
+                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Sortie</th>
+                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">H. Travaillées</th>
+                                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500">Remplacement</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {visibleRecs.map((rec) => {
+                                const statusStyle = STATUS_STYLES[rec.status] ?? STATUS_STYLES.anomaly;
+                                const statusLabel = STATUS_LABELS_FR[rec.status] ?? rec.status;
+                                const isReplaced   = !!rec.replaced_by;
+                                const isReplacer   = !!rec.replaces_employee;
+                                return (
+                                  <tr key={`${rec.employee_id}-${day.date}`}
+                                    className={`transition-colors ${isReplaced ? "bg-red-50/50" : isReplacer ? "bg-purple-50/50" : "hover:bg-slate-50/70"}`}>
+                                    <td className="px-4 py-2.5 font-mono text-xs text-slate-400">{rec.matricule || "—"}</td>
+                                    <td className="px-4 py-2.5 font-semibold text-slate-700">
+                                      {isReplaced ? (
+                                        <div className="flex items-center gap-2">
+                                          <span className="line-through text-red-400">{rec.full_name}</span>
+                                          <ArrowRight className="h-3 w-3 text-slate-300 shrink-0" />
+                                          <span className="text-purple-600 font-bold text-xs">{rec.replaced_by}</span>
+                                        </div>
+                                      ) : isReplacer ? (
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-purple-700">{rec.full_name}</span>
+                                          <span className="text-[10px] font-bold bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded-full ring-1 ring-purple-200">Remplacement</span>
+                                        </div>
+                                      ) : rec.full_name}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center">
+                                      <ShiftTeamPill teamKey={rec.shift_team} />
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center">
+                                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1 ${statusStyle}`}>
+                                        {statusLabel}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center">
+                                      {rec.is_late && rec.late_label ? (
+                                        <span className="text-orange-600 font-semibold text-xs">{rec.late_label}</span>
+                                      ) : <span className="text-slate-300">—</span>}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-600">
+                                      {rec.in_time ? formatTime(rec.in_time) : <span className="text-slate-300">—</span>}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-600">
+                                      {rec.out_time ? formatTime(rec.out_time) : <span className="text-slate-300">—</span>}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-600">
+                                      {rec.worked_minutes > 0 ? formatMinutes(rec.worked_minutes) : <span className="text-slate-300">—</span>}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-xs text-slate-500">
+                                      {isReplaced && rec.replacement_in_time ? (
+                                        <div className="flex flex-col gap-0.5">
+                                          <span className="text-purple-600 font-medium">{rec.replaced_by}</span>
+                                          <span className="text-slate-400">
+                                            {formatTime(rec.replacement_in_time)} → {formatTime(rec.replacement_out_time)}
+                                            {rec.replacement_worked_minutes && ` · ${formatMinutes(rec.replacement_worked_minutes)}`}
+                                          </span>
+                                        </div>
+                                      ) : isReplacer ? (
+                                        <div className="flex flex-col gap-0.5">
+                                          <span className="text-slate-400 text-[10px]">Remplace :</span>
+                                          <span className="text-purple-600 font-medium line-through">{rec.replaces_employee}</span>
+                                        </div>
+                                      ) : <span className="text-slate-300">—</span>}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+          </div>
         ) : (
           <SummaryTable
             rows={filteredSummaryRecords}
@@ -2892,10 +3251,13 @@ export default function AttendanceShiftsPage() {
         {/* ── Export Dialog ── */}
         <AnimatePresence>
           {showExportDlg && (() => {
-            const isDailyMode = viewMode === "daily";
-            const availCols   = isDailyMode ? SHIFT_DAILY_COLS : SHIFT_SUMM_COLS;
-            const selCols     = isDailyMode ? exportDailyCols  : exportSummaryCols;
-            const setSelCols  = isDailyMode
+            const isDailyMode  = viewMode === "daily";
+            const isPeriodMode = viewMode === "period";
+            const availCols   = isPeriodMode ? SHIFT_PERIOD_COLS : isDailyMode ? SHIFT_DAILY_COLS : SHIFT_SUMM_COLS;
+            const selCols     = isPeriodMode ? exportPeriodCols  : isDailyMode ? exportDailyCols  : exportSummaryCols;
+            const setSelCols  = isPeriodMode
+              ? (v: ShiftPeriodCol[]) => setExportPeriodCols(v)
+              : isDailyMode
               ? (v: ShiftDailyCol[]) => setExportDailyCols(v)
               : (v: ShiftSummCol[])  => setExportSummaryCols(v);
             return (
@@ -2909,7 +3271,7 @@ export default function AttendanceShiftsPage() {
                     <div>
                       <h2 className="font-black text-camublue-900 text-base">Export personnalisé</h2>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        {isDailyMode ? "Vue journalière" : viewMode === "weekly" ? "Vue hebdomadaire" : "Vue mensuelle"}
+                        {isPeriodMode ? `Période · ${periodFrom} → ${periodTo}` : isDailyMode ? "Vue journalière" : viewMode === "weekly" ? "Vue hebdomadaire" : "Vue mensuelle"}
                         {" · "}Sélectionnez les colonnes à inclure
                       </p>
                     </div>
