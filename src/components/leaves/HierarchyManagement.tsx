@@ -25,23 +25,30 @@ const SECTIONS: { id: HierarchySection; label: string; description: string; Icon
 ];
 
 // ─── Component principal (Modal) ────────────────────────────────────────────
-export default function HierarchyManagement({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function HierarchyManagement({ open, onClose, inline }: { open: boolean; onClose: () => void; inline?: boolean }) {
   const [activeSection, setActiveSection] = useState<HierarchySection | null>(null);
 
-  if (!open) return null;
+  if (!inline && !open) return null;
 
   const goBack = () => setActiveSection(null);
   const handleClose = () => { setActiveSection(null); onClose(); };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={handleClose}>
-      <div className={`bg-white rounded-2xl shadow-2xl w-full overflow-hidden flex flex-col ${
-          activeSection === "orgchart" ? "mx-2" : activeSection ? "max-w-5xl mx-4" : "max-w-lg mx-4"
-        }`}
-        style={{ maxHeight: activeSection === "orgchart" ? "97vh" : "90vh",
-                 width: activeSection === "orgchart" ? "calc(100vw - 16px)" : undefined }}
-        onClick={e => e.stopPropagation()}>
+    <div
+      className={inline ? "contents" : "fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"}
+      onClick={inline ? undefined : handleClose}
+    >
+      <div className={inline
+        ? "flex flex-col w-full h-full bg-white overflow-hidden"
+        : `bg-white rounded-2xl shadow-2xl w-full overflow-hidden flex flex-col ${
+            activeSection === "orgchart" ? "mx-2" : activeSection ? "max-w-5xl mx-4" : "max-w-lg mx-4"
+          }`
+      }
+        style={inline ? undefined : {
+          maxHeight: activeSection === "orgchart" ? "97vh" : "90vh",
+          width: activeSection === "orgchart" ? "calc(100vw - 16px)" : undefined
+        }}
+        onClick={inline ? undefined : (e => e.stopPropagation())}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
