@@ -1,1 +1,1 @@
-$(cat /tmp/final_content.txt)
+PLACEHOLDER_CONTENT
