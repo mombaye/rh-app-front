@@ -39,31 +39,31 @@ export default function Sidebar() {
       icon: <LayoutDashboard size={20} />,
     },
     {
-      label: "Employés",
+      label: "Gestion Employés",
       path: "/employees",
       icon: <Users2 size={20} />,
       subItems: [
-        { label: "Internes", path: "/employees/internes" },
+        { label: "Internes",     path: "/employees/internes" },
         { label: "Intérimaires", path: "/employees/interims" },
       ],
     },
     {
-      label: "Pointages",
-      path: "/attendance",
-      icon: <Clock size={20} />,
-      subItems: [
-        { label: "Normales", path: "/attendance/normales" },
-        { label: "Shifts", path: "/attendance/shifts" },
-      ],
-    },
-    {
-      label: "Congés et Absences",
+      label: "Gestion Congés",
       path: "/leaves",
       icon: <CalendarDays size={20} />,
       subItems: [
         { label: "Internes",     path: "/leaves/internes"     },
         { label: "Intérimaires", path: "/leaves/interimaires" },
         { label: "Hiérarchie",   path: "/leaves/hierarchie"   },
+      ],
+    },
+    {
+      label: "Gestion Pointages",
+      path: "/attendance",
+      icon: <Clock size={20} />,
+      subItems: [
+        { label: "Normales", path: "/attendance/normales" },
+        { label: "Shifts",   path: "/attendance/shifts"   },
       ],
     },
     {
@@ -93,6 +93,7 @@ export default function Sidebar() {
       ],
     },
   ];
+
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() => {
@@ -105,12 +106,9 @@ export default function Sidebar() {
     return initial;
   });
 
-  // Fermer le menu mobile si la taille de l'écran change (ex: passage en desktop)
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth >= 768) {
-        setMobileOpen(false);
-      }
+      if (window.innerWidth >= 768) setMobileOpen(false);
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -141,9 +139,9 @@ export default function Sidebar() {
                 : "text-gray-700 hover:bg-camublue-900/10 hover:text-camublue-900"
             }`}
           >
-            <div className="flex items-center gap-3">
-              {item.icon}
-              {item.label}
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="shrink-0">{item.icon}</span>
+              <span className="truncate">{item.label}</span>
             </div>
             {isOpen ? (
               <ChevronDown size={15} className="shrink-0 text-gray-400" />
@@ -193,13 +191,12 @@ export default function Sidebar() {
             : "text-gray-700 hover:bg-camublue-900/10 hover:text-camublue-900"
         }`}
       >
-        {item.icon}
-        {item.label}
+        <span className="shrink-0">{item.icon}</span>
+        <span className="truncate">{item.label}</span>
       </Link>
     );
   };
 
-  // Navigation filtrée selon le rôle de l'utilisateur
   const visibleNavItems = user?.is_planning_manager
     ? [{ label: "Planning Shifts", path: "/planning", icon: <CalendarRange size={20} /> }]
     : navItems;
@@ -232,7 +229,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Bouton pour ouvrir le menu mobile (visible uniquement sur mobile/tablette) */}
       <button
         className="md:hidden fixed top-4 left-4 z-40 p-2 rounded-lg bg-white shadow-md border"
         onClick={() => setMobileOpen(true)}
@@ -240,7 +236,6 @@ export default function Sidebar() {
         <Menu size={20} className="text-camublue-900" />
       </button>
 
-      {/* Overlay pour le menu mobile */}
       <div
         className={`fixed z-40 inset-0 bg-black/40 transition-opacity ${
           mobileOpen ? "block md:hidden" : "hidden"
@@ -248,17 +243,17 @@ export default function Sidebar() {
         onClick={() => setMobileOpen(false)}
       />
 
-      {/* Sidebar Desktop */}
-      <aside className="bg-white shadow-md w-64 min-h-screen hidden md:flex md:flex-col border-r">
+      {/* Sidebar Desktop — largeur augmentée à w-72 pour que les labels tiennent sur une ligne */}
+      <aside className="bg-white shadow-md w-72 min-h-screen hidden md:flex md:flex-col border-r">
         <div className="py-6 px-4 flex justify-center items-center">
           <img src={logo} alt="Camusat" className="w-full max-h-24 object-contain" />
         </div>
         <SidebarContent />
       </aside>
 
-      {/* Sidebar Mobile/Tablette (Drawer) */}
+      {/* Sidebar Mobile */}
       <aside
-        className={`fixed z-50 top-0 left-0 h-full w-64 bg-white shadow-md border-r transition-transform duration-300 flex flex-col ${
+        className={`fixed z-50 top-0 left-0 h-full w-72 bg-white shadow-md border-r transition-transform duration-300 flex flex-col ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:hidden`}
       >
@@ -271,13 +266,10 @@ export default function Sidebar() {
         <SidebarContent onClose={() => setMobileOpen(false)} />
       </aside>
 
-      {/* Modale de déconnexion */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl shadow-lg p-6 w-80">
-            <h3 className="text-lg font-semibold text-camublue-900 mb-4">
-              Déconnexion
-            </h3>
+            <h3 className="text-lg font-semibold text-camublue-900 mb-4">Déconnexion</h3>
             <p className="mb-6 text-gray-700">Voulez-vous vraiment vous déconnecter ?</p>
             <div className="flex justify-end gap-3">
               <button
