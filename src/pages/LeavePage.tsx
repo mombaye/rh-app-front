@@ -346,6 +346,55 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
             </div>
           </div>
 
+          {/* Filtres statut + avancés (dans le header) */}
+          {(contractFilter || tab === "requests") && (
+          <div className="flex items-center gap-2 flex-wrap px-4 sm:px-6 pb-3">
+            <div className="relative" ref={filterRef}>
+              <button onClick={() => setFilterOpen((o) => !o)}
+                className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-medium transition">
+                <span className="text-xs">{currentFilterLabel}</span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
+              </button>
+              <AnimatePresence>
+                {filterOpen && (
+                  <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    className="absolute left-0 mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-30">
+                    {STATUS_FILTERS.map(({ value, label }) => {
+                      const cfg = value === "ALL" ? null : STATUS_CFG[value as LeaveStatus];
+                      return (
+                        <button key={value}
+                          onClick={() => { setStatusFilter(value); setFilterOpen(false); }}
+                          className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors text-left ${
+                            statusFilter === value ? "font-bold bg-slate-50 text-camublue-900" : "text-slate-700 hover:bg-slate-50"
+                          }`}>
+                          {cfg && <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />}
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <button onClick={() => setShowFiltersModal(true)}
+              className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border transition font-medium ${
+                advancedFilterCount > 0
+                  ? "border-camublue-300 bg-camublue-50 text-camublue-700"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}>
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span className="text-xs">Filtres</span>
+              {advancedFilterCount > 0 && (
+                <span className="bg-camublue-700 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  {advancedFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
+          )}
+
           {/* Navigation par onglets (cachée en mode sous-section) */}
           {!contractFilter && (
           <div className="flex gap-0 overflow-x-auto px-4 sm:px-6">
@@ -444,9 +493,9 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
             <>
               {/* ── Toolbar Demandes : actions + KPIs + filtres ───────────────── */}
               <div className="mb-4 space-y-3">
-                {/* Ligne 1 : toggle contrat + actions */}
+                {/* Ligne 1 : toggle contrat + actions (page principale uniquement) */}
+                {!contractFilter && (
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  {!contractFilter && (
                   <div className="flex bg-white border border-slate-200 rounded-xl p-0.5 text-xs font-semibold w-fit">
                     {(["INTERNE", "INTERIM"] as ContractType[]).map((c) => (
                       <button key={c} onClick={() => setContractType(c)}
@@ -457,8 +506,6 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                       </button>
                     ))}
                   </div>
-                  )}
-                  {!contractFilter && (
                   <div className="flex items-center gap-2">
                     <button onClick={() => setShowExportDialog(true)} disabled={exportLoading}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-emerald-600 hover:border-emerald-300 transition text-xs font-semibold disabled:opacity-50">
@@ -470,8 +517,8 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                       <Plus className="h-4 w-4" />Nouvelle demande
                     </button>
                   </div>
-                  )}
                 </div>
+                )}
 
                 {/* Ligne 2 : KPI Cards */}
                 {summary && (
@@ -495,52 +542,6 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                   </div>
                 )}
 
-                {/* Ligne 3 : Filtres statut + avancés */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="relative" ref={filterRef}>
-                    <button onClick={() => setFilterOpen((o) => !o)}
-                      className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-medium transition">
-                      <span className="text-xs">{currentFilterLabel}</span>
-                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
-                    </button>
-                    <AnimatePresence>
-                      {filterOpen && (
-                        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -6 }}
-                          className="absolute left-0 mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-30">
-                          {STATUS_FILTERS.map(({ value, label }) => {
-                            const cfg = value === "ALL" ? null : STATUS_CFG[value as LeaveStatus];
-                            return (
-                              <button key={value}
-                                onClick={() => { setStatusFilter(value); setFilterOpen(false); }}
-                                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors text-left ${
-                                  statusFilter === value ? "font-bold bg-slate-50 text-camublue-900" : "text-slate-700 hover:bg-slate-50"
-                                }`}>
-                                {cfg && <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />}
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  <button onClick={() => setShowFiltersModal(true)}
-                    className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border transition font-medium ${
-                      advancedFilterCount > 0
-                        ? "border-camublue-300 bg-camublue-50 text-camublue-700"
-                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                    }`}>
-                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                    <span className="text-xs">Filtres</span>
-                    {advancedFilterCount > 0 && (
-                      <span className="bg-camublue-700 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                        {advancedFilterCount}
-                      </span>
-                    )}
-                  </button>
-                </div>
               </div>
 
               {loading && (
@@ -563,14 +564,9 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
 
               {!loading && !fetchError && (
                 <div className="space-y-3">
-                  {/* ── Barre de recherche + compteur ─────────────────────── */}
-                  <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-                    <p className="text-xs text-slate-400 font-medium">
-                      {filteredRequests.length} demande(s)
-                      {searchQ && ` · "${searchQ}"`}
-                      {filteredRequests.length > pageSize && ` · page ${page}/${totalReqPages}`}
-                    </p>
-                    <div className="relative w-full sm:w-72">
+                  {/* ── Barre de recherche centrée ─────────────────────── */}
+                  <div className="flex justify-center">
+                    <div className="relative w-full sm:w-96">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                       <input
                         type="text"
