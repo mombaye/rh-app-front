@@ -321,20 +321,23 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                 className="p-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition">
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               </button>
-              <button onClick={() => setShowHierarchy(true)}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-camublue-300 text-sm font-semibold transition">
-                <GitBranch className="h-4 w-4" />
-                <span className="hidden sm:inline">Hiérarchie</span>
-              </button>
-              <button onClick={() => setShowLeaveTypes(true)}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-camublue-300 text-sm font-semibold transition">
-                <Settings2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Types de congés</span>
-              </button>
+              {!contractFilter && (<>
+                <button onClick={() => setShowHierarchy(true)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-camublue-300 text-sm font-semibold transition">
+                  <GitBranch className="h-4 w-4" />
+                  <span className="hidden sm:inline">Hiérarchie</span>
+                </button>
+                <button onClick={() => setShowLeaveTypes(true)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-camublue-300 text-sm font-semibold transition">
+                  <Settings2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Types de congés</span>
+                </button>
+              </>)}
             </div>
           </div>
 
-          {/* Navigation par onglets */}
+          {/* Navigation par onglets (cachée en mode sous-section) */}
+          {!contractFilter && (
           <div className="flex gap-0 overflow-x-auto px-4 sm:px-6">
             {TABS.map(({ id, label, Icon }) => (
               <button key={id} onClick={() => setTab(id)}
@@ -347,6 +350,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
               </button>
             ))}
           </div>
+          )}
         </div>
 
         {/* ── Export Dialog ──────────────────────────────────────────────────────── */}
