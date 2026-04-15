@@ -129,14 +129,14 @@ function KpiCard({ label, value, sub, color, onClick, active }: {
 }
 
 // ─── Page principale ──────────────────────────────────────────────────────────
-export default function LeavePage() {
+export default function LeavePage({ contractFilter }: { contractFilter?: ContractType } = {}) {
   const [tab,          setTab]          = useState<TabId>("requests");
   const [requests,     setRequests]     = useState<LeaveRequest[]>([]);
   const [summary,      setSummary]      = useState<LeaveSummary | null>(null);
   const [loading,      setLoading]      = useState(true);
   const [fetchError,   setFetchError]   = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
-  const [contractType, setContractType] = useState<ContractType>("INTERNE");
+  const [contractType, setContractType] = useState<ContractType>(contractFilter ?? "INTERNE");
   const [showForm,       setShowForm]       = useState(false);
   const [showLeaveTypes, setShowLeaveTypes] = useState(false);
   const [newTypeTrigger, setNewTypeTrigger] = useState(0);
@@ -279,6 +279,9 @@ export default function LeavePage() {
   // Reset page sur changement de filtre/recherche
   useEffect(() => { setPage(1); }, [searchQ, contractType, statusFilter, filterLeaveTypeId, filterStartDate, filterEndDate, filterDepartment, filterEmployeeName, filterYear]);
 
+  // Sync contractType with route prop
+  useEffect(() => { if (contractFilter) setContractType(contractFilter); }, [contractFilter]);
+
   // ── Suppression d'une demande Annulée ────────────────────────────────────
   const handleDelete = async () => {
     if (!confirmDeleteId) return;
@@ -305,8 +308,12 @@ export default function LeavePage() {
                 <CalendarDays className="h-5 w-5" />
               </div>
               <div>
-                <h1 className="text-xl font-black text-camublue-900">Congés & Absences</h1>
-                <p className="text-xs text-slate-400 mt-0.5">Gestion complète des demandes de congé</p>
+                <h1 className="text-xl font-black text-camublue-900">
+                  {contractFilter === "INTERIM" ? "Intérimaires — Congés" : "Internes — Congés"}
+                </h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {contractFilter === "INTERIM" ? "Gestion des congés des intérimaires" : "Gestion des congés des employés internes (CDI / CDD / Stage)"}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -425,6 +432,7 @@ export default function LeavePage() {
               <div className="mb-4 space-y-3">
                 {/* Ligne 1 : toggle contrat + actions */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  {!contractFilter && (
                   <div className="flex bg-white border border-slate-200 rounded-xl p-0.5 text-xs font-semibold w-fit">
                     {(["INTERNE", "INTERIM"] as ContractType[]).map((c) => (
                       <button key={c} onClick={() => setContractType(c)}
@@ -435,6 +443,7 @@ export default function LeavePage() {
                       </button>
                     ))}
                   </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <button onClick={() => setShowExportDialog(true)} disabled={exportLoading}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-emerald-600 hover:border-emerald-300 transition text-xs font-semibold disabled:opacity-50">
@@ -764,6 +773,7 @@ export default function LeavePage() {
 
           {tab === "balances" && (
             <>
+              {!contractFilter && (
               <div className="flex justify-end mb-3">
                 <div className="flex bg-white border border-slate-200 rounded-xl p-0.5 text-xs font-semibold">
                   {(["INTERNE", "INTERIM"] as ContractType[]).map((c) => (
@@ -776,6 +786,7 @@ export default function LeavePage() {
                   ))}
                 </div>
               </div>
+              )}
               <BalancesTab contractType={contractType} />
             </>
           )}
