@@ -304,5 +304,7 @@ export interface ShiftPeriodStatsResponse {
   team_filter: ShiftTeamKey | null;
   teams_info: Record<ShiftTeamKey, ShiftTeamInfo>;
   summary: ShiftPeriodSummary;
+  /** Liste de tous les départements présents dans le planning pour cette période */
+  departments: string[];
   dates: ShiftPeriodDay[];
 }
