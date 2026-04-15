@@ -49,14 +49,16 @@ export async function getShiftPeriodStats(params: {
   team?: ShiftTeamKey | null;
   matricule?: string | null;
   status?: string | null;
+  department?: string | null;
 }): Promise<ShiftPeriodStatsResponse> {
   const cleanParams: Record<string, string> = {
     date_from: params.date_from,
     date_to:   params.date_to,
   };
-  if (params.team)      cleanParams.team      = params.team;
-  if (params.matricule) cleanParams.matricule = params.matricule;
-  if (params.status)    cleanParams.status    = params.status;
+  if (params.team)       cleanParams.team       = params.team;
+  if (params.matricule)  cleanParams.matricule  = params.matricule;
+  if (params.status)     cleanParams.status     = params.status;
+  if (params.department) cleanParams.department = params.department;
   const { data } = await api.get("/api/attendance/shift-period-stats/", { params: cleanParams });
   return data;
 }
@@ -97,8 +99,8 @@ export interface PlanningEntry {
   shift_type:         string;
   employee_name:      string;
   employee_matricule?: string | null;
-  team_id?:           string;   // couleur hex ou identifiant de l'équipe (groupe coloré du planning)
-  row_slot?:          number;   // position de la ligne dans le groupe — préserve l'ordre Excel
+  team_id?:           string;
+  row_slot?:          number;
 }
 
 export interface ShiftPlanningUpload {
