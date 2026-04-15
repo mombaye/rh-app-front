@@ -102,10 +102,6 @@ export default function EmployeeSidebar() {
 
   const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
     <>
-      <div className="mx-4 mt-4 px-3 py-2 rounded-lg bg-camublue-900/10 text-camublue-900 text-xs font-semibold flex items-center gap-2">
-        <UserCircle2 size={14} />
-        Espace Employé
-      </div>
       <nav className="flex-1 px-4 py-6 space-y-1">
         {navItems.map((item) => (
           <NavLink key={item.path} item={item} onClose={onClose} />
