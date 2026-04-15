@@ -272,6 +272,27 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
     });
   }, [requests, searchQ, contractType]);
 
+  // Statistiques filtrées par type de contrat (Internes vs Intérimaires)
+  const contractSummary = useMemo(() => {
+    if (!contractFilter) return summary; // page principale : utiliser le résumé API
+    const filtered = requests.filter((r) => {
+      const isShift = r.employee?.attendance_status === "SHIFT";
+      if (contractFilter === "INTERIM" && !isShift) return false;
+      if (contractFilter === "INTERNE" &&  isShift) return false;
+      return true;
+    });
+    const approved = filtered.filter((r) => r.status === "APPROVED");
+    return {
+      total:               filtered.length,
+      pending:             filtered.filter((r) => r.status === "PENDING" || r.status === "PENDING_SECOND").length,
+      approved:            approved.length,
+      rejected:            filtered.filter((r) => r.status === "REJECTED").length,
+      cancelled:           filtered.filter((r) => r.status === "CANCELLED").length,
+      revoked:             filtered.filter((r) => r.status === "REVOKED").length,
+      total_days_approved: approved.reduce((acc, r) => acc + (r.days ?? 0), 0),
+    } as typeof summary;
+  }, [requests, contractFilter, summary]);
+
   const totalReqPages  = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
   const pagedRequests  = filteredRequests.slice((page - 1) * pageSize, page * pageSize);
 
@@ -315,11 +336,56 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
               <button onClick={fetchAll} disabled={loading} title="Actualiser"
                 className="p-2 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition">
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               </button>
+              {/* Filtres statut + avancés au même niveau que les actions */}
+              {(contractFilter || tab === "requests") && (<>
+                <div className="relative" ref={filterRef}>
+                  <button onClick={() => setFilterOpen((o) => !o)}
+                    className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-medium transition">
+                    <span className="text-xs">{currentFilterLabel}</span>
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  <AnimatePresence>
+                    {filterOpen && (
+                      <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-30">
+                        {STATUS_FILTERS.map(({ value, label }) => {
+                          const cfg = value === "ALL" ? null : STATUS_CFG[value as LeaveStatus];
+                          return (
+                            <button key={value}
+                              onClick={() => { setStatusFilter(value); setFilterOpen(false); }}
+                              className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors text-left ${
+                                statusFilter === value ? "font-bold bg-slate-50 text-camublue-900" : "text-slate-700 hover:bg-slate-50"
+                              }`}>
+                              {cfg && <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />}
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <button onClick={() => setShowFiltersModal(true)}
+                  className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border transition font-medium ${
+                    advancedFilterCount > 0
+                      ? "border-camublue-300 bg-camublue-50 text-camublue-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}>
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  <span className="text-xs">Filtres</span>
+                  {advancedFilterCount > 0 && (
+                    <span className="bg-camublue-700 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                      {advancedFilterCount}
+                    </span>
+                  )}
+                </button>
+              </>)}
               {!contractFilter && (<>
                 <button onClick={() => setShowHierarchy(true)}
                   className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-camublue-300 text-sm font-semibold transition">
@@ -345,55 +411,6 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
               </>)}
             </div>
           </div>
-
-          {/* Filtres statut + avancés (dans le header) */}
-          {(contractFilter || tab === "requests") && (
-          <div className="flex items-center gap-2 flex-wrap px-4 sm:px-6 pb-3">
-            <div className="relative" ref={filterRef}>
-              <button onClick={() => setFilterOpen((o) => !o)}
-                className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-medium transition">
-                <span className="text-xs">{currentFilterLabel}</span>
-                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
-              </button>
-              <AnimatePresence>
-                {filterOpen && (
-                  <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    className="absolute left-0 mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-30">
-                    {STATUS_FILTERS.map(({ value, label }) => {
-                      const cfg = value === "ALL" ? null : STATUS_CFG[value as LeaveStatus];
-                      return (
-                        <button key={value}
-                          onClick={() => { setStatusFilter(value); setFilterOpen(false); }}
-                          className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors text-left ${
-                            statusFilter === value ? "font-bold bg-slate-50 text-camublue-900" : "text-slate-700 hover:bg-slate-50"
-                          }`}>
-                          {cfg && <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />}
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <button onClick={() => setShowFiltersModal(true)}
-              className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border transition font-medium ${
-                advancedFilterCount > 0
-                  ? "border-camublue-300 bg-camublue-50 text-camublue-700"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-              }`}>
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span className="text-xs">Filtres</span>
-              {advancedFilterCount > 0 && (
-                <span className="bg-camublue-700 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                  {advancedFilterCount}
-                </span>
-              )}
-            </button>
-          </div>
-          )}
 
           {/* Navigation par onglets (cachée en mode sous-section) */}
           {!contractFilter && (
@@ -520,23 +537,23 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                 </div>
                 )}
 
-                {/* Ligne 2 : KPI Cards */}
-                {summary && (
+                {/* Ligne 2 : KPI Cards (filtrées par type de contrat si sous-section) */}
+                {contractSummary && (
                   <div className="flex gap-2 overflow-x-auto pb-1">
-                    <KpiCard label="Total"      value={summary.total}    color="#003c71" />
-                    <KpiCard label="En attente" value={summary.pending}  color="#d97706"
+                    <KpiCard label="Total"      value={contractSummary.total}    color="#003c71" />
+                    <KpiCard label="En attente" value={contractSummary.pending}  color="#d97706"
                       active={statusFilter === "PENDING" || statusFilter === "PENDING_SECOND"}
                       onClick={() => setStatusFilter(
                         (statusFilter === "PENDING" || statusFilter === "PENDING_SECOND") ? "ALL" : "PENDING"
                       )} />
-                    <KpiCard label="Approuvés"  value={summary.approved} color="#059669"
-                      sub={`${summary.total_days_approved}j accordés`}
+                    <KpiCard label="Approuvés"  value={contractSummary.approved} color="#059669"
+                      sub={`${contractSummary.total_days_approved}j accordés`}
                       active={statusFilter === "APPROVED"}
                       onClick={() => setStatusFilter(statusFilter === "APPROVED" ? "ALL" : "APPROVED")} />
-                    <KpiCard label="Rejetés"    value={summary.rejected} color="#dc2626"
+                    <KpiCard label="Rejetés"    value={contractSummary.rejected} color="#dc2626"
                       active={statusFilter === "REJECTED"}
                       onClick={() => setStatusFilter(statusFilter === "REJECTED" ? "ALL" : "REJECTED")} />
-                    <KpiCard label="Révoqués"   value={summary.revoked ?? 0} color="#b45309"
+                    <KpiCard label="Révoqués"   value={contractSummary.revoked ?? 0} color="#b45309"
                       active={statusFilter === "REVOKED"}
                       onClick={() => setStatusFilter(statusFilter === "REVOKED" ? "ALL" : "REVOKED")} />
                   </div>
@@ -566,7 +583,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                 <div className="space-y-3">
                   {/* ── Barre de recherche centrée ─────────────────────── */}
                   <div className="flex justify-center">
-                    <div className="relative w-full sm:w-96">
+                    <div className="relative w-full sm:w-[42rem]">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                       <input
                         type="text"
