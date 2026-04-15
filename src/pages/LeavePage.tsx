@@ -584,18 +584,18 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                   {/* ── Barre de recherche centrée ─────────────────────── */}
                   <div className="flex justify-center">
                     <div className="relative w-full sm:w-[42rem]">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 pointer-events-none" />
                       <input
                         type="text"
                         placeholder="Rechercher employé, type, service…"
                         value={searchQ}
                         onChange={(e) => setSearchQ(e.target.value)}
-                        className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition bg-white"
+                        className="w-full pl-12 pr-10 py-4 border-2 border-slate-200 rounded-2xl text-sm font-medium outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition bg-white shadow-sm placeholder:text-slate-400"
                       />
                       {searchQ && (
                         <button onClick={() => setSearchQ("")}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                          <X className="h-3.5 w-3.5" />
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                          <X className="h-5 w-5" />
                         </button>
                       )}
                     </div>
