@@ -181,7 +181,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   const needsDoc     = selectedType?.requires_justification ?? false;
 
   const handleSubmit = async () => {
-    if (!form.employee_id || !form.leave_type_id || !form.start_date || !form.end_date || !form.motif.trim()) {
+    if (!form.employee_id || !form.leave_type_id || !form.start_date || !form.end_date) {
       setError("Veuillez remplir tous les champs obligatoires."); return;
     }
     if (!form.days || Number(form.days) <= 0) {
@@ -358,7 +358,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         <div className="flex justify-between items-start px-4 sm:px-8 pt-6 sm:pt-8">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Nouvelle demande</h2>
-            <p className="text-sm text-gray-400 mt-1">Employé {contractLabel} · Remplissez tous les champs</p>
+            <p className="text-sm text-gray-400 mt-1">Employé {contractLabel} · Remplissez les champs obligatoires</p>
           </div>
           <button onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition p-1.5 rounded-lg hover:bg-gray-100">
@@ -447,7 +447,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                     <motion.div
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                       className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3 text-sm text-gray-400">
-                      Aucun employé trouvé pour «&nbsp;{empSearch}&nbsp;»
+                      Aucun employé trouvé pour «\u00a0{empSearch}\u00a0»
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -595,10 +595,10 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
           {/* ── Motif ───────────────────────────────────────────────── */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
-              Motif <span className="text-red-500">*</span>
+              Motif <span className="text-gray-400 font-normal normal-case">(optionnel)</span>
             </label>
             <textarea name="motif" value={form.motif} onChange={handleChange}
-              placeholder="Décrivez le motif de l'absence…" rows={3}
+              placeholder="Décrivez le motif de l'absence… (optionnel)" rows={3}
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition resize-none" />
           </div>
 
