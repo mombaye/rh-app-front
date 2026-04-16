@@ -2115,6 +2115,8 @@ export default function AttendanceShiftsPage() {
   const [periodStatus,     setPeriodStatus]     = useState<string>("");
   const [periodSearch,     setPeriodSearch]     = useState("");
   const [periodMatricule,  setPeriodMatricule]  = useState<string>("");
+  const [periodPage,       setPeriodPage]       = useState(1);
+  const [periodPageSize,   setPeriodPageSize]   = useState(20);
 
   const [alertModalOpen, setAlertModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -2255,12 +2257,26 @@ export default function AttendanceShiftsPage() {
         status:     periodStatus || null,
       });
       setPeriodData(res);
+      setPeriodPage(1);
     } catch (e) {
       console.error("fetchPeriodData error:", e);
     } finally {
       setPeriodLoading(false);
     }
   }, [periodFrom, periodTo, periodTeam, periodMatricule, periodStatus]);
+
+  // ── Records période aplatis (un enregistrement par ligne) ─────────────────
+  const flatPeriodRecords = useMemo((): (ShiftRecord & { _date: string })[] => {
+    if (!periodData) return [];
+    return periodData.dates
+      .filter((d) => d.has_planning && d.records.length > 0)
+      .flatMap((d) => d.records.map((r) => ({ ...r, _date: d.date })));
+  }, [periodData]);
+
+  const periodPageData = useMemo(() => {
+    const start = (periodPage - 1) * periodPageSize;
+    return flatPeriodRecords.slice(start, start + periodPageSize);
+  }, [flatPeriodRecords, periodPage, periodPageSize]);
 
   // Fetch on mount + view change
   useEffect(() => { fetchData(); }, [viewMode, date, week, month]);
@@ -2944,8 +2960,8 @@ export default function AttendanceShiftsPage() {
               </div>
             </div>
 
-            {/* Table période : par date */}
-            <div className="flex-1 min-h-0 overflow-auto flex flex-col gap-4">
+            {/* Table période — affichage plat identique à la vue Journalier */}
+            <div className="flex-1 min-h-0 flex flex-col gap-2">
               {periodLoading ? (
                 <div className="flex items-center justify-center py-20 text-slate-400">
                   <Loader2 className="h-8 w-8 animate-spin mr-3" />
@@ -2956,159 +2972,128 @@ export default function AttendanceShiftsPage() {
                   <CalendarRange className="h-12 w-12 text-slate-200" />
                   <p className="text-sm font-medium">Définissez une <strong>date de début</strong> et une <strong>date de fin</strong>, puis cliquez sur <strong>Afficher</strong></p>
                 </div>
-              ) : periodData.dates.filter((d) => d.has_planning).length === 0 ? (
+              ) : flatPeriodRecords.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
                   <CalendarDays className="h-12 w-12 text-slate-200" />
                   <p className="text-sm font-medium">Aucun planning trouvé sur cette période</p>
                 </div>
               ) : (
-                periodData.dates
-                  .filter((d) => d.has_planning && d.records.length > 0)
-                  .map((day) => {
-                    const searchLower = periodSearch.toLowerCase();
-                    const visibleRecs = searchLower
-                      ? day.records.filter((r) =>
-                          r.full_name.toLowerCase().includes(searchLower) ||
-                          (r.matricule || "").toLowerCase().includes(searchLower)
-                        )
-                      : day.records;
-                    if (visibleRecs.length === 0) return null;
-
-                    const dateLabel = new Date(day.date + "T00:00:00").toLocaleDateString("fr-FR", {
-                      weekday: "long", day: "2-digit", month: "long", year: "numeric",
-                    });
-
-                    const STATUS_STYLES: Record<string, string> = {
-                      ok: "bg-emerald-100 text-emerald-700 ring-emerald-200",
-                      absent: "bg-red-100 text-red-700 ring-red-200",
-                      incomplete: "bg-amber-100 text-amber-700 ring-amber-200",
-                      anomaly: "bg-violet-100 text-violet-700 ring-violet-200",
-                      not_working: "bg-slate-100 text-slate-500 ring-slate-200",
-                      on_leave: "bg-sky-100 text-sky-700 ring-sky-200",
-                      on_mission: "bg-indigo-100 text-indigo-700 ring-indigo-200",
-                    };
-                    const STATUS_LABELS_FR: Record<string, string> = {
-                      ok: "Présent", absent: "Absent", incomplete: "Incomplet",
-                      anomaly: "Anomalie", not_working: "Pas de service",
-                      on_leave: "En congé", on_mission: "En mission",
-                    };
-
-                    return (
-                      <div key={day.date} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        {/* En-tête date */}
-                        <div className="px-4 py-3 bg-camublue-900 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <CalendarDays className="h-4 w-4 text-white/70" />
-                            <span className="font-bold text-white capitalize">{dateLabel}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-white/70 bg-white/10 px-2 py-0.5 rounded-full">
-                              {day.kpis.present}/{day.kpis.total} présents
-                            </span>
-                            {day.kpis.absent > 0 && (
-                              <span className="text-xs font-bold text-red-300 bg-red-900/40 px-2 py-0.5 rounded-full">
-                                {day.kpis.absent} abs
-                              </span>
-                            )}
-                            {day.kpis.late > 0 && (
-                              <span className="text-xs font-bold text-orange-300 bg-orange-900/40 px-2 py-0.5 rounded-full">
-                                {day.kpis.late} retard
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Table employés */}
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full text-sm">
-                            <thead className="bg-slate-50 border-b border-slate-200">
-                              <tr>
-                                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 w-28">Matricule</th>
-                                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500">Nom</th>
-                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Équipe</th>
-                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Statut</th>
-                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Retard</th>
-                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Entrée</th>
-                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">Sortie</th>
-                                <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-500">H. Travaillées</th>
-                                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500">Remplacement</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {visibleRecs.map((rec) => {
-                                const statusStyle = STATUS_STYLES[rec.status] ?? STATUS_STYLES.anomaly;
-                                const statusLabel = STATUS_LABELS_FR[rec.status] ?? rec.status;
-                                const isReplaced   = !!rec.replaced_by;
-                                const isReplacer   = !!rec.replaces_employee;
-                                return (
-                                  <tr key={`${rec.employee_id}-${day.date}`}
-                                    className={`transition-colors ${isReplaced ? "bg-red-50/50" : isReplacer ? "bg-purple-50/50" : "hover:bg-slate-50/70"}`}>
-                                    <td className="px-4 py-2.5 font-mono text-xs text-slate-400">{rec.matricule || "—"}</td>
-                                    <td className="px-4 py-2.5 font-semibold text-slate-700">
-                                      {isReplaced ? (
-                                        <div className="flex items-center gap-2">
-                                          <span className="line-through text-red-400">{rec.full_name}</span>
-                                          <ArrowRight className="h-3 w-3 text-slate-300 shrink-0" />
-                                          <span className="text-purple-600 font-bold text-xs">{rec.replaced_by}</span>
-                                        </div>
-                                      ) : isReplacer ? (
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-purple-700">{rec.full_name}</span>
-                                          <span className="text-[10px] font-bold bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded-full ring-1 ring-purple-200">Remplacement</span>
-                                        </div>
-                                      ) : rec.full_name}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-center">
-                                      <ShiftTeamPill teamKey={rec.shift_team} />
-                                    </td>
-                                    <td className="px-4 py-2.5 text-center">
-                                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1 ${statusStyle}`}>
-                                        {statusLabel}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-2.5 text-center">
-                                      {rec.is_late && rec.late_label ? (
-                                        <span className="text-orange-600 font-semibold text-xs">{rec.late_label}</span>
-                                      ) : <span className="text-slate-300">—</span>}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-600">
-                                      {rec.in_time ? formatTime(rec.in_time) : <span className="text-slate-300">—</span>}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-600">
-                                      {rec.out_time ? formatTime(rec.out_time) : <span className="text-slate-300">—</span>}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-600">
-                                      {rec.worked_minutes > 0 ? formatMinutes(rec.worked_minutes) : <span className="text-slate-300">—</span>}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-xs text-slate-500">
-                                      {isReplaced && rec.replacement_in_time ? (
-                                        <div className="flex flex-col gap-0.5">
-                                          <span className="text-purple-600 font-medium">{rec.replaced_by}</span>
-                                          <span className="text-slate-400">
-                                            {formatTime(rec.replacement_in_time)} → {formatTime(rec.replacement_out_time)}
-                                            {rec.replacement_worked_minutes && ` · ${formatMinutes(rec.replacement_worked_minutes)}`}
-                                          </span>
-                                        </div>
-                                      ) : isReplacer ? (
-                                        <div className="flex flex-col gap-0.5">
-                                          <span className="text-slate-400 text-[10px]">Remplace :</span>
-                                          <span className="text-purple-600 font-medium line-through">{rec.replaces_employee}</span>
-                                        </div>
-                                      ) : <span className="text-slate-300">—</span>}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
+                <>
+                  <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
+                    <table className="min-w-full bg-white">
+                      <thead className="sticky top-0 z-10 bg-camublue-900 text-white">
+                        <tr>
+                          {["Date", "Matricule", "Nom", "Équipe", "Statut", "Retard", "Entrée", "Sortie", "H. Travaillées"].map((h) => (
+                            <th key={h} className="px-4 py-3 text-center text-xs font-semibold whitespace-nowrap border-b border-white/20">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {periodPageData.map((row, idx) => {
+                          const STATUS_STYLES: Record<string, string> = {
+                            ok: "bg-emerald-100 text-emerald-700 ring-emerald-200",
+                            absent: "bg-red-100 text-red-700 ring-red-200",
+                            incomplete: "bg-amber-100 text-amber-700 ring-amber-200",
+                            anomaly: "bg-violet-100 text-violet-700 ring-violet-200",
+                            not_working: "bg-slate-100 text-slate-500 ring-slate-200",
+                            on_leave: "bg-sky-100 text-sky-700 ring-sky-200",
+                            on_mission: "bg-indigo-100 text-indigo-700 ring-indigo-200",
+                          };
+                          const STATUS_LABELS: Record<string, string> = {
+                            ok: "Présent", absent: "Absent", incomplete: "Incomplet",
+                            anomaly: "Anomalie", not_working: "Repos",
+                            on_leave: "En congé", on_mission: "En mission",
+                          };
+                          const dateLabel = new Date(row._date + "T00:00:00").toLocaleDateString("fr-FR", {
+                            weekday: "short", day: "2-digit", month: "short",
+                          });
+                          const isReplaced = !!row.replaced_by;
+                          const isReplacer = !!row.replaces_employee;
+                          const rowBg = isReplaced
+                            ? "bg-red-50/50"
+                            : isReplacer
+                            ? "bg-purple-50/50"
+                            : "hover:bg-slate-50/70";
+                          return (
+                            <tr key={`${row._date}-${row.employee_id}-${idx}`}
+                              className={`text-sm transition-colors ${rowBg}`}>
+                              <td className="px-4 py-2.5 text-center whitespace-nowrap">
+                                <span className="text-xs font-semibold text-camublue-900 bg-camublue-50 px-2 py-0.5 rounded-lg capitalize">{dateLabel}</span>
+                              </td>
+                              <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-400">{row.matricule || "—"}</td>
+                              <td className="px-4 py-2.5">
+                                {isReplaced ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="line-through text-red-400 text-xs">{row.full_name}</span>
+                                    <ArrowRight className="h-3 w-3 text-slate-300 shrink-0" />
+                                    <span className="text-purple-600 font-bold text-xs">{row.replaced_by}</span>
+                                  </div>
+                                ) : isReplacer ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-purple-700 text-xs">{row.full_name}</span>
+                                    <span className="text-[10px] font-bold bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded-full ring-1 ring-purple-200">Remplacement</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs font-medium text-slate-700">{row.full_name}</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-center">
+                                <ShiftTeamPill teamKey={row.shift_team} />
+                              </td>
+                              <td className="px-4 py-2.5 text-center">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1 ${STATUS_STYLES[row.status] ?? STATUS_STYLES.anomaly}`}>
+                                  {STATUS_LABELS[row.status] ?? row.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 text-center">
+                                {row.is_late && row.late_label
+                                  ? <span className="text-orange-600 font-semibold text-xs">{row.late_label}</span>
+                                  : <span className="text-slate-300 text-xs">—</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-600">
+                                {row.in_time
+                                  ? formatTime(row.in_time)
+                                  : row.replacement_in_time
+                                  ? <span className="text-purple-600">{formatTime(row.replacement_in_time)}</span>
+                                  : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-600">
+                                {row.out_time
+                                  ? formatTime(row.out_time)
+                                  : row.replacement_out_time
+                                  ? <span className="text-purple-600">{formatTime(row.replacement_out_time)}</span>
+                                  : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-center">
+                                {(row.worked_minutes > 0 || (row.replacement_worked_minutes ?? 0) > 0)
+                                  ? <WorkedTimeBadge minutes={row.worked_minutes > 0 ? row.worked_minutes : (row.replacement_worked_minutes ?? 0)} />
+                                  : <span className="text-slate-300 text-xs">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Pagination */}
+                  {flatPeriodRecords.length > periodPageSize && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 shrink-0">
+                      <span className="text-xs text-slate-500">
+                        {(periodPage - 1) * periodPageSize + 1}–{Math.min(periodPage * periodPageSize, flatPeriodRecords.length)} / <strong className="text-slate-700">{flatPeriodRecords.length}</strong> enregistrements
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setPeriodPage(1)} disabled={periodPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleLeft size={12} /></button>
+                        <button onClick={() => setPeriodPage((p) => Math.max(p - 1, 1))} disabled={periodPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-4 w-4" /></button>
+                        <span className="text-xs text-slate-600 px-2 font-medium">Page {periodPage} / {Math.ceil(flatPeriodRecords.length / periodPageSize)}</span>
+                        <button onClick={() => setPeriodPage((p) => Math.min(p + 1, Math.ceil(flatPeriodRecords.length / periodPageSize)))} disabled={periodPage >= Math.ceil(flatPeriodRecords.length / periodPageSize)} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-4 w-4" /></button>
+                        <button onClick={() => setPeriodPage(Math.ceil(flatPeriodRecords.length / periodPageSize))} disabled={periodPage >= Math.ceil(flatPeriodRecords.length / periodPageSize)} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleRight size={12} /></button>
                       </div>
-                    );
-                  })
+                    </div>
+                  )}
+                </>
               )}
             </div>
-          </div>
-        ) : (
+          </div>        ) : (
           <SummaryTable
             rows={filteredSummaryRecords}
             mode={viewMode as "weekly" | "monthly"}
