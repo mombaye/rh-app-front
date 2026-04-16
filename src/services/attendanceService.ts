@@ -6,6 +6,7 @@ import type {
   EmployeePeriodDetailResponse,
   ShiftDailyStatsResponse,
   ShiftPeriodStatsResponse,
+  ShiftEmployeePeriodStatsResponse,
   ShiftTeamKey,
 } from "@/types/attendance";
 
@@ -60,6 +61,24 @@ export async function getShiftPeriodStats(params: {
   if (params.status)     cleanParams.status     = params.status;
   if (params.department) cleanParams.department = params.department;
   const { data } = await api.get("/api/attendance/shift-period-stats/", { params: cleanParams });
+  return data;
+}
+
+export async function getShiftEmployeePeriodStats(params: {
+  date_from: string;
+  date_to: string;
+  team?: ShiftTeamKey | null;
+  matricule?: string | null;
+  status?: string | null;
+}): Promise<ShiftEmployeePeriodStatsResponse> {
+  const cleanParams: Record<string, string> = {
+    date_from: params.date_from,
+    date_to:   params.date_to,
+  };
+  if (params.team)      cleanParams.team      = params.team;
+  if (params.matricule) cleanParams.matricule = params.matricule;
+  if (params.status)    cleanParams.status    = params.status;
+  const { data } = await api.get("/api/attendance/shift-employee-period-stats/", { params: cleanParams });
   return data;
 }
 

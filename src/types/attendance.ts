@@ -308,3 +308,35 @@ export interface ShiftPeriodStatsResponse {
   departments: string[];
   dates: ShiftPeriodDay[];
 }
+
+// ─── Shift Employee Period Stats (agrégé par employé) ─────────────────────────
+
+export interface ShiftEmployeePeriodRecord {
+  employee_id: number;
+  matricule: string;
+  full_name: string;
+  department: string | null;
+  shift_team: ShiftTeamKey | null;
+  shift_team_label: string;
+  days_planned: number;
+  days_present: number;
+  days_absent: number;
+  days_incomplete: number;
+  days_anomaly: number;
+  days_late: number;
+  days_not_working: number;
+  total_worked_minutes: number;
+  total_expected_minutes: number;
+  total_delta_minutes: number;
+  total_late_minutes: number;
+  replacements_done: number;
+  times_replaced: number;
+}
+
+export interface ShiftEmployeePeriodStatsResponse {
+  date_from: string;
+  date_to: string;
+  team_filter: ShiftTeamKey | null;
+  teams_info: Record<ShiftTeamKey, ShiftTeamInfo>;
+  employees: ShiftEmployeePeriodRecord[];
+}
