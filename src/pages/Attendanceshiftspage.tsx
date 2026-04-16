@@ -2036,6 +2036,7 @@ export default function AttendanceShiftsPage() {
   const [periodPage,       setPeriodPage]       = useState(1);
   const [periodPageSize,   setPeriodPageSize]   = useState(20);
 
+  const [showPeriodModal, setShowPeriodModal] = useState(false);
   const [alertModalOpen, setAlertModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -2178,6 +2179,61 @@ export default function AttendanceShiftsPage() {
       setPeriodPage(1);
     } catch (e) {
       console.error("fetchPeriodData error:", e);
+    } finally {
+      setPeriodLoading(false);
+    }
+  }, [periodFrom, periodTo, periodTeam, periodMatricule, periodStatus]);
+
+  // ── Valider période + exporter Excel ──────────────────────────────────────
+  const handlePeriodExport = useCallback(async () => {
+    if (!periodFrom || !periodTo) return;
+    setShowPeriodModal(false);
+    setPeriodLoading(true);
+    try {
+      const res = await getShiftPeriodStats({
+        date_from: periodFrom,
+        date_to: periodTo,
+        team: periodTeam,
+        matricule: periodMatricule || null,
+        status: periodStatus || null,
+      });
+      setPeriodData(res);
+      setPeriodPage(1);
+
+      // Export to Excel
+      const STATUS_LABELS: Record<string, string> = {
+        ok: "Présent", absent: "Absent", incomplete: "Incomplet",
+        anomaly: "Anomalie", not_working: "Pas de service",
+        on_leave: "En congé", on_mission: "En mission",
+      };
+      const ALL: Record<ShiftPeriodCol, (r: ShiftRecord, d: { date: string; weekday: number; weekday_label: string }) => any> = {
+        "Date":              (_r, d) => new Date(d.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
+        "Jour":              (_r, d) => d.weekday_label,
+        "Matricule":         (r)     => r.matricule || "—",
+        "Nom":               (r)     => r.full_name,
+        "Équipe":            (r)     => r.shift_team_label || r.shift_team || "—",
+        "Statut":            (r)     => STATUS_LABELS[r.status] ?? r.status,
+        "Retard":            (r)     => r.late_minutes > 0 ? `${r.late_label ?? r.late_minutes + " min"}` : "—",
+        "Entrée":            (r)     => r.shift_team === "soir2" ? (r.out_time ? formatTime(r.out_time) : "—") : (r.in_time ? formatTime(r.in_time) : "—"),
+        "Sortie":            (r)     => r.shift_team === "soir2" ? (r.in_time ? formatTime(r.in_time) : "—") : (r.out_time ? formatTime(r.out_time) : "—"),
+        "Heures travaillées":(r)     => r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
+        "Remplacé par":      (r)     => r.replaced_by ?? "—",
+        "Remplaçant de":     (r)     => r.replaces_employee ?? "—",
+      };
+      const rows: Record<string, any>[] = [];
+      for (const day of res.dates) {
+        if (!day.has_planning) continue;
+        for (const rec of day.records) {
+          rows.push(Object.fromEntries(
+            [...SHIFT_PERIOD_COLS].map((k) => [k, ALL[k](rec, day)])
+          ));
+        }
+        if (day.records.length > 0) rows.push({});
+      }
+      exportXLSX(`shift_periode_${periodFrom}_${periodTo}`, rows);
+    } catch (e) {
+      console.error("handlePeriodExport error:", e);
+      alert("Erreur lors de la récupération des données. Veuillez réessayer.");
     } finally {
       setPeriodLoading(false);
     }
@@ -2655,9 +2711,9 @@ export default function AttendanceShiftsPage() {
         className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-3 p-3 sm:p-4 md:p-6">
 
         {/* ── En-tête ── */}
-        <div className="flex flex-col sm:flex-row justify-between gap-3 sm:items-start shrink-0">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-camublue-900">Pointages Shifts</h1>
+        <div className="flex flex-col sm:flex-row justify-between gap-2 sm:items-center shrink-0">
+          <div className="shrink-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-camublue-900">Pointages Shifts</h1>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${isActiveLocked ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-slate-50 text-slate-500 ring-slate-200"}`}>
                 {isActiveLocked ? <Lock className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
@@ -2691,25 +2747,23 @@ export default function AttendanceShiftsPage() {
               </button>
             </div>
 
-            {/* ── Date picker inline ── */}
+            {/* ── Date picker inline (daily) ── */}
             {viewMode === "daily" && (
               <input type="date" value={date} onChange={(e) => { setDate(e.target.value); }}
                 className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
             )}
+            {/* ── Bouton filtre période (ouvre modal) ── */}
             {viewMode === "period" && (
-              <div className="flex items-center gap-1.5">
-                <input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)}
-                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-camublue-900 focus:outline-none w-36" />
-                <span className="text-slate-400 text-xs font-semibold">→</span>
-                <input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)}
-                  max={todayISO()}
-                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-camublue-900 focus:outline-none w-36" />
-                <button onClick={fetchPeriodData} disabled={periodLoading || !periodFrom || !periodTo}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
-                  {periodLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  <span className="hidden sm:inline">Afficher</span>
-                </button>
-              </div>
+              <button onClick={() => setShowPeriodModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 text-sm font-semibold hover:bg-indigo-100 transition">
+                <CalendarRange className="h-4 w-4" />
+                <span className="hidden sm:inline">Période</span>
+                {periodFrom && periodTo && (
+                  <span className="text-[10px] font-bold bg-indigo-200/60 px-1.5 py-0.5 rounded-full hidden md:inline">
+                    {new Date(periodFrom + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })} → {new Date(periodTo + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
+                  </span>
+                )}
+              </button>
             )}
 
             {/* ── Search ── */}
@@ -2736,12 +2790,10 @@ export default function AttendanceShiftsPage() {
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
             </button>
-            {viewMode === "daily" && (
-              <button onClick={() => fetchData(false)}
-                className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
-              </button>
-            )}
+            <button onClick={() => viewMode === "period" ? fetchPeriodData() : fetchData(false)}
+              className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
+              <RefreshCw className={`h-4 w-4 ${loading || periodLoading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
+            </button>
           </div>
         </div>
 
@@ -3217,6 +3269,75 @@ export default function AttendanceShiftsPage() {
             onClose={() => { setEditModalOpen(false); setEditRecord(null); }}
             onSaved={() => fetchData(true)} />
         )}
+
+        {/* ── Period Filter Modal ── */}
+        <AnimatePresence>
+          {showPeriodModal && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4"
+              onClick={(e) => { if (e.target === e.currentTarget) setShowPeriodModal(false); }}>
+              <motion.div
+                initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                  <div>
+                    <h2 className="font-black text-camublue-900 text-base flex items-center gap-2">
+                      <CalendarRange className="h-5 w-5" />Filtrer par période
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Sélectionnez la date de début et de fin</p>
+                  </div>
+                  <button onClick={() => setShowPeriodModal(false)}
+                    className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="px-5 py-5 space-y-4">
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="text-xs font-semibold text-slate-500 block mb-1.5">Date de début</label>
+                      <input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs font-semibold text-slate-500 block mb-1.5">Date de fin</label>
+                      <input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)}
+                        max={todayISO()}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                    </div>
+                  </div>
+                  {periodFrom && periodTo && periodFrom <= periodTo && (
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-indigo-50 border border-indigo-100">
+                      <CalendarDays className="h-4 w-4 text-indigo-500 shrink-0" />
+                      <span className="text-xs font-medium text-indigo-700">
+                        {Math.ceil((new Date(periodTo + "T00:00:00").getTime() - new Date(periodFrom + "T00:00:00").getTime()) / (1000 * 60 * 60 * 24)) + 1} jours sélectionnés
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                  <button onClick={() => setShowPeriodModal(false)}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
+                    Annuler
+                  </button>
+                  <button
+                    onClick={() => { setShowPeriodModal(false); fetchPeriodData(); }}
+                    disabled={!periodFrom || !periodTo || periodFrom > periodTo}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-camublue-900 text-camublue-900 text-sm font-bold hover:bg-camublue-50 disabled:opacity-50 transition">
+                    <Table2 className="h-4 w-4" />Afficher
+                  </button>
+                  <button
+                    onClick={handlePeriodExport}
+                    disabled={!periodFrom || !periodTo || periodFrom > periodTo || periodLoading}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
+                    {periodLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+                    {periodLoading ? "Chargement…" : "Exporter"}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Export Dialog ── */}
         <AnimatePresence>
