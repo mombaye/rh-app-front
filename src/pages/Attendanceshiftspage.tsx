@@ -8,7 +8,7 @@ import {
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
   Check, Settings, CheckCircle, Lock, CalendarDays,
   TrendingUp, Pencil, Plus, Trash2, Upload, CalendarRange, ArrowLeftRight, ArrowRight,
-  Table2, Filter,
+  Table2,
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import {
@@ -1972,99 +1972,6 @@ function buildWeekendShortcuts(): { label: string; d: string }[] {
   ];
 }
 
-function FilterModal({
-  open, onClose, viewMode, setViewMode, date, setDate,
-  periodFrom, setPeriodFrom, periodTo, setPeriodTo,
-  statusFilter, setStatusFilter, onApply,
-}: {
-  open: boolean; onClose: () => void; viewMode: ViewMode; setViewMode: (v: ViewMode) => void;
-  date: string; setDate: (v: string) => void;
-  periodFrom: string; setPeriodFrom: (v: string) => void;
-  periodTo: string; setPeriodTo: (v: string) => void;
-  statusFilter: StatusFilter;
-  setStatusFilter: (v: StatusFilter) => void; onApply: () => void;
-}) {
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-          <motion.div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10 max-h-[90vh] flex flex-col"
-            initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 40, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-gray-600" />
-                <span className="font-semibold text-gray-900">Filtres & Période</span>
-              </div>
-              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-gray-100 transition"><X className="h-4 w-4 text-gray-500" /></button>
-            </div>
-            <div className="px-6 py-5 space-y-6 max-h-[80vh] sm:max-h-[70vh] overflow-y-auto">
-              <div>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { k: "daily"  as ViewMode, label: "Journalier", icon: "📅" },
-                    { k: "period" as ViewMode, label: "Période",    icon: "📊" },
-                  ].map((v) => (
-                    <button key={v.k} onClick={() => setViewMode(v.k)}
-                      className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl border-2 text-xs font-semibold transition-all ${
-                        viewMode === v.k ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
-                      }`}>
-                      <span className="text-xl">{v.icon}</span>{v.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{viewMode === "period" ? "Période" : "Date"}</p>
-                {viewMode === "daily" && (
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
-                )}
-                {viewMode === "period" && (
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs font-medium text-slate-500">Date de début</label>
-                      <input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)}
-                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs font-medium text-slate-500">Date de fin</label>
-                      <input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)}
-                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
-                    </div>
-                  </div>
-                )}
-              </div>
-              {viewMode === "daily" && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Statut / Type</p>
-                  <div className="flex flex-wrap gap-2">
-                    {QUICK_FILTERS.map((f) => (
-                      <button key={f.key} onClick={() => setStatusFilter(f.key)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                          statusFilter === f.key ? `${f.activeBg} ${f.activeText} border-transparent` : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
-                        }`}>
-                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusFilter === f.key ? f.activeDot : f.dotColor}`} />{f.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 shrink-0">
-              <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
-              <button onClick={() => { onApply(); onClose(); }} className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-medium transition">Appliquer</button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
 // ============================================================================
 // COMPOSANT PRINCIPAL: AttendanceShiftsPage
 // ============================================================================
@@ -2078,7 +1985,6 @@ export default function AttendanceShiftsPage() {
   };
 
   const [loading, setLoading] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("daily");
   const [date, setDate] = useState(todayISO());
   const [selectedTeam, setSelectedTeam] = useState<ShiftTeamKey | null>(null);
@@ -2273,10 +2179,29 @@ export default function AttendanceShiftsPage() {
       .flatMap((d) => d.records.map((r) => ({ ...r, _date: d.date })));
   }, [periodData]);
 
+  // Filter period records by team, status and search
+  const filteredPeriodRecords = useMemo(() => {
+    return flatPeriodRecords.filter((r) => {
+      const matchTeam = !periodTeam ? true : r.shift_team === periodTeam;
+      const matchStatus = !periodStatus ? true
+        : periodStatus === "late" ? (r.status === "ok" || r.status === "incomplete") && r.late_minutes > 0
+        : periodStatus === "replacement" ? !!r.replaces_employee
+        : r.status === periodStatus;
+      const matchSearch = !periodSearch
+        ? true
+        : r.full_name?.toLowerCase().includes(periodSearch.toLowerCase())
+          || r.matricule?.toLowerCase().includes(periodSearch.toLowerCase());
+      return matchTeam && matchStatus && matchSearch;
+    });
+  }, [flatPeriodRecords, periodTeam, periodStatus, periodSearch]);
+
   const periodPageData = useMemo(() => {
     const start = (periodPage - 1) * periodPageSize;
-    return flatPeriodRecords.slice(start, start + periodPageSize);
-  }, [flatPeriodRecords, periodPage, periodPageSize]);
+    return filteredPeriodRecords.slice(start, start + periodPageSize);
+  }, [filteredPeriodRecords, periodPage, periodPageSize]);
+
+  // Reset page when filters change
+  useEffect(() => { setPeriodPage(1); }, [periodStatus, periodSearch, periodTeam, periodData]);
 
   // Fetch on mount + view change
   useEffect(() => { fetchData(); }, [viewMode, date, week, month]);
@@ -2538,10 +2463,14 @@ export default function AttendanceShiftsPage() {
   };
 
   const handleExport = () => {
-    // Sync export dates with current period filter when opening export modal
+    // Sync export dates with current view filter
     if (viewMode === "period") {
       setExportFrom(periodFrom);
       setExportTo(periodTo);
+    } else {
+      // For daily: default to current date
+      setExportFrom(date);
+      setExportTo(date);
     }
     setShowExportDlg(true);
   };
@@ -2676,19 +2605,52 @@ export default function AttendanceShiftsPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
+            {/* ── Vue toggle Journalier / Période ── */}
+            <div className="flex rounded-lg border border-slate-300 overflow-hidden">
+              <button
+                onClick={() => setViewMode("daily")}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold transition-all ${viewMode === "daily" ? "bg-camublue-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                <span className="text-base">📅</span>
+                <span className="hidden sm:inline">Journalier</span>
+              </button>
+              <button
+                onClick={() => { setViewMode("period"); }}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold transition-all border-l border-slate-300 ${viewMode === "period" ? "bg-camublue-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                <span className="text-base">📊</span>
+                <span className="hidden sm:inline">Période</span>
+              </button>
+            </div>
+
+            {/* ── Date picker inline ── */}
+            {viewMode === "daily" && (
+              <input type="date" value={date} onChange={(e) => { setDate(e.target.value); }}
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
+            )}
+            {viewMode === "period" && (
+              <div className="flex items-center gap-1.5">
+                <input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)}
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-camublue-900 focus:outline-none w-36" />
+                <span className="text-slate-400 text-xs font-semibold">→</span>
+                <input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)}
+                  max={todayISO()}
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-camublue-900 focus:outline-none w-36" />
+                <button onClick={fetchPeriodData} disabled={periodLoading || !periodFrom || !periodTo}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
+                  {periodLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  <span className="hidden sm:inline">Afficher</span>
+                </button>
+              </div>
+            )}
+
+            {/* ── Search ── */}
             <div className="relative w-full sm:w-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input value={searchQ} onChange={(e) => { setSearchQ(e.target.value); setPage(1); }} placeholder="Nom, matricule, équipe…"
-                className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-48 md:w-56 focus:outline-none" />
+              <input value={viewMode === "period" ? periodSearch : searchQ}
+                onChange={(e) => { if (viewMode === "period") { setPeriodSearch(e.target.value); setPeriodPage(1); } else { setSearchQ(e.target.value); setPage(1); } }}
+                placeholder="Nom, matricule…"
+                className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-44 focus:outline-none" />
             </div>
-            <button onClick={() => setFilterOpen(true)}
-              className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 ${statusFilter !== "all" ? "bg-orange-50 border-orange-300 text-orange-700" : "bg-white border-slate-300 hover:bg-slate-50"}`}>
-              <Filter className="h-4 w-4" />
-              <span className="hidden sm:inline">
-                {viewMode === "daily" ? "Journalier" : viewMode === "weekly" ? "Hebdomadaire" : "Mensuel"}
-              </span>
-              {statusFilter !== "all" && <span className="bg-orange-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold leading-none">1</span>}
-            </button>
+
             <button onClick={() => setScheduleOpen(true)}
               className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 font-medium ${isActiveLocked ? "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100" : "bg-white border-slate-300 text-camublue-900 hover:bg-slate-50"}`}>
               <Settings className="h-4 w-4" /><span className="hidden sm:inline">Heures de travail</span>{isActiveLocked && <Lock className="h-3 w-3" />}
@@ -2704,10 +2666,12 @@ export default function AttendanceShiftsPage() {
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
             </button>
-            <button onClick={() => viewMode === "period" ? fetchPeriodData() : fetchData(false)}
-              className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
-              <RefreshCw className={`h-4 w-4 ${(loading || periodLoading) ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
-            </button>
+            {viewMode === "daily" && (
+              <button onClick={() => fetchData(false)}
+                className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
+                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -2938,25 +2902,64 @@ export default function AttendanceShiftsPage() {
         ) : viewMode === "period" ? (
           // ── Vue Période personnalisée ──────────────────────────────────────
           <div className="flex-1 min-h-0 flex flex-col gap-4">
-            {/* Panneau filtre période — simple: date début / date fin */}
-            <div className="shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-              <div className="flex flex-wrap gap-3 items-end">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-slate-500">Date de début</label>
-                  <input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-slate-500">Date de fin</label>
-                  <input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)}
-                    max={todayISO()}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
-                </div>
-                <button onClick={fetchPeriodData} disabled={periodLoading || !periodFrom || !periodTo}
-                  className="flex items-center gap-2 px-6 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition shrink-0">
-                  {periodLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  Afficher
-                </button>
+            {/* Sélecteur équipe période */}
+            <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+              <button onClick={() => { setPeriodTeam(null); }}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${periodTeam === null ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
+                <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" /><span className="truncate text-xs sm:text-sm">Toutes équipes</span>
+              </button>
+              {SHIFT_TEAMS.map((team) => {
+                const isActive = periodTeam === team.key;
+                const teamCount = flatPeriodRecords.filter(r => r.shift_team === team.key).length;
+                return (
+                  <button key={team.key} onClick={() => { setPeriodTeam(isActive ? null : team.key); }}
+                    className={`flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${isActive ? `${team.activeBg} ${team.activeText} ${team.activeBorder}` : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
+                    <div className="flex flex-col items-start min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full shrink-0 ${team.dot}`} />
+                        <span className="truncate text-xs sm:text-sm">{team.short}</span>
+                      </div>
+                      <span className="text-[10px] opacity-70 pl-3.5 hidden sm:block">{team.horaire}</span>
+                    </div>
+                    {teamCount > 0 && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? "bg-white/30" : "bg-slate-100 text-slate-500"}`}>{teamCount}</span>}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Filtres statut pour la vue période */}
+            <div className="shrink-0 w-full overflow-x-auto">
+              <div className="flex items-center gap-1 bg-slate-100/80 rounded-xl p-1 border border-camublue-900/20 shadow-sm min-w-max">
+                {QUICK_FILTERS.map((f) => {
+                  const cnt = flatPeriodRecords.filter((r) => {
+                    const matchStatus = f.key === "all" ? true
+                      : f.key === "late" ? r.status === "ok" && r.late_minutes > 0
+                      : f.key === "incomplete" ? r.status === "incomplete"
+                      : f.key === "anomaly" ? r.status === "anomaly"
+                      : f.key === "absent" ? r.status === "absent"
+                      : f.key === "replacement" ? !!r.replaces_employee
+                      : r.status === f.key;
+                    const matchSearch = !periodSearch || r.full_name?.toLowerCase().includes(periodSearch.toLowerCase()) || r.matricule?.toLowerCase().includes(periodSearch.toLowerCase());
+                    return matchStatus && matchSearch;
+                  }).length;
+                  const isActive = periodStatus === f.key || (f.key === "all" && !periodStatus);
+                  return (
+                    <button key={f.key}
+                      onClick={() => { setPeriodStatus(f.key === "all" ? "" : f.key); setPeriodPage(1); }}
+                      className={`relative inline-flex flex-col items-center justify-center gap-0.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 whitespace-nowrap shrink-0 ${isActive ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-white/60"}`}>
+                      <span className="inline-flex items-center gap-1">
+                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActive ? f.activeDot : f.dotColor}`} />
+                        <span className="hidden sm:inline">{f.label}</span>
+                        <span className="sm:hidden">{f.label.split(" ")[0]}</span>
+                      </span>
+                      <span className={`tabular-nums font-bold leading-none ${isActive ? "text-camublue-900" : "text-slate-400/70"}`}>{cnt}</span>
+                    </button>
+                  );
+                })}
+                {periodStatus && (
+                  <><div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
+                    <button onClick={() => { setPeriodStatus(""); setPeriodPage(1); }} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500 hover:bg-white/60 transition-all shrink-0"><X className="h-3 w-3" /></button></>
+                )}
               </div>
             </div>
 
@@ -2972,7 +2975,7 @@ export default function AttendanceShiftsPage() {
                   <CalendarRange className="h-12 w-12 text-slate-200" />
                   <p className="text-sm font-medium">Définissez une <strong>date de début</strong> et une <strong>date de fin</strong>, puis cliquez sur <strong>Afficher</strong></p>
                 </div>
-              ) : flatPeriodRecords.length === 0 ? (
+              ) : filteredPeriodRecords.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
                   <CalendarDays className="h-12 w-12 text-slate-200" />
                   <p className="text-sm font-medium">Aucun planning trouvé sur cette période</p>
@@ -2983,7 +2986,7 @@ export default function AttendanceShiftsPage() {
                     <table className="min-w-full bg-white">
                       <thead className="sticky top-0 z-10 bg-camublue-900 text-white">
                         <tr>
-                          {["Date", "Matricule", "Nom", "Équipe", "Statut", "Retard", "Entrée", "Sortie", "H. Travaillées"].map((h) => (
+                          {["Date", "Matricule", "Nom", "Projet/Dép.", "Équipe", "Statut", "Retard", "Entrée", "Sortie", "H. Travaillées"].map((h) => (
                             <th key={h} className="px-4 py-3 text-center text-xs font-semibold whitespace-nowrap border-b border-white/20">{h}</th>
                           ))}
                         </tr>
@@ -3038,6 +3041,11 @@ export default function AttendanceShiftsPage() {
                                 )}
                               </td>
                               <td className="px-4 py-2.5 text-center">
+                                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+                                  {(row.department ?? departmentMap.get(row.matricule ?? "") ?? "—").toUpperCase()}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 text-center">
                                 <ShiftTeamPill teamKey={row.shift_team} />
                               </td>
                               <td className="px-4 py-2.5 text-center">
@@ -3076,17 +3084,17 @@ export default function AttendanceShiftsPage() {
                     </table>
                   </div>
                   {/* Pagination */}
-                  {flatPeriodRecords.length > periodPageSize && (
+                  {filteredPeriodRecords.length > periodPageSize && (
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 shrink-0">
                       <span className="text-xs text-slate-500">
-                        {(periodPage - 1) * periodPageSize + 1}–{Math.min(periodPage * periodPageSize, flatPeriodRecords.length)} / <strong className="text-slate-700">{flatPeriodRecords.length}</strong> enregistrements
+                        {(periodPage - 1) * periodPageSize + 1}–{Math.min(periodPage * periodPageSize, filteredPeriodRecords.length)} / <strong className="text-slate-700">{filteredPeriodRecords.length}</strong> enregistrements
                       </span>
                       <div className="flex items-center gap-1">
                         <button onClick={() => setPeriodPage(1)} disabled={periodPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleLeft size={12} /></button>
                         <button onClick={() => setPeriodPage((p) => Math.max(p - 1, 1))} disabled={periodPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-4 w-4" /></button>
-                        <span className="text-xs text-slate-600 px-2 font-medium">Page {periodPage} / {Math.ceil(flatPeriodRecords.length / periodPageSize)}</span>
-                        <button onClick={() => setPeriodPage((p) => Math.min(p + 1, Math.ceil(flatPeriodRecords.length / periodPageSize)))} disabled={periodPage >= Math.ceil(flatPeriodRecords.length / periodPageSize)} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-4 w-4" /></button>
-                        <button onClick={() => setPeriodPage(Math.ceil(flatPeriodRecords.length / periodPageSize))} disabled={periodPage >= Math.ceil(flatPeriodRecords.length / periodPageSize)} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleRight size={12} /></button>
+                        <span className="text-xs text-slate-600 px-2 font-medium">Page {periodPage} / {Math.ceil(filteredPeriodRecords.length / periodPageSize)}</span>
+                        <button onClick={() => setPeriodPage((p) => Math.min(p + 1, Math.ceil(filteredPeriodRecords.length / periodPageSize)))} disabled={periodPage >= Math.ceil(filteredPeriodRecords.length / periodPageSize)} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-4 w-4" /></button>
+                        <button onClick={() => setPeriodPage(Math.ceil(filteredPeriodRecords.length / periodPageSize))} disabled={periodPage >= Math.ceil(filteredPeriodRecords.length / periodPageSize)} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleRight size={12} /></button>
                       </div>
                     </div>
                   )}
@@ -3104,15 +3112,6 @@ export default function AttendanceShiftsPage() {
         )}
 
         {/* ── Modals ── */}
-        <FilterModal
-          open={filterOpen} onClose={() => setFilterOpen(false)}
-          viewMode={viewMode} setViewMode={setViewMode}
-          date={date} setDate={setDate}
-          periodFrom={periodFrom} setPeriodFrom={setPeriodFrom}
-          periodTo={periodTo} setPeriodTo={setPeriodTo}
-          statusFilter={statusFilter} setStatusFilter={setStatusFilter}
-          onApply={() => viewMode === "period" ? fetchPeriodData() : fetchData()} />
-
         <WorkScheduleModal
           open={scheduleOpen} onClose={() => setScheduleOpen(false)}
           active={activeSchedule} presets={presets}
@@ -3155,8 +3154,16 @@ export default function AttendanceShiftsPage() {
               : isDailyMode
               ? (v: ShiftDailyCol[]) => setExportDailyCols(v)
               : (v: ShiftSummCol[])  => setExportSummaryCols(v);
-            // Departments available for filtering (from employee list)
-            const allDepts = Array.from(new Set(employeesList.map(e => (e.department ?? (e as any).service ?? "").toUpperCase()).filter(Boolean))).sort();
+            // Only show departments present in shift records (not all company departments)
+            const shiftDeptSet = new Set<string>();
+            allRecords.forEach(r => { if (r.department && r.department !== "—") shiftDeptSet.add(r.department.toUpperCase()); });
+            flatPeriodRecords.forEach(r => { if (r.department) shiftDeptSet.add(r.department.toUpperCase()); });
+            // Fallback: use departmentMap for records that have shift team assignments
+            allRecords.forEach(r => {
+              const d = departmentMap.get(r.matricule ?? "");
+              if (d) shiftDeptSet.add(d.toUpperCase());
+            });
+            const allDepts = Array.from(shiftDeptSet).sort();
             const filteredDepts = exportDeptSearch.trim()
               ? allDepts.filter(d => d.toLowerCase().includes(exportDeptSearch.toLowerCase()))
               : allDepts;
@@ -3171,7 +3178,11 @@ export default function AttendanceShiftsPage() {
                     <div>
                       <h2 className="font-black text-camublue-900 text-base">Export personnalisé</h2>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        {isPeriodMode ? `Période · ${exportFrom} → ${exportTo}` : isDailyMode ? "Vue journalière" : viewMode === "weekly" ? "Vue hebdomadaire" : "Vue mensuelle"}
+                        {isDailyMode
+                          ? `Journalier · ${exportFrom}`
+                          : isPeriodMode
+                          ? `Période · ${exportFrom} → ${exportTo}`
+                          : viewMode === "weekly" ? "Vue hebdomadaire" : "Vue mensuelle"}
                         {" · "}Sélectionnez les colonnes à inclure
                       </p>
                     </div>
@@ -3181,24 +3192,26 @@ export default function AttendanceShiftsPage() {
                     </button>
                   </div>
                   <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
-                    {/* Period date range (shown for period mode) */}
-                    {isPeriodMode && (
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 mb-2">Période d'export</p>
-                        <div className="flex gap-3">
-                          <div className="flex-1">
-                            <label className="text-xs text-slate-400 block mb-1">Du</label>
-                            <input type="date" value={exportFrom} onChange={(e) => setExportFrom(e.target.value)}
-                              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
-                          </div>
+                    {/* Date range — always shown for all modes */}
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 mb-2">
+                        {isDailyMode ? "Date d'export" : "Période d'export"}
+                      </p>
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <label className="text-xs text-slate-400 block mb-1">{isDailyMode ? "Date" : "Du"}</label>
+                          <input type="date" value={exportFrom} onChange={(e) => setExportFrom(e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                        </div>
+                        {!isDailyMode && (
                           <div className="flex-1">
                             <label className="text-xs text-slate-400 block mb-1">Au</label>
                             <input type="date" value={exportTo} onChange={(e) => setExportTo(e.target.value)}
                               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
                           </div>
-                        </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                     {/* Department filter */}
                     {allDepts.length > 0 && (
                       <div>
