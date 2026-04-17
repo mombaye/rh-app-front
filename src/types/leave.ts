@@ -61,6 +61,11 @@ export interface LeaveRequest {
   status:        LeaveStatus;
   status_label:  string;
 
+  // Flags calculés côté serveur (évite les problèmes de fuseau horaire)
+  is_ended:       boolean;
+  is_in_progress: boolean;
+  is_consumed:    boolean;
+
   // Demi-journée
   half_day_start: boolean;
   half_day_end:   boolean;

@@ -46,42 +46,6 @@ function fmtDate(d: string): string {
   return `${day}/${m}/${y}`;
 }
 
-// Vérifie si un congé est consommé (date de fin passée et pas révoqué)
-function isConsumed(endDate: string, status: LeaveStatus): boolean {
-  if (!endDate || status === "REVOKED") return false;
-  // Parse "YYYY-MM-DD" properly in local timezone
-  const [year, month, day] = endDate.split("-").map(Number);
-  const end = new Date(year, month - 1, day);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return end < today;
-}
-
-// Vérifie si la date de fin du congé est passée
-function isLeaveEnded(endDate: string): boolean {
-  if (!endDate) return false;
-  // Parse "YYYY-MM-DD" properly in local timezone
-  const [year, month, day] = endDate.split("-").map(Number);
-  const end = new Date(year, month - 1, day);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const result = end < today;
-  console.log(`isLeaveEnded(${endDate}): end=${end.toDateString()}, today=${today.toDateString()}, result=${result}`);
-  return result;
-}
-
-// Vérifie si le congé est actuellement en cours (début <= aujourd'hui <= fin)
-function isLeaveInProgress(startDate: string, endDate: string): boolean {
-  if (!startDate || !endDate) return false;
-  // Parse "YYYY-MM-DD" properly in local timezone
-  const [sy, sm, sd] = startDate.split("-").map(Number);
-  const [ey, em, ed] = endDate.split("-").map(Number);
-  const start = new Date(sy, sm - 1, sd);
-  const end = new Date(ey, em - 1, ed);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return start <= today && today <= end;
-}
 
 // ─── Composant ────────────────────────────────────────────────────────────────
 export default function LeaveRequestList({
@@ -280,8 +244,8 @@ export default function LeaveRequestList({
                 {requests.map((r, i) => {
                   // Sécurisation : s'assurer que status est valide
                   let statusKey: LeaveStatus | "CONSUMED" = (r.status in STATUS_CONFIG ? r.status : "PENDING") as LeaveStatus;
-                  // Si le congé est consommé (date de fin passée et pas révoqué), afficher le statut "Consommé"
-                  if (isConsumed(r.end_date, r.status)) {
+                  // Si le congé est consommé (flag calculé côté serveur), afficher "Consommé"
+                  if (r.is_consumed) {
                     statusKey = "CONSUMED";
                   }
                   const st         = STATUS_CONFIG[statusKey];
@@ -379,7 +343,7 @@ export default function LeaveRequestList({
                             </>
                           )}
                           {r.status === "APPROVED" && (
-                            isLeaveEnded(r.end_date) ? (
+                            r.is_ended ? (
                               <button
                                 disabled={true}
                                 title="Congé terminé"
@@ -390,8 +354,8 @@ export default function LeaveRequestList({
                             ) : (
                               <button
                                 onClick={() => handleCancel(r.id)}
-                                disabled={actionLoading || !isLeaveInProgress(r.start_date, r.end_date)}
-                                title={isLeaveInProgress(r.start_date, r.end_date) ? "Révoquer ce congé" : "Impossible de révoquer un congé passé"}
+                                disabled={actionLoading || !r.is_in_progress}
+                                title={r.is_in_progress ? "Révoquer ce congé" : "Impossible de révoquer un congé passé"}
                                 className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                               >
                                 Révoquer
