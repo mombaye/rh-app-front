@@ -230,6 +230,39 @@ export async function getShiftExportData(params: {
   return data;
 }
 
+// 🧪 Test function to verify download capability
+export async function testDownload(): Promise<void> {
+  try {
+    console.log("=== TEST DOWNLOAD START ===");
+    const response = await api.get("/api/attendance/test-download/", {
+      responseType: "blob",
+    });
+
+    console.log("Test response received:", response.status, response.data.size);
+
+    const blob = response.data as Blob;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "TEST_shifts_export.txt");
+
+    document.body.appendChild(link);
+    link.click();
+
+    setTimeout(() => {
+      if (link.parentNode) {
+        document.body.removeChild(link);
+      }
+      window.URL.revokeObjectURL(url);
+    }, 500);
+
+    console.log("=== TEST DOWNLOAD SUCCESS ===");
+  } catch (error) {
+    console.error("=== TEST DOWNLOAD ERROR ===", error);
+    throw error;
+  }
+}
+
 export async function downloadShiftExportCSV(params: {
   date_from: string;
   date_to: string;

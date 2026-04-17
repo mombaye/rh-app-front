@@ -15,7 +15,7 @@ import {
   getShiftDailyStats, getShiftPeriodStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning,
   getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
-  updateAttendanceRecord, sendAttendanceAlert, downloadShiftExportCSV,
+  updateAttendanceRecord, sendAttendanceAlert, downloadShiftExportCSV, testDownload,
 } from "@/services/attendanceService";
 import type { PlanningEntry } from "@/services/attendanceService";
 import { parseNOCPlanningExcel, cellToDateStr, extractMonthYearFromSheetName } from "@/utils/planningParser";
@@ -2900,6 +2900,10 @@ export default function AttendanceShiftsPage() {
             <button onClick={handleExport}
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
+            </button>
+            <button onClick={async () => { try { await testDownload(); alert("✓ Test OK!"); } catch (e) { alert("❌ Test échoué: " + (e instanceof Error ? e.message : String(e))); } }}
+              className="bg-orange-100 border border-orange-300 px-3 py-2 rounded-lg text-sm hover:bg-orange-50 transition flex items-center gap-1.5 text-orange-700 font-medium" title="Teste le téléchargement (pour diagnostic)">
+              <FileSpreadsheet className="h-4 w-4" /><span className="hidden sm:inline">Test</span>
             </button>
             <button onClick={() => viewMode === "period" ? fetchPeriodData() : fetchData(false)}
               className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
