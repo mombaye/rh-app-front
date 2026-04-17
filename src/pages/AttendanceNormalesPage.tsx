@@ -2031,7 +2031,7 @@ export default function AttendanceNormalesPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
           </>
         ) : (
           /* ── Vue Hebdo / Mensuel : tableau synthétique ── */
