@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import {
   Upload, FileText, Trash2, Eye, EyeOff, Plus,
-  FolderOpen, RefreshCw, Download, X, Search, Clock,
+  FolderOpen, RefreshCw, Download, X, Search, Clock, Calendar,
 } from "lucide-react";
 import AppLayout from "@/layouts/AppLayout";
 import { documentService, HRDocument, CATEGORY_LABELS } from "@/services/documentService";
@@ -37,8 +37,10 @@ const DEFAULT_PRESETS: WorkSchedulePreset[] = [
   { context: "Ramadan",  startH: 8, startM: 0, endH: 16, endM: 30, breakMin: 30 },
 ];
 
+const LS_HOLIDAYS_KEY = "camu_public_holidays";
+
 export default function RhDocumentsPage() {
-  const [activeTab, setActiveTab] = useState<"documents" | "horaires">("documents");
+  const [activeTab, setActiveTab] = useState<"documents" | "horaires" | "jours-feries">("documents");
 
   // Documents state
   const [docs, setDocs] = useState<HRDocument[]>([]);
@@ -57,6 +59,17 @@ export default function RhDocumentsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Public holidays state
+  const [holidays, setHolidays] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(LS_HOLIDAYS_KEY);
+      if (stored) return JSON.parse(stored) as string[];
+    } catch {}
+    return [];
+  });
+  const [newHolidayDate, setNewHolidayDate] = useState("");
+  const [newHolidayName, setNewHolidayName] = useState("");
 
   // Work schedule state
   const [active, setActive] = useState<ActiveSchedule | null>(() => {
@@ -95,6 +108,30 @@ export default function RhDocumentsPage() {
 
   const handleDeactivateSchedule = () => {
     saveSchedule(null);
+  };
+
+  const addHoliday = () => {
+    if (!newHolidayDate) {
+      toast.error("Veuillez sélectionner une date");
+      return;
+    }
+    if (holidays.includes(newHolidayDate)) {
+      toast.error("Ce jour est déjà marqué comme férié");
+      return;
+    }
+    const updated = [...holidays, newHolidayDate].sort();
+    setHolidays(updated);
+    localStorage.setItem(LS_HOLIDAYS_KEY, JSON.stringify(updated));
+    setNewHolidayDate("");
+    setNewHolidayName("");
+    toast.success("Jour férié ajouté");
+  };
+
+  const removeHoliday = (date: string) => {
+    const updated = holidays.filter(d => d !== date);
+    setHolidays(updated);
+    localStorage.setItem(LS_HOLIDAYS_KEY, JSON.stringify(updated));
+    toast.success("Jour férié supprimé");
   };
 
   const load = async () => {
@@ -238,6 +275,19 @@ export default function RhDocumentsPage() {
             <div className="flex items-center gap-2">
               <Clock size={16} />
               Heures de travail
+            </div>
+          </button>
+          <button
+            onClick={() => setActiveTab("jours-feries")}
+            className={`px-4 py-3 font-medium text-sm transition border-b-2 ${
+              activeTab === "jours-feries"
+                ? "border-camublue-900 text-camublue-900"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Calendar size={16} />
+              Jours fériés
             </div>
           </button>
         </div>
@@ -405,6 +455,76 @@ export default function RhDocumentsPage() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {activeTab === "jours-feries" && (
+          <div className="space-y-6">
+            {/* Add Holiday Form */}
+            <div className="bg-white rounded-xl border shadow-sm p-6">
+              <h3 className="font-semibold text-gray-900 mb-4">Ajouter un jour férié</h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                    <input
+                      type="date"
+                      value={newHolidayDate}
+                      onChange={(e) => setNewHolidayDate(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900/20 focus:border-camublue-900 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nom (optionnel)</label>
+                    <input
+                      type="text"
+                      value={newHolidayName}
+                      onChange={(e) => setNewHolidayName(e.target.value)}
+                      placeholder="Ex: Fête nationale"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-camublue-900/20 focus:border-camublue-900 outline-none"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={addHoliday}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-camublue-900 text-white hover:bg-camublue-900/90 transition text-sm font-medium"
+                >
+                  <Plus size={16} />
+                  Ajouter
+                </button>
+              </div>
+            </div>
+
+            {/* Holidays List */}
+            <div className="bg-white rounded-xl border shadow-sm p-6">
+              <h3 className="font-semibold text-gray-900 mb-4">Jours fériés programmés ({holidays.length})</h3>
+              {holidays.length === 0 ? (
+                <p className="text-sm text-gray-500">Aucun jour férié programmé.</p>
+              ) : (
+                <div className="space-y-2">
+                  {holidays.map((date) => (
+                    <div key={date} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition">
+                      <div className="flex items-center gap-3">
+                        <Calendar size={16} className="text-camublue-900" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {new Date(date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
+                          </p>
+                          <p className="text-xs text-gray-500">{date}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeHoliday(date)}
+                        className="p-2 rounded-lg text-red-600 hover:bg-red-50 transition"
+                        title="Supprimer"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
