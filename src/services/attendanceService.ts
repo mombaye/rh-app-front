@@ -230,6 +230,24 @@ export async function getShiftExportData(params: {
   return data;
 }
 
+// 🧪 Debug function to verify parameters are sent correctly
+export async function debugExportParams(date_from: string, date_to: string): Promise<void> {
+  try {
+    console.log("🔍 DEBUG: Checking what backend receives...");
+    const response = await api.get("/api/attendance/debug-params/", {
+      params: { date_from, date_to, export_format: "csv" },
+    });
+
+    console.log("📦 Backend received:");
+    console.log(JSON.stringify(response.data, null, 2));
+
+    alert("✓ Check console for backend response");
+  } catch (error) {
+    console.error("❌ Debug error:", error);
+    alert("❌ Debug failed: " + (error instanceof Error ? error.message : String(error)));
+  }
+}
+
 // 🧪 Test function to verify download capability
 export async function testDownload(): Promise<void> {
   try {

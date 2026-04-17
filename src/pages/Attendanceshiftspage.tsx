@@ -15,7 +15,7 @@ import {
   getShiftDailyStats, getShiftPeriodStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning,
   getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
-  updateAttendanceRecord, sendAttendanceAlert, downloadShiftExportCSV, testDownload,
+  updateAttendanceRecord, sendAttendanceAlert, downloadShiftExportCSV, testDownload, debugExportParams,
 } from "@/services/attendanceService";
 import type { PlanningEntry } from "@/services/attendanceService";
 import { parseNOCPlanningExcel, cellToDateStr, extractMonthYearFromSheetName } from "@/utils/planningParser";
@@ -2634,39 +2634,50 @@ export default function AttendanceShiftsPage() {
   };
 
   const handleExport = async () => {
-    console.log("=== handleExport START ===");
-    console.log("viewMode:", viewMode);
-    console.log("periodFrom:", periodFrom);
-    console.log("periodTo:", periodTo);
+    console.log("╔═══════════════════════════════════════════════════════════╗");
+    console.log("║            EXPORT BUTTON CLICKED                          ║");
+    console.log("╚═══════════════════════════════════════════════════════════╝");
+    console.log("📊 viewMode:", viewMode);
+    console.log("📅 periodFrom:", periodFrom, "| Type:", typeof periodFrom);
+    console.log("📅 periodTo:", periodTo, "| Type:", typeof periodTo);
+    console.log("✓ Condition (viewMode === 'period' && periodFrom && periodTo):", viewMode === "period" && !!periodFrom && !!periodTo);
 
     // En mode Période: téléchargement DIRECT
     if (viewMode === "period" && periodFrom && periodTo) {
-      console.log("Period mode detected, starting direct download...");
+      console.log("✅ Period mode DETECTED - Starting direct download...");
       try {
         setExportLoading(true);
-        console.log("Calling downloadShiftExportCSV with:", { periodFrom, periodTo });
-        await downloadShiftExportCSV({ date_from: periodFrom, date_to: periodTo });
-        console.log("Download completed successfully");
+        const params = { date_from: periodFrom, date_to: periodTo };
+        console.log("🔄 Calling downloadShiftExportCSV with params:", params);
+        console.log("   date_from format: YYYY-MM-DD? ", /^\d{4}-\d{2}-\d{2}$/.test(periodFrom) ? "✓ YES" : "❌ NO");
+        console.log("   date_to format: YYYY-MM-DD?   ", /^\d{4}-\d{2}-\d{2}$/.test(periodTo) ? "✓ YES" : "❌ NO");
+
+        await downloadShiftExportCSV(params);
+
+        console.log("✅ Download completed successfully");
         alert("✓ Fichier téléchargé avec succès!");
       } catch (error) {
-        console.error("Export error:", error);
+        console.error("❌ Export ERROR:", error);
         const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error("Error details:", {
+          name: error instanceof Error ? error.name : "Unknown",
+          message: errorMsg,
+          stack: error instanceof Error ? error.stack : "No stack trace"
+        });
         alert(`❌ Erreur: ${errorMsg}`);
       } finally {
         setExportLoading(false);
       }
-      console.log("=== handleExport END ===");
       return;
     }
 
     // Autres modes: ouvrir la modale
-    console.log("Non-period mode, opening export dialog...");
+    console.log("⚠️ Non-period mode or missing dates - Opening export dialog...");
     if (viewMode === "daily") {
       setExportFrom(date);
       setExportTo(date);
     }
     setShowExportDlg(true);
-    console.log("=== handleExport END ===");
   };
 
   const doExport = async () => {
@@ -2905,6 +2916,12 @@ export default function AttendanceShiftsPage() {
               className="bg-orange-100 border border-orange-300 px-3 py-2 rounded-lg text-sm hover:bg-orange-50 transition flex items-center gap-1.5 text-orange-700 font-medium" title="Teste le téléchargement (pour diagnostic)">
               <FileSpreadsheet className="h-4 w-4" /><span className="hidden sm:inline">Test</span>
             </button>
+            {viewMode === "period" && periodFrom && periodTo && (
+              <button onClick={async () => { try { await debugExportParams(periodFrom, periodTo); } catch (e) { console.error(e); } }}
+                className="bg-purple-100 border border-purple-300 px-3 py-2 rounded-lg text-sm hover:bg-purple-50 transition flex items-center gap-1.5 text-purple-700 font-medium" title="Vérifie les paramètres envoyés">
+                <FileSpreadsheet className="h-4 w-4" /><span className="hidden sm:inline">Debug</span>
+              </button>
+            )}
             <button onClick={() => viewMode === "period" ? fetchPeriodData() : fetchData(false)}
               className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
               <RefreshCw className={`h-4 w-4 ${loading || periodLoading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
