@@ -804,7 +804,7 @@ function OrgChartTab() {
                   <h3 className="font-bold text-gray-800">Membres du département</h3>
                   <p className="text-xs text-gray-400 mt-0.5">
                     <span className="font-semibold text-emerald-700">{bulkDept.name}</span>
-                    {" · "}Sélectionnés en haut, liste complète en bas
+                    {" · "}Les sélectionnés (en vert) apparaissent en haut
                   </p>
                 </div>
                 <button onClick={() => setBulkDept(null)}
@@ -812,32 +812,6 @@ function OrgChartTab() {
                   <X size={16} />
                 </button>
               </div>
-
-              {/* Employés sélectionnés (chips) */}
-              {bulkSelected.size > 0 && (
-              <div className="px-6 py-3 border-b border-gray-100 flex-shrink-0">
-                <div className="flex flex-wrap gap-2">
-                  {selectedEmpsDetail.map(emp => (
-                    <button
-                      key={emp.id}
-                      onClick={() => setBulkSelected(prev => {
-                        const next = new Set(prev);
-                        next.delete(emp.id);
-                        return next;
-                      })}
-                      className="flex items-center gap-2 px-3 py-2 bg-emerald-100 rounded-full border border-emerald-400 hover:bg-emerald-200 transition text-xs font-medium text-emerald-800"
-                      title="Cliquer pour retirer"
-                    >
-                      <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px] font-black">
-                        {`${emp.nom} ${emp.prenom}`.slice(0, 2).toUpperCase()}
-                      </div>
-                      <span>{emp.nom} {emp.prenom}</span>
-                      <X size={12} className="opacity-60" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-              )}
 
               {/* Barre de recherche + Tout/Aucun */}
               <div className="px-6 py-2 border-b border-gray-100 flex-shrink-0 space-y-2">
@@ -879,21 +853,27 @@ function OrgChartTab() {
                 </div>
               </div>
 
-              {/* Liste scrollable */}
+              {/* Liste scrollable - Sélectionnés en vert en haut */}
               <div className="overflow-y-auto flex-1 px-4 py-2">
                 {visibleEmps.length === 0 ? (
                   <p className="text-center text-sm text-gray-400 italic py-8">Aucun employé trouvé</p>
                 ) : (
-                  visibleEmps.map(emp => {
+                  // Trier pour afficher sélectionnés d'abord (en vert)
+                  [...visibleEmps].sort((a, b) => {
+                    const aChecked = bulkSelected.has(a.id);
+                    const bChecked = bulkSelected.has(b.id);
+                    if (aChecked === bChecked) return 0;
+                    return aChecked ? -1 : 1;
+                  }).map(emp => {
                     const checked = bulkSelected.has(emp.id);
                     const currentDept = employees.find(e => e.id === emp.id)?.service ?? "";
                     const isInOtherDept = currentDept && currentDept !== bulkDept.name;
                     return (
                       <label
                         key={emp.id}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition select-none ${
-                          checked ? "bg-emerald-50 border border-emerald-200" : "hover:bg-gray-50 border border-transparent"
-                        } mb-1`}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition select-none mb-1 border ${
+                          checked ? "bg-emerald-100 border-emerald-300" : "hover:bg-gray-50 border-transparent"
+                        }`}
                       >
                         <input
                           type="checkbox"
