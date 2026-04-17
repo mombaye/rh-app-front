@@ -19,7 +19,7 @@ interface Props {
 
 // ─── Config statut ────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<
-  LeaveStatus | "CONSUMED",
+  LeaveStatus | "CONSUMED" | "ON_LEAVE",
   { label: string; color: string; bg: string; dotClass: string }
 > = {
   PENDING:        { label: "En attente N+1",      color: "#f59e0b", bg: "#fffbeb", dotClass: "bg-amber-400"   },
@@ -30,6 +30,7 @@ const STATUS_CONFIG: Record<
   CANCELLED:      { label: "Annulé",              color: "#64748b", bg: "#f8fafc", dotClass: "bg-slate-400"   },
   REVOKED:        { label: "Révoqué",             color: "#b45309", bg: "#fff7ed", dotClass: "bg-orange-500"  },
   CONSUMED:       { label: "Consommé",            color: "#9ca3af", bg: "#f3f4f6", dotClass: "bg-gray-500"    },
+  ON_LEAVE:       { label: "En congé",            color: "#0284c7", bg: "#f0f9ff", dotClass: "bg-sky-500"     },
 };
 
 // Convertit le filtre UI → LeaveStatus API
@@ -243,10 +244,12 @@ export default function LeaveRequestList({
               <tbody className="divide-y divide-gray-50">
                 {requests.map((r, i) => {
                   // Sécurisation : s'assurer que status est valide
-                  let statusKey: LeaveStatus | "CONSUMED" = (r.status in STATUS_CONFIG ? r.status : "PENDING") as LeaveStatus;
-                  // Si le congé est consommé (flag calculé côté serveur), afficher "Consommé"
+                  let statusKey: LeaveStatus | "CONSUMED" | "ON_LEAVE" = (r.status in STATUS_CONFIG ? r.status : "PENDING") as LeaveStatus;
+                  // Priorité : Consommé > En congé > statut normal (flags calculés côté serveur)
                   if (r.is_consumed) {
                     statusKey = "CONSUMED";
+                  } else if (r.is_in_progress && r.status === "APPROVED") {
+                    statusKey = "ON_LEAVE";
                   }
                   const st         = STATUS_CONFIG[statusKey];
                   const leaveColor = r.leave_type?.color ?? "#6b7280";

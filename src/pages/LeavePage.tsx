@@ -30,7 +30,7 @@ import LeaveTypeManagement from "@/components/leaves/LeaveTypeManagement";
 
 // ─── Config statuts ───────────────────────────────────────────────────────────
 const STATUS_CFG: Record<
-  LeaveStatus | "CONSUMED",
+  LeaveStatus | "CONSUMED" | "ON_LEAVE",
   { label: string; color: string; bg: string; border: string; dot: string }
 > = {
   PENDING:        { label: "En attente",          color: "#d97706", bg: "#fffbeb", border: "#fde68a", dot: "bg-amber-400"   },
@@ -41,6 +41,7 @@ const STATUS_CFG: Record<
   CANCELLED:      { label: "Annulé",              color: "#64748b", bg: "#f8fafc", border: "#e2e8f0", dot: "bg-slate-400"   },
   REVOKED:        { label: "Révoqué (urgence)",   color: "#b45309", bg: "#fff7ed", border: "#fed7aa", dot: "bg-orange-500"  },
   CONSUMED:       { label: "Consommé",            color: "#6b7280", bg: "#f3f4f6", border: "#d1d5db", dot: "bg-gray-500"    },
+  ON_LEAVE:       { label: "En congé",            color: "#0284c7", bg: "#f0f9ff", border: "#bae6fd", dot: "bg-sky-500"     },
 };
 
 // ─── Colonnes disponibles pour l'export personnalisé ─────────────────────────
@@ -100,9 +101,16 @@ function fmtDate(d?: string | null): string {
 }
 
 // ─── StatusBadge ──────────────────────────────────────────────────────────────
-function StatusBadge({ status, isConsumed = false }: { status: LeaveStatus; isConsumed?: boolean }) {
-  // Si le congé est consommé (APPROVED + date de fin passée + non révoqué), afficher "Consommé"
-  const key = isConsumed ? "CONSUMED" : status;
+function StatusBadge({ status, isConsumed = false, isInProgress = false }: {
+  status: LeaveStatus; isConsumed?: boolean; isInProgress?: boolean;
+}) {
+  // Priorité : Consommé > En congé > statut normal
+  let key: LeaveStatus | "CONSUMED" | "ON_LEAVE" = status;
+  if (isConsumed) {
+    key = "CONSUMED";
+  } else if (isInProgress && status === "APPROVED") {
+    key = "ON_LEAVE";
+  }
   const cfg = STATUS_CFG[key] ?? STATUS_CFG.PENDING;
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap"
@@ -680,7 +688,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
 
                                   {/* Statut */}
                                   <td className="px-4 py-3.5">
-                                    <StatusBadge status={r.status} isConsumed={r.is_consumed} />
+                                    <StatusBadge status={r.status} isConsumed={r.is_consumed} isInProgress={r.is_in_progress} />
                                   </td>
 
                                   {/* Justificatif */}
@@ -1887,7 +1895,9 @@ function LeaveHistoryModal({ employeeId, employeeName, onClose }: {
           ) : (
             <div className="space-y-2">
               {requests.map((req) => {
-                const statusKey = req.is_consumed ? "CONSUMED" : req.status;
+                let statusKey: LeaveStatus | "CONSUMED" | "ON_LEAVE" = req.status;
+                if (req.is_consumed) statusKey = "CONSUMED";
+                else if (req.is_in_progress && req.status === "APPROVED") statusKey = "ON_LEAVE";
                 const cfg = STATUS_CFG[statusKey] ?? STATUS_CFG.PENDING;
                 const totalDays = parseFloat(req.days ?? req.duration_days ?? "0");
                 return (
@@ -2834,7 +2844,7 @@ function DetailModal({ request: r, onClose, onDone }: {
         <div className="px-6 py-4 space-y-4">
           {/* Badges statut + type */}
           <div className="flex items-center gap-2 flex-wrap">
-            <StatusBadge status={r.status} isConsumed={r.is_consumed} />
+            <StatusBadge status={r.status} isConsumed={r.is_consumed} isInProgress={r.is_in_progress} />
             <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap"
               style={{ backgroundColor: lc + "20", color: lc }}>
               {r.leave_type?.label}
