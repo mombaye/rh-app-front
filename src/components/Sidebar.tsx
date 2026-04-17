@@ -72,7 +72,7 @@ export default function Sidebar() {
       icon: <BadgeDollarSign size={20} />,
     },
     {
-      label: "Gestion Document",
+      label: "Gestion Ressources",
       path: "/rh/documents",
       icon: <FileStack size={20} />,
     },

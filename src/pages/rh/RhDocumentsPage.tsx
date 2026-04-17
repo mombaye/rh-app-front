@@ -186,7 +186,7 @@ export default function RhDocumentsPage() {
               <FolderOpen size={24} className="text-camublue-900" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-camublue-900">Gestion Document</h1>
+              <h1 className="text-2xl font-bold text-camublue-900">Gestion Ressources</h1>
               <p className="text-sm text-gray-500">
                 Gérez les documents RH et les heures de travail
               </p>
