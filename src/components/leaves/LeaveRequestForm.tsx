@@ -576,24 +576,6 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
             )}
           </AnimatePresence>
 
-          {/* ── Solde disponible ─────────────────────────────────── */}
-          {balance !== null && selectedType && !selectedType.is_special_leave && (
-            <div className={`rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 border ${
-              balance.remaining <= 0 ? "bg-red-50 border-red-200 text-red-700"
-              : form.days && Number(form.days) > balance.remaining ? "bg-red-50 border-red-200 text-red-700"
-              : balance.remaining <= 5 ? "bg-amber-50 border-amber-200 text-amber-700"
-              : "bg-emerald-50 border-emerald-200 text-emerald-700"
-            }`}>
-              <span>💰</span>
-              <span>
-                Solde {selectedType.label}&nbsp;: <strong>{balance.remaining.toFixed(1)}</strong>j disponibles
-                <span className="ml-1 text-xs font-normal opacity-70">
-                  (acquis&nbsp;: {balance.acquired.toFixed(1)}j · pris&nbsp;: {balance.taken.toFixed(1)}j)
-                </span>
-              </span>
-            </div>
-          )}
-
           {/* ── Justificatif optionnel ───────────────────────────────── */}
           {!needsDoc && (
             <div>
