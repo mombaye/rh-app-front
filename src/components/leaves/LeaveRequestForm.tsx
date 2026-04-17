@@ -21,14 +21,11 @@ interface FormState {
   start_date:     string;
   end_date:       string;
   days:           string;
-  half_day_start: boolean;
-  half_day_end:   boolean;
 }
 
 const EMPTY_FORM: FormState = {
   employee_id: "", leave_type_id: "", start_date: "",
   end_date: "", days: "",
-  half_day_start: false, half_day_end: false,
 };
 
 function parseDRFErrors(data: unknown): string {
@@ -138,12 +135,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         holidayService.checkDays(form.start_date, form.end_date)
           .then((result) => {
             setHolidayCheck(result);
-            // Ajuster pour les demi-journées
-            let effectiveDays = result.effective_days;
-            if (form.half_day_start) effectiveDays -= 0.5;
-            if (form.half_day_end)   effectiveDays -= 0.5;
-            if (effectiveDays < 0.5) effectiveDays = 0.5;
-            setForm((f) => ({ ...f, days: String(effectiveDays) }));
+            setForm((f) => ({ ...f, days: String(result.effective_days) }));
           })
           .catch(() => { setHolidayCheck(null); })
           .finally(() => setCheckingDays(false));
@@ -154,7 +146,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     } else {
       setHolidayCheck(null);
     }
-  }, [form.start_date, form.end_date, form.half_day_start, form.half_day_end]);
+  }, [form.start_date, form.end_date]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -194,8 +186,6 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         start_date:     form.start_date,
         end_date:       form.end_date,
         days:           parseFloat(form.days),
-        half_day_start: form.half_day_start,
-        half_day_end:   form.half_day_end,
       });
 
       // Si un fichier optionnel a été sélectionné en step 1, l'uploader maintenant
@@ -502,17 +492,6 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               </label>
               <input type="date" name="start_date" value={form.start_date} onChange={handleChange}
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
-              {form.start_date && (
-                <label className="flex items-center gap-2 mt-1.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={form.half_day_start}
-                    onChange={(e) => setForm((f) => ({ ...f, half_day_start: e.target.checked }))}
-                    className="w-3.5 h-3.5 rounded accent-camublue-900"
-                  />
-                  <span className="text-xs text-gray-500">Commence l'après-midi (½ j)</span>
-                </label>
-              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
@@ -521,17 +500,6 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               <input type="date" name="end_date" value={form.end_date} min={form.start_date || undefined}
                 onChange={handleChange}
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
-              {form.end_date && (
-                <label className="flex items-center gap-2 mt-1.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={form.half_day_end}
-                    onChange={(e) => setForm((f) => ({ ...f, half_day_end: e.target.checked }))}
-                    className="w-3.5 h-3.5 rounded accent-camublue-900"
-                  />
-                  <span className="text-xs text-gray-500">Se termine le matin (½ j)</span>
-                </label>
-              )}
             </div>
           </div>
 
