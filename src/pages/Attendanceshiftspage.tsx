@@ -2634,19 +2634,24 @@ export default function AttendanceShiftsPage() {
   };
 
   const handleExport = async () => {
+    console.log("handleExport called, viewMode:", viewMode, "periodFrom:", periodFrom, "periodTo:", periodTo);
+
     if (viewMode === "period" && periodFrom && periodTo) {
       // Direct download CSV for period view
       try {
+        console.log("Starting direct export for period mode...");
         setExportLoading(true);
         await downloadShiftExportCSV({ date_from: periodFrom, date_to: periodTo });
+        console.log("Export completed successfully");
       } catch (e) {
         console.error("Export error:", e);
-        alert("Erreur lors du téléchargement. Veuillez réessayer.");
+        alert(`Erreur lors du téléchargement: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
         setExportLoading(false);
       }
     } else {
       // Sync export dates with current view filter
+      console.log("Opening export dialog");
       if (viewMode === "period") {
         setExportFrom(periodFrom);
         setExportTo(periodTo);

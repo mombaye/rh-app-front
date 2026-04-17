@@ -234,17 +234,48 @@ export async function downloadShiftExportCSV(params: {
   date_from: string;
   date_to: string;
 }): Promise<void> {
-  const response = await api.get("/api/attendance/shifts/export/", {
-    params: { date_from: params.date_from, date_to: params.date_to, format: "csv" },
-    responseType: "blob",
-  });
+  try {
+    console.log("Starting shifts export download...", params);
 
-  const url = window.URL.createObjectURL(new Blob([response.data]));
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", `shifts_export_${params.date_from}_to_${params.date_to}.txt`);
-  document.body.appendChild(link);
-  link.click();
-  link.parentNode?.removeChild(link);
-  window.URL.revokeObjectURL(url);
+    const response = await api.get("/api/attendance/shifts/export/", {
+      params: {
+        date_from: params.date_from,
+        date_to: params.date_to,
+        format: "csv"
+      },
+      responseType: "blob",
+    });
+
+    console.log("Export response received:", response.status, response.data.size);
+
+    if (!response.data || response.data.size === 0) {
+      throw new Error("Réponse vide du serveur");
+    }
+
+    // response.data est déjà un Blob, pas besoin de le wrapper
+    const blob = response.data as Blob;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const filename = `shifts_export_${params.date_from}_to_${params.date_to}.txt`;
+    link.setAttribute("download", filename);
+
+    console.log("Starting download of:", filename);
+
+    document.body.appendChild(link);
+    link.click();
+
+    // Cleanup après un court délai
+    setTimeout(() => {
+      if (link.parentNode) {
+        document.body.removeChild(link);
+      }
+      window.URL.revokeObjectURL(url);
+    }, 200);
+
+    console.log("Download initiated successfully");
+  } catch (error) {
+    console.error("Shifts export download failed:", error);
+    throw error;
+  }
 }
