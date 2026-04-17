@@ -19,7 +19,7 @@ interface Props {
 
 // ─── Config statut ────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<
-  LeaveStatus,
+  LeaveStatus | "CONSUMED",
   { label: string; color: string; bg: string; dotClass: string }
 > = {
   PENDING:        { label: "En attente N+1",      color: "#f59e0b", bg: "#fffbeb", dotClass: "bg-amber-400"   },
@@ -29,6 +29,7 @@ const STATUS_CONFIG: Record<
   REJECTED:       { label: "Rejeté",              color: "#ef4444", bg: "#fef2f2", dotClass: "bg-red-500"     },
   CANCELLED:      { label: "Annulé",              color: "#64748b", bg: "#f8fafc", dotClass: "bg-slate-400"   },
   REVOKED:        { label: "Révoqué",             color: "#b45309", bg: "#fff7ed", dotClass: "bg-orange-500"  },
+  CONSUMED:       { label: "Consommé",            color: "#9ca3af", bg: "#f3f4f6", dotClass: "bg-gray-500"    },
 };
 
 // Convertit le filtre UI → LeaveStatus API
@@ -43,6 +44,15 @@ function fmtDate(d: string): string {
   if (!d) return "—";
   const [y, m, day] = d.split("-");
   return `${day}/${m}/${y}`;
+}
+
+// Vérifie si un congé est consommé (date de début passée)
+function isConsumed(startDate: string): boolean {
+  if (!startDate) return false;
+  const start = new Date(startDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return start < today;
 }
 
 // ─── Composant ────────────────────────────────────────────────────────────────
@@ -241,7 +251,11 @@ export default function LeaveRequestList({
               <tbody className="divide-y divide-gray-50">
                 {requests.map((r, i) => {
                   // Sécurisation : s'assurer que status est valide
-                  const statusKey  = (r.status in STATUS_CONFIG ? r.status : "PENDING") as LeaveStatus;
+                  let statusKey: LeaveStatus | "CONSUMED" = (r.status in STATUS_CONFIG ? r.status : "PENDING") as LeaveStatus;
+                  // Si le congé est consommé (date de début passée), afficher le statut "Consommé"
+                  if (isConsumed(r.start_date)) {
+                    statusKey = "CONSUMED";
+                  }
                   const st         = STATUS_CONFIG[statusKey];
                   const leaveColor = r.leave_type?.color ?? "#6b7280";
                   const initials   = (r.employee?.full_name ?? "??").slice(0, 2).toUpperCase();
