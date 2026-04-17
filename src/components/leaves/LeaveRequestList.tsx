@@ -46,13 +46,13 @@ function fmtDate(d: string): string {
   return `${day}/${m}/${y}`;
 }
 
-// Vérifie si un congé est consommé (date de début passée)
-function isConsumed(startDate: string): boolean {
-  if (!startDate) return false;
-  const start = new Date(startDate);
+// Vérifie si un congé est consommé (date de fin passée et pas révoqué)
+function isConsumed(endDate: string, status: LeaveStatus): boolean {
+  if (!endDate || status === "REVOKED") return false;
+  const end = new Date(endDate);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return start < today;
+  return end < today;
 }
 
 // ─── Composant ────────────────────────────────────────────────────────────────
@@ -252,8 +252,8 @@ export default function LeaveRequestList({
                 {requests.map((r, i) => {
                   // Sécurisation : s'assurer que status est valide
                   let statusKey: LeaveStatus | "CONSUMED" = (r.status in STATUS_CONFIG ? r.status : "PENDING") as LeaveStatus;
-                  // Si le congé est consommé (date de début passée), afficher le statut "Consommé"
-                  if (isConsumed(r.start_date)) {
+                  // Si le congé est consommé (date de fin passée et pas révoqué), afficher le statut "Consommé"
+                  if (isConsumed(r.end_date, r.status)) {
                     statusKey = "CONSUMED";
                   }
                   const st         = STATUS_CONFIG[statusKey];
