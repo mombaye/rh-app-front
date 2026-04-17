@@ -2044,7 +2044,6 @@ export default function AttendanceShiftsPage() {
   const [selectedEmployee, setSelectedEmployee] = useState<FlatRecord | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [sendingAlert, setSendingAlert] = useState(false);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [showNotScheduled, setShowNotScheduled] = useState(false);
   const [week, setWeek] = useState(isoWeekNow());
   const [month, setMonth] = useState(yyyyMmToday());
@@ -2775,10 +2774,6 @@ export default function AttendanceShiftsPage() {
                 className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-44 focus:outline-none" />
             </div>
 
-            <button onClick={() => setScheduleOpen(true)}
-              className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 font-medium ${isActiveLocked ? "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100" : "bg-white border-slate-300 text-camublue-900 hover:bg-slate-50"}`}>
-              <Settings className="h-4 w-4" /><span className="hidden sm:inline">Heures de travail</span>{isActiveLocked && <Lock className="h-3 w-3" />}
-            </button>
             <button onClick={handlePlanningClick}
               className={`border px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${allRecords.filter(r => r.is_scheduled).length > 0 ? "bg-green-50 border-green-400 text-green-700 hover:bg-green-100" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
               <CalendarRange className="h-4 w-4" /><span className="hidden sm:inline">Planning</span>
@@ -3240,19 +3235,6 @@ export default function AttendanceShiftsPage() {
         )}
 
         {/* ── Modals ── */}
-        <WorkScheduleModal
-          open={scheduleOpen} onClose={() => setScheduleOpen(false)}
-          active={activeSchedule} presets={presets}
-          onSave={(s) => {
-            setActiveSchedule(s);
-            saveShiftSchedule({
-              context: s.context, startH: s.startH, startM: s.startM,
-              endH: s.endH, endM: s.endM, breakMin: s.breakMin,
-              dateStart: s.dateStart, dateEnd: s.dateEnd,
-            }).catch(console.error);
-          }}
-          onPresetsChange={(p) => setPresets(p)} />
-
         <DetailModal
           open={detailModalOpen} onClose={() => setDetailModalOpen(false)}
           employeeId={selectedEmployeeId}

@@ -2,11 +2,12 @@
 import { useEffect, useState, useRef } from "react";
 import {
   Upload, FileText, Trash2, Eye, EyeOff, Plus,
-  FolderOpen, RefreshCw, Download, X, Search,
+  FolderOpen, RefreshCw, Download, X, Search, Clock,
 } from "lucide-react";
 import AppLayout from "@/layouts/AppLayout";
 import { documentService, HRDocument, CATEGORY_LABELS } from "@/services/documentService";
 import DocumentPreviewModal, { getDocKind } from "@/components/documents/DocumentPreviewModal";
+import { WorkScheduleModal, ActiveSchedule, WorkSchedulePreset } from "@/components/work/WorkScheduleManager";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 
@@ -29,7 +30,17 @@ const CATEGORY_COLORS: Record<string, string> = {
 const fmt = (d: string) =>
   new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
 
+const LS_PRESETS_KEY = "camu_work_schedule_presets";
+const LS_ACTIVE_SCHEDULE_KEY = "camu_work_active_schedule";
+const DEFAULT_PRESETS: WorkSchedulePreset[] = [
+  { context: "Normale",  startH: 8, startM: 0, endH: 17, endM: 30, breakMin: 60 },
+  { context: "Ramadan",  startH: 8, startM: 0, endH: 16, endM: 30, breakMin: 30 },
+];
+
 export default function RhDocumentsPage() {
+  const [activeTab, setActiveTab] = useState<"documents" | "horaires">("documents");
+
+  // Documents state
   const [docs, setDocs] = useState<HRDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -46,6 +57,33 @@ export default function RhDocumentsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Work schedule state
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [presets, setPresets] = useState<WorkSchedulePreset[]>(() => {
+    try {
+      const stored = localStorage.getItem(LS_PRESETS_KEY);
+      if (stored) return JSON.parse(stored) as WorkSchedulePreset[];
+    } catch {}
+    return DEFAULT_PRESETS;
+  });
+  const [active, setActive] = useState<ActiveSchedule | null>(() => {
+    try {
+      const stored = localStorage.getItem(LS_ACTIVE_SCHEDULE_KEY);
+      if (stored) return JSON.parse(stored) as ActiveSchedule;
+    } catch {}
+    return null;
+  });
+
+  const savePresets = (p: WorkSchedulePreset[]) => {
+    setPresets(p);
+    localStorage.setItem(LS_PRESETS_KEY, JSON.stringify(p));
+  };
+
+  const saveSchedule = (s: ActiveSchedule) => {
+    setActive(s);
+    localStorage.setItem(LS_ACTIVE_SCHEDULE_KEY, JSON.stringify(s));
+  };
 
   const load = async () => {
     setLoading(true);
@@ -136,9 +174,9 @@ export default function RhDocumentsPage() {
               <FolderOpen size={24} className="text-camublue-900" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-camublue-900">Documents RH</h1>
+              <h1 className="text-2xl font-bold text-camublue-900">Gestion Document</h1>
               <p className="text-sm text-gray-500">
-                Gérez les documents publics accessibles à tous les employés
+                Gérez les documents RH et les heures de travail
               </p>
             </div>
           </div>
@@ -150,16 +188,60 @@ export default function RhDocumentsPage() {
             >
               <RefreshCw size={16} className="text-gray-500" />
             </button>
-            <button
-              onClick={() => { resetForm(); setShowUploadModal(true); }}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-camublue-900 text-white hover:bg-camublue-900/90 transition text-sm font-medium"
-            >
-              <Plus size={16} />
-              Ajouter un document
-            </button>
+            {activeTab === "documents" && (
+              <button
+                onClick={() => { resetForm(); setShowUploadModal(true); }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-camublue-900 text-white hover:bg-camublue-900/90 transition text-sm font-medium"
+              >
+                <Plus size={16} />
+                Ajouter un document
+              </button>
+            )}
+            {activeTab === "horaires" && (
+              <button
+                onClick={() => setScheduleOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-camublue-900 text-white hover:bg-camublue-900/90 transition text-sm font-medium"
+              >
+                <Clock size={16} />
+                Configurer
+              </button>
+            )}
           </div>
         </div>
 
+        {/* Tabs */}
+        <div className="flex gap-2 border-b border-gray-200">
+          <button
+            onClick={() => setActiveTab("documents")}
+            className={`px-4 py-3 font-medium text-sm transition border-b-2 ${
+              activeTab === "documents"
+                ? "border-camublue-900 text-camublue-900"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <FolderOpen size={16} />
+              Documents
+            </div>
+          </button>
+          <button
+            onClick={() => setActiveTab("horaires")}
+            className={`px-4 py-3 font-medium text-sm transition border-b-2 ${
+              activeTab === "horaires"
+                ? "border-camublue-900 text-camublue-900"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Clock size={16} />
+              Heures de travail
+            </div>
+          </button>
+        </div>
+
+        {/* Content */}
+        {activeTab === "documents" ? (
+          <>
         {/* Filters */}
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[200px]">
@@ -279,6 +361,19 @@ export default function RhDocumentsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+          </>
+        ) : (
+          <div className="bg-white rounded-xl border shadow-sm p-6">
+            <p className="text-gray-600 mb-4">Gérez les heures de travail et les périodes actives.</p>
+            <button
+              onClick={() => setScheduleOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-camublue-900 text-white hover:bg-camublue-900/90 transition text-sm font-medium"
+            >
+              <Clock size={16} />
+              Configurer les heures de travail
+            </button>
           </div>
         )}
       </div>
@@ -409,6 +504,16 @@ export default function RhDocumentsPage() {
           accentClass="camublue-900"
         />
       )}
+
+      {/* Work Schedule Modal */}
+      <WorkScheduleModal
+        open={scheduleOpen}
+        onClose={() => setScheduleOpen(false)}
+        active={active}
+        presets={presets}
+        onSave={saveSchedule}
+        onPresetsChange={savePresets}
+      />
     </AppLayout>
   );
 }

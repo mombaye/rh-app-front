@@ -1379,7 +1379,6 @@ export default function AttendanceNormalesPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [alertModalOpen,  setAlertModalOpen]  = useState(false);
-  const [scheduleOpen,    setScheduleOpen]    = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [selectedEmployee,   setSelectedEmployee]   = useState<FlatRecord | null>(null);
   const [sendingAlert,       setSendingAlert]        = useState(false);
@@ -1406,53 +1405,6 @@ export default function AttendanceNormalesPage() {
   const [projectMap,    setProjectMap]    = useState<Map<string,string>>(new Map());
   const [shiftMatricules, setShiftMatricules] = useState<Set<string>>(new Set());
 
-  // ── Horaires actifs — persistés dans localStorage ─────────────────────────
-  const [presets, setPresets] = useState<WorkSchedulePreset[]>(() => {
-    try {
-      const stored = localStorage.getItem(LS_PRESETS_KEY);
-      if (stored) return JSON.parse(stored) as WorkSchedulePreset[];
-    } catch {}
-    return DEFAULT_PRESETS;
-  });
-
-  const [activeSchedule, setActiveSchedule] = useState<ActiveSchedule | null>(() => {
-    try {
-      const stored = localStorage.getItem(LS_ACTIVE_SCHEDULE_KEY);
-      if (stored) return JSON.parse(stored) as ActiveSchedule;
-    } catch {}
-    // Valeur par défaut : Normale, période = mois courant
-    const d = new Date();
-    const end = new Date(d.getFullYear(), d.getMonth()+1, 0);
-    return {
-      ...DEFAULT_PRESETS[0],
-      dateStart: isoToday(),
-      dateEnd: end.toISOString().slice(0,10),
-      locked: true,
-    };
-  });
-
-  // ── Persistance automatique dans localStorage ─────────────────────────────
-  useEffect(() => {
-    try {
-      localStorage.setItem(LS_PRESETS_KEY, JSON.stringify(presets));
-    } catch {}
-  }, [presets]);
-
-  useEffect(() => {
-    try {
-      if (activeSchedule) {
-        localStorage.setItem(LS_ACTIVE_SCHEDULE_KEY, JSON.stringify(activeSchedule));
-      } else {
-        localStorage.removeItem(LS_ACTIVE_SCHEDULE_KEY);
-      }
-    } catch {}
-  }, [activeSchedule]);
-
-  // Le schedule effectif = activeSchedule si en période, sinon premier preset par défaut
-  const effectiveSchedule: WorkSchedulePreset = useMemo(() => {
-    if (activeSchedule && isPeriodActive(activeSchedule)) return activeSchedule;
-    return presets[0] ?? DEFAULT_PRESETS[0];
-  }, [activeSchedule, presets]);
 
   const pad2 = (n: number) => String(n).padStart(2,"0");
 
@@ -1683,8 +1635,6 @@ export default function AttendanceNormalesPage() {
   };
 
   const tableHeaders = ["Matricule","Nom","Projet/Département","Service","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
-  const isActiveLocked = activeSchedule ? isPeriodActive(activeSchedule) : false;
-
   return (
     <AppLayout>
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}
@@ -1694,21 +1644,6 @@ export default function AttendanceNormalesPage() {
         <div className="flex flex-col sm:flex-row justify-between gap-3 sm:items-start shrink-0">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-camublue-900">Pointages Normaux</h1>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${
-                isActiveLocked ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-slate-50 text-slate-500 ring-slate-200"
-              }`}>
-                {isActiveLocked ? <Lock className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-                {effectiveSchedule.context} ·
-                {pad2(effectiveSchedule.startH)}h{pad2(effectiveSchedule.startM)} – {pad2(effectiveSchedule.endH)}h{pad2(effectiveSchedule.endM)}
-                {effectiveSchedule.breakMin > 0 && ` · Pause ${effectiveSchedule.breakMin}min`}
-              </span>
-              {activeSchedule && isActiveLocked && (
-                <span className="text-xs text-slate-400">
-                  jusqu'au {new Date(activeSchedule.dateEnd).toLocaleDateString("fr-FR",{day:"2-digit",month:"short"})}
-                </span>
-              )}
-            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -1723,16 +1658,6 @@ export default function AttendanceNormalesPage() {
               <option value="weekly">Hebdomadaire</option>
               <option value="monthly">Mensuel</option>
             </select>
-
-            {/* Bouton horaires */}
-            <button onClick={() => setScheduleOpen(true)}
-              className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 font-medium ${
-                isActiveLocked ? "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100" : "bg-white border-slate-300 text-camublue-900 hover:bg-slate-50"
-              }`}>
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline">Heures de travail</span>
-              {isActiveLocked && <Lock className="h-3 w-3" />}
-            </button>
 
             <button onClick={() => setFilterOpen(true)}
               className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 ${statusFilter !== "all" ? "bg-orange-50 border-orange-300 text-orange-700" : "bg-white border-slate-300 hover:bg-slate-50"}`}>
@@ -1877,14 +1802,6 @@ export default function AttendanceNormalesPage() {
         )}
 
         {/* ── Modals ── */}
-        <WorkScheduleModal
-          open={scheduleOpen}
-          onClose={() => setScheduleOpen(false)}
-          active={activeSchedule}
-          presets={presets}
-          onSave={(s) => setActiveSchedule(s)}
-          onPresetsChange={(p) => setPresets(p)}
-        />
         <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)}
           viewMode={viewMode} setViewMode={setViewMode}
           date={date} setDate={setDate} week={week} setWeek={setWeek}
