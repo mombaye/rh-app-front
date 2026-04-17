@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";
 import {
   Clock, AlertTriangle, UserMinus, Filter, FileSpreadsheet, X, ChevronLeft, ChevronRight,
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown, Settings, CheckCircle,
-  CalendarDays, TrendingUp, Lock, Pencil, Plus, Trash2,
+  CalendarDays, CalendarRange, TrendingUp, Lock, Pencil, Plus, Trash2,
 } from "lucide-react";
 import { FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import {
   getDailyStats, getWeeklyStats, getMonthlyStats, getEmployeePeriodDetail, getShiftDailyStats,
-  sendAttendanceAlert,
+  getAttendancePeriodStats, sendAttendanceAlert,
 } from "@/services/attendanceService";
 import { getEmployees } from "@/services/employeeService";
 import type {
@@ -20,7 +19,7 @@ import type { Employee } from "@/types/employee";
 import * as XLSX from "xlsx";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type ViewMode = "daily" | "weekly" | "monthly";
+type ViewMode = "daily" | "weekly" | "monthly" | "period";
 type StatusFilter = "all" | "ok" | "absent" | "on_leave" | "on_mission" | "incomplete" | "anomaly" | "late" | "deficit";
 type MotifType = "absent" | "not_pointing";
 type WorkContext = "Normale" | "Ramadan" | string;
@@ -187,6 +186,8 @@ const NORM_DAILY_COLS = ["Matricule","Nom","Projet","Service","Statut","Retard",
 const NORM_SUMM_COLS  = ["Matricule","Nom","Projet","Service","Nb jours","Heures travaillées","% quota (40h)"] as const;
 type NormDailyCol = typeof NORM_DAILY_COLS[number];
 type NormSummCol  = typeof NORM_SUMM_COLS[number];
+const NORM_PERIOD_COLS = ["Matricule","Nom","Service","Présents","H.travaillées","Absents","Congés","Retards"] as const;
+type NormPeriodCol = typeof NORM_PERIOD_COLS[number];
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const STATUS_CFG = {
@@ -857,12 +858,15 @@ function buildWeekendShortcuts(): { label: string; d: string }[] {
 
 function FilterModal({
   open, onClose, viewMode, setViewMode, date, setDate, week, setWeek,
-  month, setMonth, statusFilter, setStatusFilter, onApply,
+  month, setMonth, periodFrom, setPeriodFrom, periodTo, setPeriodTo,
+  statusFilter, setStatusFilter, onApply,
 }: {
   open: boolean; onClose: () => void; viewMode: ViewMode; setViewMode: (v: ViewMode) => void;
   date: string; setDate: (v: string) => void; week: string; setWeek: (v: string) => void;
-  month: string; setMonth: (v: string) => void; statusFilter: StatusFilter;
-  setStatusFilter: (v: StatusFilter) => void; onApply: () => void;
+  month: string; setMonth: (v: string) => void;
+  periodFrom: string; setPeriodFrom: (v: string) => void;
+  periodTo: string; setPeriodTo: (v: string) => void;
+  statusFilter: StatusFilter; setStatusFilter: (v: StatusFilter) => void; onApply: () => void;
 }) {
   const weekendShortcuts = buildWeekendShortcuts();
 
@@ -886,11 +890,12 @@ function FilterModal({
             <div className="px-4 sm:px-6 py-5 space-y-6 overflow-y-auto flex-1">
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Affichage</p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {[
                     { k: "daily"   as ViewMode, label: "Journalier",   icon: "📅" },
                     { k: "weekly"  as ViewMode, label: "Hebdomadaire", icon: "📆" },
                     { k: "monthly" as ViewMode, label: "Mensuel",      icon: "🗓️" },
+                    { k: "period"  as ViewMode, label: "Période",      icon: "📊" },
                   ].map((v) => (
                     <button key={v.k} onClick={() => setViewMode(v.k)}
                       className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl border-2 text-xs font-semibold transition-all ${
@@ -906,6 +911,30 @@ function FilterModal({
                 {viewMode === "daily"   && <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
                 {viewMode === "weekly"  && <input value={week} onChange={(e) => setWeek(e.target.value)} placeholder="2026-W09" className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
                 {viewMode === "monthly" && <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
+                {viewMode === "period" && (
+                  <div className="space-y-3">
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <label className="text-xs font-semibold text-gray-400 block mb-1">Date de début</label>
+                        <input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)}
+                          className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs font-semibold text-gray-400 block mb-1">Date de fin</label>
+                        <input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)} max={new Date().toISOString().slice(0,10)}
+                          className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                      </div>
+                    </div>
+                    {periodFrom && periodTo && periodFrom <= periodTo && (
+                      <div className="flex items-center gap-2 p-3 rounded-xl bg-indigo-50 border border-indigo-100">
+                        <CalendarRange className="h-4 w-4 text-indigo-500 shrink-0" />
+                        <span className="text-xs font-medium text-indigo-700">
+                          {Math.ceil((new Date(periodTo + "T00:00:00").getTime() - new Date(periodFrom + "T00:00:00").getTime()) / (1000 * 60 * 60 * 24)) + 1} jours sélectionnés
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               {/* Weekend / accès rapide (vue journalière uniquement) */}
               {viewMode === "daily" && (
@@ -944,7 +973,15 @@ function FilterModal({
             </div>
             <div className="px-4 sm:px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
               <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
-              <button onClick={() => { onApply(); onClose(); }} className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-medium transition">Appliquer</button>
+              <button
+                onClick={() => {
+                  onApply();
+                  onClose();
+                }}
+                disabled={viewMode === "period" && (!periodFrom || !periodTo || periodFrom > periodTo)}
+                className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-medium transition disabled:opacity-50">
+                {viewMode === "period" ? "Afficher" : "Appliquer"}
+              </button>
             </div>
           </motion.div>
         </motion.div>
@@ -1399,6 +1436,20 @@ export default function AttendanceNormalesPage() {
   const [showExportDlg,    setShowExportDlg]    = useState(false);
   const [exportDailyCols,  setExportDailyCols]  = useState<NormDailyCol[]>([...NORM_DAILY_COLS]);
   const [exportSummaryCols,setExportSummaryCols]= useState<NormSummCol[]>([...NORM_SUMM_COLS]);
+  const [exportPeriodCols, setExportPeriodCols] = useState<NormPeriodCol[]>([...NORM_PERIOD_COLS]);
+
+  // ── Vue période personnalisée ──────────────────────────────────────────────
+  const _todayStr = isoToday();
+  const _firstOfMonth = _todayStr.slice(0, 8) + "01";
+  const [periodFrom,       setPeriodFrom]       = useState(_firstOfMonth);
+  const [periodTo,         setPeriodTo]         = useState(_todayStr);
+  const [periodData,       setPeriodData]       = useState<any>(null);
+  const [periodLoading,    setPeriodLoading]    = useState(false);
+  // ── Export étendu ─────────────────────────────────────────────────────────
+  const [exportFrom,       setExportFrom]       = useState(_firstOfMonth);
+  const [exportTo,         setExportTo]         = useState(_todayStr);
+  const [exportDepts,      setExportDepts]      = useState<string[]>([]);
+  const [exportDeptSearch, setExportDeptSearch] = useState("");
 
   const [emailMap,      setEmailMap]      = useState<Map<string,string>>(new Map());
   const [phoneMap,      setPhoneMap]      = useState<Map<string,string>>(new Map());
@@ -1493,6 +1544,19 @@ export default function AttendanceNormalesPage() {
       if (viewMode === "monthly") setMonthly(await getMonthlyStats(month));
     } finally { setLoading(false); }
   }, [viewMode, date, week, month]);
+
+  const fetchPeriodData = useCallback(async () => {
+    if (!periodFrom || !periodTo) return;
+    setPeriodLoading(true);
+    try {
+      const res = await getAttendancePeriodStats({ date_from: periodFrom, date_to: periodTo });
+      setPeriodData(res);
+    } catch (e) {
+      console.error("fetchPeriodData error:", e);
+    } finally {
+      setPeriodLoading(false);
+    }
+  }, [periodFrom, periodTo]);
 
   useEffect(() => { fetchData(); }, [viewMode]);
   useEffect(() => { setPage(1); }, [statusFilter, searchQ, viewMode, daily, weekly, monthly, pageSize]);
@@ -1646,8 +1710,39 @@ export default function AttendanceNormalesPage() {
 
   const handleExport = () => setShowExportDlg(true);
 
-  const doExport = () => {
-    if (viewMode === "daily") {
+  const doExport = async () => {
+    const applyDeptFilter = <T extends { service?: string; department?: string }>(rows: T[]): T[] => {
+      if (!exportDepts.length) return rows;
+      return rows.filter(r => {
+        const svc = ((r as any).service || (r as any).department || "").toUpperCase();
+        return exportDepts.includes(svc);
+      });
+    };
+
+    if (viewMode === "period") {
+      // Export sur période personnalisée via API
+      try {
+        const res = await getAttendancePeriodStats({ date_from: exportFrom, date_to: exportTo });
+        const rows = applyDeptFilter(res.by_employee);
+        const ALL: Record<NormPeriodCol, (r: any) => any> = {
+          "Matricule":      (r) => r.matricule ?? "—",
+          "Nom":            (r) => r.full_name,
+          "Service":        (r) => r.service ?? "—",
+          "Présents":       (r) => r.present_days,
+          "H.travaillées":  (r) => formatMinutes(r.worked_minutes) || "0h",
+          "Absents":        (r) => r.absent_days,
+          "Congés":         (r) => r.on_leave_days,
+          "Retards":        (r) => r.late_days,
+        };
+        exportXLSX(`pointage_normaux_periode_${exportFrom}_${exportTo}`,
+          rows.map(r => Object.fromEntries(exportPeriodCols.map(k => [k, ALL[k](r)])))
+        );
+      } catch (e) {
+        console.error("Export période error:", e);
+        alert("Erreur lors de l'export. Veuillez réessayer.");
+      }
+    } else if (viewMode === "daily") {
+      const rows = applyDeptFilter(filtered);
       const ALL: Record<NormDailyCol, (r: FlatRecord) => any> = {
         "Matricule":        (r) => r.matricule,
         "Nom":              (r) => r.full_name,
@@ -1662,10 +1757,11 @@ export default function AttendanceNormalesPage() {
         "Email":            (r) => r.email ?? "Manquant",
       };
       exportXLSX("pointage_normaux_journalier",
-        filtered.map((r) => Object.fromEntries(exportDailyCols.map((k) => [k, ALL[k](r)])))
+        rows.map((r) => Object.fromEntries(exportDailyCols.map((k) => [k, ALL[k](r)])))
       );
     } else {
       const MAX_MIN = viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WORKDAY_MIN * 4.33);
+      const rows = applyDeptFilter(summaryRecords);
       const ALL: Record<NormSummCol, (r: any) => any> = {
         "Matricule":          (r) => r.matricule,
         "Nom":                (r) => r.full_name,
@@ -1676,7 +1772,7 @@ export default function AttendanceNormalesPage() {
         "% quota (40h)":      (r) => `${Math.min(100, Math.round((r.worked_minutes / MAX_MIN) * 100))}%`,
       };
       exportXLSX(`pointage_normaux_${viewMode === "weekly" ? "hebdo" : "mensuel"}`,
-        summaryRecords.map((r) => Object.fromEntries(exportSummaryCols.map((k) => [k, ALL[k](r)])))
+        rows.map((r) => Object.fromEntries(exportSummaryCols.map((k) => [k, ALL[k](r)])))
       );
     }
     setShowExportDlg(false);
@@ -1762,7 +1858,7 @@ export default function AttendanceNormalesPage() {
         </div>
 
         {/* ── Contenu principal — switch journalier / synthétique ── */}
-        {viewMode === "daily" ? (
+        {(viewMode === "daily" || viewMode === "period") ? (
           <>
             {/* Filtres rapides */}
             <div className="shrink-0 w-full overflow-x-auto">
@@ -1793,8 +1889,74 @@ export default function AttendanceNormalesPage() {
               </div>
             </div>
 
+            {/* ── Vue Période ── */}
+            {viewMode === "period" && (
+              <div className="flex-1 min-h-0 flex flex-col gap-2">
+                {periodLoading ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-camublue-900" />
+                  </div>
+                ) : !periodData ? (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
+                    <CalendarRange className="h-12 w-12 opacity-30" />
+                    <p className="text-sm font-medium">Cliquez sur <strong>Filtrer</strong> pour sélectionner une période</p>
+                    <button onClick={() => setFilterOpen(true)}
+                      className="px-4 py-2 rounded-lg bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
+                      Filtrer par période
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
+                      <table className="min-w-max w-full bg-white">
+                        <thead className="bg-camublue-900 text-white sticky top-0 z-10">
+                          <tr>
+                            {["Matricule","Nom","Service","Jours présents","H. travaillées","Absents","Congés","Retards","HS"].map(h => (
+                              <th key={h} className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800 whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {periodData.by_employee.length === 0 ? (
+                            <tr><td colSpan={9} className="text-center py-12 text-slate-400 text-sm">Aucun résultat pour cette période.</td></tr>
+                          ) : periodData.by_employee
+                              .filter((e: any) => !searchQ || e.full_name?.toLowerCase().includes(searchQ.toLowerCase()) || e.matricule?.toLowerCase().includes(searchQ.toLowerCase()))
+                              .map((e: any) => (
+                            <tr key={e.employee_id} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                              <td className="px-4 py-3 text-xs font-mono text-slate-500">{e.matricule ?? "—"}</td>
+                              <td className="px-4 py-3 text-sm font-semibold text-slate-800 whitespace-nowrap">{e.full_name}</td>
+                              <td className="px-4 py-3 text-xs text-slate-500">{e.service ?? "—"}</td>
+                              <td className="px-4 py-3 text-center">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700">{e.present_days}</span>
+                              </td>
+                              <td className="px-4 py-3 text-xs font-semibold text-slate-700">{formatMinutes(e.worked_minutes) || "0h"}</td>
+                              <td className="px-4 py-3 text-center">
+                                {e.absent_days > 0 ? <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">{e.absent_days}</span> : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {e.on_leave_days > 0 ? <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">{e.on_leave_days}</span> : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {e.late_days > 0 ? <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700">{e.late_days}</span> : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-xs text-slate-600">
+                                {e.overtime_minutes > 0 ? <span className="font-semibold text-green-600">+{formatMinutes(e.overtime_minutes)}</span> : <span className="text-slate-300">—</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="text-xs text-slate-400 px-1 shrink-0">
+                      {periodData.by_employee.length} employé(s) · Période : {periodFrom} → {periodTo} · {periodData.days_total} jours
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Tableau journalier */}
-            <div className="flex-1 min-h-0 flex flex-col gap-2">
+            {viewMode !== "period" && <div className="flex-1 min-h-0 flex flex-col gap-2">
               <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
                 <table className="min-w-max w-full bg-white">
                   <thead className="bg-camublue-900 text-white sticky top-0 z-10">
@@ -1889,8 +2051,13 @@ export default function AttendanceNormalesPage() {
           viewMode={viewMode} setViewMode={setViewMode}
           date={date} setDate={setDate} week={week} setWeek={setWeek}
           month={month} setMonth={setMonth}
+          periodFrom={periodFrom} setPeriodFrom={setPeriodFrom}
+          periodTo={periodTo} setPeriodTo={setPeriodTo}
           statusFilter={statusFilter} setStatusFilter={setStatusFilter}
-          onApply={fetchData} />
+          onApply={() => {
+            if (viewMode === "period") fetchPeriodData();
+            else fetchData();
+          }} />
         <DetailModal open={detailModalOpen} onClose={() => setDetailModalOpen(false)}
           employeeId={selectedEmployeeId} initialWeek={week} />
         <AlertModal open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
@@ -1899,12 +2066,23 @@ export default function AttendanceNormalesPage() {
         {/* ── Export Dialog ── */}
         <AnimatePresence>
           {showExportDlg && (() => {
-            const isDailyMode = viewMode === "daily";
-            const availCols   = isDailyMode ? NORM_DAILY_COLS : NORM_SUMM_COLS;
-            const selCols     = isDailyMode ? exportDailyCols  : exportSummaryCols;
-            const setSelCols  = isDailyMode
-              ? (v: NormDailyCol[]) => setExportDailyCols(v)
-              : (v: NormSummCol[])  => setExportSummaryCols(v);
+            const isDailyMode  = viewMode === "daily";
+            const isPeriodMode = viewMode === "period";
+            const availCols    = isPeriodMode ? NORM_PERIOD_COLS : isDailyMode ? NORM_DAILY_COLS : NORM_SUMM_COLS;
+            const selCols      = isPeriodMode ? exportPeriodCols : isDailyMode ? exportDailyCols  : exportSummaryCols;
+            const setSelCols   = isPeriodMode
+              ? (v: NormPeriodCol[]) => setExportPeriodCols(v)
+              : isDailyMode
+              ? (v: NormDailyCol[])  => setExportDailyCols(v)
+              : (v: NormSummCol[])   => setExportSummaryCols(v);
+            // Collect departments from current data
+            const deptSet = new Set<string>();
+            allRecords.forEach(r => { if (r.department && r.department !== "—") deptSet.add(r.department.toUpperCase()); });
+            departmentMap.forEach(d => { if (d) deptSet.add(d.toUpperCase()); });
+            const allDepts = Array.from(deptSet).sort();
+            const filteredDepts = exportDeptSearch.trim()
+              ? allDepts.filter(d => d.toLowerCase().includes(exportDeptSearch.toLowerCase()))
+              : allDepts;
             return (
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -1916,7 +2094,7 @@ export default function AttendanceNormalesPage() {
                     <div>
                       <h2 className="font-black text-camublue-900 text-base">Export personnalisé</h2>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        {isDailyMode ? "Vue journalière" : viewMode === "weekly" ? "Vue hebdomadaire" : "Vue mensuelle"}
+                        {isPeriodMode ? `Période · ${exportFrom} → ${exportTo}` : isDailyMode ? "Vue journalière" : viewMode === "weekly" ? "Vue hebdomadaire" : "Vue mensuelle"}
                         {" · "}Sélectionnez les colonnes à inclure
                       </p>
                     </div>
@@ -1925,37 +2103,88 @@ export default function AttendanceNormalesPage() {
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="px-5 py-4">
-                    <div className="flex justify-between items-center mb-3">
-                      <p className="text-xs font-semibold text-slate-500">
-                        {selCols.length}/{availCols.length} colonnes sélectionnées
-                      </p>
-                      <div className="flex gap-2">
-                        <button onClick={() => setSelCols([...availCols] as any)}
-                          className="text-xs text-camublue-700 hover:underline font-medium">Tout</button>
-                        <span className="text-slate-300">|</span>
-                        <button onClick={() => setSelCols([] as any)}
-                          className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
+                  <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+                    {/* Période d'export */}
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 mb-2">Période d'export</p>
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <label className="text-xs text-slate-400 block mb-1">Du</label>
+                          <input type="date" value={exportFrom} onChange={(e) => setExportFrom(e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-xs text-slate-400 block mb-1">Au</label>
+                          <input type="date" value={exportTo} onChange={(e) => setExportTo(e.target.value)}
+                            min={exportFrom}
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                        </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
-                      {availCols.map((col) => {
-                        const checked = (selCols as string[]).includes(col);
-                        return (
-                          <label key={col}
-                            className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer border transition text-sm ${
-                              checked ? "bg-camublue-50 border-camublue-200 text-camublue-800" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                            }`}>
-                            <input type="checkbox" checked={checked} onChange={() => {
-                              const next = checked
-                                ? (selCols as string[]).filter((k) => k !== col)
-                                : [...(selCols as string[]), col];
-                              setSelCols(next as any);
-                            }} className="accent-camublue-700 w-3.5 h-3.5" />
-                            <span className="font-medium">{col}</span>
-                          </label>
-                        );
-                      })}
+                    {/* Filtre par service/département */}
+                    {allDepts.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 mb-2">
+                          Service / Département <span className="text-slate-400 font-normal">(optionnel — laisser vide = tous)</span>
+                        </p>
+                        <div className="relative mb-2">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                          <input type="text" value={exportDeptSearch} onChange={(e) => setExportDeptSearch(e.target.value)}
+                            placeholder="Rechercher un service…"
+                            className="w-full rounded-xl border border-slate-200 pl-8 pr-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                          {filteredDepts.map(dept => {
+                            const sel = exportDepts.includes(dept);
+                            return (
+                              <button key={dept}
+                                onClick={() => setExportDepts(sel ? exportDepts.filter(d => d !== dept) : [...exportDepts, dept])}
+                                className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${sel ? "bg-camublue-900 text-white border-transparent" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+                                {dept}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {exportDepts.length > 0 && (
+                          <button onClick={() => setExportDepts([])} className="mt-1 text-xs text-slate-400 hover:underline">
+                            Effacer la sélection ({exportDepts.length})
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {/* Colonnes */}
+                    <div>
+                      <div className="flex justify-between items-center mb-3">
+                        <p className="text-xs font-semibold text-slate-500">
+                          {selCols.length}/{availCols.length} colonnes sélectionnées
+                        </p>
+                        <div className="flex gap-2">
+                          <button onClick={() => setSelCols([...availCols] as any)}
+                            className="text-xs text-camublue-700 hover:underline font-medium">Tout</button>
+                          <span className="text-slate-300">|</span>
+                          <button onClick={() => setSelCols([] as any)}
+                            className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                        {availCols.map((col) => {
+                          const checked = (selCols as string[]).includes(col);
+                          return (
+                            <label key={col}
+                              className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer border transition text-sm ${
+                                checked ? "bg-camublue-50 border-camublue-200 text-camublue-800" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                              }`}>
+                              <input type="checkbox" checked={checked} onChange={() => {
+                                const next = checked
+                                  ? (selCols as string[]).filter((k) => k !== col)
+                                  : [...(selCols as string[]), col];
+                                setSelCols(next as any);
+                              }} className="accent-camublue-700 w-3.5 h-3.5" />
+                              <span className="font-medium">{col}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                   <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
