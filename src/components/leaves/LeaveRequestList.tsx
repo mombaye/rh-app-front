@@ -65,7 +65,9 @@ function isLeaveEnded(endDate: string): boolean {
   const end = new Date(year, month - 1, day);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return end < today;
+  const result = end < today;
+  console.log(`isLeaveEnded(${endDate}): end=${end.toDateString()}, today=${today.toDateString()}, result=${result}`);
+  return result;
 }
 
 // Vérifie si le congé est actuellement en cours (début <= aujourd'hui <= fin)
