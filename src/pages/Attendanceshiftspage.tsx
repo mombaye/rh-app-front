@@ -1984,6 +1984,109 @@ function buildWeekendShortcuts(): { label: string; d: string }[] {
 }
 
 // ============================================================================
+// MODAL FILTRES
+// ============================================================================
+
+function FilterModal({
+  open, onClose, viewMode, setViewMode, date, setDate, periodFrom, setPeriodFrom,
+  periodTo, setPeriodTo, statusFilter, setStatusFilter, onApply,
+}: {
+  open: boolean; onClose: () => void; viewMode: ViewMode; setViewMode: (v: ViewMode) => void;
+  date: string; setDate: (v: string) => void; periodFrom: string; setPeriodFrom: (v: string) => void;
+  periodTo: string; setPeriodTo: (v: string) => void; statusFilter: StatusFilter;
+  setStatusFilter: (v: StatusFilter) => void; onApply: () => void;
+}) {
+  const weekendShortcuts = buildWeekendShortcuts();
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+          <motion.div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10 max-h-[90vh] flex flex-col"
+            initial={{ y: 40, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 40, opacity: 0, scale: 0.97 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-gray-600" />
+                <span className="font-semibold text-gray-900">Filtres & Période</span>
+              </div>
+              <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-gray-100 transition"><X className="h-4 w-4 text-gray-500" /></button>
+            </div>
+            <div className="px-4 sm:px-6 py-5 space-y-6 overflow-y-auto flex-1">
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Affichage</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { k: "daily" as ViewMode, label: "Journalier", icon: "📅" },
+                    { k: "period" as ViewMode, label: "Période", icon: "📊" },
+                  ].map((v) => (
+                    <button key={v.k} onClick={() => setViewMode(v.k)}
+                      className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl border-2 text-xs font-semibold transition-all ${
+                        viewMode === v.k ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                      }`}>
+                      <span className="text-xl">{v.icon}</span>{v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Période</p>
+                {viewMode === "daily" && <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
+                {viewMode === "period" && (
+                  <div className="space-y-2">
+                    <input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" placeholder="Début" />
+                    <input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" placeholder="Fin" />
+                  </div>
+                )}
+              </div>
+              {viewMode === "daily" && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Accès rapide</p>
+                  <div className="flex flex-wrap gap-2">
+                    {weekendShortcuts.map((s) => (
+                      <button key={s.label} onClick={() => setDate(s.d)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                          date === s.d
+                            ? "bg-camublue-900 text-white border-transparent"
+                            : (s.label === "Samedi" || s.label === "Dimanche")
+                              ? "bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400"
+                              : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                        }`}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Statut / Type</p>
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_FILTERS.map((f) => (
+                    <button key={f.key} onClick={() => setStatusFilter(f.key)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                        statusFilter === f.key ? `${f.activeBg} ${f.activeText} border-transparent` : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                      }`}>
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusFilter === f.key ? f.activeDot : f.dotColor}`} />{f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="px-4 sm:px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
+              <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 transition">Annuler</button>
+              <button onClick={() => { onApply(); onClose(); }} className="flex-1 rounded-2xl bg-camublue-900 hover:bg-camublue-800 text-white px-4 py-2 text-sm font-medium transition">Appliquer</button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ============================================================================
 // COMPOSANT PRINCIPAL: AttendanceShiftsPage
 // ============================================================================
 
@@ -3485,6 +3588,22 @@ export default function AttendanceShiftsPage() {
             );
           })()}
         </AnimatePresence>
+
+        {/* Modal de filtre */}
+        <FilterModal
+          open={filterOpen}
+          onClose={() => setFilterOpen(false)}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          date={date}
+          setDate={setDate}
+          periodFrom={periodFrom}
+          setPeriodFrom={setPeriodFrom}
+          periodTo={periodTo}
+          setPeriodTo={setPeriodTo}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          onApply={() => { viewMode === "period" ? fetchPeriodData() : fetchData(false); }} />
       </motion.div>
     </AppLayout>
   );
