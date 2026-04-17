@@ -67,18 +67,6 @@ export default function RhDocumentsPage() {
     return null;
   });
 
-  // Form state for activating schedule
-  const [selectedPreset, setSelectedPreset] = useState<string>(DEFAULT_PRESETS[0].context);
-  const [dateStart, setDateStart] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  });
-  const [dateEnd, setDateEnd] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 1);
-    return d.toISOString().slice(0, 10);
-  });
-
   const pad = (n: number) => String(n).padStart(2, "0");
 
   const saveSchedule = (s: ActiveSchedule | null) => {
@@ -90,14 +78,17 @@ export default function RhDocumentsPage() {
     }
   };
 
-  const handleActivateSchedule = () => {
-    const preset = DEFAULT_PRESETS.find(p => p.context === selectedPreset);
-    if (!preset || dateStart > dateEnd) return;
+  const handleActivatePreset = (preset: WorkSchedulePreset) => {
+    const today = new Date();
+    const dateStart = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+    const dateEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const dateEndStr = dateEnd.toISOString().slice(0, 10);
+
     const newSchedule: ActiveSchedule = {
       ...preset,
       dateStart,
-      dateEnd,
-      locked: dateStart <= new Date().toISOString().slice(0, 10) && dateEnd >= new Date().toISOString().slice(0, 10),
+      dateEnd: dateEndStr,
+      locked: true,
     };
     saveSchedule(newSchedule);
   };
@@ -379,100 +370,41 @@ export default function RhDocumentsPage() {
         )}
 
         {activeTab === "horaires" && (
-          <div className="space-y-6">
-            {/* Presets Display */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {DEFAULT_PRESETS.map((preset) => (
-                <div key={preset.context} className="bg-white rounded-xl border shadow-sm p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{preset.context}</h3>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {pad(preset.startH)}h{pad(preset.startM)} → {pad(preset.endH)}h{pad(preset.endM)} · Pause {preset.breakMin}min
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {DEFAULT_PRESETS.map((preset) => (
+              <div key={preset.context} className="bg-white rounded-xl border shadow-sm p-6">
+                <div className="mb-4">
+                  <h3 className="font-semibold text-gray-900">{preset.context}</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {pad(preset.startH)}h{pad(preset.startM)} → {pad(preset.endH)}h{pad(preset.endM)} · Pause {preset.breakMin}min
+                  </p>
+                </div>
+
+                {active?.context === preset.context ? (
+                  <div className="space-y-3">
+                    <div className="text-xs text-gray-600 bg-green-50 border border-green-200 rounded-lg p-2">
+                      <p className="font-medium text-green-700">Actif</p>
+                      <p className="text-green-600 mt-1">
+                        Du {new Date(active.dateStart).toLocaleDateString("fr-FR")} au {new Date(active.dateEnd).toLocaleDateString("fr-FR")}
                       </p>
                     </div>
-                    {active?.context === preset.context && (
-                      <span className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full ring-1 ring-green-200">
-                        <span className="w-2 h-2 bg-green-500 rounded-full" />
-                        Actif
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Activation Form */}
-            <div className="bg-white rounded-xl border shadow-sm p-6">
-              <h3 className="font-semibold text-gray-900 mb-4">
-                {active ? "Période active" : "Activer une période"}
-              </h3>
-
-              {active ? (
-                <div className="space-y-4">
-                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-900">
-                      <strong>{active.context}</strong> · {pad(active.startH)}h{pad(active.startM)} → {pad(active.endH)}h{pad(active.endM)}
-                    </p>
-                    <p className="text-xs text-blue-700 mt-2">
-                      Du {new Date(active.dateStart).toLocaleDateString("fr-FR")} au {new Date(active.dateEnd).toLocaleDateString("fr-FR")}
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleDeactivateSchedule}
-                    className="w-full px-4 py-2.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition text-sm font-medium border border-red-200"
-                  >
-                    Désactiver
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Sélectionner un contexte</label>
-                    <select
-                      value={selectedPreset}
-                      onChange={(e) => setSelectedPreset(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-camublue-900/20 focus:border-camublue-900 outline-none"
+                    <button
+                      onClick={handleDeactivateSchedule}
+                      className="w-full px-3 py-2.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition text-sm font-medium border border-red-200"
                     >
-                      {DEFAULT_PRESETS.map((preset) => (
-                        <option key={preset.context} value={preset.context}>
-                          {preset.context}
-                        </option>
-                      ))}
-                    </select>
+                      Désactiver
+                    </button>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Début</label>
-                      <input
-                        type="date"
-                        value={dateStart}
-                        onChange={(e) => setDateStart(e.target.value)}
-                        className="w-full border rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-camublue-900/20 focus:border-camublue-900 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Fin</label>
-                      <input
-                        type="date"
-                        value={dateEnd}
-                        onChange={(e) => setDateEnd(e.target.value)}
-                        className="w-full border rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-camublue-900/20 focus:border-camublue-900 outline-none"
-                      />
-                    </div>
-                  </div>
-
+                ) : (
                   <button
-                    onClick={handleActivateSchedule}
-                    disabled={dateStart > dateEnd}
-                    className="w-full px-4 py-2.5 rounded-lg bg-camublue-900 text-white hover:bg-camublue-900/90 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => handleActivatePreset(preset)}
+                    className="w-full px-3 py-2.5 rounded-lg bg-camublue-900 text-white hover:bg-camublue-900/90 transition text-sm font-medium"
                   >
                     Activer
                   </button>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>
