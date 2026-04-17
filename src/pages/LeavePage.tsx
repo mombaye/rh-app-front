@@ -717,10 +717,12 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                       {isPending && (
                                         <>
                                           <ApprovalStepIndicator request={r} />
-                                          <button onClick={(e) => { e.stopPropagation(); setEditTarget(r); }}
-                                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
-                                            <Pencil className="h-3 w-3" /> Modifier
-                                          </button>
+                                          <div className="flex gap-1.5">
+                                            <button onClick={(e) => { e.stopPropagation(); setEditTarget(r); }}
+                                              className="flex-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center justify-center gap-1">
+                                              <Pencil className="h-3 w-3" /> Modifier
+                                            </button>
+                                          </div>
                                         </>
                                       )}
                                       {r.status === "APPROVED" && (
@@ -729,7 +731,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                             <button
                                               disabled
                                               title="Congé terminé"
-                                              className="px-2.5 py-1 bg-gray-100 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed whitespace-nowrap flex items-center gap-1">
+                                              className="flex-1 px-2.5 py-1 bg-gray-100 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed whitespace-nowrap flex items-center justify-center gap-1">
                                               <CheckCircle2 className="h-3 w-3" /> Terminé
                                             </button>
                                             <button
@@ -755,7 +757,9 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                             </button>
                                           </div>
                                         ) : (
-                                          <QuickRevokeBtn request={r} onDone={fetchAll} />
+                                          <div className="flex gap-1.5">
+                                            <QuickRevokeBtn request={r} onDone={fetchAll} />
+                                          </div>
                                         )
                                       )}
                                       {r.status === "CANCELLED" && (
@@ -1992,7 +1996,7 @@ function QuickRevokeBtn({ request, onDone }: { request: LeaveRequest; onDone: ()
     <>
       <button
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
-        className="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+        className="flex-1 px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center justify-center gap-1">
         <RotateCcw className="h-3 w-3" /> Révoquer
       </button>
       <AnimatePresence>
