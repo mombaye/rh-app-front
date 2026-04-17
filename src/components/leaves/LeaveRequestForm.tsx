@@ -21,14 +21,13 @@ interface FormState {
   start_date:     string;
   end_date:       string;
   days:           string;
-  motif:          string;
   half_day_start: boolean;
   half_day_end:   boolean;
 }
 
 const EMPTY_FORM: FormState = {
   employee_id: "", leave_type_id: "", start_date: "",
-  end_date: "", days: "", motif: "",
+  end_date: "", days: "",
   half_day_start: false, half_day_end: false,
 };
 
@@ -195,7 +194,6 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         start_date:     form.start_date,
         end_date:       form.end_date,
         days:           parseFloat(form.days),
-        motif:          form.motif.trim(),
         half_day_start: form.half_day_start,
         half_day_end:   form.half_day_end,
       });
@@ -591,16 +589,6 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               )}
             </div>
           )}
-
-          {/* ── Motif ───────────────────────────────────────────────── */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
-              Motif <span className="text-gray-400 font-normal normal-case">(optionnel)</span>
-            </label>
-            <textarea name="motif" value={form.motif} onChange={handleChange}
-              placeholder="Décrivez le motif de l'absence…" rows={3}
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition resize-none" />
-          </div>
 
           {/* ── Justificatif optionnel ───────────────────────────────── */}
           {!needsDoc && (
