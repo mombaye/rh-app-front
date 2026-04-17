@@ -49,7 +49,9 @@ function fmtDate(d: string): string {
 // Vérifie si un congé est consommé (date de fin passée et pas révoqué)
 function isConsumed(endDate: string, status: LeaveStatus): boolean {
   if (!endDate || status === "REVOKED") return false;
-  const end = new Date(endDate);
+  // Parse "YYYY-MM-DD" properly in local timezone
+  const [year, month, day] = endDate.split("-").map(Number);
+  const end = new Date(year, month - 1, day);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return end < today;
@@ -58,7 +60,9 @@ function isConsumed(endDate: string, status: LeaveStatus): boolean {
 // Vérifie si la date de fin du congé est passée
 function isLeaveEnded(endDate: string): boolean {
   if (!endDate) return false;
-  const end = new Date(endDate);
+  // Parse "YYYY-MM-DD" properly in local timezone
+  const [year, month, day] = endDate.split("-").map(Number);
+  const end = new Date(year, month - 1, day);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return end < today;
@@ -67,8 +71,11 @@ function isLeaveEnded(endDate: string): boolean {
 // Vérifie si le congé est actuellement en cours (début <= aujourd'hui <= fin)
 function isLeaveInProgress(startDate: string, endDate: string): boolean {
   if (!startDate || !endDate) return false;
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  // Parse "YYYY-MM-DD" properly in local timezone
+  const [sy, sm, sd] = startDate.split("-").map(Number);
+  const [ey, em, ed] = endDate.split("-").map(Number);
+  const start = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return start <= today && today <= end;
