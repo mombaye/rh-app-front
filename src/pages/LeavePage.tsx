@@ -3146,8 +3146,8 @@ function DetailModal({ request: r, onClose, onDone }: {
             </div>
           )}
 
-          {/* ── Actions APPROVED ───────────────────────────────────────────────── */}
-          {r.status === "APPROVED" && (
+          {/* ── Actions APPROVED (masqué si congé terminé/consommé) ──────────── */}
+          {r.status === "APPROVED" && !r.is_ended && !r.is_consumed && (
             <div className="space-y-3 pt-2 border-t border-slate-100">
               <div className="rounded-2xl border-2 border-orange-200 bg-orange-50 p-4 space-y-3">
                 <button onClick={() => setShowRevoke((v) => !v)}
