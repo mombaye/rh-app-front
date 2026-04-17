@@ -1405,6 +1405,10 @@ export default function AttendanceNormalesPage() {
   const [projectMap,    setProjectMap]    = useState<Map<string,string>>(new Map());
   const [shiftMatricules, setShiftMatricules] = useState<Set<string>>(new Set());
 
+  // ── Schedule par défaut (Normale) ──────────────────────────────────────────
+  const effectiveSchedule: WorkSchedulePreset = useMemo(() => {
+    return DEFAULT_PRESETS[0];
+  }, []);
 
   const pad2 = (n: number) => String(n).padStart(2,"0");
 
