@@ -2252,7 +2252,7 @@ export default function AttendanceShiftsPage() {
       const matchTeam = !periodTeam ? true : r.shift_team === periodTeam;
       const matchStatus = !periodStatus ? true
         : periodStatus === "late" ? (r.status === "ok" || r.status === "incomplete") && r.late_minutes > 0
-        : periodStatus === "replacement" ? !!r.replaces_employee
+        : periodStatus === "deficit" ? r.deficit_minutes > 0
         : r.status === periodStatus;
       const matchSearch = !periodSearch
         ? true
@@ -2487,16 +2487,14 @@ export default function AttendanceShiftsPage() {
 
   const filterCount = (key: StatusFilter) => {
     const base: FlatRecord[] = selectedTeam ? shiftPlanningBase : allRecords;
-    // Pour "Tous" on exclut les repos non planifiés du comptage par défaut
-    const visibleBase = (!selectedTeam && key === "all")
-      ? base.filter(r => !r.not_scheduled_rest)
-      : base;
-    if (key === "all") return visibleBase.length;
+    if (key === "all") return base.length;
     if (key === "late") return base.filter(isLateRecord).length;
     if (key === "deficit") return base.filter((r) => r.deficit_minutes > 0).length;
-    if (key === "absent") return base.filter((r) => r.status === "absent" && !r.not_scheduled_rest).length;
-    if (key === "pending") return base.filter((r) => r.status === "pending" || r.is_shift_pending).length;
-    if (key === "replacement") return base.filter((r) => r.is_replacement).length;
+    if (key === "absent") return base.filter((r) => r.status === "absent").length;
+    if (key === "on_leave") return base.filter((r) => r.status === "on_leave").length;
+    if (key === "on_mission") return base.filter((r) => r.status === "on_mission").length;
+    if (key === "incomplete") return base.filter((r) => r.status === "incomplete").length;
+    if (key === "anomaly") return base.filter((r) => r.status === "anomaly").length;
     return base.filter((r) => r.status === key).length;
   };
 
@@ -2845,6 +2843,7 @@ export default function AttendanceShiftsPage() {
               <div className="flex items-center gap-1 bg-slate-100/80 rounded-xl p-1 border border-camublue-900/20 shadow-sm min-w-max">
                 {QUICK_FILTERS.map((f) => {
                   const isActive = statusFilter === f.key;
+                  const count = filterCount(f.key);
                   return (
                     <button key={f.key} onClick={() => { setStatusFilter(f.key); setPage(1); }}
                       className={`relative inline-flex flex-col items-center justify-center gap-0.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 whitespace-nowrap shrink-0 ${isActive ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-white/60"}`}>
@@ -2853,13 +2852,17 @@ export default function AttendanceShiftsPage() {
                         <span className="hidden sm:inline">{f.label}</span>
                         <span className="sm:hidden">{f.label.split(" ")[0]}</span>
                       </span>
-                      <span className={`tabular-nums font-bold leading-none ${isActive ? "text-camublue-900" : "text-slate-400/70"}`}>{filterCount(f.key)}</span>
+                      <span className={`tabular-nums font-bold leading-none ${isActive ? "text-camublue-900" : "text-slate-400/70"}`}>{count}</span>
                     </button>
                   );
                 })}
                 {statusFilter !== "all" && (
-                  <><div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
-                    <button onClick={() => setStatusFilter("all")} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500 hover:bg-white/60 transition-all shrink-0"><X className="h-3 w-3" /></button></>
+                  <>
+                    <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
+                    <button onClick={() => setStatusFilter("all")} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500 hover:bg-white/60 transition-all shrink-0">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -3053,10 +3056,12 @@ export default function AttendanceShiftsPage() {
                   const cnt = flatPeriodRecords.filter((r) => {
                     const matchStatus = f.key === "all" ? true
                       : f.key === "late" ? r.status === "ok" && r.late_minutes > 0
+                      : f.key === "deficit" ? r.deficit_minutes > 0
                       : f.key === "incomplete" ? r.status === "incomplete"
                       : f.key === "anomaly" ? r.status === "anomaly"
                       : f.key === "absent" ? r.status === "absent"
-                      : f.key === "replacement" ? !!r.replaces_employee
+                      : f.key === "on_leave" ? r.status === "on_leave"
+                      : f.key === "on_mission" ? r.status === "on_mission"
                       : r.status === f.key;
                     const matchSearch = !periodSearch || r.full_name?.toLowerCase().includes(periodSearch.toLowerCase()) || r.matricule?.toLowerCase().includes(periodSearch.toLowerCase());
                     return matchStatus && matchSearch;
@@ -3076,8 +3081,12 @@ export default function AttendanceShiftsPage() {
                   );
                 })}
                 {periodStatus && (
-                  <><div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
-                    <button onClick={() => { setPeriodStatus(""); setPeriodPage(1); }} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500 hover:bg-white/60 transition-all shrink-0"><X className="h-3 w-3" /></button></>
+                  <>
+                    <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
+                    <button onClick={() => { setPeriodStatus(""); setPeriodPage(1); }} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500 hover:bg-white/60 transition-all shrink-0">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </>
                 )}
               </div>
             </div>
