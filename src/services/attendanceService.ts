@@ -24,6 +24,20 @@ export async function getMonthlyStats(month: string): Promise<MonthlyStatsRespon
   return data;
 }
 
+export async function getAttendancePeriodStats(params: {
+  date_from: string;
+  date_to: string;
+  department?: string | null;
+}): Promise<MonthlyStatsResponse & { date_from: string; date_to: string; days_total: number }> {
+  const cleanParams: Record<string, string> = {
+    date_from: params.date_from,
+    date_to:   params.date_to,
+  };
+  if (params.department) cleanParams.department = params.department;
+  const { data } = await api.get("/api/attendance/period-stats/", { params: cleanParams });
+  return data;
+}
+
 export async function getEmployeePeriodDetail(params: {
   employee_id: number;
   start: string;
