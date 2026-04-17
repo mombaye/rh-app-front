@@ -2840,7 +2840,7 @@ export default function AttendanceShiftsPage() {
               <input value={viewMode === "period" ? periodSearch : searchQ}
                 onChange={(e) => { if (viewMode === "period") { setPeriodSearch(e.target.value); setPeriodPage(1); } else { setSearchQ(e.target.value); setPage(1); } }}
                 placeholder="Nom, matricule…"
-                className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-44 focus:outline-none" />
+                className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-80 md:w-96 focus:outline-none" />
             </div>
 
             <button onClick={() => setFilterOpen(true)}
