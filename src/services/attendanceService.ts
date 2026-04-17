@@ -190,3 +190,44 @@ export async function sendAttendanceAlert(params: {
   const { data } = await api.post("/api/attendance/alerts/send/", params);
   return data;
 }
+
+// ─── Export des Shifts sur une période ──────────────────────────────────────
+
+export interface ShiftExportRecord {
+  date: string;
+  shift: string;
+  employee_name: string;
+  matricule: string;
+  in_time: string;
+  out_time: string;
+  status: string;
+}
+
+export async function getShiftExportData(params: {
+  date_from: string;
+  date_to: string;
+}): Promise<{ date_from: string; date_to: string; total_records: number; records: ShiftExportRecord[] }> {
+  const { data } = await api.get("/api/attendance/shifts/export/", {
+    params: { date_from: params.date_from, date_to: params.date_to, format: "json" },
+  });
+  return data;
+}
+
+export async function downloadShiftExportCSV(params: {
+  date_from: string;
+  date_to: string;
+}): Promise<void> {
+  const response = await api.get("/api/attendance/shifts/export/", {
+    params: { date_from: params.date_from, date_to: params.date_to, format: "csv" },
+    responseType: "blob",
+  });
+
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", `shifts_export_${params.date_from}_to_${params.date_to}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  link.parentNode?.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}

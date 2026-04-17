@@ -15,7 +15,7 @@ import {
   getShiftDailyStats, getShiftPeriodStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning,
   getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
-  updateAttendanceRecord, sendAttendanceAlert,
+  updateAttendanceRecord, sendAttendanceAlert, downloadShiftExportCSV,
 } from "@/services/attendanceService";
 import type { PlanningEntry } from "@/services/attendanceService";
 import { parseNOCPlanningExcel, cellToDateStr, extractMonthYearFromSheetName } from "@/utils/planningParser";
@@ -2633,18 +2633,31 @@ export default function AttendanceShiftsPage() {
     }
   };
 
-  const handleExport = () => {
-    // Sync export dates with current view filter
-    if (viewMode === "period") {
-      setExportFrom(periodFrom);
-      setExportTo(periodTo);
-    } else if (viewMode === "daily") {
-      // Daily: default Du = current date, Au = current date (user can widen the range)
-      setExportFrom(date);
-      setExportTo(date);
+  const handleExport = async () => {
+    if (viewMode === "period" && periodFrom && periodTo) {
+      // Direct download CSV for period view
+      try {
+        setExportLoading(true);
+        await downloadShiftExportCSV({ date_from: periodFrom, date_to: periodTo });
+      } catch (e) {
+        console.error("Export error:", e);
+        alert("Erreur lors du téléchargement. Veuillez réessayer.");
+      } finally {
+        setExportLoading(false);
+      }
+    } else {
+      // Sync export dates with current view filter
+      if (viewMode === "period") {
+        setExportFrom(periodFrom);
+        setExportTo(periodTo);
+      } else if (viewMode === "daily") {
+        // Daily: default Du = current date, Au = current date (user can widen the range)
+        setExportFrom(date);
+        setExportTo(date);
+      }
+      // For weekly/monthly: keep the existing exportFrom/exportTo
+      setShowExportDlg(true);
     }
-    // For weekly/monthly: keep the existing exportFrom/exportTo
-    setShowExportDlg(true);
   };
 
   const doExport = async () => {
