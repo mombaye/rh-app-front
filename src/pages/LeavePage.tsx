@@ -751,18 +751,22 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                         )
                                       )}
                                       {r.status === "CANCELLED" && (
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(r.id); }}
-                                          className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
-                                          <Trash2 className="h-3 w-3" /> Supprimer
-                                        </button>
+                                        <div className="flex gap-1.5">
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(r.id); }}
+                                            className="flex-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center justify-center gap-1">
+                                            <Trash2 className="h-3 w-3" /> Supprimer
+                                          </button>
+                                        </div>
                                       )}
                                       {r.status === "REVOKED" && (
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); setRelaunchRequest(r); }}
-                                          className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
-                                          <Send className="h-3 w-3" /> Relancer
-                                        </button>
+                                        <div className="flex gap-1.5">
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setRelaunchRequest(r); }}
+                                            className="flex-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center justify-center gap-1">
+                                            <Send className="h-3 w-3" /> Relancer
+                                          </button>
+                                        </div>
                                       )}
                                     </div>
                                   </td>
