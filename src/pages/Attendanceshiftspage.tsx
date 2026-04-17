@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/useAuth";
 import {
   Clock, AlertTriangle, UserMinus, FileSpreadsheet, X, ChevronLeft, ChevronRight,
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
-  Check, Settings, CheckCircle, Lock, CalendarDays,
+  Check, Settings, CheckCircle, Lock, CalendarDays, Filter,
   TrendingUp, Pencil, Plus, Trash2, Upload, CalendarRange, ArrowLeftRight, ArrowRight,
   Table2,
 } from "lucide-react";
@@ -2037,6 +2037,7 @@ export default function AttendanceShiftsPage() {
   const [periodPageSize,   setPeriodPageSize]   = useState(20);
 
   const [showPeriodModal, setShowPeriodModal] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [alertModalOpen, setAlertModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -2773,6 +2774,12 @@ export default function AttendanceShiftsPage() {
                 placeholder="Nom, matricule…"
                 className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-44 focus:outline-none" />
             </div>
+
+            <button onClick={() => setFilterOpen(true)}
+              className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 ${statusFilter !== "all" ? "bg-orange-50 border-orange-300 text-orange-700" : "bg-white border-slate-300 hover:bg-slate-50"}`}>
+              <Filter className="h-4 w-4" /><span className="hidden sm:inline">Filtrer</span>
+              {statusFilter !== "all" && <span className="bg-orange-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold leading-none">1</span>}
+            </button>
 
             <button onClick={handlePlanningClick}
               className={`border px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${allRecords.filter(r => r.is_scheduled).length > 0 ? "bg-green-50 border-green-400 text-green-700 hover:bg-green-100" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
