@@ -18,7 +18,7 @@ import {
   FileCheck, Upload, ExternalLink, Users, Settings2, Wallet,
   Search, History, Info, Trash2, Send, FileSpreadsheet,
   CheckCircle, XOctagon, Mail, GitBranch, UserX, ShieldCheck,
-  AlertCircle, SlidersHorizontal,
+  AlertCircle, SlidersHorizontal, Check,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ExportColumnKey, ExportColumnDef } from "@/types/leave";
@@ -178,10 +178,11 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   const [pageSize,         setPageSize]         = useState(20);
   const PAGE_SIZES = [10, 20, 50, 100] as const;
 
-  // ── Suppression / Relance ─────────────────────────────────────────────────
+  // ── Suppression / Relance / Annulation ───────────────────────────────────────
   const [confirmDeleteId,  setConfirmDeleteId]  = useState<number | null>(null);
   const [deleteLoading,    setDeleteLoading]    = useState(false);
   const [relaunchRequest,  setRelaunchRequest]  = useState<LeaveRequest | null>(null);
+  const [cancelInProgressRequest, setCancelInProgressRequest] = useState<LeaveRequest | null>(null);
 
   const advancedFilterCount = [
     filterLeaveTypeId, filterStartDate, filterEndDate,
@@ -730,6 +731,13 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                             className="px-2.5 py-1 bg-gray-100 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed whitespace-nowrap flex items-center gap-1">
                                             <CheckCircle2 className="h-3 w-3" /> Terminé
                                           </button>
+                                        ) : r.is_in_progress ? (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setCancelInProgressRequest(r); }}
+                                            title="Annuler ce congé en cours"
+                                            className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+                                            <X className="h-3 w-3" /> Annuler
+                                          </button>
                                         ) : (
                                           <QuickRevokeBtn request={r} onDone={fetchAll} />
                                         )
@@ -873,6 +881,17 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
         onConfirm={handleDelete}
         loading={deleteLoading}
       />
+
+      {/* Modal Annulation (En congé) */}
+      <AnimatePresence>
+        {cancelInProgressRequest && (
+          <CancelInProgressModal
+            request={cancelInProgressRequest}
+            onClose={() => setCancelInProgressRequest(null)}
+            onDone={() => { setCancelInProgressRequest(null); fetchAll(); }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Modal Relancer (Révoqué) */}
       <AnimatePresence>
@@ -3201,6 +3220,87 @@ function DetailModal({ request: r, onClose, onDone }: {
               </div>
             </div>
           )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Modale d'annulation pour congés en cours ───────────────────────────────
+function CancelInProgressModal({ request: r, onClose, onDone }: {
+  request: LeaveRequest; onClose: () => void; onDone: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+
+  const daysToRestore = parseFloat(r.days ?? r.duration_days ?? "0");
+
+  const handleConfirm = async () => {
+    if (!r.id) return;
+    setLoading(true);
+    try {
+      await leaveRequestService.cancel(r.id, user?.employee_id ?? undefined);
+      toast.success(`Congé annulé · ${daysToRestore}j restitués au solde`);
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors de l'annulation");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ duration: 0.2 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-[420px]"
+        onClick={(e) => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 pt-6 pb-4">
+          <div className="p-2.5 rounded-xl bg-red-100">
+            <AlertCircle className="h-5 w-5 text-red-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-black text-slate-900">Annuler ce congé ?</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Demande #{r.id}</p>
+          </div>
+        </div>
+
+        {/* Contenu */}
+        <div className="px-6 py-4 space-y-3 border-t border-slate-100">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-2">
+            <p className="text-sm font-semibold text-red-900">Récapitulatif</p>
+            <div className="text-sm text-red-800 space-y-1">
+              <p>• <strong>{r.employee?.full_name}</strong></p>
+              <p>• <strong>{r.leave_type?.label}</strong></p>
+              <p>• Période : <strong>{fmtDate(r.start_date)} → {fmtDate(r.end_date)}</strong></p>
+              <p className="font-bold text-red-600 mt-2">
+                ✓ Jours à restituer : <strong>{daysToRestore}j</strong>
+              </p>
+            </div>
+          </div>
+
+          <p className="text-sm text-slate-600">
+            Cette action <strong>annulera</strong> le congé en cours et <strong>restituera</strong> les <strong>{daysToRestore} jour(s)</strong> dans le solde de congés de l'employé.
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 px-6 py-4 border-t border-slate-100">
+          <button onClick={onClose} disabled={loading}
+            className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl transition disabled:opacity-50">
+            Annuler
+          </button>
+          <button onClick={handleConfirm} disabled={loading}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50">
+            {loading ? <ImSpinner2 className="animate-spin" size={14} /> : <Check className="h-4 w-4" />}
+            Confirmer l'annulation
+          </button>
         </div>
       </motion.div>
     </div>
