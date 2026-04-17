@@ -181,7 +181,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   const needsDoc     = selectedType?.requires_justification ?? false;
 
   const handleSubmit = async () => {
-    if (!form.employee_id || !form.leave_type_id || !form.start_date || !form.end_date || !form.motif.trim()) {
+    if (!form.employee_id || !form.leave_type_id || !form.start_date || !form.end_date) {
       setError("Veuillez remplir tous les champs obligatoires."); return;
     }
     if (!form.days || Number(form.days) <= 0) {
@@ -595,7 +595,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
           {/* ── Motif ───────────────────────────────────────────────── */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
-              Motif <span className="text-red-500">*</span>
+              Motif <span className="text-gray-400 font-normal normal-case">(optionnel)</span>
             </label>
             <textarea name="motif" value={form.motif} onChange={handleChange}
               placeholder="Décrivez le motif de l'absence…" rows={3}
@@ -649,8 +649,8 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               className="flex-1 border border-gray-200 text-gray-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition">
               Annuler
             </button>
-            <button onClick={handleSubmit} disabled={loading || isLoadingTypes}
-              className="flex-[2] bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
+            <button onClick={handleSubmit} disabled={loading || isLoadingTypes || (form.days && Number(form.days) > (balance?.remaining ?? 0))}
+              className="flex-[2] bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
               {loading
                 ? <><ImSpinner2 className="animate-spin" size={14} /> Envoi en cours…</>
                 : needsDoc
