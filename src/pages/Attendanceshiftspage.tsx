@@ -2834,41 +2834,6 @@ export default function AttendanceShiftsPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
-            {/* ── Vue toggle Journalier / Période ── */}
-            <div className="flex rounded-lg border border-slate-300 overflow-hidden">
-              <button
-                onClick={() => setViewMode("daily")}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold transition-all ${viewMode === "daily" ? "bg-camublue-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
-                <span className="text-base">📅</span>
-                <span className="hidden sm:inline">Journalier</span>
-              </button>
-              <button
-                onClick={() => { setViewMode("period"); }}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold transition-all border-l border-slate-300 ${viewMode === "period" ? "bg-camublue-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
-                <span className="text-base">📊</span>
-                <span className="hidden sm:inline">Période</span>
-              </button>
-            </div>
-
-            {/* ── Date picker inline (daily) ── */}
-            {viewMode === "daily" && (
-              <input type="date" value={date} onChange={(e) => { setDate(e.target.value); }}
-                className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
-            )}
-            {/* ── Bouton filtre période (ouvre modal) ── */}
-            {viewMode === "period" && (
-              <button onClick={() => setShowPeriodModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 text-sm font-semibold hover:bg-indigo-100 transition">
-                <CalendarRange className="h-4 w-4" />
-                <span className="hidden sm:inline">Période</span>
-                {periodFrom && periodTo && (
-                  <span className="text-[10px] font-bold bg-indigo-200/60 px-1.5 py-0.5 rounded-full hidden md:inline">
-                    {new Date(periodFrom + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })} → {new Date(periodTo + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
-                  </span>
-                )}
-              </button>
-            )}
-
             {/* ── Search ── */}
             <div className="relative w-full sm:w-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
