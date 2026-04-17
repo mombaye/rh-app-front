@@ -372,6 +372,13 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                 <span className="shrink-0 mt-0.5">⚠️</span><span>{error}</span>
               </motion.div>
             )}
+            {form.days && Number(form.days) > (balance?.remaining ?? 0) && selectedType && !selectedType.is_special_leave && (
+              <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 flex items-start gap-2 font-semibold">
+                <span className="shrink-0 mt-0.5">🚫</span>
+                <span>Solde insuffisant pour cette demande</span>
+              </motion.div>
+            )}
           </AnimatePresence>
 
           {/* ── Recherche employé par matricule ────────────────────── */}
@@ -584,9 +591,6 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                   (acquis&nbsp;: {balance.acquired.toFixed(1)}j · pris&nbsp;: {balance.taken.toFixed(1)}j)
                 </span>
               </span>
-              {form.days && Number(form.days) > balance.remaining && (
-                <span className="ml-auto text-xs font-bold text-red-600">Solde insuffisant !</span>
-              )}
             </div>
           )}
 
