@@ -30,15 +30,17 @@ import LeaveTypeManagement from "@/components/leaves/LeaveTypeManagement";
 
 // ─── Config statuts ───────────────────────────────────────────────────────────
 const STATUS_CFG: Record<
-  LeaveStatus,
+  LeaveStatus | "CONSUMED",
   { label: string; color: string; bg: string; border: string; dot: string }
 > = {
   PENDING:        { label: "En attente",          color: "#d97706", bg: "#fffbeb", border: "#fde68a", dot: "bg-amber-400"   },
   PENDING_SECOND: { label: "En att. 2ème valid.", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe", dot: "bg-violet-500"  },
+  PENDING_RH:     { label: "En attente RH",       color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe", dot: "bg-blue-500"    },
   APPROVED:       { label: "Approuvé",            color: "#059669", bg: "#ecfdf5", border: "#a7f3d0", dot: "bg-emerald-500" },
   REJECTED:       { label: "Rejeté",              color: "#dc2626", bg: "#fef2f2", border: "#fecaca", dot: "bg-red-500"     },
   CANCELLED:      { label: "Annulé",              color: "#64748b", bg: "#f8fafc", border: "#e2e8f0", dot: "bg-slate-400"   },
   REVOKED:        { label: "Révoqué (urgence)",   color: "#b45309", bg: "#fff7ed", border: "#fed7aa", dot: "bg-orange-500"  },
+  CONSUMED:       { label: "Consommé",            color: "#6b7280", bg: "#f3f4f6", border: "#d1d5db", dot: "bg-gray-500"    },
 };
 
 // ─── Colonnes disponibles pour l'export personnalisé ─────────────────────────
@@ -98,8 +100,10 @@ function fmtDate(d?: string | null): string {
 }
 
 // ─── StatusBadge ──────────────────────────────────────────────────────────────
-function StatusBadge({ status }: { status: LeaveStatus }) {
-  const cfg = STATUS_CFG[status] ?? STATUS_CFG.PENDING;
+function StatusBadge({ status, isConsumed = false }: { status: LeaveStatus; isConsumed?: boolean }) {
+  // Si le congé est consommé (APPROVED + date de fin passée + non révoqué), afficher "Consommé"
+  const key = isConsumed ? "CONSUMED" : status;
+  const cfg = STATUS_CFG[key] ?? STATUS_CFG.PENDING;
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap"
       style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
@@ -676,7 +680,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
 
                                   {/* Statut */}
                                   <td className="px-4 py-3.5">
-                                    <StatusBadge status={r.status} />
+                                    <StatusBadge status={r.status} isConsumed={r.is_consumed} />
                                   </td>
 
                                   {/* Justificatif */}
@@ -711,7 +715,16 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                         </>
                                       )}
                                       {r.status === "APPROVED" && (
-                                        <QuickRevokeBtn request={r} onDone={fetchAll} />
+                                        r.is_ended ? (
+                                          <button
+                                            disabled
+                                            title="Congé terminé"
+                                            className="px-2.5 py-1 bg-gray-100 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed whitespace-nowrap flex items-center gap-1">
+                                            <CheckCircle2 className="h-3 w-3" /> Terminé
+                                          </button>
+                                        ) : (
+                                          <QuickRevokeBtn request={r} onDone={fetchAll} />
+                                        )
                                       )}
                                       {r.status === "CANCELLED" && (
                                         <button
@@ -1874,7 +1887,8 @@ function LeaveHistoryModal({ employeeId, employeeName, onClose }: {
           ) : (
             <div className="space-y-2">
               {requests.map((req) => {
-                const cfg = STATUS_CFG[req.status] ?? STATUS_CFG.PENDING;
+                const statusKey = req.is_consumed ? "CONSUMED" : req.status;
+                const cfg = STATUS_CFG[statusKey] ?? STATUS_CFG.PENDING;
                 const totalDays = parseFloat(req.days ?? req.duration_days ?? "0");
                 return (
                   <div key={req.id}
@@ -2820,7 +2834,7 @@ function DetailModal({ request: r, onClose, onDone }: {
         <div className="px-6 py-4 space-y-4">
           {/* Badges statut + type */}
           <div className="flex items-center gap-2 flex-wrap">
-            <StatusBadge status={r.status} />
+            <StatusBadge status={r.status} isConsumed={r.is_consumed} />
             <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap"
               style={{ backgroundColor: lc + "20", color: lc }}>
               {r.leave_type?.label}
