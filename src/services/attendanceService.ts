@@ -242,7 +242,7 @@ export async function downloadShiftExportCSV(params: {
   const url = window.URL.createObjectURL(new Blob([response.data]));
   const link = document.createElement("a");
   link.href = url;
-  link.setAttribute("download", `shifts_export_${params.date_from}_to_${params.date_to}.csv`);
+  link.setAttribute("download", `shifts_export_${params.date_from}_to_${params.date_to}.txt`);
   document.body.appendChild(link);
   link.click();
   link.parentNode?.removeChild(link);
