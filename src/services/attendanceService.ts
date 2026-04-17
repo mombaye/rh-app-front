@@ -225,7 +225,7 @@ export async function getShiftExportData(params: {
   date_to: string;
 }): Promise<ShiftExportResponse> {
   const { data } = await api.get("/api/attendance/shifts/export/", {
-    params: { date_from: params.date_from, date_to: params.date_to, format: "json" },
+    params: { date_from: params.date_from, date_to: params.date_to, export_format: "json" },
   });
   return data;
 }
@@ -241,7 +241,7 @@ export async function downloadShiftExportCSV(params: {
       params: {
         date_from: params.date_from,
         date_to: params.date_to,
-        format: "csv"
+        export_format: "csv"
       },
       responseType: "blob",
     });

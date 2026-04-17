@@ -2633,39 +2633,40 @@ export default function AttendanceShiftsPage() {
     }
   };
 
-  const handleExport = async () => {
-    console.log("handleExport called, viewMode:", viewMode, "periodFrom:", periodFrom, "periodTo:", periodTo);
+  const handleExport = () => {
+    // Sync export dates with current view filter
+    if (viewMode === "period") {
+      setExportFrom(periodFrom);
+      setExportTo(periodTo);
+    } else if (viewMode === "daily") {
+      // Daily: default Du = current date, Au = current date (user can widen the range)
+      setExportFrom(date);
+      setExportTo(date);
+    }
+    // For weekly/monthly: keep the existing exportFrom/exportTo
+    setShowExportDlg(true);
+  };
 
-    if (viewMode === "period" && periodFrom && periodTo) {
-      // Direct download CSV for period view
+  const doExport = async () => {
+    console.log("doExport called, viewMode:", viewMode, "exportFrom:", exportFrom, "exportTo:", exportTo);
+
+    // Export structuré format texte (Date -> Shift -> Employés) pour mode Période
+    if (viewMode === "period" && exportFrom && exportTo) {
+      console.log("Using structured text export for period mode");
+      setExportLoading(true);
       try {
-        console.log("Starting direct export for period mode...");
-        setExportLoading(true);
-        await downloadShiftExportCSV({ date_from: periodFrom, date_to: periodTo });
-        console.log("Export completed successfully");
+        await downloadShiftExportCSV({ date_from: exportFrom, date_to: exportTo });
+        setShowExportDlg(false);
+        console.log("Export download initiated successfully");
       } catch (e) {
         console.error("Export error:", e);
         alert(`Erreur lors du téléchargement: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
         setExportLoading(false);
       }
-    } else {
-      // Sync export dates with current view filter
-      console.log("Opening export dialog");
-      if (viewMode === "period") {
-        setExportFrom(periodFrom);
-        setExportTo(periodTo);
-      } else if (viewMode === "daily") {
-        // Daily: default Du = current date, Au = current date (user can widen the range)
-        setExportFrom(date);
-        setExportTo(date);
-      }
-      // For weekly/monthly: keep the existing exportFrom/exportTo
-      setShowExportDlg(true);
+      return;
     }
-  };
 
-  const doExport = async () => {
     if (viewMode === "daily" && exportFrom !== exportTo) {
       // Date range export in daily mode: fetch period data then export
       setExportLoading(true);
@@ -3560,7 +3561,7 @@ export default function AttendanceShiftsPage() {
                       className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
                       Annuler
                     </button>
-                    <button onClick={doExport} disabled={selCols.length === 0 || exportLoading}
+                    <button onClick={doExport} disabled={(viewMode !== "period" && selCols.length === 0) || exportLoading}
                       className="flex items-center gap-2 px-5 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
                       <FileSpreadsheet className="h-4 w-4" />
                       {exportLoading ? "Chargement…" : "Télécharger"}
