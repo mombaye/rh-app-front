@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/useAuth";
 import {
   Clock, AlertTriangle, UserMinus, FileSpreadsheet, X, ChevronLeft, ChevronRight,
   Search, RefreshCw, Bell, Mail, XCircle, Send, Loader2, ChevronDown,
-  Check, Settings, CheckCircle, Lock, CalendarDays,
+  Check, Settings, CheckCircle, Lock, CalendarDays, Filter,
   TrendingUp, Pencil, Plus, Trash2, Upload, CalendarRange, ArrowLeftRight, ArrowRight,
   Table2,
 } from "lucide-react";
@@ -2752,19 +2752,17 @@ export default function AttendanceShiftsPage() {
               <input type="date" value={date} onChange={(e) => { setDate(e.target.value); }}
                 className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-camublue-900 focus:outline-none" />
             )}
-            {/* ── Bouton filtre période (ouvre modal) ── */}
-            {viewMode === "period" && (
-              <button onClick={() => setShowPeriodModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 text-sm font-semibold hover:bg-indigo-100 transition">
-                <CalendarRange className="h-4 w-4" />
-                <span className="hidden sm:inline">Période</span>
-                {periodFrom && periodTo && (
-                  <span className="text-[10px] font-bold bg-indigo-200/60 px-1.5 py-0.5 rounded-full hidden md:inline">
-                    {new Date(periodFrom + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })} → {new Date(periodTo + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
-                  </span>
-                )}
-              </button>
-            )}
+            {/* ── Bouton Filtrer (toujours visible, ouvre modal période) ── */}
+            <button onClick={() => setShowPeriodModal(true)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-semibold transition ${viewMode === "period" && periodFrom && periodTo ? "border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}>
+              <Filter className="h-4 w-4" />
+              <span className="hidden sm:inline">Filtrer</span>
+              {viewMode === "period" && periodFrom && periodTo && (
+                <span className="text-[10px] font-bold bg-indigo-200/60 px-1.5 py-0.5 rounded-full hidden md:inline">
+                  {new Date(periodFrom + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })} → {new Date(periodTo + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
+                </span>
+              )}
+            </button>
 
             {/* ── Search ── */}
             <div className="relative w-full sm:w-auto">
@@ -3321,7 +3319,7 @@ export default function AttendanceShiftsPage() {
                     Annuler
                   </button>
                   <button
-                    onClick={() => { setShowPeriodModal(false); fetchPeriodData(); }}
+                    onClick={() => { setShowPeriodModal(false); setViewMode("period"); fetchPeriodData(); }}
                     disabled={!periodFrom || !periodTo || periodFrom > periodTo}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-camublue-900 text-camublue-900 text-sm font-bold hover:bg-camublue-50 disabled:opacity-50 transition">
                     <Table2 className="h-4 w-4" />Afficher
