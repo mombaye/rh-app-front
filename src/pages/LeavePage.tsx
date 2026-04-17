@@ -725,12 +725,20 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                       )}
                                       {r.status === "APPROVED" && (
                                         r.is_ended ? (
-                                          <button
-                                            disabled
-                                            title="Congé terminé"
-                                            className="px-2.5 py-1 bg-gray-100 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed whitespace-nowrap flex items-center gap-1">
-                                            <CheckCircle2 className="h-3 w-3" /> Terminé
-                                          </button>
+                                          <div className="flex gap-1.5">
+                                            <button
+                                              disabled
+                                              title="Congé terminé"
+                                              className="px-2.5 py-1 bg-gray-100 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed whitespace-nowrap flex items-center gap-1">
+                                              <CheckCircle2 className="h-3 w-3" /> Terminé
+                                            </button>
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(r.id); }}
+                                              title="Supprimer ce congé terminé"
+                                              className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+                                              <Trash2 className="h-3 w-3" />
+                                            </button>
+                                          </div>
                                         ) : r.is_in_progress ? (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); setCancelInProgressRequest(r); }}
