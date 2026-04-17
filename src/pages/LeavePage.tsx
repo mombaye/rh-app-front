@@ -740,12 +740,20 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                             </button>
                                           </div>
                                         ) : r.is_in_progress ? (
-                                          <button
-                                            onClick={(e) => { e.stopPropagation(); setCancelInProgressRequest(r); }}
-                                            title="Annuler ce congé en cours"
-                                            className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
-                                            <X className="h-3 w-3" /> Annuler
-                                          </button>
+                                          <div className="flex gap-1.5">
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setCancelInProgressRequest(r); }}
+                                              title="Annuler ce congé en cours"
+                                              className="flex-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center justify-center gap-1">
+                                              <X className="h-3 w-3" /> Annuler
+                                            </button>
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(r.id); }}
+                                              title="Supprimer ce congé"
+                                              className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+                                              <Trash2 className="h-3 w-3" />
+                                            </button>
+                                          </div>
                                         ) : (
                                           <QuickRevokeBtn request={r} onDone={fetchAll} />
                                         )
@@ -765,6 +773,12 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                             onClick={(e) => { e.stopPropagation(); setRelaunchRequest(r); }}
                                             className="flex-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center justify-center gap-1">
                                             <Send className="h-3 w-3" /> Relancer
+                                          </button>
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(r.id); }}
+                                            title="Supprimer ce congé"
+                                            className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
+                                            <Trash2 className="h-3 w-3" />
                                           </button>
                                         </div>
                                       )}
