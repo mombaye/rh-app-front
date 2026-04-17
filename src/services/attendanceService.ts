@@ -235,47 +235,77 @@ export async function downloadShiftExportCSV(params: {
   date_to: string;
 }): Promise<void> {
   try {
-    console.log("Starting shifts export download...", params);
+    console.log("=== downloadShiftExportCSV START ===");
+    console.log("Params:", params);
 
-    const response = await api.get("/api/attendance/shifts/export/", {
-      params: {
-        date_from: params.date_from,
-        date_to: params.date_to,
-        export_format: "csv"
-      },
+    const requestUrl = "/api/attendance/shifts/export/";
+    const requestParams = {
+      date_from: params.date_from,
+      date_to: params.date_to,
+      export_format: "csv"
+    };
+
+    console.log("Request URL:", requestUrl);
+    console.log("Request params:", requestParams);
+
+    const response = await api.get(requestUrl, {
+      params: requestParams,
       responseType: "blob",
     });
 
-    console.log("Export response received:", response.status, response.data.size);
+    console.log("Response status:", response.status);
+    console.log("Response headers:", response.headers);
+    console.log("Response data type:", typeof response.data);
+    console.log("Response data size:", response.data.size);
 
-    if (!response.data || response.data.size === 0) {
-      throw new Error("Réponse vide du serveur");
+    if (!response.data) {
+      throw new Error("Response data is empty");
     }
 
-    // response.data est déjà un Blob, pas besoin de le wrapper
+    if (response.data.size === 0) {
+      throw new Error("Downloaded file is empty (0 bytes)");
+    }
+
     const blob = response.data as Blob;
+    console.log("Blob created, size:", blob.size, "type:", blob.type);
+
     const url = window.URL.createObjectURL(blob);
+    console.log("Object URL created:", url);
+
     const link = document.createElement("a");
     link.href = url;
     const filename = `shifts_export_${params.date_from}_to_${params.date_to}.txt`;
     link.setAttribute("download", filename);
 
-    console.log("Starting download of:", filename);
+    console.log("Link element created");
+    console.log("Download attribute set to:", filename);
 
     document.body.appendChild(link);
-    link.click();
+    console.log("Link appended to body");
 
-    // Cleanup après un court délai
+    link.click();
+    console.log("Link clicked, download should start");
+
     setTimeout(() => {
       if (link.parentNode) {
         document.body.removeChild(link);
+        console.log("Link removed from body");
       }
       window.URL.revokeObjectURL(url);
-    }, 200);
+      console.log("Object URL revoked");
+    }, 500);
 
-    console.log("Download initiated successfully");
+    console.log("=== downloadShiftExportCSV SUCCESS ===");
   } catch (error) {
-    console.error("Shifts export download failed:", error);
+    console.error("=== downloadShiftExportCSV ERROR ===");
+    console.error("Error type:", error instanceof Error ? error.constructor.name : typeof error);
+    console.error("Error message:", error instanceof Error ? error.message : String(error));
+    console.error("Full error:", error);
+
+    if (error instanceof Error && error.message.includes("Network")) {
+      console.error("Network error - check backend connectivity");
+    }
+
     throw error;
   }
 }

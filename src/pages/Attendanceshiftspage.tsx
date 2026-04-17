@@ -2633,18 +2633,40 @@ export default function AttendanceShiftsPage() {
     }
   };
 
-  const handleExport = () => {
-    // Sync export dates with current view filter
-    if (viewMode === "period") {
-      setExportFrom(periodFrom);
-      setExportTo(periodTo);
-    } else if (viewMode === "daily") {
-      // Daily: default Du = current date, Au = current date (user can widen the range)
+  const handleExport = async () => {
+    console.log("=== handleExport START ===");
+    console.log("viewMode:", viewMode);
+    console.log("periodFrom:", periodFrom);
+    console.log("periodTo:", periodTo);
+
+    // En mode Période: téléchargement DIRECT
+    if (viewMode === "period" && periodFrom && periodTo) {
+      console.log("Period mode detected, starting direct download...");
+      try {
+        setExportLoading(true);
+        console.log("Calling downloadShiftExportCSV with:", { periodFrom, periodTo });
+        await downloadShiftExportCSV({ date_from: periodFrom, date_to: periodTo });
+        console.log("Download completed successfully");
+        alert("✓ Fichier téléchargé avec succès!");
+      } catch (error) {
+        console.error("Export error:", error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        alert(`❌ Erreur: ${errorMsg}`);
+      } finally {
+        setExportLoading(false);
+      }
+      console.log("=== handleExport END ===");
+      return;
+    }
+
+    // Autres modes: ouvrir la modale
+    console.log("Non-period mode, opening export dialog...");
+    if (viewMode === "daily") {
       setExportFrom(date);
       setExportTo(date);
     }
-    // For weekly/monthly: keep the existing exportFrom/exportTo
     setShowExportDlg(true);
+    console.log("=== handleExport END ===");
   };
 
   const doExport = async () => {
