@@ -34,7 +34,7 @@ import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 // TYPES ET INTERFACES
 // ============================================================================
 
-type StatusFilter = "all" | "ok" | "absent" | "incomplete" | "anomaly" | "late" | "deficit" | "pending" | "replacement";
+type StatusFilter = "all" | "ok" | "absent" | "on_leave" | "on_mission" | "incomplete" | "anomaly" | "late" | "deficit";
 type MotifType = "absent" | "not_pointing";
 type AssignmentMap = Record<string, ShiftTeamKey | null>;
 type ViewMode = "daily" | "weekly" | "monthly" | "period";
@@ -143,15 +143,15 @@ const STATUS_CFG = {
 };
 
 const QUICK_FILTERS = [
-  { key: "all"        as StatusFilter, label: "Tous",         dotColor: "bg-slate-400",  activeText: "text-slate-800",   activeBg: "bg-slate-900",  activeDot: "bg-white"        },
-  { key: "ok"         as StatusFilter, label: "OK",           dotColor: "bg-emerald-400",activeText: "text-emerald-700", activeBg: "bg-emerald-50", activeDot: "bg-emerald-500"  },
-  { key: "absent"     as StatusFilter, label: "Absents",      dotColor: "bg-red-400",    activeText: "text-red-700",     activeBg: "bg-red-50",     activeDot: "bg-red-500"      },
-  { key: "late"       as StatusFilter, label: "Retards",      dotColor: "bg-orange-400", activeText: "text-orange-700",  activeBg: "bg-orange-50",  activeDot: "bg-orange-500"   },
-  { key: "incomplete" as StatusFilter, label: "Incomplets",   dotColor: "bg-amber-400",  activeText: "text-amber-800",   activeBg: "bg-amber-50",   activeDot: "bg-amber-500"    },
-  { key: "anomaly"    as StatusFilter, label: "Anomalies",    dotColor: "bg-violet-400", activeText: "text-violet-700",  activeBg: "bg-violet-50",  activeDot: "bg-violet-500"   },
-  { key: "deficit"    as StatusFilter, label: "Heures moins", dotColor: "bg-rose-400",   activeText: "text-rose-700",    activeBg: "bg-rose-50",    activeDot: "bg-rose-500"     },
-  { key: "pending"     as StatusFilter, label: "En attente",   dotColor: "bg-blue-400",   activeText: "text-blue-700",    activeBg: "bg-blue-50",     activeDot: "bg-blue-500"     },
-  { key: "replacement" as StatusFilter, label: "Remplaçants",  dotColor: "bg-purple-400", activeText: "text-purple-700",  activeBg: "bg-purple-50",  activeDot: "bg-purple-500"   },
+  { key: "all"       as StatusFilter, label: "Tous",         dotColor: "bg-slate-400",  activeText: "text-slate-800",   activeBg: "bg-slate-900", activeDot: "bg-white"         },
+  { key: "ok"        as StatusFilter, label: "OK",           dotColor: "bg-emerald-400",activeText: "text-emerald-700", activeBg: "bg-emerald-50",activeDot: "bg-emerald-500"   },
+  { key: "absent"    as StatusFilter, label: "Absents",      dotColor: "bg-red-400",    activeText: "text-red-700",     activeBg: "bg-red-50",    activeDot: "bg-red-500"       },
+  { key: "on_leave"  as StatusFilter, label: "En Congé",    dotColor: "bg-sky-400",    activeText: "text-sky-700",     activeBg: "bg-sky-50",    activeDot: "bg-sky-500"       },
+  { key: "on_mission"as StatusFilter, label: "En Mission",   dotColor: "bg-indigo-400", activeText: "text-indigo-700",  activeBg: "bg-indigo-50", activeDot: "bg-indigo-500"    },
+  { key: "late"      as StatusFilter, label: "Retards",      dotColor: "bg-orange-400", activeText: "text-orange-700",  activeBg: "bg-orange-50", activeDot: "bg-orange-500"    },
+  { key: "incomplete"as StatusFilter, label: "Incomplets",   dotColor: "bg-amber-400",  activeText: "text-amber-800",   activeBg: "bg-amber-50",  activeDot: "bg-amber-500"     },
+  { key: "anomaly"   as StatusFilter, label: "Anomalies",    dotColor: "bg-violet-400", activeText: "text-violet-700",  activeBg: "bg-violet-50", activeDot: "bg-violet-500"    },
+  { key: "deficit"   as StatusFilter, label: "Heures moins", dotColor: "bg-rose-400",   activeText: "text-rose-700",    activeBg: "bg-rose-50",   activeDot: "bg-rose-500"      },
 ];
 
 const DAYS_FR = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
@@ -2420,8 +2420,10 @@ export default function AttendanceShiftsPage() {
       if (statusFilter === "late") return isLateRecord(r);
       if (statusFilter === "deficit") return r.deficit_minutes > 0;
       if (statusFilter === "absent") return r.status === "absent" && !r.not_scheduled_rest;
-      if (statusFilter === "pending") return r.status === "pending" || r.is_shift_pending;
-      if (statusFilter === "replacement") return r.is_replacement;
+      if (statusFilter === "on_leave") return r.status === "on_leave";
+      if (statusFilter === "on_mission") return r.status === "on_mission";
+      if (statusFilter === "incomplete") return r.status === "incomplete";
+      if (statusFilter === "anomaly") return r.status === "anomaly";
       if (statusFilter !== "all") return r.status === statusFilter;
       return true;
     });
