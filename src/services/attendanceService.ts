@@ -193,9 +193,7 @@ export async function sendAttendanceAlert(params: {
 
 // ─── Export des Shifts sur une période ──────────────────────────────────────
 
-export interface ShiftExportRecord {
-  date: string;
-  shift: string;
+export interface ShiftEmployee {
   employee_name: string;
   matricule: string;
   in_time: string;
@@ -203,10 +201,29 @@ export interface ShiftExportRecord {
   status: string;
 }
 
+export interface ShiftGroup {
+  shift_type: string;
+  shift_label: string;
+  employees: ShiftEmployee[];
+}
+
+export interface ShiftDateEntry {
+  date: string;
+  weekday: string;
+  shifts: ShiftGroup[];
+}
+
+export interface ShiftExportResponse {
+  date_from: string;
+  date_to: string;
+  total_dates: number;
+  dates: ShiftDateEntry[];
+}
+
 export async function getShiftExportData(params: {
   date_from: string;
   date_to: string;
-}): Promise<{ date_from: string; date_to: string; total_records: number; records: ShiftExportRecord[] }> {
+}): Promise<ShiftExportResponse> {
   const { data } = await api.get("/api/attendance/shifts/export/", {
     params: { date_from: params.date_from, date_to: params.date_to, format: "json" },
   });
