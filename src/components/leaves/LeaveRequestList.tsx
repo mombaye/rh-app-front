@@ -55,6 +55,25 @@ function isConsumed(endDate: string, status: LeaveStatus): boolean {
   return end < today;
 }
 
+// Vérifie si la date de fin du congé est passée
+function isLeaveEnded(endDate: string): boolean {
+  if (!endDate) return false;
+  const end = new Date(endDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return end < today;
+}
+
+// Vérifie si le congé est actuellement en cours (début <= aujourd'hui <= fin)
+function isLeaveInProgress(startDate: string, endDate: string): boolean {
+  if (!startDate || !endDate) return false;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return start <= today && today <= end;
+}
+
 // ─── Composant ────────────────────────────────────────────────────────────────
 export default function LeaveRequestList({
   statusFilter = "ALL",
@@ -351,14 +370,24 @@ export default function LeaveRequestList({
                             </>
                           )}
                           {r.status === "APPROVED" && (
-                            <button
-                              onClick={() => handleCancel(r.id)}
-                              disabled={actionLoading}
-                              title="Annuler"
-                              className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-semibold rounded-lg transition disabled:opacity-50 whitespace-nowrap"
-                            >
-                              Annuler
-                            </button>
+                            isLeaveEnded(r.end_date) ? (
+                              <button
+                                disabled={true}
+                                title="Congé terminé"
+                                className="px-3 py-1 bg-gray-100 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed whitespace-nowrap"
+                              >
+                                ✓ Terminé
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleCancel(r.id)}
+                                disabled={actionLoading || !isLeaveInProgress(r.start_date, r.end_date)}
+                                title={isLeaveInProgress(r.start_date, r.end_date) ? "Révoquer ce congé" : "Impossible de révoquer un congé passé"}
+                                className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                              >
+                                Révoquer
+                              </button>
+                            )
                           )}
                         </div>
                       </td>
