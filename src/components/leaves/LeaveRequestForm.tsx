@@ -126,9 +126,15 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   // Auto-calculate days + check holidays
   useEffect(() => {
     if (form.start_date && form.end_date) {
-      const start = new Date(form.start_date), end = new Date(form.end_date);
+      // Parse dates correctly in local timezone to avoid UTC issues
+      const [sy, sm, sd] = form.start_date.split("-").map(Number);
+      const [ey, em, ed] = form.end_date.split("-").map(Number);
+      const start = new Date(sy, sm - 1, sd);
+      const end = new Date(ey, em - 1, ed);
+
       if (end >= start) {
-        const totalDiff = Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1;
+        // Calculate total calendar days (inclusive of both start and end dates)
+        const totalDiff = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
         setForm((f) => ({ ...f, days: String(totalDiff) }));
 
         setCheckingDays(true);
