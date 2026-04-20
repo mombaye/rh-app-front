@@ -2287,7 +2287,7 @@ export default function AttendanceShiftsPage() {
     }
   }, [periodFrom, periodTo, periodTeam, periodMatricule, periodStatus]);
 
-  // ── Valider période + exporter Excel ──────────────────────────────────────
+  // ── Valider période + exporter Excel (format vertical groupé par date/shift) ─
   const handlePeriodExport = useCallback(async () => {
     if (!periodFrom || !periodTo) return;
     setShowPeriodModal(false);
@@ -2303,37 +2303,75 @@ export default function AttendanceShiftsPage() {
       setPeriodData(res);
       setPeriodPage(1);
 
-      // Export to Excel
-      const STATUS_LABELS: Record<string, string> = {
-        ok: "Présent", absent: "Absent", incomplete: "Incomplet",
-        anomaly: "Anomalie", not_working: "Pas de service",
-        on_leave: "En congé", on_mission: "En mission",
+      // Mapping shift_team → libellé demandé ("Shift Matin / Midi / Soir")
+      const SHIFT_LABELS: Record<string, string> = {
+        jour:  "Shift Matin",
+        soir1: "Shift Midi",
+        soir2: "Shift Soir",
       };
-      const ALL: Record<ShiftPeriodCol, (r: ShiftRecord, d: { date: string; weekday: number; weekday_label: string }) => any> = {
-        "Date":              (_r, d) => new Date(d.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
-        "Jour":              (_r, d) => d.weekday_label,
-        "Matricule":         (r)     => r.matricule || "—",
-        "Nom":               (r)     => r.full_name,
-        "Équipe":            (r)     => r.shift_team_label || r.shift_team || "—",
-        "Statut":            (r)     => STATUS_LABELS[r.status] ?? r.status,
-        "Retard":            (r)     => r.late_minutes > 0 ? `${r.late_label ?? r.late_minutes + " min"}` : "—",
-        "Entrée":            (r)     => r.shift_team === "soir2" ? (r.out_time ? formatTime(r.out_time) : "—") : (r.in_time ? formatTime(r.in_time) : "—"),
-        "Sortie":            (r)     => r.shift_team === "soir2" ? (r.in_time ? formatTime(r.in_time) : "—") : (r.out_time ? formatTime(r.out_time) : "—"),
-        "Heures travaillées":(r)     => r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
-        "Remplacé par":      (r)     => r.replaced_by ?? "—",
-        "Remplaçant de":     (r)     => r.replaces_employee ?? "—",
-      };
-      const rows: Record<string, any>[] = [];
+      const SHIFT_ORDER: ShiftTeamKey[] = ["jour", "soir1", "soir2"];
+
+      // Une feuille Excel par date — chaque date est strictement isolée
+      const wb = XLSX.utils.book_new();
+      let hasAny = false;
+      const usedSheetNames = new Set<string>();
+
       for (const day of res.dates) {
-        if (!day.has_planning) continue;
-        for (const rec of day.records) {
-          rows.push(Object.fromEntries(
-            [...SHIFT_PERIOD_COLS].map((k) => [k, ALL[k](rec, day)])
-          ));
+        if (!day.has_planning || day.records.length === 0) continue;
+
+        const dateLabel = new Date(day.date + "T00:00:00").toLocaleDateString("fr-FR", {
+          weekday: "long", day: "2-digit", month: "long", year: "numeric",
+        });
+
+        const aoa: (string | number | null)[][] = [];
+        aoa.push([`Date : ${dateLabel}`]);
+        aoa.push([]);
+
+        let sheetHasContent = false;
+        for (const shiftKey of SHIFT_ORDER) {
+          const shiftRecs = day.records.filter((r) => r.shift_team === shiftKey);
+          if (shiftRecs.length === 0) continue;
+
+          sheetHasContent = true;
+          aoa.push([SHIFT_LABELS[shiftKey] ?? shiftKey]);
+          aoa.push(["Matricule", "Nom", "Entrée", "Sortie"]);
+
+          for (const r of shiftRecs) {
+            // Shift nuit (22h-08h) : entrée réelle = out_time, sortie réelle = in_time
+            const entry = r.shift_team === "soir2"
+              ? (r.out_time ? formatTime(r.out_time) : "—")
+              : (r.in_time  ? formatTime(r.in_time)  : "—");
+            const exit  = r.shift_team === "soir2"
+              ? (r.in_time  ? formatTime(r.in_time)  : "—")
+              : (r.out_time ? formatTime(r.out_time) : "—");
+            aoa.push([r.matricule || "—", r.full_name, entry, exit]);
+          }
+          aoa.push([]);
         }
-        if (day.records.length > 0) rows.push({});
+
+        if (!sheetHasContent) continue;
+        hasAny = true;
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws["!cols"] = [{ wch: 14 }, { wch: 36 }, { wch: 10 }, { wch: 10 }];
+
+        // Nom de feuille Excel : max 31 char, pas de : \ / ? * [ ]
+        let sheetName = day.date.replace(/[:\\/?*\[\]]/g, "-").slice(0, 31);
+        let idx = 2;
+        while (usedSheetNames.has(sheetName)) {
+          sheetName = `${day.date.slice(0, 28)}_${idx++}`;
+        }
+        usedSheetNames.add(sheetName);
+
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
       }
-      exportXLSX(`shift_periode_${periodFrom}_${periodTo}`, rows);
+
+      if (!hasAny) {
+        alert("Aucun pointage à exporter sur cette période.");
+        return;
+      }
+
+      XLSX.writeFile(wb, `shift_periode_${periodFrom}_${periodTo}_${todayISO()}.xlsx`);
     } catch (e) {
       console.error("handlePeriodExport error:", e);
       alert("Erreur lors de la récupération des données. Veuillez réessayer.");
