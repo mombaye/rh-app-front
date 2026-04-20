@@ -3542,14 +3542,13 @@ export default function AttendanceShiftsPage() {
               : isDailyMode
               ? (v: ShiftDailyCol[]) => setExportDailyCols(v)
               : (v: ShiftSummCol[])  => setExportSummaryCols(v);
-            // Only show departments present in shift records (not all company departments)
+            // Parcourir uniquement les employés définis comme shift dans le planning
+            // et utiliser le service défini sur leur fiche Employé
             const shiftDeptSet = new Set<string>();
-            allRecords.forEach(r => { if (r.department && r.department !== "—") shiftDeptSet.add(r.department.toUpperCase()); });
-            flatPeriodRecords.forEach(r => { if (r.department) shiftDeptSet.add(r.department.toUpperCase()); });
-            // Fallback: use departmentMap for records that have shift team assignments
-            allRecords.forEach(r => {
-              const d = departmentMap.get(r.matricule ?? "");
-              if (d) shiftDeptSet.add(d.toUpperCase());
+            Object.entries(assignments).forEach(([matricule, team]) => {
+              if (!team) return;
+              const dept = departmentMap.get(matricule);
+              if (dept) shiftDeptSet.add(dept.toUpperCase());
             });
             const allDepts = Array.from(shiftDeptSet).sort();
             const filteredDepts = exportDeptSearch.trim()
