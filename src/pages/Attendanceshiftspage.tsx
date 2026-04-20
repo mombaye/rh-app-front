@@ -2311,9 +2311,10 @@ export default function AttendanceShiftsPage() {
       };
       const SHIFT_ORDER: ShiftTeamKey[] = ["jour", "soir1", "soir2"];
 
-      // Construction ligne par ligne : Date → (Shift → Matricule/Nom/Entrée/Sortie)
-      const aoa: (string | number | null)[][] = [];
+      // Une feuille Excel par date — chaque date est strictement isolée
+      const wb = XLSX.utils.book_new();
       let hasAny = false;
+      const usedSheetNames = new Set<string>();
 
       for (const day of res.dates) {
         if (!day.has_planning || day.records.length === 0) continue;
@@ -2321,14 +2322,17 @@ export default function AttendanceShiftsPage() {
         const dateLabel = new Date(day.date + "T00:00:00").toLocaleDateString("fr-FR", {
           weekday: "long", day: "2-digit", month: "long", year: "numeric",
         });
+
+        const aoa: (string | number | null)[][] = [];
         aoa.push([`Date : ${dateLabel}`]);
         aoa.push([]);
 
+        let sheetHasContent = false;
         for (const shiftKey of SHIFT_ORDER) {
           const shiftRecs = day.records.filter((r) => r.shift_team === shiftKey);
           if (shiftRecs.length === 0) continue;
 
-          hasAny = true;
+          sheetHasContent = true;
           aoa.push([SHIFT_LABELS[shiftKey] ?? shiftKey]);
           aoa.push(["Matricule", "Nom", "Entrée", "Sortie"]);
 
@@ -2344,7 +2348,22 @@ export default function AttendanceShiftsPage() {
           }
           aoa.push([]);
         }
-        aoa.push([]);
+
+        if (!sheetHasContent) continue;
+        hasAny = true;
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws["!cols"] = [{ wch: 14 }, { wch: 36 }, { wch: 10 }, { wch: 10 }];
+
+        // Nom de feuille Excel : max 31 char, pas de : \ / ? * [ ]
+        let sheetName = day.date.replace(/[:\\/?*\[\]]/g, "-").slice(0, 31);
+        let idx = 2;
+        while (usedSheetNames.has(sheetName)) {
+          sheetName = `${day.date.slice(0, 28)}_${idx++}`;
+        }
+        usedSheetNames.add(sheetName);
+
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
       }
 
       if (!hasAny) {
@@ -2352,10 +2371,6 @@ export default function AttendanceShiftsPage() {
         return;
       }
 
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws["!cols"] = [{ wch: 14 }, { wch: 36 }, { wch: 10 }, { wch: 10 }];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Pointages Shifts");
       XLSX.writeFile(wb, `shift_periode_${periodFrom}_${periodTo}_${todayISO()}.xlsx`);
     } catch (e) {
       console.error("handlePeriodExport error:", e);
