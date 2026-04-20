@@ -252,6 +252,15 @@ export function parseNOCPlanningSheet(
       // Filtrer les cellules qui contiennent en fait un libellé de shift
       // (arrive si une ligne a le label dans plusieurs colonnes)
       if (detectShiftLabel(name) !== null) continue;
+      // Filtrer les cellules qui ne sont visiblement pas des noms :
+      //   - valeurs purement numériques (ex. "12", "14" — index de ligne)
+      //   - chaînes trop courtes ou ponctuation seule
+      //   - tokens techniques (off, -, x, n/a, repos, conge, cp, cm, rtt)
+      if (/^\d+([,\.]\d+)?$/.test(name)) continue;
+      if (name.length < 3) continue;
+      if (!/[a-zA-ZÀ-ÿ]/.test(name)) continue;
+      const lowered = name.toLowerCase();
+      if (["off", "n/a", "na", "repos", "rest", "conge", "congé", "cp", "cm", "rtt", "x", "xx", "xxx"].includes(lowered)) continue;
       const cellColor = getCellBgHex(ws, row, c);
       entries.push({
         date,
