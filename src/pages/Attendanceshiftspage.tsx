@@ -3542,12 +3542,18 @@ export default function AttendanceShiftsPage() {
               : isDailyMode
               ? (v: ShiftDailyCol[]) => setExportDailyCols(v)
               : (v: ShiftSummCol[])  => setExportSummaryCols(v);
-            // Parcourir uniquement les employés définis comme shift dans le planning
-            // et utiliser le service défini sur leur fiche Employé
+            // Collecter les matricules des employés définis comme shift :
+            // - via la map d'assignations (planning remonté par l'API Employee.shift_team)
+            // - via les enregistrements shift affichés (allRecords / flatPeriodRecords)
+            // Puis récupérer le service défini sur leur fiche Employé (departmentMap).
+            const shiftMatricules = new Set<string>();
+            Object.entries(assignments).forEach(([m, team]) => { if (team) shiftMatricules.add(m); });
+            allRecords.forEach(r => { if (r.matricule) shiftMatricules.add(r.matricule); });
+            flatPeriodRecords.forEach(r => { if (r.matricule) shiftMatricules.add(r.matricule); });
+
             const shiftDeptSet = new Set<string>();
-            Object.entries(assignments).forEach(([matricule, team]) => {
-              if (!team) return;
-              const dept = departmentMap.get(matricule);
+            shiftMatricules.forEach(m => {
+              const dept = departmentMap.get(m);
               if (dept) shiftDeptSet.add(dept.toUpperCase());
             });
             const allDepts = Array.from(shiftDeptSet).sort();
