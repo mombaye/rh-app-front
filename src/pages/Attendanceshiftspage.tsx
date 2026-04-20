@@ -2133,6 +2133,7 @@ export default function AttendanceShiftsPage() {
   const [exportTo,         setExportTo]         = useState(todayStr);
   const [exportDepts,      setExportDepts]      = useState<string[]>([]);
   const [exportDeptSearch, setExportDeptSearch] = useState("");
+  const [planningMatricules, setPlanningMatricules] = useState<Set<string>>(new Set());
   const [periodData,       setPeriodData]       = useState<ShiftPeriodStatsResponse | null>(null);
   const [periodLoading,    setPeriodLoading]    = useState(false);
   const [periodTeam,       setPeriodTeam]       = useState<ShiftTeamKey | null>(null);
@@ -2248,6 +2249,20 @@ export default function AttendanceShiftsPage() {
       setAssignments((prev) => ({ ...apiAssignments, ...prev }));
     }).catch(console.error);
   }, []);
+
+  // Charger les matricules du planning shift pour la plage d'export
+  // (seuls les employés planifiés sur cette période alimentent le filtre Département).
+  useEffect(() => {
+    if (!showExportDlg || !exportFrom || !exportTo) return;
+    let cancelled = false;
+    getShiftPlanning(exportFrom, exportTo).then(entries => {
+      if (cancelled) return;
+      const mats = new Set<string>();
+      entries.forEach(e => { if (e.employee_matricule) mats.add(e.employee_matricule); });
+      setPlanningMatricules(mats);
+    }).catch(() => { if (!cancelled) setPlanningMatricules(new Set()); });
+    return () => { cancelled = true; };
+  }, [showExportDlg, exportFrom, exportTo]);
 
   const effectiveSchedule: WorkSchedulePreset = useMemo(() => {
     if (activeSchedule && isPeriodActive(activeSchedule)) return activeSchedule;
@@ -3542,14 +3557,17 @@ export default function AttendanceShiftsPage() {
               : isDailyMode
               ? (v: ShiftDailyCol[]) => setExportDailyCols(v)
               : (v: ShiftSummCol[])  => setExportSummaryCols(v);
-            // Collecter les matricules des employés définis comme shift :
-            // - via la map d'assignations (planning remonté par l'API Employee.shift_team)
-            // - via les enregistrements shift affichés (allRecords / flatPeriodRecords)
-            // Puis récupérer le service défini sur leur fiche Employé (departmentMap).
-            const shiftMatricules = new Set<string>();
-            Object.entries(assignments).forEach(([m, team]) => { if (team) shiftMatricules.add(m); });
-            allRecords.forEach(r => { if (r.matricule) shiftMatricules.add(r.matricule); });
-            flatPeriodRecords.forEach(r => { if (r.matricule) shiftMatricules.add(r.matricule); });
+            // Parcourir les employés définis comme shift dans le planning
+            // (ShiftPlanningEntry) pour la plage d'export, puis lire le service
+            // défini sur leur fiche Employé (departmentMap) — ainsi seuls les
+            // départements des employés shift planifiés alimentent le filtre.
+            // Repli sur assignments + records si le planning n'est pas encore chargé.
+            const shiftMatricules = new Set<string>(planningMatricules);
+            if (shiftMatricules.size === 0) {
+              Object.entries(assignments).forEach(([m, team]) => { if (team) shiftMatricules.add(m); });
+              allRecords.forEach(r => { if (r.matricule) shiftMatricules.add(r.matricule); });
+              flatPeriodRecords.forEach(r => { if (r.matricule) shiftMatricules.add(r.matricule); });
+            }
 
             const shiftDeptSet = new Set<string>();
             shiftMatricules.forEach(m => {
