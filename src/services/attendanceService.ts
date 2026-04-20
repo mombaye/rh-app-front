@@ -115,7 +115,10 @@ export async function getShiftPlanning(dateFrom: string, dateTo: string): Promis
   return data;
 }
 
-export async function uploadShiftPlanning(payload: ShiftPlanningUpload): Promise<{
+export async function uploadShiftPlanning(
+  payload: ShiftPlanningUpload,
+  onUploadProgress?: (progress: { loaded: number; total?: number; percent: number }) => void,
+): Promise<{
   created: number;
   ok: boolean;
   activated?: number;
@@ -126,7 +129,38 @@ export async function uploadShiftPlanning(payload: ShiftPlanningUpload): Promise
   skipped_invalid_date?: number;
   skipped_invalid_shift?: number;
 }> {
-  const { data } = await api.post("/api/attendance/shift-planning/", payload);
+  const { data } = await api.post("/api/attendance/shift-planning/", payload, {
+    onUploadProgress: (evt) => {
+      if (!onUploadProgress) return;
+      const total = evt.total ?? (evt as any).event?.total;
+      const percent = total ? Math.round((evt.loaded / total) * 100) : 0;
+      onUploadProgress({ loaded: evt.loaded, total, percent });
+    },
+  });
+  return data;
+}
+
+export interface ShiftPlanningStatus {
+  has_planning:        boolean;
+  is_active:           boolean;
+  total_entries:       number;
+  date_min:            string | null;
+  date_max:            string | null;
+  total_planned:       number;
+  resolved_matricules: number;
+  unresolved_names:    number;
+  active_count:        number;
+  pending_count:       number;
+}
+
+export async function getShiftPlanningStatus(params?: {
+  dateFrom?: string;
+  dateTo?:   string;
+}): Promise<ShiftPlanningStatus> {
+  const query: Record<string, string> = {};
+  if (params?.dateFrom) query.date_from = params.dateFrom;
+  if (params?.dateTo)   query.date_to   = params.dateTo;
+  const { data } = await api.get("/api/attendance/shift-planning/status/", { params: query });
   return data;
 }
 

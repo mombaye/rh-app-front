@@ -19,8 +19,9 @@ import AppLayout from "@/layouts/AppLayout";
 import {
   getShiftPlanning, uploadShiftPlanning, addSinglePlanningEntry,
   deleteSinglePlanningEntry, moveShiftPlanningEntry, activateShiftPlanning,
+  getShiftPlanningStatus,
 } from "@/services/attendanceService";
-import type { PlanningEntry, ShiftPlanningUpload } from "@/services/attendanceService";
+import type { PlanningEntry, ShiftPlanningUpload, ShiftPlanningStatus } from "@/services/attendanceService";
 import { getEmployees } from "@/services/employeeService";
 import type { Employee } from "@/types/employee";
 import toast from "react-hot-toast";
@@ -109,6 +110,15 @@ export default function PlanningPage() {
   const [importOpen, setImportOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Progression de l'import Excel (barre de progression)
+  type ImportPhase = "idle" | "reading" | "parsing" | "uploading" | "processing" | "done" | "error";
+  const [importPhase, setImportPhase] = useState<ImportPhase>("idle");
+  const [importPercent, setImportPercent] = useState(0);
+  const [importFilename, setImportFilename] = useState<string>("");
+
+  // Indicateur d'activation persistant (state serveur - survit au reload)
+  const [planningStatus, setPlanningStatus] = useState<ShiftPlanningStatus | null>(null);
+
   // Activer planning (bascule SHIFT)
   const [activateOpen, setActivateOpen] = useState(false);
   const [activating, setActivating] = useState(false);
@@ -134,18 +144,29 @@ export default function PlanningPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, emps] = await Promise.all([
+      const [data, emps, status] = await Promise.all([
         getShiftPlanning(weekDates[0], weekDates[6]),
         getEmployees({ status: "ACTIVE" }),
+        getShiftPlanningStatus().catch(() => null),
       ]);
       setEntries(data);
       setEmployees(emps);
+      if (status) setPlanningStatus(status);
     } catch {
       toast.error("Erreur lors du chargement du planning");
     } finally {
       setLoading(false);
     }
   }, [weekDates]);
+
+  const refreshPlanningStatus = useCallback(async () => {
+    try {
+      const status = await getShiftPlanningStatus();
+      setPlanningStatus(status);
+    } catch {
+      // silencieux
+    }
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -407,77 +428,123 @@ export default function PlanningPage() {
     }
   };
 
-  // ── Import Excel ──────────────────────────────────────────────────────────
+  // ── Import Excel (avec barre de progression par phases) ──────────────────
   const handleFileImport = async (file: File) => {
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const { entries: allEntries, sheets } = parseNOCPlanningExcel(ev.target!.result as ArrayBuffer);
-        if (!allEntries.length) {
-          const totalBlocks = sheets.reduce((a, s) => a + (s.blocksDetected ?? 0), 0);
-          const totalShifts = sheets.reduce((a, s) => a + (s.shiftSectionsDetected ?? 0), 0);
-          if (totalBlocks === 0) {
-            toast.error("Aucun en-tête de dates détecté. Vérifiez que la ligne SHIFT ou une ligne contenant au moins 3 dates est présente.");
-          } else if (totalShifts === 0) {
-            toast.error("Dates détectées mais aucune section de shift (08H-16H / 16H-22H / 22H-08H). Vérifiez les libellés des shifts.");
-          } else {
-            toast.error("Aucun employé détecté sous les sections de shift. Vérifiez que les noms sont bien en dessous des dates.");
-          }
-          return;
+    setImportFilename(file.name);
+    setImportPhase("reading");
+    setImportPercent(0);
+
+    // Phase 1 : lecture du fichier (avec progress reader natif)
+    const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onprogress = (ev) => {
+        if (ev.lengthComputable) {
+          const pct = Math.min(30, Math.round((ev.loaded / ev.total) * 30));
+          setImportPercent(pct);
         }
-        const batchId = `import_${Date.now()}`;
-        const payload: ShiftPlanningUpload = { batch_id: batchId, entries: allEntries };
-        const res = await uploadShiftPlanning(payload);
+      };
+      reader.onload   = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror  = () => reject(reader.error ?? new Error("read error"));
+      reader.readAsArrayBuffer(file);
+    }).catch(() => null);
 
-        // Toast principal : nombre d'entrées réellement créées en base + plage
-        const created = res.created ?? allEntries.length;
-        const rangeLabel = res.date_min && res.date_max
-          ? ` (${res.date_min} → ${res.date_max})`
-          : "";
-        toast.success(`${created} entrée${created > 1 ? "s" : ""} importée${created > 1 ? "s" : ""}${rangeLabel}`);
+    if (!buffer) {
+      setImportPhase("error");
+      toast.error("Erreur lors de la lecture du fichier");
+      return;
+    }
 
-        // Diagnostic : entrées rejetées par le backend
-        const rejected = (res.skipped_invalid_date ?? 0) + (res.skipped_invalid_shift ?? 0);
-        if (rejected > 0) {
-          toast.error(`${rejected} entrée${rejected > 1 ? "s" : ""} rejetée${rejected > 1 ? "s" : ""} (dates ou shifts invalides)`);
+    try {
+      // Phase 2 : parsing Excel (CPU intensif — laisser le navigateur respirer)
+      setImportPhase("parsing");
+      setImportPercent(35);
+      await new Promise<void>(r => setTimeout(r, 10)); // force re-render avant le parse bloquant
+
+      const { entries: allEntries, sheets } = parseNOCPlanningExcel(buffer);
+      setImportPercent(50);
+
+      if (!allEntries.length) {
+        setImportPhase("error");
+        const totalBlocks = sheets.reduce((a, s) => a + (s.blocksDetected ?? 0), 0);
+        const totalShifts = sheets.reduce((a, s) => a + (s.shiftSectionsDetected ?? 0), 0);
+        if (totalBlocks === 0) {
+          toast.error("Aucun en-tête de dates détecté. Vérifiez que la ligne SHIFT ou une ligne contenant au moins 3 dates est présente.");
+        } else if (totalShifts === 0) {
+          toast.error("Dates détectées mais aucune section de shift (08H-16H / 16H-22H / 22H-08H). Vérifiez les libellés des shifts.");
+        } else {
+          toast.error("Aucun employé détecté sous les sections de shift. Vérifiez que les noms sont bien en dessous des dates.");
         }
-
-        // Diagnostic : matricules non résolus (noms absents de la base employés)
-        const unresolvedCount = res.unresolved_names?.length ?? 0;
-        if (unresolvedCount > 0) {
-          toast(`${unresolvedCount} nom${unresolvedCount > 1 ? "s" : ""} sans matricule détecté${unresolvedCount > 1 ? "s" : ""}`, { icon: "⚠️" });
-        }
-
-        // Activation automatique post-import
-        if ((res.activated ?? 0) > 0) {
-          toast.success(`${res.activated} employé${res.activated! > 1 ? "s" : ""} activé${res.activated! > 1 ? "s" : ""} en shift`);
-        }
-
-        setImportOpen(false);
-
-        // Naviguer automatiquement vers la semaine du premier import
-        // si la plage importée ne recouvre pas la semaine affichée —
-        // évite d'avoir une grille vide alors que des données existent.
-        if (res.date_min) {
-          const minDate = new Date(res.date_min + "T00:00:00");
-          const importedWeekStart = mondayOf(minDate);
-          const currentWeekStart = weekStart;
-          const overlapsCurrent =
-            res.date_max &&
-            res.date_max >= weekDates[0] &&
-            res.date_min <= weekDates[6];
-          if (!overlapsCurrent && importedWeekStart.getTime() !== currentWeekStart.getTime()) {
-            setWeekStart(importedWeekStart);
-            return; // useEffect sur weekStart relancera load()
-          }
-        }
-
-        await load();
-      } catch {
-        toast.error("Erreur lors de l'import du fichier");
+        return;
       }
-    };
-    reader.readAsArrayBuffer(file);
+
+      // Phase 3 : upload au serveur avec suivi de progression réel (axios)
+      setImportPhase("uploading");
+      const batchId = `import_${Date.now()}`;
+      const payload: ShiftPlanningUpload = { batch_id: batchId, entries: allEntries };
+      const res = await uploadShiftPlanning(payload, ({ percent }) => {
+        // Upload occupe la plage 50 → 90 %
+        setImportPercent(50 + Math.round((Math.min(percent, 100) * 40) / 100));
+      });
+
+      // Phase 4 : traitement côté serveur terminé
+      setImportPhase("processing");
+      setImportPercent(95);
+
+      // Toast principal : nombre d'entrées réellement créées en base + plage
+      const created = res.created ?? allEntries.length;
+      const rangeLabel = res.date_min && res.date_max
+        ? ` (${res.date_min} → ${res.date_max})`
+        : "";
+      toast.success(`${created} entrée${created > 1 ? "s" : ""} importée${created > 1 ? "s" : ""}${rangeLabel}`);
+
+      // Diagnostic : entrées rejetées par le backend
+      const rejected = (res.skipped_invalid_date ?? 0) + (res.skipped_invalid_shift ?? 0);
+      if (rejected > 0) {
+        toast.error(`${rejected} entrée${rejected > 1 ? "s" : ""} rejetée${rejected > 1 ? "s" : ""} (dates ou shifts invalides)`);
+      }
+
+      // Diagnostic : matricules non résolus (noms absents de la base employés)
+      const unresolvedCount = res.unresolved_names?.length ?? 0;
+      if (unresolvedCount > 0) {
+        toast(`${unresolvedCount} nom${unresolvedCount > 1 ? "s" : ""} sans matricule détecté${unresolvedCount > 1 ? "s" : ""}`, { icon: "⚠️" });
+      }
+
+      // Activation automatique post-import
+      if ((res.activated ?? 0) > 0) {
+        toast.success(`${res.activated} employé${res.activated! > 1 ? "s" : ""} activé${res.activated! > 1 ? "s" : ""} en shift`);
+      }
+
+      setImportPercent(100);
+      setImportPhase("done");
+      setTimeout(() => {
+        setImportOpen(false);
+        setImportPhase("idle");
+        setImportPercent(0);
+        setImportFilename("");
+      }, 700);
+
+      // Naviguer automatiquement vers la semaine du premier import
+      // si la plage importée ne recouvre pas la semaine affichée —
+      // évite d'avoir une grille vide alors que des données existent.
+      if (res.date_min) {
+        const minDate = new Date(res.date_min + "T00:00:00");
+        const importedWeekStart = mondayOf(minDate);
+        const currentWeekStart = weekStart;
+        const overlapsCurrent =
+          res.date_max &&
+          res.date_max >= weekDates[0] &&
+          res.date_min <= weekDates[6];
+        if (!overlapsCurrent && importedWeekStart.getTime() !== currentWeekStart.getTime()) {
+          setWeekStart(importedWeekStart);
+          return; // useEffect sur weekStart relancera load()
+        }
+      }
+
+      await load();
+    } catch {
+      setImportPhase("error");
+      toast.error("Erreur lors de l'import du fichier");
+    }
   };
 
   // ── Activer planning : bascule tous les employés planifiés en SHIFT ──────
@@ -509,6 +576,8 @@ export default function PlanningPage() {
       if ((res.missing_matricules?.length ?? 0) > 0) {
         toast(`${res.missing_matricules!.length} matricule(s) planifié(s) introuvable(s) en base`, { icon: "⚠️" });
       }
+      // Rafraîchir l'indicateur persistant (survit au reload)
+      await refreshPlanningStatus();
     } catch {
       toast.error("Erreur lors de l'activation du planning");
     } finally {
@@ -530,6 +599,40 @@ export default function PlanningPage() {
             <p className="text-sm text-slate-400 mt-0.5">
               Planification des shifts — glisser-déposer pour modifier
             </p>
+            {planningStatus?.has_planning && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                    planningStatus.is_active
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : planningStatus.active_count > 0
+                        ? "bg-amber-50 text-amber-700 border border-amber-200"
+                        : "bg-slate-100 text-slate-600 border border-slate-200"
+                  }`}
+                  title="Cet etat persiste apres rechargement : c'est le planning utilise pour les pointages."
+                >
+                  <Zap size={10} />
+                  {planningStatus.is_active
+                    ? `Planning actif — ${planningStatus.active_count} employe${planningStatus.active_count > 1 ? "s" : ""}`
+                    : planningStatus.active_count > 0
+                      ? `Planning partiel — ${planningStatus.active_count}/${planningStatus.total_planned} actifs`
+                      : `Planning importe — ${planningStatus.total_planned} a activer`}
+                </span>
+                {planningStatus.date_min && planningStatus.date_max && (
+                  <span className="text-[11px] text-slate-400">
+                    {planningStatus.date_min} → {planningStatus.date_max}
+                  </span>
+                )}
+                {planningStatus.pending_count > 0 && (
+                  <span
+                    className="text-[11px] text-amber-600 font-medium"
+                    title="Employes planifies qui ne sont pas encore en attendance_status=SHIFT"
+                  >
+                    ({planningStatus.pending_count} en attente)
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
@@ -838,8 +941,23 @@ export default function PlanningPage() {
       )}
 
       {/* ── Modal: import Excel ── */}
-      {importOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setImportOpen(false)}>
+      {importOpen && (() => {
+        const importBusy = importPhase !== "idle" && importPhase !== "error" && importPhase !== "done";
+        const showProgress = importPhase !== "idle" && importPhase !== "error";
+        const phaseLabel: Record<ImportPhase, string> = {
+          idle:       "",
+          reading:    "Lecture du fichier…",
+          parsing:    "Analyse du planning…",
+          uploading:  "Envoi au serveur…",
+          processing: "Traitement côté serveur…",
+          done:       "Import terminé",
+          error:      "Erreur lors de l'import",
+        };
+        return (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !importBusy && setImportOpen(false)}
+        >
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
               <Upload size={16} className="text-camublue-900" />
@@ -848,36 +966,92 @@ export default function PlanningPage() {
             <p className="text-xs text-slate-400 mb-4">
               Le fichier doit contenir les colonnes : <strong>Date</strong>, <strong>Shift</strong>, <strong>Nom employé</strong>
             </p>
-            <div
-              className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center cursor-pointer hover:border-camublue-900/40 hover:bg-slate-50 transition"
-              onClick={() => fileRef.current?.click()}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => {
-                e.preventDefault();
-                const file = e.dataTransfer.files[0];
+
+            {!showProgress && (
+              <div
+                className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center cursor-pointer hover:border-camublue-900/40 hover:bg-slate-50 transition"
+                onClick={() => fileRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files[0];
+                  if (file) handleFileImport(file);
+                }}
+              >
+                <Download size={28} className="mx-auto mb-2 text-slate-300" />
+                <p className="text-sm text-slate-500">Déposer un fichier .xlsx ici</p>
+                <p className="text-xs text-slate-400 mt-1">ou cliquer pour parcourir</p>
+              </div>
+            )}
+
+            {showProgress && (
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+                <div className="flex items-center gap-2 mb-2">
+                  {importPhase === "done" ? (
+                    <Check size={16} className="text-emerald-600" />
+                  ) : (
+                    <RefreshCw size={14} className="animate-spin text-camublue-900" />
+                  )}
+                  <span className="text-sm font-medium text-slate-700 flex-1 truncate">
+                    {phaseLabel[importPhase]}
+                  </span>
+                  <span className="text-xs font-mono text-slate-500">{importPercent}%</span>
+                </div>
+                {importFilename && (
+                  <p className="text-[11px] text-slate-400 truncate mb-2" title={importFilename}>
+                    {importFilename}
+                  </p>
+                )}
+                <div
+                  className="w-full h-2 rounded-full bg-slate-200 overflow-hidden"
+                  role="progressbar"
+                  aria-valuenow={importPercent}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <div
+                    className={`h-full transition-all duration-200 ${
+                      importPhase === "done" ? "bg-emerald-500" : "bg-camublue-900"
+                    }`}
+                    style={{ width: `${importPercent}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2">
+                  Merci de patienter, ne fermez pas cette fenêtre.
+                </p>
+              </div>
+            )}
+
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              disabled={importBusy}
+              onChange={e => {
+                const file = e.target.files?.[0];
                 if (file) handleFileImport(file);
+                // Reset input pour permettre la selection du meme fichier apres erreur
+                e.target.value = "";
               }}
-            >
-              <Download size={28} className="mx-auto mb-2 text-slate-300" />
-              <p className="text-sm text-slate-500">Déposer un fichier .xlsx ici</p>
-              <p className="text-xs text-slate-400 mt-1">ou cliquer pour parcourir</p>
-            </div>
-            <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => {
-              const file = e.target.files?.[0];
-              if (file) handleFileImport(file);
-            }} />
+            />
             <div className="flex items-start gap-2 mt-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
               <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-700">
                 L'import <strong>remplace intégralement</strong> le planning existant pour les dates importées.
               </p>
             </div>
-            <button onClick={() => setImportOpen(false)} className="mt-4 w-full px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm hover:bg-slate-200 transition">
+            <button
+              onClick={() => { if (!importBusy) { setImportOpen(false); setImportPhase("idle"); setImportPercent(0); setImportFilename(""); } }}
+              disabled={importBusy}
+              className="mt-4 w-full px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm hover:bg-slate-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               Fermer
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
       {/* ── Modal: activer planning ── */}
       {activateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !activating && setActivateOpen(false)}>
