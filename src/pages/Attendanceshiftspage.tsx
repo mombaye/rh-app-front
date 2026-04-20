@@ -15,7 +15,7 @@ import {
   getShiftDailyStats, getShiftPeriodStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning,
   getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
-  updateAttendanceRecord, sendAttendanceAlert, downloadShiftExportCSV, testDownload, debugExportParams,
+  updateAttendanceRecord, sendAttendanceAlert, testDownload, debugExportParams,
 } from "@/services/attendanceService";
 import type { PlanningEntry } from "@/services/attendanceService";
 import { parseNOCPlanningExcel, cellToDateStr, extractMonthYearFromSheetName } from "@/utils/planningParser";
@@ -2693,45 +2693,16 @@ export default function AttendanceShiftsPage() {
   };
 
   const handleExport = async () => {
-    console.log("╔═══════════════════════════════════════════════════════════╗");
-    console.log("║            EXPORT BUTTON CLICKED                          ║");
-    console.log("╚═══════════════════════════════════════════════════════════╝");
-    console.log("📊 viewMode:", viewMode);
-    console.log("📅 periodFrom:", periodFrom, "| Type:", typeof periodFrom);
-    console.log("📅 periodTo:", periodTo, "| Type:", typeof periodTo);
-    console.log("✓ Condition (viewMode === 'period' && periodFrom && periodTo):", viewMode === "period" && !!periodFrom && !!periodTo);
-
-    // En mode Période: téléchargement DIRECT
-    if (viewMode === "period" && periodFrom && periodTo) {
-      console.log("✅ Period mode DETECTED - Starting direct download...");
-      try {
-        setExportLoading(true);
-        const params = { date_from: periodFrom, date_to: periodTo };
-        console.log("🔄 Calling downloadShiftExportCSV with params:", params);
-        console.log("   date_from format: YYYY-MM-DD? ", /^\d{4}-\d{2}-\d{2}$/.test(periodFrom) ? "✓ YES" : "❌ NO");
-        console.log("   date_to format: YYYY-MM-DD?   ", /^\d{4}-\d{2}-\d{2}$/.test(periodTo) ? "✓ YES" : "❌ NO");
-
-        await downloadShiftExportCSV(params);
-
-        console.log("✅ Download completed successfully");
-        alert("✓ Fichier téléchargé avec succès!");
-      } catch (error) {
-        console.error("❌ Export ERROR:", error);
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error("Error details:", {
-          name: error instanceof Error ? error.name : "Unknown",
-          message: errorMsg,
-          stack: error instanceof Error ? error.stack : "No stack trace"
-        });
-        alert(`❌ Erreur: ${errorMsg}`);
-      } finally {
-        setExportLoading(false);
-      }
+    // En mode Période : ouvrir la modale pour choisir colonnes + départements,
+    // puis l'export xlsx est produit par doExport à partir de getShiftPeriodStats.
+    if (viewMode === "period") {
+      setExportFrom(periodFrom || exportFrom);
+      setExportTo(periodTo || exportTo);
+      setShowExportDlg(true);
       return;
     }
 
-    // Autres modes: ouvrir la modale
-    console.log("⚠️ Non-period mode or missing dates - Opening export dialog...");
+    // Mode journalier : pré-remplir la plage avec la date du jour sélectionné
     if (viewMode === "daily") {
       setExportFrom(date);
       setExportTo(date);
@@ -2740,19 +2711,69 @@ export default function AttendanceShiftsPage() {
   };
 
   const doExport = async () => {
-    console.log("doExport called, viewMode:", viewMode, "exportFrom:", exportFrom, "exportTo:", exportTo);
-
-    // Export structuré format texte (Date -> Shift -> Employés) pour mode Période
+    // Export xlsx en mode Période : mêmes données que le filtre, plage exportFrom → exportTo.
     if (viewMode === "period" && exportFrom && exportTo) {
-      console.log("Using structured text export for period mode");
+      if (exportPeriodCols.length === 0) {
+        alert("Sélectionnez au moins une colonne à exporter.");
+        return;
+      }
       setExportLoading(true);
       try {
-        await downloadShiftExportCSV({ date_from: exportFrom, date_to: exportTo });
+        const rangeData = await getShiftPeriodStats({
+          date_from: exportFrom,
+          date_to:   exportTo,
+          team:      periodTeam,
+          matricule: periodMatricule || null,
+          status:    periodStatus || null,
+        });
+        const STATUS_LABELS: Record<string, string> = {
+          ok: "Présent", absent: "Absent", incomplete: "Incomplet",
+          anomaly: "Anomalie", not_working: "Pas de service",
+          on_leave: "En congé", on_mission: "En mission",
+        };
+        const RANGE_ALL: Record<ShiftPeriodCol, (r: ShiftRecord, d: { date: string; weekday: number; weekday_label: string }) => any> = {
+          "Date":              (_r, d) => new Date(d.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
+          "Jour":              (_r, d) => d.weekday_label,
+          "Matricule":         (r)     => r.matricule || "—",
+          "Nom":               (r)     => r.full_name,
+          "Équipe":            (r)     => r.shift_team_label || r.shift_team || "—",
+          "Statut":            (r)     => STATUS_LABELS[r.status] ?? r.status,
+          "Retard":            (r)     => r.late_minutes > 0 ? `${r.late_label ?? r.late_minutes + " min"}` : "—",
+          "Entrée":            (r)     => r.shift_team === "soir2" ? (r.out_time ? formatTime(r.out_time) : "—") : (r.in_time ? formatTime(r.in_time) : "—"),
+          "Sortie":            (r)     => r.shift_team === "soir2" ? (r.in_time ? formatTime(r.in_time) : "—") : (r.out_time ? formatTime(r.out_time) : "—"),
+          "Heures travaillées":(r)     => r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
+          "Remplacé par":      (r)     => r.replaced_by ?? "—",
+          "Remplaçant de":     (r)     => r.replaces_employee ?? "—",
+        };
+        const rangeRows: Record<string, any>[] = [];
+        for (const day of rangeData.dates) {
+          const baseRecs = day.records ?? [];
+          if (baseRecs.length === 0) continue;
+          const dayRecs = exportDepts.length > 0
+            ? baseRecs.filter(rec => {
+                const dept = (rec.department ?? departmentMap.get(rec.matricule ?? "") ?? "").toUpperCase();
+                return exportDepts.includes(dept);
+              })
+            : baseRecs;
+          for (const rec of dayRecs) {
+            rangeRows.push(Object.fromEntries(
+              exportPeriodCols.map((k) => [k, RANGE_ALL[k](rec, day)])
+            ));
+          }
+        }
+        if (rangeRows.length === 0) {
+          alert(
+            `Aucun pointage trouvé pour la période ${exportFrom} → ${exportTo}` +
+            (exportDepts.length ? ` (département(s) : ${exportDepts.join(", ")})` : "") +
+            "."
+          );
+          return;
+        }
+        exportXLSX(`shift_periode_${exportFrom}_${exportTo}`, rangeRows);
         setShowExportDlg(false);
-        console.log("Export download initiated successfully");
       } catch (e) {
-        console.error("Export error:", e);
-        alert(`Erreur lors du téléchargement: ${e instanceof Error ? e.message : String(e)}`);
+        console.error("Export period error:", e);
+        alert(`Erreur lors du téléchargement : ${e instanceof Error ? e.message : String(e)}`);
       } finally {
         setExportLoading(false);
       }
@@ -3683,7 +3704,7 @@ export default function AttendanceShiftsPage() {
                       className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
                       Annuler
                     </button>
-                    <button onClick={doExport} disabled={(viewMode !== "period" && selCols.length === 0) || exportLoading}
+                    <button onClick={doExport} disabled={selCols.length === 0 || exportLoading}
                       className="flex items-center gap-2 px-5 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
                       <FileSpreadsheet className="h-4 w-4" />
                       {exportLoading ? "Chargement…" : "Télécharger"}
