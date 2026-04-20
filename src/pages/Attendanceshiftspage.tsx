@@ -15,7 +15,7 @@ import {
   getShiftDailyStats, getShiftPeriodStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning,
   getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
-  updateAttendanceRecord, sendAttendanceAlert, downloadShiftExportCSV, debugExportParams,
+  updateAttendanceRecord, sendAttendanceAlert, downloadShiftExportCSV,
 } from "@/services/attendanceService";
 import type { PlanningEntry } from "@/services/attendanceService";
 import { parseNOCPlanningExcel, cellToDateStr, extractMonthYearFromSheetName } from "@/utils/planningParser";
@@ -2250,6 +2250,14 @@ export default function AttendanceShiftsPage() {
     }).catch(console.error);
   }, []);
 
+  // Nombre d'employés assignés à un shift dans le planning — indépendant de la vue
+  // (daily / weekly / monthly / period), pour que le badge « Planning actif » et
+  // la pastille « Actif » du bouton Planning restent visibles quel que soit le filtre.
+  const plannedAssignedCount = useMemo(
+    () => Object.values(assignments).filter(Boolean).length,
+    [assignments]
+  );
+
   // Charger les matricules du planning shift pour la plage d'export
   // (seuls les employés planifiés sur cette période alimentent le filtre Département).
   useEffect(() => {
@@ -2952,10 +2960,10 @@ export default function AttendanceShiftsPage() {
                 {effectiveSchedule.breakMin > 0 && ` · Pause ${effectiveSchedule.breakMin}min`}
               </span>
               {activeTeamCfg && <span className="text-indigo-500 font-semibold text-xs">{activeTeamCfg.label} · {activeTeamCfg.horaire}</span>}
-              {allRecords.filter(r => r.is_scheduled).length > 0 && (
+              {plannedAssignedCount > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full ring-1 ring-green-200">
                   <CalendarRange className="h-3 w-3" />
-                  Planning actif · {allRecords.filter(r => r.is_scheduled).length} assignés
+                  Planning actif · {plannedAssignedCount} assignés
                 </span>
               )}
             </div>
@@ -2978,9 +2986,9 @@ export default function AttendanceShiftsPage() {
             </button>
 
             <button onClick={handlePlanningClick}
-              className={`border px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${allRecords.filter(r => r.is_scheduled).length > 0 ? "bg-green-50 border-green-400 text-green-700 hover:bg-green-100" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
+              className={`border px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${plannedAssignedCount > 0 ? "bg-green-50 border-green-400 text-green-700 hover:bg-green-100" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
               <CalendarRange className="h-4 w-4" /><span className="hidden sm:inline">Planning</span>
-              {allRecords.filter(r => r.is_scheduled).length > 0 && (
+              {plannedAssignedCount > 0 && (
                 <span className="text-[10px] font-bold bg-green-200 text-green-800 px-1.5 py-0.5 rounded-full hidden sm:inline">Actif</span>
               )}
             </button>
@@ -2988,12 +2996,6 @@ export default function AttendanceShiftsPage() {
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
             </button>
-            {viewMode === "period" && periodFrom && periodTo && (
-              <button onClick={async () => { try { await debugExportParams(periodFrom, periodTo); } catch (e) { console.error(e); } }}
-                className="bg-purple-100 border border-purple-300 px-3 py-2 rounded-lg text-sm hover:bg-purple-50 transition flex items-center gap-1.5 text-purple-700 font-medium" title="Vérifie les paramètres envoyés">
-                <FileSpreadsheet className="h-4 w-4" /><span className="hidden sm:inline">Debug</span>
-              </button>
-            )}
             <button onClick={() => viewMode === "period" ? fetchPeriodData() : fetchData(false)}
               className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
               <RefreshCw className={`h-4 w-4 ${loading || periodLoading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
