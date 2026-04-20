@@ -412,9 +412,17 @@ export default function PlanningPage() {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       try {
-        const { entries: allEntries } = parseNOCPlanningExcel(ev.target!.result as ArrayBuffer);
+        const { entries: allEntries, sheets } = parseNOCPlanningExcel(ev.target!.result as ArrayBuffer);
         if (!allEntries.length) {
-          toast.error("Aucune entrée valide trouvée dans le fichier. Vérifiez que les dates (ligne SHIFT) et les libellés de shift (08H-16H, 16H-22H, 22H-08H) sont bien présents.");
+          const totalBlocks = sheets.reduce((a, s) => a + (s.blocksDetected ?? 0), 0);
+          const totalShifts = sheets.reduce((a, s) => a + (s.shiftSectionsDetected ?? 0), 0);
+          if (totalBlocks === 0) {
+            toast.error("Aucun en-tête de dates détecté. Vérifiez que la ligne SHIFT ou une ligne contenant au moins 3 dates est présente.");
+          } else if (totalShifts === 0) {
+            toast.error("Dates détectées mais aucune section de shift (08H-16H / 16H-22H / 22H-08H). Vérifiez les libellés des shifts.");
+          } else {
+            toast.error("Aucun employé détecté sous les sections de shift. Vérifiez que les noms sont bien en dessous des dates.");
+          }
           return;
         }
         const batchId = `import_${Date.now()}`;
