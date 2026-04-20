@@ -177,6 +177,92 @@ export interface ParsedSheet {
   teams: number;
 }
 
+// ─── Parser flat fallback ──────────────────────────────────────────────────────
+// Format attendu : 1 ligne d'en-tête + lignes de données avec au minimum
+//   Date | Shift (jour|soir1|soir2 OU 08H-16H|16H-22H|22H-08H) | Nom [| Matricule]
+function detectColumnIndex(headers: string[], keywords: string[]): number {
+  const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  for (let i = 0; i < headers.length; i++) {
+    const h = norm(headers[i] ?? "");
+    if (!h) continue;
+    for (const k of keywords) {
+      if (h.includes(norm(k))) return i;
+    }
+  }
+  return -1;
+}
+
+function normalizeShiftValue(raw: unknown): ShiftTeamKey | null {
+  if (raw == null) return null;
+  const s = String(raw).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (!s) return null;
+  if (s === "jour" || s === "j" || s === "day" || s === "matin") return "jour";
+  if (s === "soir1" || s === "s1" || s === "midi" || s === "apm" || s === "après-midi" || s === "apres-midi") return "soir1";
+  if (s === "soir2" || s === "s2" || s === "nuit" || s === "night" || s === "soir") return "soir2";
+  return detectShiftLabel(s);
+}
+
+export function parseFlatPlanningSheet(ws: XLSX.WorkSheet, sheetName = ""): PlanningEntry[] {
+  const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as unknown[][];
+  if (rawRows.length < 2) return [];
+  const { month: ctxMonth, year: ctxYear } = extractMonthYearFromSheetName(sheetName);
+
+  // Localiser la ligne d'en-tête (première ligne contenant à la fois "date" et "shift/equipe")
+  let headerRow = -1;
+  for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
+    const row = (rawRows[i] as unknown[]).map((c) => String(c ?? ""));
+    const hasDate = detectColumnIndex(row, ["date"]) >= 0;
+    const hasShift = detectColumnIndex(row, ["shift", "equipe", "team", "horaire"]) >= 0;
+    const hasName  = detectColumnIndex(row, ["nom", "name", "employe", "employé", "agent"]) >= 0;
+    if (hasDate && hasShift && hasName) { headerRow = i; break; }
+  }
+  if (headerRow < 0) return [];
+
+  const headers = (rawRows[headerRow] as unknown[]).map((c) => String(c ?? ""));
+  const cDate = detectColumnIndex(headers, ["date"]);
+  const cShift = detectColumnIndex(headers, ["shift", "equipe", "team", "horaire"]);
+  const cName  = detectColumnIndex(headers, ["nom", "name", "employe", "employé", "agent"]);
+  const cMat   = detectColumnIndex(headers, ["matricule", "matric", "id employe"]);
+
+  const entries: PlanningEntry[] = [];
+  const resolveDate = (cell: unknown): string => {
+    const basic = cellToDateStr(cell);
+    if (basic) return basic;
+    if (typeof cell === "string") {
+      const s = cell.trim();
+      const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+      if (m2) {
+        const d = parseInt(m2[1]), mo = parseInt(m2[2]);
+        if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) {
+          const y = ctxYear || new Date().getFullYear();
+          return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        }
+      }
+    }
+    if (typeof cell === "number" && cell >= 1 && cell < 100 && ctxMonth > 0)
+      return `${ctxYear}-${String(ctxMonth).padStart(2, "0")}-${String(cell).padStart(2, "0")}`;
+    return "";
+  };
+
+  for (let r = headerRow + 1; r < rawRows.length; r++) {
+    const row = rawRows[r] as unknown[];
+    const date = resolveDate(row[cDate]);
+    const shift = normalizeShiftValue(row[cShift]);
+    const name = String(row[cName] ?? "").trim();
+    if (!date || !shift || !name) continue;
+    const mat = cMat >= 0 ? String(row[cMat] ?? "").trim() : "";
+    entries.push({
+      date,
+      shift_type: shift,
+      employee_name: name,
+      employee_matricule: mat || null,
+      team_id: "",
+      row_slot: r - headerRow - 1,
+    });
+  }
+  return entries;
+}
+
 export function parseNOCPlanningExcel(buffer: ArrayBuffer): { entries: PlanningEntry[]; sheets: ParsedSheet[] } {
   const wb = XLSX.read(buffer, { type: "array", cellDates: true, cellStyles: true });
   const allEntries: PlanningEntry[] = [];
@@ -184,7 +270,9 @@ export function parseNOCPlanningExcel(buffer: ArrayBuffer): { entries: PlanningE
 
   for (const sheetName of wb.SheetNames) {
     const ws = wb.Sheets[sheetName];
-    const entries = parseNOCPlanningSheet(ws, sheetName);
+    // Essayer d'abord le format NOC (grille mensuelle), puis le format plat en fallback
+    let entries = parseNOCPlanningSheet(ws, sheetName);
+    if (!entries.length) entries = parseFlatPlanningSheet(ws, sheetName);
     if (!entries.length) continue;
     const dates = entries.map((e) => e.date).filter(Boolean).sort();
     const teamSet = new Set(entries.map((e) => e.team_id).filter(Boolean));

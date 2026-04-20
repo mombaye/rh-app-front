@@ -399,18 +399,36 @@ export default function PlanningPage() {
   const handleFileImport = async (file: File) => {
     const reader = new FileReader();
     reader.onload = async (ev) => {
+      let step: "parse" | "upload" | "reload" = "parse";
       try {
         const { entries: allEntries } = parseNOCPlanningExcel(ev.target!.result as ArrayBuffer);
-        if (!allEntries.length) { toast.error("Aucune entrée valide trouvée dans le fichier"); return; }
+        if (!allEntries.length) {
+          toast.error("Aucune entrée valide trouvée. Vérifiez le format : grille NOC ou colonnes Date/Shift/Nom.");
+          return;
+        }
+        step = "upload";
         const batchId = `import_${Date.now()}`;
         const payload: ShiftPlanningUpload = { batch_id: batchId, entries: allEntries };
-        await uploadShiftPlanning(payload);
-        toast.success(`${allEntries.length} entrées importées`);
+        const res = await uploadShiftPlanning(payload);
+        toast.success(`${res.created ?? allEntries.length} entrées importées`);
         setImportOpen(false);
+        step = "reload";
         await load();
-      } catch {
-        toast.error("Erreur lors de l'import du fichier");
+      } catch (err: any) {
+        console.error(`[Planning import] échec à l'étape "${step}":`, err);
+        const detail = err?.response?.data?.detail || err?.message;
+        if (step === "parse") {
+          toast.error(`Lecture du fichier échouée${detail ? ` : ${detail}` : ""}`);
+        } else if (step === "upload") {
+          toast.error(`Envoi au serveur échoué${detail ? ` : ${detail}` : ""}`);
+        } else {
+          toast.error("Import réussi mais rafraîchissement échoué");
+        }
       }
+    };
+    reader.onerror = () => {
+      console.error("[Planning import] FileReader error:", reader.error);
+      toast.error("Impossible de lire le fichier sélectionné");
     };
     reader.readAsArrayBuffer(file);
   };
