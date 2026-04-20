@@ -156,6 +156,23 @@ export async function addSinglePlanningEntry(entry: {
   return data;
 }
 
+/** Active (attendance_status=SHIFT) tous les employés présents dans le planning. */
+export async function activateShiftPlanning(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<{
+  activated: number;
+  total_planned: number;
+  unmatched: string[];
+  matricules: string[];
+}> {
+  const body: Record<string, string> = {};
+  if (params?.dateFrom) body.date_from = params.dateFrom;
+  if (params?.dateTo)   body.date_to   = params.dateTo;
+  const { data } = await api.post("/api/attendance/shift-planning/activate/", body);
+  return data;
+}
+
 /** Déplace une entrée du planning (drag & drop) — PATCH. */
 export async function moveShiftPlanningEntry(params: {
   date: string;

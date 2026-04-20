@@ -18,7 +18,7 @@ import React, {
 import AppLayout from "@/layouts/AppLayout";
 import {
   getShiftPlanning, uploadShiftPlanning, addSinglePlanningEntry,
-  deleteSinglePlanningEntry, moveShiftPlanningEntry,
+  deleteSinglePlanningEntry, moveShiftPlanningEntry, activateShiftPlanning,
 } from "@/services/attendanceService";
 import type { PlanningEntry, ShiftPlanningUpload } from "@/services/attendanceService";
 import { getEmployees } from "@/services/employeeService";
@@ -27,7 +27,7 @@ import toast from "react-hot-toast";
 import { parseNOCPlanningExcel } from "@/utils/planningParser";
 import {
   ChevronLeft, ChevronRight, Upload, Plus, Trash2, RefreshCw,
-  Calendar, Users, Download, GripVertical, AlertTriangle, Pencil, Check, X, Search,
+  Calendar, Users, Download, GripVertical, AlertTriangle, Pencil, Check, X, Search, Zap,
 } from "lucide-react";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 
@@ -108,6 +108,13 @@ export default function PlanningPage() {
   // Modal: import Excel
   const [importOpen, setImportOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Activer planning (bascule SHIFT)
+  const [activateOpen, setActivateOpen] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [activateResult, setActivateResult] = useState<{
+    activated: number; total_planned: number; unmatched: string[];
+  } | null>(null);
 
   // ── Recherche d'employé ───────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
@@ -415,6 +422,31 @@ export default function PlanningPage() {
     reader.readAsArrayBuffer(file);
   };
 
+  // ── Activer planning : bascule tous les employés planifiés en SHIFT ──────
+  const handleActivatePlanning = async () => {
+    if (activating) return;
+    setActivating(true);
+    try {
+      const res = await activateShiftPlanning();
+      setActivateResult({
+        activated: res.activated,
+        total_planned: res.total_planned,
+        unmatched: res.unmatched ?? [],
+      });
+      if (res.activated > 0) {
+        toast.success(`${res.activated} employé${res.activated > 1 ? "s" : ""} activé${res.activated > 1 ? "s" : ""} en shift`);
+      } else if (res.total_planned > 0) {
+        toast.success("Tous les employés planifiés sont déjà en shift");
+      } else {
+        toast("Aucun employé à activer", { icon: "ℹ️" });
+      }
+    } catch {
+      toast.error("Erreur lors de l'activation du planning");
+    } finally {
+      setActivating(false);
+    }
+  };
+
   // ── Rendu ─────────────────────────────────────────────────────────────────
   return (
     <AppLayout>
@@ -431,6 +463,14 @@ export default function PlanningPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => { setActivateResult(null); setActivateOpen(true); }}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition"
+              title="Basculer tous les employés du planning en attendance_status=SHIFT"
+            >
+              <Zap size={15} />
+              Activer planning
+            </button>
             <button
               onClick={() => setImportOpen(true)}
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-camublue-900 text-white text-sm font-medium hover:bg-camublue-800 transition"
@@ -769,6 +809,80 @@ export default function PlanningPage() {
           </div>
         </div>
       )}
+      {/* ── Modal: activer planning ── */}
+      {activateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !activating && setActivateOpen(false)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
+              <Zap size={16} className="text-emerald-600" />
+              Activer le planning
+            </h3>
+            {!activateResult ? (
+              <>
+                <p className="text-sm text-slate-500 mb-4">
+                  Tous les employés présents dans le planning seront basculés en
+                  <strong> Shift</strong> (attendance_status = SHIFT). Les employés
+                  déjà en shift ne seront pas modifiés.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setActivateOpen(false)}
+                    disabled={activating}
+                    className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm hover:bg-slate-200 transition disabled:opacity-50"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleActivatePlanning}
+                    disabled={activating}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition disabled:opacity-50"
+                  >
+                    {activating
+                      ? <><RefreshCw size={13} className="animate-spin" /> Activation…</>
+                      : <><Zap size={13} /> Activer</>
+                    }
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-sm text-slate-600 mb-3">
+                  <div className="flex items-center justify-between py-1">
+                    <span>Employés basculés en SHIFT</span>
+                    <span className="font-semibold text-emerald-700">{activateResult.activated}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-t border-slate-100">
+                    <span>Employés planifiés identifiés</span>
+                    <span className="font-semibold text-slate-800">{activateResult.total_planned}</span>
+                  </div>
+                </div>
+                {activateResult.unmatched.length > 0 && (
+                  <div className="mb-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 mb-1">
+                      <AlertTriangle size={13} /> {activateResult.unmatched.length} nom{activateResult.unmatched.length > 1 ? "s" : ""} non reconnu{activateResult.unmatched.length > 1 ? "s" : ""}
+                    </div>
+                    <ul className="text-xs text-amber-700 list-disc pl-4 max-h-32 overflow-y-auto">
+                      {activateResult.unmatched.map(n => <li key={n}>{n}</li>)}
+                    </ul>
+                    <p className="text-[10px] text-amber-600 mt-1">
+                      Mettez à jour ces entrées (matricule) depuis la grille ci-dessous.
+                    </p>
+                  </div>
+                )}
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => { setActivateOpen(false); setActivateResult(null); }}
+                    className="px-4 py-2 rounded-lg bg-camublue-900 text-white text-sm font-medium hover:bg-camublue-800 transition"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <ConfirmDeleteModal
         open={deleteTarget !== null}
         title="Supprimer cette entrée de planning ?"
