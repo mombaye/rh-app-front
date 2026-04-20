@@ -1212,15 +1212,28 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
     reader.onload = (ev) => {
       try {
         const { entries: parsed, sheets } = parseNOCPlanningExcel(ev.target!.result as ArrayBuffer);
+        if (!parsed.length) {
+          setError("Aucune entrée valide trouvée. Formats acceptés : grille NOC ou colonnes Date/Shift/Nom.");
+          setPreview([]); setParsedSheets([]);
+          return;
+        }
         const enriched = parsed.map(entry => ({
           ...entry,
-          employee_matricule: employeeNameToMatricule.get(
+          employee_matricule: entry.employee_matricule || employeeNameToMatricule.get(
             entry.employee_name.trim().toLowerCase().replace(/\s+/g, ' ')
-          ) ?? null
+          ) || null
         }));
         setPreview(enriched);
         setParsedSheets(sheets);
-      } catch { setError("Erreur lors de la lecture du fichier Excel."); setPreview([]); setParsedSheets([]); }
+      } catch (err: any) {
+        console.error("[PlanningUploadModal] parse error:", err);
+        setError(`Erreur lors de la lecture du fichier Excel${err?.message ? ` : ${err.message}` : ""}.`);
+        setPreview([]); setParsedSheets([]);
+      }
+    };
+    reader.onerror = () => {
+      console.error("[PlanningUploadModal] FileReader error:", reader.error);
+      setError("Impossible de lire le fichier sélectionné.");
     };
     reader.readAsArrayBuffer(f);
   };
@@ -1242,7 +1255,11 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
         loadMonthPlanning(targetMonth);
         setFile(null); setPreview([]); setUploaded(false);
       }, 800);
-    } catch { setError("Erreur lors de l'envoi du planning. Réessayez."); } finally { setLoading(false); }
+    } catch (err: any) {
+      console.error("[PlanningUploadModal] upload error:", err);
+      const detail = err?.response?.data?.detail || err?.message;
+      setError(`Erreur lors de l'envoi du planning${detail ? ` : ${detail}` : ""}. Réessayez.`);
+    } finally { setLoading(false); }
   };
 
   const stats = useMemo(() => {
@@ -2380,7 +2397,7 @@ export default function AttendanceShiftsPage() {
       const usedSheetNames = new Set<string>();
 
       for (const day of res.dates) {
-        if (!day.has_planning || day.records.length === 0) continue;
+        if (day.records.length === 0) continue;
 
         const dateLabel = new Date(day.date + "T00:00:00").toLocaleDateString("fr-FR", {
           weekday: "long", day: "2-digit", month: "long", year: "numeric",
@@ -2444,10 +2461,11 @@ export default function AttendanceShiftsPage() {
   }, [periodFrom, periodTo, periodTeam, periodMatricule, periodStatus]);
 
   // ── Records période aplatis (un enregistrement par ligne) ─────────────────
+  // On inclut TOUS les records (planifiés + pointages sans planning)
   const flatPeriodRecords = useMemo((): (ShiftRecord & { _date: string })[] => {
     if (!periodData) return [];
     return periodData.dates
-      .filter((d) => d.has_planning && d.records.length > 0)
+      .filter((d) => d.records.length > 0)
       .flatMap((d) => d.records.map((r) => ({ ...r, _date: d.date })));
   }, [periodData]);
 
@@ -3354,7 +3372,7 @@ export default function AttendanceShiftsPage() {
               ) : filteredPeriodRecords.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
                   <CalendarDays className="h-12 w-12 text-slate-200" />
-                  <p className="text-sm font-medium">Aucun planning trouvé sur cette période</p>
+                  <p className="text-sm font-medium">Aucun pointage trouvé sur cette période</p>
                 </div>
               ) : (
                 <>
