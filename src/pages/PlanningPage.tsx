@@ -113,7 +113,12 @@ export default function PlanningPage() {
   const [activateOpen, setActivateOpen] = useState(false);
   const [activating, setActivating] = useState(false);
   const [activateResult, setActivateResult] = useState<{
-    activated: number; total_planned: number; unmatched: string[];
+    activated: number;
+    already_shift: number;
+    total_planned: number;
+    matched: number;
+    unmatched: string[];
+    missing_matricules: string[];
   } | null>(null);
 
   // ── Recherche d'employé ───────────────────────────────────────────────────
@@ -430,13 +435,18 @@ export default function PlanningPage() {
       const res = await activateShiftPlanning();
       setActivateResult({
         activated: res.activated,
+        already_shift: res.already_shift ?? 0,
         total_planned: res.total_planned,
+        matched: res.matched ?? 0,
         unmatched: res.unmatched ?? [],
+        missing_matricules: res.missing_matricules ?? [],
       });
       if (res.activated > 0) {
         toast.success(`${res.activated} employé${res.activated > 1 ? "s" : ""} activé${res.activated > 1 ? "s" : ""} en shift`);
-      } else if (res.total_planned > 0) {
+      } else if ((res.already_shift ?? 0) > 0 && (res.missing_matricules?.length ?? 0) === 0) {
         toast.success("Tous les employés planifiés sont déjà en shift");
+      } else if ((res.missing_matricules?.length ?? 0) > 0) {
+        toast.error(`${res.missing_matricules!.length} matricule(s) du planning introuvables en base`);
       } else {
         toast("Aucun employé à activer", { icon: "ℹ️" });
       }
@@ -852,10 +862,33 @@ export default function PlanningPage() {
                     <span className="font-semibold text-emerald-700">{activateResult.activated}</span>
                   </div>
                   <div className="flex items-center justify-between py-1 border-t border-slate-100">
-                    <span>Employés planifiés identifiés</span>
+                    <span>Déjà en SHIFT</span>
+                    <span className="font-semibold text-slate-700">{activateResult.already_shift}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-t border-slate-100">
+                    <span>Matricules planifiés</span>
                     <span className="font-semibold text-slate-800">{activateResult.total_planned}</span>
                   </div>
+                  <div className="flex items-center justify-between py-1 border-t border-slate-100">
+                    <span>Matricules retrouvés en base</span>
+                    <span className={`font-semibold ${activateResult.matched < activateResult.total_planned ? "text-amber-700" : "text-slate-800"}`}>
+                      {activateResult.matched} / {activateResult.total_planned}
+                    </span>
+                  </div>
                 </div>
+                {activateResult.missing_matricules.length > 0 && (
+                  <div className="mb-3 p-3 bg-rose-50 border border-rose-100 rounded-lg">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 mb-1">
+                      <AlertTriangle size={13} /> {activateResult.missing_matricules.length} matricule{activateResult.missing_matricules.length > 1 ? "s" : ""} introuvable{activateResult.missing_matricules.length > 1 ? "s" : ""} dans la base employés
+                    </div>
+                    <ul className="text-xs text-rose-700 list-disc pl-4 max-h-32 overflow-y-auto font-mono">
+                      {activateResult.missing_matricules.map(m => <li key={m}>{m}</li>)}
+                    </ul>
+                    <p className="text-[10px] text-rose-600 mt-1">
+                      Ces matricules figurent dans le planning mais ne correspondent à aucun employé actif.
+                    </p>
+                  </div>
+                )}
                 {activateResult.unmatched.length > 0 && (
                   <div className="mb-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 mb-1">

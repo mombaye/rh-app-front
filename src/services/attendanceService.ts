@@ -162,8 +162,11 @@ export async function activateShiftPlanning(params?: {
   dateTo?: string;
 }): Promise<{
   activated: number;
+  already_shift: number;
   total_planned: number;
+  matched: number;
   unmatched: string[];
+  missing_matricules: string[];
   matricules: string[];
 }> {
   const body: Record<string, string> = {};
