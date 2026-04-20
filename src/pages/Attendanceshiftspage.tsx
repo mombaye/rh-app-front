@@ -331,7 +331,10 @@ function getCycleForDate(baseDate: string, cycleStartDate: string, date: string)
 }
 
 function exportXLSX(filename: string, rows: Record<string, any>[]) {
-  if (!rows.length) return;
+  if (!rows.length) {
+    alert("Aucune donnée à exporter.");
+    return;
+  }
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
@@ -2771,19 +2774,29 @@ export default function AttendanceShiftsPage() {
         };
         const rangeRows: Record<string, any>[] = [];
         for (const day of rangeData.dates) {
-          if (!day.has_planning) continue;
+          // On n'exclut plus les jours sans planning : on garde toute journée ayant au moins un pointage
+          const baseRecs = day.records ?? [];
+          if (baseRecs.length === 0) continue;
           const dayRecs = exportDepts.length > 0
-            ? day.records.filter(rec => {
+            ? baseRecs.filter(rec => {
                 const dept = (rec.department ?? departmentMap.get(rec.matricule ?? "") ?? "").toUpperCase();
                 return exportDepts.includes(dept);
               })
-            : day.records;
+            : baseRecs;
           for (const rec of dayRecs) {
             rangeRows.push(Object.fromEntries(
               exportPeriodCols.map((k) => [k, RANGE_ALL[k](rec, day)])
             ));
           }
           if (dayRecs.length > 0) rangeRows.push({});
+        }
+        if (rangeRows.length === 0) {
+          alert(
+            `Aucun pointage trouvé pour la période ${exportFrom} → ${exportTo}` +
+            (exportDepts.length ? ` (département(s) : ${exportDepts.join(", ")})` : "") +
+            "."
+          );
+          return;
         }
         exportXLSX(`shift_periode_${exportFrom}_${exportTo}`, rangeRows);
         setShowExportDlg(false);
@@ -2838,13 +2851,15 @@ export default function AttendanceShiftsPage() {
       };
       const rows: Record<string, any>[] = [];
       for (const day of periodData.dates) {
-        if (!day.has_planning) continue;
+        // On n'exclut plus les jours sans planning : on garde toute journée ayant au moins un pointage
+        const baseRecs = day.records ?? [];
+        if (baseRecs.length === 0) continue;
         const dayRecs = exportDepts.length > 0
-          ? day.records.filter(rec => {
+          ? baseRecs.filter(rec => {
               const dept = (rec.department ?? departmentMap.get(rec.matricule ?? "") ?? "").toUpperCase();
               return exportDepts.includes(dept);
             })
-          : day.records;
+          : baseRecs;
         for (const rec of dayRecs) {
           rows.push(Object.fromEntries(
             exportPeriodCols.map((k) => [k, ALL[k](rec, day)])
@@ -2854,6 +2869,14 @@ export default function AttendanceShiftsPage() {
         if (dayRecs.length > 0) {
           rows.push({});
         }
+      }
+      if (rows.length === 0) {
+        alert(
+          `Aucun pointage trouvé pour la période ${exportFrom} → ${exportTo}` +
+          (exportDepts.length ? ` (département(s) : ${exportDepts.join(", ")})` : "") +
+          "."
+        );
+        return;
       }
       exportXLSX(`shift_periode_${exportFrom}_${exportTo}`, rows);
     } else {
