@@ -494,14 +494,20 @@ export default function PlanningPage() {
         unmatched: res.unmatched ?? [],
         missing_matricules: res.missing_matricules ?? [],
       });
+      const activeCount = res.activated + (res.already_shift ?? 0);
       if (res.activated > 0) {
         toast.success(`${res.activated} employé${res.activated > 1 ? "s" : ""} activé${res.activated > 1 ? "s" : ""} en shift`);
-      } else if ((res.already_shift ?? 0) > 0 && (res.missing_matricules?.length ?? 0) === 0) {
-        toast.success("Tous les employés planifiés sont déjà en shift");
-      } else if ((res.missing_matricules?.length ?? 0) > 0) {
-        toast.error(`${res.missing_matricules!.length} matricule(s) du planning introuvables en base`);
-      } else {
+      } else if (activeCount > 0) {
+        toast.success(`Planning actif — ${activeCount} employé${activeCount > 1 ? "s" : ""} en SHIFT`);
+      } else if ((res.unmatched?.length ?? 0) === 0 && (res.missing_matricules?.length ?? 0) === 0) {
         toast("Aucun employé à activer", { icon: "ℹ️" });
+      }
+      // Avertissements (non bloquants) — l'activation est considérée réussie
+      if ((res.unmatched?.length ?? 0) > 0) {
+        toast(`${res.unmatched!.length} nom(s) à corriger manuellement depuis la grille`, { icon: "⚠️" });
+      }
+      if ((res.missing_matricules?.length ?? 0) > 0) {
+        toast(`${res.missing_matricules!.length} matricule(s) planifié(s) introuvable(s) en base`, { icon: "⚠️" });
       }
     } catch {
       toast.error("Erreur lors de l'activation du planning");
@@ -909,6 +915,22 @@ export default function PlanningPage() {
               </>
             ) : (
               <>
+                {/* Bandeau de succès : actif dès que ≥ 1 matricule est pris en compte */}
+                {(activateResult.activated + activateResult.already_shift) > 0 && (
+                  <div className="mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-2">
+                    <Check size={16} className="text-emerald-700 mt-0.5 shrink-0" />
+                    <div className="text-xs text-emerald-800">
+                      <div className="font-semibold text-sm mb-0.5">Planning actif</div>
+                      {activateResult.activated > 0 && (
+                        <div>{activateResult.activated} employé{activateResult.activated > 1 ? "s" : ""} basculé{activateResult.activated > 1 ? "s" : ""} en SHIFT à l'instant.</div>
+                      )}
+                      {activateResult.already_shift > 0 && (
+                        <div>{activateResult.already_shift} employé{activateResult.already_shift > 1 ? "s" : ""} déjà en SHIFT.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="text-sm text-slate-600 mb-3">
                   <div className="flex items-center justify-between py-1">
                     <span>Employés basculés en SHIFT</span>
@@ -945,13 +967,14 @@ export default function PlanningPage() {
                 {activateResult.unmatched.length > 0 && (
                   <div className="mb-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 mb-1">
-                      <AlertTriangle size={13} /> {activateResult.unmatched.length} nom{activateResult.unmatched.length > 1 ? "s" : ""} non reconnu{activateResult.unmatched.length > 1 ? "s" : ""}
+                      <AlertTriangle size={13} /> {activateResult.unmatched.length} nom{activateResult.unmatched.length > 1 ? "s" : ""} à corriger manuellement
                     </div>
                     <ul className="text-xs text-amber-700 list-disc pl-4 max-h-32 overflow-y-auto">
                       {activateResult.unmatched.map(n => <li key={n}>{n}</li>)}
                     </ul>
                     <p className="text-[10px] text-amber-600 mt-1">
-                      Mettez à jour ces entrées (matricule) depuis la grille ci-dessous.
+                      Cliquez sur les cartes entourées en orange dans la grille pour saisir le matricule.
+                      Le matricule sera automatiquement propagé à toutes les occurrences du même nom.
                     </p>
                   </div>
                 )}
@@ -1001,6 +1024,7 @@ function DraggableEmployee({
   entry, cfg, isDragging, matricule, onDragStart, onDragEnd, onDelete, onEdit,
 }: DraggableEmployeeProps) {
   const [hovered, setHovered] = useState(false);
+  const missingMatricule = !matricule;
 
   return (
     <div
@@ -1008,18 +1032,33 @@ function DraggableEmployee({
       onDragStart={e => onDragStart(e, entry)}
       onDragEnd={onDragEnd}
       onDoubleClick={e => { e.stopPropagation(); onEdit(entry); }}
+      onClick={e => {
+        // Un seul clic suffit à éditer quand le matricule est manquant
+        if (missingMatricule) { e.stopPropagation(); onEdit(entry); }
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`group relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium cursor-grab select-none transition-all duration-150 ${cfg.bg} ${cfg.text} border ${cfg.border} ${
+      className={`group relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium cursor-grab select-none transition-all duration-150 ${cfg.bg} ${cfg.text} border ${
+        missingMatricule
+          ? "border-amber-400 ring-1 ring-amber-300/60"
+          : cfg.border
+      } ${
         isDragging ? "opacity-40 scale-95 shadow-lg ring-2 ring-camublue-900/20" : "hover:shadow-sm"
       }`}
-      title="Double-clic pour modifier · Glisser pour déplacer"
+      title={missingMatricule
+        ? "Matricule manquant — cliquez pour le saisir"
+        : "Double-clic pour modifier · Glisser pour déplacer"
+      }
     >
       <GripVertical size={10} className="text-current opacity-40 shrink-0" />
       <div className="flex flex-col flex-1 min-w-0">
         <span className="truncate">{entry.employee_name}</span>
-        {matricule && (
+        {matricule ? (
           <span className="text-[9px] opacity-60 font-mono">{matricule}</span>
+        ) : (
+          <span className="text-[9px] text-amber-700 font-semibold flex items-center gap-0.5">
+            <AlertTriangle size={9} /> Matricule à saisir
+          </span>
         )}
       </div>
 
