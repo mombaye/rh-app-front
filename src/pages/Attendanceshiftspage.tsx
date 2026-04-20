@@ -1329,7 +1329,40 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                     </div>
                   ) : (
                     // ── Rendu EXACT du design Excel ──
-                    <ExcelPlanningTable entries={entries} nameToMatricule={employeeNameToMatricule} />
+                    <>
+                      {(() => {
+                        const unresolvedNames = Array.from(new Set(
+                          entries.filter(e => !e.employee_matricule).map(e => e.employee_name)
+                        )).sort();
+                        if (unresolvedNames.length === 0) return null;
+                        return (
+                          <div className="mx-4 mt-3 mb-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-semibold text-amber-800 mb-1">
+                                  {unresolvedNames.length} employé{unresolvedNames.length > 1 ? "s" : ""} sans matricule (planning actif pour les autres)
+                                </div>
+                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                  {unresolvedNames.slice(0, 20).map(n => (
+                                    <span key={n} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-white border border-amber-300 text-amber-800 font-mono">
+                                      {n}
+                                    </span>
+                                  ))}
+                                  {unresolvedNames.length > 20 && (
+                                    <span className="text-xs text-amber-700 self-center">+{unresolvedNames.length - 20} autres</span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-amber-700">
+                                  Saisissez le matricule depuis <a href="/planning" className="font-semibold underline hover:text-amber-900">/planning</a> (cartes bordées en orange) — la correction se propage automatiquement à toutes les occurrences du nom.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <ExcelPlanningTable entries={entries} nameToMatricule={employeeNameToMatricule} />
+                    </>
                   )}
                 </div>
               </div>
