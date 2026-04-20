@@ -15,7 +15,7 @@ import {
   getShiftDailyStats, getShiftPeriodStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning,
   getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
-  updateAttendanceRecord, sendAttendanceAlert, downloadShiftExportCSV,
+  updateAttendanceRecord, sendAttendanceAlert, testDownload, debugExportParams,
 } from "@/services/attendanceService";
 import type { PlanningEntry } from "@/services/attendanceService";
 import { parseNOCPlanningExcel, cellToDateStr, extractMonthYearFromSheetName } from "@/utils/planningParser";
@@ -1245,14 +1245,10 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
       const batchId = `upload_${Date.now()}`;
       const res = await uploadShiftPlanning({ batch_id: batchId, entries: preview });
       setUploaded(true);
-      // Basculer sur le mois réellement importé pour que la vue montre les données,
-      // sinon la grille reste vide si l'utilisateur avait ouvert un autre mois.
-      const targetMonth = (res.date_min ?? preview[0]?.date ?? "").slice(0, 7) || viewMonth;
       setTimeout(() => {
         onSuccess(res.created);
         setTab("view");
-        if (targetMonth && targetMonth !== viewMonth) setViewMonth(targetMonth);
-        loadMonthPlanning(targetMonth);
+        loadMonthPlanning(viewMonth);
         setFile(null); setPreview([]); setUploaded(false);
       }, 800);
     } catch (err: any) {
@@ -1346,40 +1342,7 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
                     </div>
                   ) : (
                     // ── Rendu EXACT du design Excel ──
-                    <>
-                      {(() => {
-                        const unresolvedNames = Array.from(new Set(
-                          entries.filter(e => !e.employee_matricule).map(e => e.employee_name)
-                        )).sort();
-                        if (unresolvedNames.length === 0) return null;
-                        return (
-                          <div className="mx-4 mt-3 mb-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                            <div className="flex items-start gap-2">
-                              <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-semibold text-amber-800 mb-1">
-                                  {unresolvedNames.length} employé{unresolvedNames.length > 1 ? "s" : ""} sans matricule (planning actif pour les autres)
-                                </div>
-                                <div className="flex flex-wrap gap-1.5 mb-2">
-                                  {unresolvedNames.slice(0, 20).map(n => (
-                                    <span key={n} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-white border border-amber-300 text-amber-800 font-mono">
-                                      {n}
-                                    </span>
-                                  ))}
-                                  {unresolvedNames.length > 20 && (
-                                    <span className="text-xs text-amber-700 self-center">+{unresolvedNames.length - 20} autres</span>
-                                  )}
-                                </div>
-                                <p className="text-[11px] text-amber-700">
-                                  Saisissez le matricule depuis <a href="/planning" className="font-semibold underline hover:text-amber-900">/planning</a> (cartes bordées en orange) — la correction se propage automatiquement à toutes les occurrences du nom.
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      <ExcelPlanningTable entries={entries} nameToMatricule={employeeNameToMatricule} />
-                    </>
+                    <ExcelPlanningTable entries={entries} nameToMatricule={employeeNameToMatricule} />
                   )}
                 </div>
               </div>
@@ -2187,7 +2150,6 @@ export default function AttendanceShiftsPage() {
   const [exportTo,         setExportTo]         = useState(todayStr);
   const [exportDepts,      setExportDepts]      = useState<string[]>([]);
   const [exportDeptSearch, setExportDeptSearch] = useState("");
-  const [planningMatricules, setPlanningMatricules] = useState<Set<string>>(new Set());
   const [periodData,       setPeriodData]       = useState<ShiftPeriodStatsResponse | null>(null);
   const [periodLoading,    setPeriodLoading]    = useState(false);
   const [periodTeam,       setPeriodTeam]       = useState<ShiftTeamKey | null>(null);
@@ -2303,28 +2265,6 @@ export default function AttendanceShiftsPage() {
       setAssignments((prev) => ({ ...apiAssignments, ...prev }));
     }).catch(console.error);
   }, []);
-
-  // Nombre d'employés assignés à un shift dans le planning — indépendant de la vue
-  // (daily / weekly / monthly / period), pour que le badge « Planning actif » et
-  // la pastille « Actif » du bouton Planning restent visibles quel que soit le filtre.
-  const plannedAssignedCount = useMemo(
-    () => Object.values(assignments).filter(Boolean).length,
-    [assignments]
-  );
-
-  // Charger les matricules du planning shift pour la plage d'export
-  // (seuls les employés planifiés sur cette période alimentent le filtre Département).
-  useEffect(() => {
-    if (!showExportDlg || !exportFrom || !exportTo) return;
-    let cancelled = false;
-    getShiftPlanning(exportFrom, exportTo).then(entries => {
-      if (cancelled) return;
-      const mats = new Set<string>();
-      entries.forEach(e => { if (e.employee_matricule) mats.add(e.employee_matricule); });
-      setPlanningMatricules(mats);
-    }).catch(() => { if (!cancelled) setPlanningMatricules(new Set()); });
-    return () => { cancelled = true; };
-  }, [showExportDlg, exportFrom, exportTo]);
 
   const effectiveSchedule: WorkSchedulePreset = useMemo(() => {
     if (activeSchedule && isPeriodActive(activeSchedule)) return activeSchedule;
@@ -2753,45 +2693,16 @@ export default function AttendanceShiftsPage() {
   };
 
   const handleExport = async () => {
-    console.log("╔═══════════════════════════════════════════════════════════╗");
-    console.log("║            EXPORT BUTTON CLICKED                          ║");
-    console.log("╚═══════════════════════════════════════════════════════════╝");
-    console.log("📊 viewMode:", viewMode);
-    console.log("📅 periodFrom:", periodFrom, "| Type:", typeof periodFrom);
-    console.log("📅 periodTo:", periodTo, "| Type:", typeof periodTo);
-    console.log("✓ Condition (viewMode === 'period' && periodFrom && periodTo):", viewMode === "period" && !!periodFrom && !!periodTo);
-
-    // En mode Période: téléchargement DIRECT
-    if (viewMode === "period" && periodFrom && periodTo) {
-      console.log("✅ Period mode DETECTED - Starting direct download...");
-      try {
-        setExportLoading(true);
-        const params = { date_from: periodFrom, date_to: periodTo };
-        console.log("🔄 Calling downloadShiftExportCSV with params:", params);
-        console.log("   date_from format: YYYY-MM-DD? ", /^\d{4}-\d{2}-\d{2}$/.test(periodFrom) ? "✓ YES" : "❌ NO");
-        console.log("   date_to format: YYYY-MM-DD?   ", /^\d{4}-\d{2}-\d{2}$/.test(periodTo) ? "✓ YES" : "❌ NO");
-
-        await downloadShiftExportCSV(params);
-
-        console.log("✅ Download completed successfully");
-        alert("✓ Fichier téléchargé avec succès!");
-      } catch (error) {
-        console.error("❌ Export ERROR:", error);
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error("Error details:", {
-          name: error instanceof Error ? error.name : "Unknown",
-          message: errorMsg,
-          stack: error instanceof Error ? error.stack : "No stack trace"
-        });
-        alert(`❌ Erreur: ${errorMsg}`);
-      } finally {
-        setExportLoading(false);
-      }
+    // En mode Période : ouvrir la modale pour choisir colonnes + départements,
+    // puis l'export xlsx est produit par doExport à partir de getShiftPeriodStats.
+    if (viewMode === "period") {
+      setExportFrom(periodFrom || exportFrom);
+      setExportTo(periodTo || exportTo);
+      setShowExportDlg(true);
       return;
     }
 
-    // Autres modes: ouvrir la modale
-    console.log("⚠️ Non-period mode or missing dates - Opening export dialog...");
+    // Mode journalier : pré-remplir la plage avec la date du jour sélectionné
     if (viewMode === "daily") {
       setExportFrom(date);
       setExportTo(date);
@@ -2800,19 +2711,69 @@ export default function AttendanceShiftsPage() {
   };
 
   const doExport = async () => {
-    console.log("doExport called, viewMode:", viewMode, "exportFrom:", exportFrom, "exportTo:", exportTo);
-
-    // Export structuré format texte (Date -> Shift -> Employés) pour mode Période
+    // Export xlsx en mode Période : mêmes données que le filtre, plage exportFrom → exportTo.
     if (viewMode === "period" && exportFrom && exportTo) {
-      console.log("Using structured text export for period mode");
+      if (exportPeriodCols.length === 0) {
+        alert("Sélectionnez au moins une colonne à exporter.");
+        return;
+      }
       setExportLoading(true);
       try {
-        await downloadShiftExportCSV({ date_from: exportFrom, date_to: exportTo });
+        const rangeData = await getShiftPeriodStats({
+          date_from: exportFrom,
+          date_to:   exportTo,
+          team:      periodTeam,
+          matricule: periodMatricule || null,
+          status:    periodStatus || null,
+        });
+        const STATUS_LABELS: Record<string, string> = {
+          ok: "Présent", absent: "Absent", incomplete: "Incomplet",
+          anomaly: "Anomalie", not_working: "Pas de service",
+          on_leave: "En congé", on_mission: "En mission",
+        };
+        const RANGE_ALL: Record<ShiftPeriodCol, (r: ShiftRecord, d: { date: string; weekday: number; weekday_label: string }) => any> = {
+          "Date":              (_r, d) => new Date(d.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
+          "Jour":              (_r, d) => d.weekday_label,
+          "Matricule":         (r)     => r.matricule || "—",
+          "Nom":               (r)     => r.full_name,
+          "Équipe":            (r)     => r.shift_team_label || r.shift_team || "—",
+          "Statut":            (r)     => STATUS_LABELS[r.status] ?? r.status,
+          "Retard":            (r)     => r.late_minutes > 0 ? `${r.late_label ?? r.late_minutes + " min"}` : "—",
+          "Entrée":            (r)     => r.shift_team === "soir2" ? (r.out_time ? formatTime(r.out_time) : "—") : (r.in_time ? formatTime(r.in_time) : "—"),
+          "Sortie":            (r)     => r.shift_team === "soir2" ? (r.in_time ? formatTime(r.in_time) : "—") : (r.out_time ? formatTime(r.out_time) : "—"),
+          "Heures travaillées":(r)     => r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
+          "Remplacé par":      (r)     => r.replaced_by ?? "—",
+          "Remplaçant de":     (r)     => r.replaces_employee ?? "—",
+        };
+        const rangeRows: Record<string, any>[] = [];
+        for (const day of rangeData.dates) {
+          const baseRecs = day.records ?? [];
+          if (baseRecs.length === 0) continue;
+          const dayRecs = exportDepts.length > 0
+            ? baseRecs.filter(rec => {
+                const dept = (rec.department ?? departmentMap.get(rec.matricule ?? "") ?? "").toUpperCase();
+                return exportDepts.includes(dept);
+              })
+            : baseRecs;
+          for (const rec of dayRecs) {
+            rangeRows.push(Object.fromEntries(
+              exportPeriodCols.map((k) => [k, RANGE_ALL[k](rec, day)])
+            ));
+          }
+        }
+        if (rangeRows.length === 0) {
+          alert(
+            `Aucun pointage trouvé pour la période ${exportFrom} → ${exportTo}` +
+            (exportDepts.length ? ` (département(s) : ${exportDepts.join(", ")})` : "") +
+            "."
+          );
+          return;
+        }
+        exportXLSX(`shift_periode_${exportFrom}_${exportTo}`, rangeRows);
         setShowExportDlg(false);
-        console.log("Export download initiated successfully");
       } catch (e) {
-        console.error("Export error:", e);
-        alert(`Erreur lors du téléchargement: ${e instanceof Error ? e.message : String(e)}`);
+        console.error("Export period error:", e);
+        alert(`Erreur lors du téléchargement : ${e instanceof Error ? e.message : String(e)}`);
       } finally {
         setExportLoading(false);
       }
@@ -3015,10 +2976,10 @@ export default function AttendanceShiftsPage() {
                 {effectiveSchedule.breakMin > 0 && ` · Pause ${effectiveSchedule.breakMin}min`}
               </span>
               {activeTeamCfg && <span className="text-indigo-500 font-semibold text-xs">{activeTeamCfg.label} · {activeTeamCfg.horaire}</span>}
-              {plannedAssignedCount > 0 && (
+              {allRecords.filter(r => r.is_scheduled).length > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full ring-1 ring-green-200">
                   <CalendarRange className="h-3 w-3" />
-                  Planning actif · {plannedAssignedCount} assignés
+                  Planning actif · {allRecords.filter(r => r.is_scheduled).length} assignés
                 </span>
               )}
             </div>
@@ -3041,9 +3002,9 @@ export default function AttendanceShiftsPage() {
             </button>
 
             <button onClick={handlePlanningClick}
-              className={`border px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${plannedAssignedCount > 0 ? "bg-green-50 border-green-400 text-green-700 hover:bg-green-100" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
+              className={`border px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${allRecords.filter(r => r.is_scheduled).length > 0 ? "bg-green-50 border-green-400 text-green-700 hover:bg-green-100" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
               <CalendarRange className="h-4 w-4" /><span className="hidden sm:inline">Planning</span>
-              {plannedAssignedCount > 0 && (
+              {allRecords.filter(r => r.is_scheduled).length > 0 && (
                 <span className="text-[10px] font-bold bg-green-200 text-green-800 px-1.5 py-0.5 rounded-full hidden sm:inline">Actif</span>
               )}
             </button>
@@ -3051,6 +3012,16 @@ export default function AttendanceShiftsPage() {
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
             </button>
+            <button onClick={async () => { try { await testDownload(); alert("✓ Test OK!"); } catch (e) { alert("❌ Test échoué: " + (e instanceof Error ? e.message : String(e))); } }}
+              className="bg-orange-100 border border-orange-300 px-3 py-2 rounded-lg text-sm hover:bg-orange-50 transition flex items-center gap-1.5 text-orange-700 font-medium" title="Teste le téléchargement (pour diagnostic)">
+              <FileSpreadsheet className="h-4 w-4" /><span className="hidden sm:inline">Test</span>
+            </button>
+            {viewMode === "period" && periodFrom && periodTo && (
+              <button onClick={async () => { try { await debugExportParams(periodFrom, periodTo); } catch (e) { console.error(e); } }}
+                className="bg-purple-100 border border-purple-300 px-3 py-2 rounded-lg text-sm hover:bg-purple-50 transition flex items-center gap-1.5 text-purple-700 font-medium" title="Vérifie les paramètres envoyés">
+                <FileSpreadsheet className="h-4 w-4" /><span className="hidden sm:inline">Debug</span>
+              </button>
+            )}
             <button onClick={() => viewMode === "period" ? fetchPeriodData() : fetchData(false)}
               className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
               <RefreshCw className={`h-4 w-4 ${loading || periodLoading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
@@ -3610,22 +3581,14 @@ export default function AttendanceShiftsPage() {
               : isDailyMode
               ? (v: ShiftDailyCol[]) => setExportDailyCols(v)
               : (v: ShiftSummCol[])  => setExportSummaryCols(v);
-            // Parcourir les employés définis comme shift dans le planning
-            // (ShiftPlanningEntry) pour la plage d'export, puis lire le service
-            // défini sur leur fiche Employé (departmentMap) — ainsi seuls les
-            // départements des employés shift planifiés alimentent le filtre.
-            // Repli sur assignments + records si le planning n'est pas encore chargé.
-            const shiftMatricules = new Set<string>(planningMatricules);
-            if (shiftMatricules.size === 0) {
-              Object.entries(assignments).forEach(([m, team]) => { if (team) shiftMatricules.add(m); });
-              allRecords.forEach(r => { if (r.matricule) shiftMatricules.add(r.matricule); });
-              flatPeriodRecords.forEach(r => { if (r.matricule) shiftMatricules.add(r.matricule); });
-            }
-
+            // Only show departments present in shift records (not all company departments)
             const shiftDeptSet = new Set<string>();
-            shiftMatricules.forEach(m => {
-              const dept = departmentMap.get(m);
-              if (dept) shiftDeptSet.add(dept.toUpperCase());
+            allRecords.forEach(r => { if (r.department && r.department !== "—") shiftDeptSet.add(r.department.toUpperCase()); });
+            flatPeriodRecords.forEach(r => { if (r.department) shiftDeptSet.add(r.department.toUpperCase()); });
+            // Fallback: use departmentMap for records that have shift team assignments
+            allRecords.forEach(r => {
+              const d = departmentMap.get(r.matricule ?? "");
+              if (d) shiftDeptSet.add(d.toUpperCase());
             });
             const allDepts = Array.from(shiftDeptSet).sort();
             const filteredDepts = exportDeptSearch.trim()
@@ -3741,7 +3704,7 @@ export default function AttendanceShiftsPage() {
                       className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
                       Annuler
                     </button>
-                    <button onClick={doExport} disabled={(viewMode !== "period" && selCols.length === 0) || exportLoading}
+                    <button onClick={doExport} disabled={selCols.length === 0 || exportLoading}
                       className="flex items-center gap-2 px-5 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
                       <FileSpreadsheet className="h-4 w-4" />
                       {exportLoading ? "Chargement…" : "Télécharger"}
