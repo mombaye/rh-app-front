@@ -416,8 +416,11 @@ export default function PlanningPage() {
         if (!allEntries.length) { toast.error("Aucune entrée valide trouvée dans le fichier"); return; }
         const batchId = `import_${Date.now()}`;
         const payload: ShiftPlanningUpload = { batch_id: batchId, entries: allEntries };
-        await uploadShiftPlanning(payload);
+        const res = await uploadShiftPlanning(payload);
         toast.success(`${allEntries.length} entrées importées`);
+        if ((res.activated ?? 0) > 0) {
+          toast.success(`${res.activated} employé${res.activated! > 1 ? "s" : ""} activé${res.activated! > 1 ? "s" : ""} en shift`);
+        }
         setImportOpen(false);
         await load();
       } catch {

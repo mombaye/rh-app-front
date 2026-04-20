@@ -115,7 +115,12 @@ export async function getShiftPlanning(dateFrom: string, dateTo: string): Promis
   return data;
 }
 
-export async function uploadShiftPlanning(payload: ShiftPlanningUpload): Promise<{ created: number; ok: boolean }> {
+export async function uploadShiftPlanning(payload: ShiftPlanningUpload): Promise<{
+  created: number;
+  ok: boolean;
+  activated?: number;
+  planned_matricules?: number;
+}> {
   const { data } = await api.post("/api/attendance/shift-planning/", payload);
   return data;
 }
