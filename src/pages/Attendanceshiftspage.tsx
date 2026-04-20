@@ -1232,10 +1232,14 @@ function PlanningUploadModal({ open, onClose, onSuccess, employeeNameToMatricule
       const batchId = `upload_${Date.now()}`;
       const res = await uploadShiftPlanning({ batch_id: batchId, entries: preview });
       setUploaded(true);
+      // Basculer sur le mois réellement importé pour que la vue montre les données,
+      // sinon la grille reste vide si l'utilisateur avait ouvert un autre mois.
+      const targetMonth = (res.date_min ?? preview[0]?.date ?? "").slice(0, 7) || viewMonth;
       setTimeout(() => {
         onSuccess(res.created);
         setTab("view");
-        loadMonthPlanning(viewMonth);
+        if (targetMonth && targetMonth !== viewMonth) setViewMonth(targetMonth);
+        loadMonthPlanning(targetMonth);
         setFile(null); setPreview([]); setUploaded(false);
       }, 800);
     } catch { setError("Erreur lors de l'envoi du planning. Réessayez."); } finally { setLoading(false); }

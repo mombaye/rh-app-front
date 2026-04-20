@@ -120,6 +120,11 @@ export async function uploadShiftPlanning(payload: ShiftPlanningUpload): Promise
   ok: boolean;
   activated?: number;
   planned_matricules?: number;
+  date_min?: string | null;
+  date_max?: string | null;
+  unresolved_names?: string[];
+  skipped_invalid_date?: number;
+  skipped_invalid_shift?: number;
 }> {
   const { data } = await api.post("/api/attendance/shift-planning/", payload);
   return data;

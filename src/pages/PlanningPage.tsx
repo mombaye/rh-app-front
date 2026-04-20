@@ -413,15 +413,57 @@ export default function PlanningPage() {
     reader.onload = async (ev) => {
       try {
         const { entries: allEntries } = parseNOCPlanningExcel(ev.target!.result as ArrayBuffer);
-        if (!allEntries.length) { toast.error("Aucune entrée valide trouvée dans le fichier"); return; }
+        if (!allEntries.length) {
+          toast.error("Aucune entrée valide trouvée dans le fichier. Vérifiez que les dates (ligne SHIFT) et les libellés de shift (08H-16H, 16H-22H, 22H-08H) sont bien présents.");
+          return;
+        }
         const batchId = `import_${Date.now()}`;
         const payload: ShiftPlanningUpload = { batch_id: batchId, entries: allEntries };
         const res = await uploadShiftPlanning(payload);
-        toast.success(`${allEntries.length} entrées importées`);
+
+        // Toast principal : nombre d'entrées réellement créées en base + plage
+        const created = res.created ?? allEntries.length;
+        const rangeLabel = res.date_min && res.date_max
+          ? ` (${res.date_min} → ${res.date_max})`
+          : "";
+        toast.success(`${created} entrée${created > 1 ? "s" : ""} importée${created > 1 ? "s" : ""}${rangeLabel}`);
+
+        // Diagnostic : entrées rejetées par le backend
+        const rejected = (res.skipped_invalid_date ?? 0) + (res.skipped_invalid_shift ?? 0);
+        if (rejected > 0) {
+          toast.error(`${rejected} entrée${rejected > 1 ? "s" : ""} rejetée${rejected > 1 ? "s" : ""} (dates ou shifts invalides)`);
+        }
+
+        // Diagnostic : matricules non résolus (noms absents de la base employés)
+        const unresolvedCount = res.unresolved_names?.length ?? 0;
+        if (unresolvedCount > 0) {
+          toast(`${unresolvedCount} nom${unresolvedCount > 1 ? "s" : ""} sans matricule détecté${unresolvedCount > 1 ? "s" : ""}`, { icon: "⚠️" });
+        }
+
+        // Activation automatique post-import
         if ((res.activated ?? 0) > 0) {
           toast.success(`${res.activated} employé${res.activated! > 1 ? "s" : ""} activé${res.activated! > 1 ? "s" : ""} en shift`);
         }
+
         setImportOpen(false);
+
+        // Naviguer automatiquement vers la semaine du premier import
+        // si la plage importée ne recouvre pas la semaine affichée —
+        // évite d'avoir une grille vide alors que des données existent.
+        if (res.date_min) {
+          const minDate = new Date(res.date_min + "T00:00:00");
+          const importedWeekStart = mondayOf(minDate);
+          const currentWeekStart = weekStart;
+          const overlapsCurrent =
+            res.date_max &&
+            res.date_max >= weekDates[0] &&
+            res.date_min <= weekDates[6];
+          if (!overlapsCurrent && importedWeekStart.getTime() !== currentWeekStart.getTime()) {
+            setWeekStart(importedWeekStart);
+            return; // useEffect sur weekStart relancera load()
+          }
+        }
+
         await load();
       } catch {
         toast.error("Erreur lors de l'import du fichier");
