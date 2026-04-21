@@ -1091,12 +1091,17 @@ export default function EmployeeLeavesPage({
     setCurrentPage(1);
   };
 
-  // Stats rapides
+  // Solde principal (cumul de tous les types qui déduisent du solde)
+  const primaryBalance = balances.find(b => b.leave_type.deducts_from_balance) ?? balances[0];
+  const soldeRestant = primaryBalance ? Math.round(parseFloat(primaryBalance.remaining || "0")) : 0;
+  const soldeLabel = primaryBalance?.leave_type.label || "Congé";
+
+  // Stats rapides — couleurs alignées sur la charte (#003c71) + petit indicateur de statut
   const statsData = [
-    { label: "Total",     count: requests.length,                                   color: "text-gray-700",   bg: "bg-gray-50",   border: "border-gray-200" },
-    { label: "En attente", count: requests.filter(r => r.status.startsWith("PENDING")).length, color: "text-amber-700", bg: "bg-amber-50",  border: "border-amber-200" },
-    { label: "Approuvées", count: requests.filter(r => r.status === "APPROVED").length,         color: "text-green-700", bg: "bg-green-50",  border: "border-green-200" },
-    { label: "Rejetées",   count: requests.filter(r => r.status === "REJECTED").length,         color: "text-red-700",   bg: "bg-red-50",    border: "border-red-200"   },
+    { label: "Total",      status: "ALL",      count: requests.length,                                             dot: "bg-slate-300"  },
+    { label: "En attente", status: "PENDING",  count: requests.filter(r => r.status.startsWith("PENDING")).length, dot: "bg-amber-400"  },
+    { label: "Approuvées", status: "APPROVED", count: requests.filter(r => r.status === "APPROVED").length,        dot: "bg-[#003c71]" },
+    { label: "Rejetées",   status: "REJECTED", count: requests.filter(r => r.status === "REJECTED").length,        dot: "bg-slate-400"  },
   ];
 
   const handleSelfApprove = async (req: LeaveRequest) => {
@@ -1146,9 +1151,22 @@ export default function EmployeeLeavesPage({
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-between mb-6 flex-wrap gap-3"
         >
-          <div>
-            <h1 className="text-2xl font-bold text-[#003c71]">Mes Congés</h1>
-            <p className="text-gray-500 text-sm mt-0.5">Gérez et suivez vos demandes de congés</p>
+          <div className="flex items-center gap-4 flex-wrap">
+            <div>
+              <h1 className="text-2xl font-bold text-[#003c71]">Mes Congés</h1>
+              <p className="text-gray-500 text-sm mt-0.5">Gérez et suivez vos demandes de congés</p>
+            </div>
+            {!loading && primaryBalance && (
+              <div
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#003c71]/5 border border-[#003c71]/15 text-[#003c71]"
+                title={`Solde ${soldeLabel} ${new Date().getFullYear()}`}
+              >
+                <TrendingUp size={15} className="shrink-0" />
+                <span className="text-sm font-medium">
+                  Solde congé : <span className="font-bold">{soldeRestant} jour{soldeRestant > 1 ? "s" : ""}</span>
+                </span>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -1176,143 +1194,29 @@ export default function EmployeeLeavesPage({
             animate={{ opacity: 1, y: 0 }}
             className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6"
           >
-            {statsData.map(s => (
-              <button
-                key={s.label}
-                onClick={() => handleFilterChange(
-                  s.label === "Total"      ? "ALL"      :
-                  s.label === "En attente" ? "PENDING"  :
-                  s.label === "Approuvées" ? "APPROVED" : "REJECTED"
-                )}
-                className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition hover:shadow-sm ${s.bg} ${s.border} ${
-                  (filterStatus === (
-                    s.label === "Total"      ? "ALL"      :
-                    s.label === "En attente" ? "PENDING"  :
-                    s.label === "Approuvées" ? "APPROVED" : "REJECTED"
-                  )) ? "ring-2 ring-offset-1 ring-current" : ""
-                }`}
-              >
-                <span className={`text-2xl font-bold ${s.color}`}>{s.count}</span>
-                <span className={`text-xs mt-0.5 font-medium ${s.color} opacity-80`}>{s.label}</span>
-              </button>
-            ))}
+            {statsData.map(s => {
+              const active = filterStatus === s.status;
+              return (
+                <button
+                  key={s.label}
+                  onClick={() => handleFilterChange(s.status)}
+                  className={`flex flex-col items-center justify-center p-3 rounded-2xl border bg-white transition hover:shadow-sm ${
+                    active
+                      ? "border-[#003c71] ring-2 ring-[#003c71]/20"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <span className="text-2xl font-bold text-[#003c71]">{s.count}</span>
+                  <span className="text-xs mt-0.5 font-medium text-gray-600 inline-flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                    {s.label}
+                  </span>
+                </button>
+              );
+            })}
           </motion.div>
         )}
 
-        {/* ── Solde (affichage prominent) ── */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-          aria-label="Mes soldes de congés"
-        >
-          {loading ? (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <div className="h-6 w-44 bg-gray-100 rounded animate-pulse mb-5" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[1,2,3].map(i => <div key={i} className="h-32 bg-gray-100 rounded-2xl animate-pulse" />)}
-              </div>
-            </div>
-          ) : balances.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
-                <TrendingUp size={22} className="text-gray-400" />
-              </div>
-              <p className="text-sm font-medium text-gray-600">Aucun solde configuré</p>
-              <p className="text-xs text-gray-400 mt-1">Contactez le service RH pour initialiser vos soldes.</p>
-            </div>
-          ) : (
-            <>
-              {/* Solde principal : premier type déduit du solde, ou premier tout court */}
-              {(() => {
-                const primary = balances.find(b => b.leave_type.deducts_from_balance) ?? balances[0];
-                const rem = parseFloat(primary.remaining || "0");
-                const acq = parseFloat(primary.acquired  || "0");
-                const taken = parseFloat(primary.taken || "0");
-                const pct = acq > 0 ? Math.round((rem / acq) * 100) : 0;
-                const barColor = pct > 50 ? "#10b981" : pct > 20 ? "#f59e0b" : "#ef4444";
-
-                return (
-                  <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#003c71] via-[#0055a4] to-[#0066c7] p-6 md:p-8 shadow-lg">
-                    {/* Décorations */}
-                    <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none" />
-                    <div className="absolute -bottom-16 -left-10 w-48 h-48 rounded-full bg-white/5 blur-2xl pointer-events-none" />
-
-                    <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                      <div className="min-w-0">
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-white/90 text-[11px] font-semibold uppercase tracking-wider mb-3">
-                          <TrendingUp size={12} />
-                          Solde {new Date().getFullYear()} · {primary.leave_type.label}
-                        </div>
-                        <div className="flex items-baseline gap-2 text-white">
-                          <span className="text-6xl md:text-7xl font-bold leading-none drop-shadow-sm">
-                            {rem.toFixed(1)}
-                          </span>
-                          <span className="text-2xl md:text-3xl font-semibold opacity-70">j</span>
-                          <span className="text-sm md:text-base text-white/70 ml-2">restants</span>
-                        </div>
-                        <p className="text-xs md:text-sm text-white/70 mt-2">
-                          Acquis : <span className="font-semibold text-white">{acq.toFixed(1)} j</span>
-                          <span className="mx-2 opacity-40">·</span>
-                          Pris : <span className="font-semibold text-white">{taken.toFixed(1)} j</span>
-                        </p>
-                      </div>
-
-                      <div className="w-full md:w-64 shrink-0">
-                        <div className="flex items-center justify-between text-xs text-white/80 font-medium mb-1.5">
-                          <span>Progression</span>
-                          <span className="font-bold text-white">{pct}%</span>
-                        </div>
-                        <div className="w-full h-3 bg-white/15 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{ width: `${pct}%`, backgroundColor: barColor }}
-                          />
-                        </div>
-                        <button
-                          onClick={() => { setEditTarget(null); setShowForm(true); }}
-                          className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-white text-[#003c71] text-sm font-semibold hover:bg-white/90 transition shadow-sm"
-                        >
-                          <Plus size={15} />
-                          Poser un congé
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Autres soldes (compacts) */}
-              {balances.length > 1 && (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-4">
-                  {balances
-                    .filter(b => {
-                      const primary = balances.find(x => x.leave_type.deducts_from_balance) ?? balances[0];
-                      return b.id !== primary.id;
-                    })
-                    .map(b => {
-                      const rem = parseFloat(b.remaining || "0");
-                      const acq = parseFloat(b.acquired  || "0");
-                      const pct = acq > 0 ? Math.round((rem / acq) * 100) : 0;
-                      const barColor = pct > 50 ? "#059669" : pct > 20 ? "#d97706" : "#dc2626";
-                      return (
-                        <div key={b.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:border-gray-200 transition">
-                          <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide truncate mb-2">{b.leave_type.label}</p>
-                          <div className="flex items-end gap-1 mb-2">
-                            <span className="text-2xl font-bold text-[#003c71]">{rem.toFixed(1)}</span>
-                            <span className="text-xs text-gray-400 mb-0.5">/ {acq.toFixed(1)} j</span>
-                          </div>
-                          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
-            </>
-          )}
-        </motion.section>
 
         {/* ── Liste des demandes ── */}
         <motion.div
