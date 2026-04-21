@@ -15,7 +15,7 @@ import {
   getShiftDailyStats, getShiftPeriodStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning,
   getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
-  updateAttendanceRecord, sendAttendanceAlert, testDownload, debugExportParams,
+  updateAttendanceRecord, sendAttendanceAlert,
 } from "@/services/attendanceService";
 import type { PlanningEntry } from "@/services/attendanceService";
 import { parseNOCPlanningExcel, cellToDateStr, extractMonthYearFromSheetName } from "@/utils/planningParser";
@@ -2693,12 +2693,101 @@ export default function AttendanceShiftsPage() {
   };
 
   const handleExport = async () => {
-    // En mode Période : ouvrir la modale pour choisir colonnes + départements,
-    // puis l'export xlsx est produit par doExport à partir de getShiftPeriodStats.
+    // En mode Période : produit directement un xlsx structuré
+    // (Date en titre → Shift Matin / Midi / Soir → lignes employés)
     if (viewMode === "period") {
-      setExportFrom(periodFrom || exportFrom);
-      setExportTo(periodTo || exportTo);
-      setShowExportDlg(true);
+      if (!periodFrom || !periodTo) {
+        alert("Sélectionnez d'abord une plage de dates via le filtre.");
+        return;
+      }
+      setExportLoading(true);
+      try {
+        const res = await getShiftPeriodStats({
+          date_from: periodFrom,
+          date_to:   periodTo,
+          team:      periodTeam,
+          matricule: periodMatricule || null,
+          status:    periodStatus || null,
+        });
+
+        const STATUS_LABELS: Record<string, string> = {
+          ok: "Présent", absent: "Absent", incomplete: "Incomplet",
+          anomaly: "Anomalie", not_working: "Pas de service",
+          on_leave: "En congé", on_mission: "En mission",
+        };
+        const SHIFT_LABELS: Record<string, string> = {
+          jour:  "Shift Matin",
+          soir1: "Shift Midi",
+          soir2: "Shift Soir",
+        };
+        const SHIFT_ORDER: ShiftTeamKey[] = ["jour", "soir1", "soir2"];
+
+        const aoa: (string | number | null)[][] = [];
+        let hasAny = false;
+
+        for (const day of res.dates) {
+          if (day.records.length === 0) continue;
+
+          const dateLabel = new Date(day.date + "T00:00:00").toLocaleDateString("fr-FR", {
+            weekday: "long", day: "2-digit", month: "long", year: "numeric",
+          });
+
+          const sectionStart = aoa.length;
+          aoa.push([`Date : ${dateLabel}`]);
+          aoa.push([]);
+
+          let dayHasContent = false;
+          for (const shiftKey of SHIFT_ORDER) {
+            const shiftRecs = day.records.filter((r) => r.shift_team === shiftKey);
+            if (shiftRecs.length === 0) continue;
+
+            dayHasContent = true;
+            aoa.push([SHIFT_LABELS[shiftKey] ?? shiftKey]);
+            aoa.push(["Matricule", "Nom", "Entrée", "Sortie", "Statut", "Retard"]);
+
+            for (const r of shiftRecs) {
+              const entry = r.shift_team === "soir2"
+                ? (r.out_time ? formatTime(r.out_time) : "—")
+                : (r.in_time  ? formatTime(r.in_time)  : "—");
+              const exit  = r.shift_team === "soir2"
+                ? (r.in_time  ? formatTime(r.in_time)  : "—")
+                : (r.out_time ? formatTime(r.out_time) : "—");
+              aoa.push([
+                r.matricule || "—",
+                r.full_name,
+                entry,
+                exit,
+                STATUS_LABELS[r.status] ?? r.status,
+                r.late_minutes > 0 ? (r.late_label ?? `${r.late_minutes} min`) : "—",
+              ]);
+            }
+            aoa.push([]);
+          }
+
+          if (!dayHasContent) {
+            aoa.length = sectionStart;
+            continue;
+          }
+          hasAny = true;
+          aoa.push([]);
+        }
+
+        if (!hasAny) {
+          alert("Aucun pointage à exporter sur cette période.");
+          return;
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws["!cols"] = [{ wch: 14 }, { wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Pointages");
+        XLSX.writeFile(wb, `shift_periode_${periodFrom}_${periodTo}_${todayISO()}.xlsx`);
+      } catch (e) {
+        console.error("handleExport period error:", e);
+        alert(`Erreur lors de l'export : ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setExportLoading(false);
+      }
       return;
     }
 
@@ -2711,75 +2800,6 @@ export default function AttendanceShiftsPage() {
   };
 
   const doExport = async () => {
-    // Export xlsx en mode Période : mêmes données que le filtre, plage exportFrom → exportTo.
-    if (viewMode === "period" && exportFrom && exportTo) {
-      if (exportPeriodCols.length === 0) {
-        alert("Sélectionnez au moins une colonne à exporter.");
-        return;
-      }
-      setExportLoading(true);
-      try {
-        const rangeData = await getShiftPeriodStats({
-          date_from: exportFrom,
-          date_to:   exportTo,
-          team:      periodTeam,
-          matricule: periodMatricule || null,
-          status:    periodStatus || null,
-        });
-        const STATUS_LABELS: Record<string, string> = {
-          ok: "Présent", absent: "Absent", incomplete: "Incomplet",
-          anomaly: "Anomalie", not_working: "Pas de service",
-          on_leave: "En congé", on_mission: "En mission",
-        };
-        const RANGE_ALL: Record<ShiftPeriodCol, (r: ShiftRecord, d: { date: string; weekday: number; weekday_label: string }) => any> = {
-          "Date":              (_r, d) => new Date(d.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
-          "Jour":              (_r, d) => d.weekday_label,
-          "Matricule":         (r)     => r.matricule || "—",
-          "Nom":               (r)     => r.full_name,
-          "Équipe":            (r)     => r.shift_team_label || r.shift_team || "—",
-          "Statut":            (r)     => STATUS_LABELS[r.status] ?? r.status,
-          "Retard":            (r)     => r.late_minutes > 0 ? `${r.late_label ?? r.late_minutes + " min"}` : "—",
-          "Entrée":            (r)     => r.shift_team === "soir2" ? (r.out_time ? formatTime(r.out_time) : "—") : (r.in_time ? formatTime(r.in_time) : "—"),
-          "Sortie":            (r)     => r.shift_team === "soir2" ? (r.in_time ? formatTime(r.in_time) : "—") : (r.out_time ? formatTime(r.out_time) : "—"),
-          "Heures travaillées":(r)     => r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
-          "Remplacé par":      (r)     => r.replaced_by ?? "—",
-          "Remplaçant de":     (r)     => r.replaces_employee ?? "—",
-        };
-        const rangeRows: Record<string, any>[] = [];
-        for (const day of rangeData.dates) {
-          const baseRecs = day.records ?? [];
-          if (baseRecs.length === 0) continue;
-          const dayRecs = exportDepts.length > 0
-            ? baseRecs.filter(rec => {
-                const dept = (rec.department ?? departmentMap.get(rec.matricule ?? "") ?? "").toUpperCase();
-                return exportDepts.includes(dept);
-              })
-            : baseRecs;
-          for (const rec of dayRecs) {
-            rangeRows.push(Object.fromEntries(
-              exportPeriodCols.map((k) => [k, RANGE_ALL[k](rec, day)])
-            ));
-          }
-        }
-        if (rangeRows.length === 0) {
-          alert(
-            `Aucun pointage trouvé pour la période ${exportFrom} → ${exportTo}` +
-            (exportDepts.length ? ` (département(s) : ${exportDepts.join(", ")})` : "") +
-            "."
-          );
-          return;
-        }
-        exportXLSX(`shift_periode_${exportFrom}_${exportTo}`, rangeRows);
-        setShowExportDlg(false);
-      } catch (e) {
-        console.error("Export period error:", e);
-        alert(`Erreur lors du téléchargement : ${e instanceof Error ? e.message : String(e)}`);
-      } finally {
-        setExportLoading(false);
-      }
-      return;
-    }
-
     if (viewMode === "daily" && exportFrom !== exportTo) {
       // Date range export in daily mode: fetch period data then export
       setExportLoading(true);
@@ -3012,16 +3032,6 @@ export default function AttendanceShiftsPage() {
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
             </button>
-            <button onClick={async () => { try { await testDownload(); alert("✓ Test OK!"); } catch (e) { alert("❌ Test échoué: " + (e instanceof Error ? e.message : String(e))); } }}
-              className="bg-orange-100 border border-orange-300 px-3 py-2 rounded-lg text-sm hover:bg-orange-50 transition flex items-center gap-1.5 text-orange-700 font-medium" title="Teste le téléchargement (pour diagnostic)">
-              <FileSpreadsheet className="h-4 w-4" /><span className="hidden sm:inline">Test</span>
-            </button>
-            {viewMode === "period" && periodFrom && periodTo && (
-              <button onClick={async () => { try { await debugExportParams(periodFrom, periodTo); } catch (e) { console.error(e); } }}
-                className="bg-purple-100 border border-purple-300 px-3 py-2 rounded-lg text-sm hover:bg-purple-50 transition flex items-center gap-1.5 text-purple-700 font-medium" title="Vérifie les paramètres envoyés">
-                <FileSpreadsheet className="h-4 w-4" /><span className="hidden sm:inline">Debug</span>
-              </button>
-            )}
             <button onClick={() => viewMode === "period" ? fetchPeriodData() : fetchData(false)}
               className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
               <RefreshCw className={`h-4 w-4 ${loading || periodLoading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
