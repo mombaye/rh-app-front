@@ -1151,14 +1151,14 @@ export default function EmployeeLeavesPage({
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-between mb-6 flex-wrap gap-3"
         >
-          <div className="flex items-center gap-4 flex-wrap">
-            <div>
-              <h1 className="text-2xl font-bold text-[#003c71]">Mes Congés</h1>
-              <p className="text-gray-500 text-sm mt-0.5">Gérez et suivez vos demandes de congés</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold text-[#003c71]">Mes Congés</h1>
+            <p className="text-gray-500 text-sm mt-0.5">Gérez et suivez vos demandes de congés</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
             {!loading && primaryBalance && (
               <div
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#003c71]/5 border border-[#003c71]/15 text-[#003c71]"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#003c71]/5 border-2 border-[#003c71]/40 text-[#003c71] shadow-sm"
                 title={`Solde ${soldeLabel} ${new Date().getFullYear()}`}
               >
                 <TrendingUp size={15} className="shrink-0" />
@@ -1167,8 +1167,6 @@ export default function EmployeeLeavesPage({
                 </span>
               </div>
             )}
-          </div>
-          <div className="flex items-center gap-2">
             <button
               onClick={() => setShowExport(true)}
               disabled={requests.length === 0}
