@@ -333,22 +333,6 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
               ))}
             </select>
 
-            {/* Solde disponible inline (toujours neutre — l'alerte de dépassement est affichée uniquement dans la bannière du haut) */}
-            {selectedType?.deducts_from_balance && (
-              <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border bg-emerald-50 border-emerald-200 text-emerald-700">
-                <TrendingUp size={14} className="shrink-0" />
-                {availableDays !== null
-                  ? <>Solde disponible : <strong className="ml-1">{availableDays.toFixed(1)} j</strong></>
-                  : <span className="text-amber-700">Aucun solde configuré — contactez les RH</span>
-                }
-                {requestedDays > 0 && availableDays !== null && (
-                  <span className="ml-auto text-xs font-normal opacity-80">
-                    ({requestedDays}j demandés)
-                  </span>
-                )}
-              </div>
-            )}
-
             {/* Info type de congé nécessitant un justificatif */}
             {needsDoc && (
               <div className="mt-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-start gap-2">
@@ -372,15 +356,6 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
                 onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
               />
-              <label className="flex items-center gap-2 mt-1.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={!!form.half_day_start}
-                  onChange={e => setForm(p => ({ ...p, half_day_start: e.target.checked }))}
-                  className="rounded text-[#003c71]"
-                />
-                <span className="text-xs text-gray-500">Commence l'après-midi (½ j)</span>
-              </label>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -393,15 +368,6 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
                 onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
               />
-              <label className="flex items-center gap-2 mt-1.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={!!form.half_day_end}
-                  onChange={e => setForm(p => ({ ...p, half_day_end: e.target.checked }))}
-                  className="rounded text-[#003c71]"
-                />
-                <span className="text-xs text-gray-500">Se termine le matin (½ j)</span>
-              </label>
             </div>
           </div>
 
