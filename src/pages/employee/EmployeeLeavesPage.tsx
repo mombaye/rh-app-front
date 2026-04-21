@@ -257,15 +257,16 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        initial={{ opacity: 0, scale: 0.97, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+        className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-[500px] max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#003c71] to-[#0055a4] px-6 py-5">
-          <h3 className="text-white font-semibold text-lg">
+        <div className="sticky top-0 z-10 bg-gradient-to-r from-[#003c71] to-[#0055a4] px-6 py-5 rounded-t-3xl sm:rounded-t-2xl">
+          <h3 className="text-white font-bold text-lg">
             {mode === "create" ? "Nouvelle demande de congé" : "Modifier la demande"}
           </h3>
           <p className="text-blue-200 text-xs mt-0.5">
@@ -273,15 +274,38 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
           </p>
         </div>
 
-        <div className="p-6 space-y-4">
-          {/* Alerte d'erreur visible dans le formulaire */}
-          {formError && (
-            <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-              <AlertTriangle size={17} className="text-red-500 shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700 leading-snug">{formError}</p>
-            </div>
-          )}
+        <div className="px-6 py-5 space-y-4">
+          {/* Bannière solde insuffisant */}
+          <AnimatePresence>
+            {balanceShortfall && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 font-semibold"
+              >
+                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                <span>Solde insuffisant — le bouton d'envoi est désactivé.</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
+          {/* Alerte d'erreur backend */}
+          <AnimatePresence>
+            {formError && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl px-4 py-3"
+              >
+                <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 leading-snug">{formError}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Type de congé */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Type de congé <span className="text-red-400">*</span>
@@ -297,7 +321,7 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
               ))}
             </select>
 
-            {/* Solde disponible */}
+            {/* Solde disponible inline */}
             {selectedType?.deducts_from_balance && (
               <div className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border ${
                 balanceShortfall
@@ -309,7 +333,7 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
                   ? <>Solde disponible : <strong className="ml-1">{availableDays.toFixed(1)} j</strong></>
                   : <span className="text-amber-700">Aucun solde configuré — contactez les RH</span>
                 }
-                {balanceShortfall && requestedDays > 0 && availableDays !== null && (
+                {requestedDays > 0 && availableDays !== null && (
                   <span className="ml-auto text-xs font-normal opacity-80">
                     ({requestedDays}j demandés)
                   </span>
@@ -318,6 +342,7 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
             )}
           </div>
 
+          {/* Dates */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -346,6 +371,7 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
               <input
                 type="date"
                 value={form.end_date ?? ""}
+                min={form.start_date || undefined}
                 onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
               />
@@ -361,15 +387,24 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
             </div>
           </div>
 
-          {form.days && form.days > 0 && (
-            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 flex items-center gap-2">
-              <Calendar size={16} className="text-blue-500 shrink-0" />
-              <span className="text-sm text-blue-700 font-medium">
-                {form.days} jour{form.days > 1 ? "s" : ""} de congé calculé{form.days > 1 ? "s" : ""}
-              </span>
-            </div>
-          )}
+          {/* Résumé jours */}
+          <AnimatePresence>
+            {form.days && form.days > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 flex items-center gap-2"
+              >
+                <Calendar size={16} className="text-blue-500 shrink-0" />
+                <span className="text-sm text-blue-700 font-semibold">
+                  {form.days} jour{form.days > 1 ? "s" : ""} de congé calculé{form.days > 1 ? "s" : ""}
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
+          {/* Motif */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Motif</label>
             <textarea
@@ -380,23 +415,24 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
             />
           </div>
-        </div>
 
-        <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-100">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm transition font-medium"
-          >
-            Annuler
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition flex items-center gap-2 disabled:opacity-60 font-medium shadow-sm"
-          >
-            {saving && <Loader2 size={15} className="animate-spin" />}
-            {mode === "create" ? "Envoyer la demande" : "Enregistrer"}
-          </button>
+          {/* Footer */}
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={onClose}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm transition font-medium"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !!balanceShortfall}
+              className="flex-[2] px-4 py-2.5 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-sm"
+            >
+              {saving && <Loader2 size={15} className="animate-spin" />}
+              {mode === "create" ? "Envoyer la demande" : "Enregistrer"}
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>
