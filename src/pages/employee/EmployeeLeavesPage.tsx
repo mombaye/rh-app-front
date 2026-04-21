@@ -2,11 +2,12 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Calendar, CheckCircle2, Clock, XCircle,
-  AlertCircle, Pencil, FileDown, ChevronDown, ChevronUp,
+  AlertCircle, Pencil, FileDown,
   Loader2, ChevronLeft, ChevronRight, TrendingUp, Filter,
   X, CalendarDays, User, Hash, MessageSquare, ShieldCheck,
   ThumbsUp, Upload, FileCheck, Paperclip, ExternalLink,
-  AlertTriangle, UserX, Trash2, Eye, ArrowDown, Building2, RefreshCw,
+  AlertTriangle, UserX, Trash2, Eye, RefreshCw,
+  LayoutGrid, List, ArrowUpDown,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -15,7 +16,6 @@ const PAGE_SIZE = 8;
 import { useAuth } from "@/contexts/useAuth";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
 import { leaveBalanceService, leaveRequestService, leaveTypeService } from "@/services/leaveService";
-import { employeeHierarchyService, MyHierarchyChain } from "@/services/hierarchyService";
 import { LeaveBalance, LeaveRequest, LeaveRequestCreate, LeaveType } from "@/types/leave";
 import toast from "react-hot-toast";
 
@@ -846,9 +846,10 @@ interface RequestCardProps {
   onCancel: () => void;
   onReminder: () => void;
   onSelfApprove?: () => void;
+  compact?: boolean;
 }
 
-function RequestCard({ req, onView, onEdit, onCancel, onReminder, onSelfApprove }: RequestCardProps) {
+function RequestCard({ req, onView, onEdit, onCancel, onReminder, onSelfApprove, compact = false }: RequestCardProps) {
   const cfg     = STATUS_CONFIG[req.status] ?? STATUS_CONFIG.CANCELLED;
   const Icon    = cfg.Icon;
   const canEdit = req.status === "PENDING" || req.status === "PENDING_SECOND";
@@ -877,12 +878,12 @@ function RequestCard({ req, onView, onEdit, onCancel, onReminder, onSelfApprove 
         style={{ backgroundColor: isAbsent ? "#dc2626" : cfg.color }}
       />
 
-      <div className="pl-5 pr-4 py-4">
-        <div className="flex items-start justify-between gap-3">
+      <div className={`pl-5 pr-4 ${compact ? "py-2.5" : "py-4"}`}>
+        <div className="flex items-center justify-between gap-3">
           {/* Infos principales */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-1.5">
-              <span className="font-semibold text-gray-800 text-sm">{req.leave_type.label}</span>
+            <div className={`flex items-center gap-2 flex-wrap ${compact ? "mb-0.5" : "mb-1.5"}`}>
+              <span className="font-semibold text-gray-800 text-sm truncate">{req.leave_type.label}</span>
               <span
                 className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.textColor} ${cfg.borderColor}`}
                 style={{ backgroundColor: cfg.bg }}
@@ -907,67 +908,73 @@ function RequestCard({ req, onView, onEdit, onCancel, onReminder, onSelfApprove 
             </div>
 
             {/* Période */}
-            <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
               <Calendar size={12} className="text-gray-400 shrink-0" />
-              <span>{fmt(req.start_date)}</span>
+              <span>{compact ? fmtShort(req.start_date) : fmt(req.start_date)}</span>
               <span className="text-gray-300">→</span>
-              <span>{fmt(req.end_date)}</span>
+              <span>{compact ? fmtShort(req.end_date) : fmt(req.end_date)}</span>
               <span className="ml-1 font-semibold text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded-md">
                 {days} j
               </span>
             </div>
 
-            {/* Motif (tronqué) */}
-            {req.motif && (
-              <p className="text-xs text-gray-400 italic truncate max-w-sm mt-0.5">"{req.motif}"</p>
-            )}
+            {!compact && (
+              <>
+                {/* Motif (tronqué) */}
+                {req.motif && (
+                  <p className="text-xs text-gray-400 italic truncate max-w-sm mt-1">"{req.motif}"</p>
+                )}
 
-            {/* Motif de rejet */}
-            {req.reject_reason && (
-              <div className="flex items-start gap-1.5 mt-1">
-                <XCircle size={11} className="text-red-400 mt-0.5 shrink-0" />
-                <p className="text-xs text-red-500 truncate max-w-xs">{req.reject_reason}</p>
-              </div>
-            )}
+                {/* Motif de rejet */}
+                {req.reject_reason && (
+                  <div className="flex items-start gap-1.5 mt-1">
+                    <XCircle size={11} className="text-red-400 mt-0.5 shrink-0" />
+                    <p className="text-xs text-red-500 truncate max-w-xs">{req.reject_reason}</p>
+                  </div>
+                )}
 
-            {/* Validateur */}
-            {req.reviewed_by && req.status === "APPROVED" && (
-              <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
-                <CheckCircle2 size={11} />
-                Approuvé par {req.reviewed_by.full_name}
-              </p>
-            )}
+                {/* Validateur */}
+                {req.reviewed_by && req.status === "APPROVED" && (
+                  <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
+                    <CheckCircle2 size={11} />
+                    Approuvé par {req.reviewed_by.full_name}
+                  </p>
+                )}
 
-            {/* Alerte non justifié */}
-            {isAbsent && (
-              <p className="text-xs text-red-600 mt-1 flex items-center gap-1 font-medium">
-                <UserX size={11} />
-                Non justifié — justificatif non fourni
-              </p>
-            )}
+                {/* Alerte non justifié */}
+                {isAbsent && (
+                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1 font-medium">
+                    <UserX size={11} />
+                    Non justifié — justificatif non fourni
+                  </p>
+                )}
 
-            {/* Alerte justificatif en attente */}
-            {!isAbsent && needsJustif && justifDone && !req.justification_validated && (
-              <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                <FileCheck size={11} />
-                Justificatif soumis — en attente de validation RH
-              </p>
-            )}
-            {!isAbsent && needsJustif && !justifDone && req.justification_deadline && (
-              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1 font-medium">
-                <AlertTriangle size={11} />
-                Justificatif requis avant le {fmtShort(req.justification_deadline)}
-              </p>
+                {/* Alerte justificatif en attente */}
+                {!isAbsent && needsJustif && justifDone && !req.justification_validated && (
+                  <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                    <FileCheck size={11} />
+                    Justificatif soumis — en attente de validation RH
+                  </p>
+                )}
+                {!isAbsent && needsJustif && !justifDone && req.justification_deadline && (
+                  <p className="text-xs text-amber-600 mt-1 flex items-center gap-1 font-medium">
+                    <AlertTriangle size={11} />
+                    Justificatif requis avant le {fmtShort(req.justification_deadline)}
+                  </p>
+                )}
+              </>
             )}
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {/* Badge jours */}
-            <div className="hidden sm:flex flex-col items-center justify-center w-12 h-12 rounded-xl border-2 border-gray-100 bg-gray-50 shrink-0">
-              <span className="text-lg font-bold text-gray-700 leading-none">{days}</span>
-              <span className="text-[9px] text-gray-400 uppercase tracking-wide">jours</span>
-            </div>
+            {!compact && (
+              <div className="hidden sm:flex flex-col items-center justify-center w-12 h-12 rounded-xl border-2 border-gray-100 bg-gray-50 shrink-0">
+                <span className="text-lg font-bold text-gray-700 leading-none">{days}</span>
+                <span className="text-[9px] text-gray-400 uppercase tracking-wide">jours</span>
+              </div>
+            )}
 
             {/* Bouton Voir le détail */}
             <button
@@ -984,35 +991,35 @@ function RequestCard({ req, onView, onEdit, onCancel, onReminder, onSelfApprove 
                   <button
                     onClick={e => { e.stopPropagation(); onSelfApprove(); }}
                     title="Approuver"
-                    className="flex items-center gap-1.5 text-xs text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-lg transition font-medium border border-green-200 hover:border-green-400"
+                    className={`flex items-center gap-1.5 text-xs text-green-700 hover:bg-green-50 rounded-lg transition font-medium border border-green-200 hover:border-green-400 ${compact ? "p-2" : "px-3 py-1.5"}`}
                   >
                     <ThumbsUp size={12} />
-                    <span className="hidden sm:inline">Approuver</span>
+                    {!compact && <span className="hidden sm:inline">Approuver</span>}
                   </button>
                 )}
                 <button
                   onClick={e => { e.stopPropagation(); onReminder(); }}
                   title="Relancer le manager"
-                  className="flex items-center gap-1.5 text-xs text-amber-600 hover:bg-amber-50 px-3 py-1.5 rounded-lg transition font-medium border border-amber-200 hover:border-amber-400"
+                  className={`flex items-center gap-1.5 text-xs text-amber-600 hover:bg-amber-50 rounded-lg transition font-medium border border-amber-200 hover:border-amber-400 ${compact ? "p-2" : "px-3 py-1.5"}`}
                 >
                   <RefreshCw size={12} />
-                  <span className="hidden sm:inline">Relancer</span>
+                  {!compact && <span className="hidden sm:inline">Relancer</span>}
                 </button>
                 <button
                   onClick={e => { e.stopPropagation(); onEdit(); }}
                   title="Modifier"
-                  className="flex items-center gap-1.5 text-xs text-[#003c71] hover:bg-[#003c71]/10 px-3 py-1.5 rounded-lg transition font-medium border border-[#003c71]/20 hover:border-[#003c71]/40"
+                  className={`flex items-center gap-1.5 text-xs text-[#003c71] hover:bg-[#003c71]/10 rounded-lg transition font-medium border border-[#003c71]/20 hover:border-[#003c71]/40 ${compact ? "p-2" : "px-3 py-1.5"}`}
                 >
                   <Pencil size={12} />
-                  <span className="hidden sm:inline">Modifier</span>
+                  {!compact && <span className="hidden sm:inline">Modifier</span>}
                 </button>
                 <button
                   onClick={e => { e.stopPropagation(); onCancel(); }}
                   title="Annuler la demande"
-                  className="flex items-center gap-1.5 text-xs text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition font-medium border border-red-200 hover:border-red-400"
+                  className={`flex items-center gap-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition font-medium border border-red-200 hover:border-red-400 ${compact ? "p-2" : "px-3 py-1.5"}`}
                 >
                   <Trash2 size={12} />
-                  <span className="hidden sm:inline">Annuler</span>
+                  {!compact && <span className="hidden sm:inline">Annuler</span>}
                 </button>
               </>
             )}
@@ -1047,9 +1054,8 @@ export default function EmployeeLeavesPage({
   const [cancelling,    setCancelling]   = useState(false);
   const [showExport,    setShowExport]   = useState(false);
   const [filterStatus,  setFilterStatus] = useState("ALL");
-  const [showBalances,  setShowBalances] = useState(true);
-  const [showHierarchy, setShowHierarchy] = useState(false);
-  const [hierarchy,     setHierarchy]    = useState<MyHierarchyChain | null>(null);
+  const [viewMode,      setViewMode]     = useState<"compact" | "detailed">("detailed");
+  const [sortOrder,     setSortOrder]    = useState<"recent" | "oldest" | "longest">("recent");
   const [currentPage,   setCurrentPage]  = useState(1);
 
   const refresh = useCallback(() => {
@@ -1070,13 +1076,13 @@ export default function EmployeeLeavesPage({
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  useEffect(() => {
-    employeeHierarchyService.getMyHierarchy()
-      .then(setHierarchy)
-      .catch(() => {});
-  }, []);
-
-  const filtered   = filterStatus === "ALL" ? requests : requests.filter(r => r.status === filterStatus);
+  const filtered = (filterStatus === "ALL" ? requests : requests.filter(r => r.status === filterStatus))
+    .slice()
+    .sort((a, b) => {
+      if (sortOrder === "recent") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (sortOrder === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return (parseFloat(b.days) || 0) - (parseFloat(a.days) || 0);
+    });
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
@@ -1193,215 +1199,120 @@ export default function EmployeeLeavesPage({
           </motion.div>
         )}
 
-        {/* ── Soldes ── */}
-        <motion.div
+        {/* ── Solde (affichage prominent) ── */}
+        <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-6 overflow-hidden"
+          className="mb-6"
+          aria-label="Mes soldes de congés"
         >
-          <button
-            onClick={() => setShowBalances(p => !p)}
-            className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition"
-          >
-            <span className="font-semibold text-gray-800 flex items-center gap-2">
-              <TrendingUp size={17} className="text-[#003c71]" />
-              Mes soldes {new Date().getFullYear()}
-            </span>
-            {showBalances
-              ? <ChevronUp size={17} className="text-gray-400" />
-              : <ChevronDown size={17} className="text-gray-400" />
-            }
-          </button>
+          {loading ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="h-6 w-44 bg-gray-100 rounded animate-pulse mb-5" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1,2,3].map(i => <div key={i} className="h-32 bg-gray-100 rounded-2xl animate-pulse" />)}
+              </div>
+            </div>
+          ) : balances.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                <TrendingUp size={22} className="text-gray-400" />
+              </div>
+              <p className="text-sm font-medium text-gray-600">Aucun solde configuré</p>
+              <p className="text-xs text-gray-400 mt-1">Contactez le service RH pour initialiser vos soldes.</p>
+            </div>
+          ) : (
+            <>
+              {/* Solde principal : premier type déduit du solde, ou premier tout court */}
+              {(() => {
+                const primary = balances.find(b => b.leave_type.deducts_from_balance) ?? balances[0];
+                const rem = parseFloat(primary.remaining || "0");
+                const acq = parseFloat(primary.acquired  || "0");
+                const taken = parseFloat(primary.taken || "0");
+                const pct = acq > 0 ? Math.round((rem / acq) * 100) : 0;
+                const barColor = pct > 50 ? "#10b981" : pct > 20 ? "#f59e0b" : "#ef4444";
 
-          <AnimatePresence>
-            {showBalances && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="px-5 pb-5">
-                  {loading ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}
-                    </div>
-                  ) : balances.length === 0 ? (
-                    <p className="text-gray-400 text-sm py-2">Aucun solde disponible.</p>
-                  ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {balances.map(b => {
-                        const rem = parseFloat(b.remaining || "0");
-                        const acq = parseFloat(b.acquired  || "0");
-                        const pct = acq > 0 ? Math.round((rem / acq) * 100) : 0;
-                        return (
-                          <div key={b.id} className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-100 hover:border-gray-200 transition">
-                            <div className="text-xs text-gray-500 font-medium mb-2 truncate">{b.leave_type.label}</div>
-                            <div className="flex items-end gap-1 mb-2">
-                              <span className="text-2xl font-bold text-[#003c71]">{rem.toFixed(1)}</span>
-                              <span className="text-sm text-gray-400 mb-0.5">/ {acq.toFixed(1)} j</span>
-                            </div>
-                            {/* Barre de progression */}
-                            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                              <div
-                                className="h-full rounded-full transition-all"
-                                style={{
-                                  width: `${pct}%`,
-                                  backgroundColor: pct > 50 ? "#059669" : pct > 20 ? "#d97706" : "#dc2626",
-                                }}
-                              />
-                            </div>
-                            <div className="text-xs text-gray-400 mt-1.5">
-                              Pris : {parseFloat(b.taken || "0").toFixed(1)} j · {pct}% restant
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+                return (
+                  <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#003c71] via-[#0055a4] to-[#0066c7] p-6 md:p-8 shadow-lg">
+                    {/* Décorations */}
+                    <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+                    <div className="absolute -bottom-16 -left-10 w-48 h-48 rounded-full bg-white/5 blur-2xl pointer-events-none" />
 
-        {/* ── Mon arborescence de validation ── */}
-        {hierarchy && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-6 overflow-hidden"
-          >
-            <button
-              onClick={() => setShowHierarchy(p => !p)}
-              className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition"
-            >
-              <span className="font-semibold text-gray-800 flex items-center gap-2">
-                <Building2 size={17} className="text-[#003c71]" />
-                Mon arborescence de validation
-              </span>
-              {showHierarchy
-                ? <ChevronUp size={17} className="text-gray-400" />
-                : <ChevronDown size={17} className="text-gray-400" />
-              }
-            </button>
-
-            <AnimatePresence>
-              {showHierarchy && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
-                >
-                  <div className="px-5 pb-5">
-                    <p className="text-xs text-gray-400 mb-4">Voici le circuit de validation appliqué à vos demandes de congé</p>
-                    <div className="flex flex-col items-center gap-0">
-                      {/* Employé (moi) */}
-                      <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-blue-50 border border-blue-200 w-full max-w-md">
-                        <div className="p-2 rounded-lg bg-blue-100">
-                          <User size={18} className="text-blue-700" />
+                    <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                      <div className="min-w-0">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-white/90 text-[11px] font-semibold uppercase tracking-wider mb-3">
+                          <TrendingUp size={12} />
+                          Solde {new Date().getFullYear()} · {primary.leave_type.label}
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-blue-800">{hierarchy.employee.full_name}</p>
-                          <p className="text-[10px] text-blue-500">{hierarchy.employee.matricule} · {hierarchy.employee.fonction || hierarchy.employee.service}</p>
+                        <div className="flex items-baseline gap-2 text-white">
+                          <span className="text-6xl md:text-7xl font-bold leading-none drop-shadow-sm">
+                            {rem.toFixed(1)}
+                          </span>
+                          <span className="text-2xl md:text-3xl font-semibold opacity-70">j</span>
+                          <span className="text-sm md:text-base text-white/70 ml-2">restants</span>
                         </div>
-                        <span className="ml-auto text-[10px] font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-lg">Vous</span>
+                        <p className="text-xs md:text-sm text-white/70 mt-2">
+                          Acquis : <span className="font-semibold text-white">{acq.toFixed(1)} j</span>
+                          <span className="mx-2 opacity-40">·</span>
+                          Pris : <span className="font-semibold text-white">{taken.toFixed(1)} j</span>
+                        </p>
                       </div>
 
-                      {/* Connecteur */}
-                      <div className="flex flex-col items-center py-1">
-                        <div className="w-0.5 h-4 bg-gray-300" />
-                        <ArrowDown size={14} className="text-gray-400 -mt-1" />
-                      </div>
-
-                      {/* Approbateur principal : DG (responsable dept racine) ou N+1 */}
-                      {hierarchy.approval_flow === "DG_ONLY" ? (
-                        <div className="flex items-center gap-3 px-5 py-3 rounded-xl w-full max-w-md bg-indigo-50 border border-indigo-200">
-                          <div className="p-2 rounded-lg bg-indigo-100">
-                            <ShieldCheck size={18} className="text-indigo-700" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-indigo-800">Direction Générale</p>
-                            <p className="text-[10px] text-indigo-500">Validation directe DG</p>
-                          </div>
-                          <span className="ml-auto text-[10px] font-semibold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-lg whitespace-nowrap">DG</span>
+                      <div className="w-full md:w-64 shrink-0">
+                        <div className="flex items-center justify-between text-xs text-white/80 font-medium mb-1.5">
+                          <span>Progression</span>
+                          <span className="font-bold text-white">{pct}%</span>
                         </div>
-                      ) : (
-                        <div className={`flex items-center gap-3 px-5 py-3 rounded-xl w-full max-w-md ${
-                          hierarchy.n1_manager ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"
-                        }`}>
-                          <div className={`p-2 rounded-lg ${hierarchy.n1_manager ? "bg-amber-100" : "bg-gray-100"}`}>
-                            <ShieldCheck size={18} className={hierarchy.n1_manager ? "text-amber-700" : "text-gray-400"} />
-                          </div>
-                          <div className="min-w-0">
-                            {hierarchy.n1_manager ? (
-                              <>
-                                <p className="text-sm font-bold text-amber-800">{hierarchy.n1_manager.full_name}</p>
-                                <p className="text-[10px] text-amber-500">{hierarchy.n1_manager.fonction || hierarchy.n1_manager.service}</p>
-                              </>
-                            ) : (
-                              <p className="text-sm text-gray-400 italic">Non défini</p>
-                            )}
-                          </div>
-                          <span className="ml-auto text-[10px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-lg whitespace-nowrap">N+1</span>
+                        <div className="w-full h-3 bg-white/15 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${pct}%`, backgroundColor: barColor }}
+                          />
                         </div>
-                      )}
-
-                      {/* N+2 — uniquement pour les employés dans un sous-département */}
-                      {hierarchy.approval_flow === "HIERARCHY" && hierarchy.requires_two_approvals && (
-                        <>
-                          <div className="flex flex-col items-center py-1">
-                            <div className="w-0.5 h-4 bg-gray-300" />
-                            <ArrowDown size={14} className="text-gray-400 -mt-1" />
-                          </div>
-                          <div className={`flex items-center gap-3 px-5 py-3 rounded-xl w-full max-w-md ${
-                            hierarchy.n2_manager ? "bg-orange-50 border border-orange-200" : "bg-gray-50 border border-gray-200"
-                          }`}>
-                            <div className={`p-2 rounded-lg ${hierarchy.n2_manager ? "bg-orange-100" : "bg-gray-100"}`}>
-                              <ShieldCheck size={18} className={hierarchy.n2_manager ? "text-orange-700" : "text-gray-400"} />
-                            </div>
-                            <div className="min-w-0">
-                              {hierarchy.n2_manager ? (
-                                <>
-                                  <p className="text-sm font-bold text-orange-800">{hierarchy.n2_manager.full_name}</p>
-                                  <p className="text-[10px] text-orange-500">{hierarchy.n2_manager.fonction || hierarchy.n2_manager.service}</p>
-                                </>
-                              ) : (
-                                <p className="text-sm text-gray-400 italic">Non défini</p>
-                              )}
-                            </div>
-                            <span className="ml-auto text-[10px] font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-lg whitespace-nowrap">N+2</span>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Connecteur → RH */}
-                      <div className="flex flex-col items-center py-1">
-                        <div className="w-0.5 h-4 bg-gray-300" />
-                        <ArrowDown size={14} className="text-gray-400 -mt-1" />
-                      </div>
-
-                      {/* RH */}
-                      <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-emerald-50 border border-emerald-200 w-full max-w-md">
-                        <div className="p-2 rounded-lg bg-emerald-100">
-                          <CheckCircle2 size={18} className="text-emerald-700" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-emerald-800">Service RH</p>
-                          <p className="text-[10px] text-emerald-500">Validation finale</p>
-                        </div>
-                        <span className="ml-auto text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-lg whitespace-nowrap">RH</span>
+                        <button
+                          onClick={() => { setEditTarget(null); setShowForm(true); }}
+                          className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-white text-[#003c71] text-sm font-semibold hover:bg-white/90 transition shadow-sm"
+                        >
+                          <Plus size={15} />
+                          Poser un congé
+                        </button>
                       </div>
                     </div>
                   </div>
-                </motion.div>
+                );
+              })()}
+
+              {/* Autres soldes (compacts) */}
+              {balances.length > 1 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-4">
+                  {balances
+                    .filter(b => {
+                      const primary = balances.find(x => x.leave_type.deducts_from_balance) ?? balances[0];
+                      return b.id !== primary.id;
+                    })
+                    .map(b => {
+                      const rem = parseFloat(b.remaining || "0");
+                      const acq = parseFloat(b.acquired  || "0");
+                      const pct = acq > 0 ? Math.round((rem / acq) * 100) : 0;
+                      const barColor = pct > 50 ? "#059669" : pct > 20 ? "#d97706" : "#dc2626";
+                      return (
+                        <div key={b.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:border-gray-200 transition">
+                          <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide truncate mb-2">{b.leave_type.label}</p>
+                          <div className="flex items-end gap-1 mb-2">
+                            <span className="text-2xl font-bold text-[#003c71]">{rem.toFixed(1)}</span>
+                            <span className="text-xs text-gray-400 mb-0.5">/ {acq.toFixed(1)} j</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
               )}
-            </AnimatePresence>
-          </motion.div>
-        )}
+            </>
+          )}
+        </motion.section>
 
         {/* ── Liste des demandes ── */}
         <motion.div
@@ -1410,23 +1321,42 @@ export default function EmployeeLeavesPage({
           transition={{ delay: 0.1 }}
           className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
         >
-          {/* Toolbar */}
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
-            <span className="font-semibold text-gray-800">
-              Mes demandes
-              {!loading && filtered.length > 0 && (
-                <span className="ml-2 text-xs font-normal text-gray-400">
-                  ({filtered.length} résultat{filtered.length > 1 ? "s" : ""})
+          {/* Toolbar — Petite interface de gestion de l'affichage */}
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-semibold text-gray-800 text-sm">Mes demandes</span>
+              {!loading && (
+                <span className="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded-full bg-gray-100 text-gray-600 text-[11px] font-semibold">
+                  {filtered.length}
                 </span>
               )}
-            </span>
+            </div>
+
             <div className="flex-1" />
+
+            {/* Tri */}
+            <div className="relative">
+              <ArrowUpDown size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <select
+                value={sortOrder}
+                onChange={e => setSortOrder(e.target.value as typeof sortOrder)}
+                className="pl-7 pr-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white text-gray-700"
+                title="Trier les demandes"
+              >
+                <option value="recent">Plus récentes</option>
+                <option value="oldest">Plus anciennes</option>
+                <option value="longest">Durée décroissante</option>
+              </select>
+            </div>
+
+            {/* Filtre statut */}
             <div className="relative">
               <Filter size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <select
                 value={filterStatus}
                 onChange={e => handleFilterChange(e.target.value)}
-                className="pl-7 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white"
+                className="pl-7 pr-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white text-gray-700"
+                title="Filtrer par statut"
               >
                 <option value="ALL">Tous ({requests.length})</option>
                 {Object.entries(STATUS_CONFIG).map(([k, v]) => (
@@ -1434,7 +1364,63 @@ export default function EmployeeLeavesPage({
                 ))}
               </select>
             </div>
+
+            {/* Mode d'affichage */}
+            <div className="flex items-center rounded-lg border border-gray-200 bg-white p-0.5">
+              <button
+                onClick={() => setViewMode("detailed")}
+                title="Affichage détaillé"
+                className={`p-1.5 rounded-md transition ${
+                  viewMode === "detailed"
+                    ? "bg-[#003c71] text-white shadow-sm"
+                    : "text-gray-500 hover:bg-gray-50"
+                }`}
+              >
+                <LayoutGrid size={13} />
+              </button>
+              <button
+                onClick={() => setViewMode("compact")}
+                title="Affichage compact"
+                className={`p-1.5 rounded-md transition ${
+                  viewMode === "compact"
+                    ? "bg-[#003c71] text-white shadow-sm"
+                    : "text-gray-500 hover:bg-gray-50"
+                }`}
+              >
+                <List size={13} />
+              </button>
+            </div>
           </div>
+
+          {/* Chips actifs */}
+          {!loading && (filterStatus !== "ALL" || sortOrder !== "recent") && (
+            <div className="px-5 pt-3 flex items-center gap-2 flex-wrap">
+              {filterStatus !== "ALL" && (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                  {STATUS_CONFIG[filterStatus]?.label ?? filterStatus}
+                  <button
+                    onClick={() => handleFilterChange("ALL")}
+                    className="hover:bg-blue-100 rounded-full p-0.5 transition"
+                    title="Retirer le filtre"
+                  >
+                    <X size={10} />
+                  </button>
+                </span>
+              )}
+              {sortOrder !== "recent" && (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-full bg-gray-50 text-gray-700 border border-gray-200">
+                  Tri : {sortOrder === "oldest" ? "Plus anciennes" : "Durée décroissante"}
+                  <button
+                    onClick={() => setSortOrder("recent")}
+                    className="hover:bg-gray-100 rounded-full p-0.5 transition"
+                    title="Tri par défaut"
+                  >
+                    <X size={10} />
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Contenu */}
           {loading ? (
@@ -1463,7 +1449,7 @@ export default function EmployeeLeavesPage({
             </div>
           ) : (
             <>
-              <div className="p-4 space-y-3">
+              <div className={`p-4 ${viewMode === "compact" ? "space-y-1.5" : "space-y-3"}`}>
                 {paginated.map(req => (
                   <RequestCard
                     key={req.id}
@@ -1473,6 +1459,7 @@ export default function EmployeeLeavesPage({
                     onCancel={() => setCancelTarget(req)}
                     onReminder={() => handleReminder(req)}
                     onSelfApprove={canSelfApprove ? () => handleSelfApprove(req) : undefined}
+                    compact={viewMode === "compact"}
                   />
                 ))}
               </div>
