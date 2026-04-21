@@ -15,9 +15,9 @@ import { useState, useEffect } from "react";
 
 const navItems = [
   { label: "Tableau de bord", path: "/employee/dashboard", icon: <LayoutDashboard size={18} /> },
+  { label: "Mon Dossier",    path: "/employee/dossier",   icon: <FolderOpen size={18} /> },
   { label: "Mes Congés",     path: "/employee/leaves",    icon: <CalendarDays size={18} /> },
   { label: "Mes Bulletins",  path: "/employee/payslips",  icon: <BadgeDollarSign size={18} /> },
-  { label: "Mon Dossier",    path: "/employee/dossier",   icon: <FolderOpen size={18} /> },
 ];
 
 export default function EmployeeTopNav() {

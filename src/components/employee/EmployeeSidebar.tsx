@@ -22,16 +22,6 @@ const baseNavItems = [
     icon: <LayoutDashboard size={20} />,
   },
   {
-    label: "Mes Congés",
-    path: "/employee/leaves",
-    icon: <CalendarDays size={20} />,
-  },
-  {
-    label: "Mes Bulletins",
-    path: "/employee/payslips",
-    icon: <BadgeDollarSign size={20} />,
-  },
-  {
     label: "Mon Dossier",
     path: "/employee/dossier",
     icon: <FolderOpen size={20} />,
@@ -40,6 +30,16 @@ const baseNavItems = [
     label: "Mes Pointages",
     path: "/employee/attendance",
     icon: <Clock size={20} />,
+  },
+  {
+    label: "Mes Congés",
+    path: "/employee/leaves",
+    icon: <CalendarDays size={20} />,
+  },
+  {
+    label: "Mes Bulletins",
+    path: "/employee/payslips",
+    icon: <BadgeDollarSign size={20} />,
   },
   {
     label: "Documents",
