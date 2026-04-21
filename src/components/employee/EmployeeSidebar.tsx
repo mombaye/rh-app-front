@@ -17,7 +17,7 @@ import { useState, useEffect } from "react";
 
 const baseNavItems = [
   {
-    label: "Vue d'ensemble",
+    label: "Tableau de bord",
     path: "/employee/dashboard",
     icon: <LayoutDashboard size={20} />,
   },
