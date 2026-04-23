@@ -10,6 +10,7 @@ import {
   Clock,
   FileStack,
   ClipboardCheck,
+  LogOut,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -35,6 +36,11 @@ const baseNavItems = [
     label: "Mes Congés",
     path: "/employee/leaves",
     icon: <CalendarDays size={20} />,
+  },
+  {
+    label: "Mes sorties",
+    path: "/employee/exits",
+    icon: <LogOut size={20} />,
   },
   {
     label: "Mes Bulletins",
@@ -136,7 +142,7 @@ export default function EmployeeSidebar() {
       />
 
       {/* Sidebar Desktop */}
-      <aside className="bg-white shadow-md w-64 min-h-screen hidden md:flex md:flex-col border-r">
+      <aside className="bg-white shadow-md w-72 min-h-screen hidden md:flex md:flex-col border-r">
         <div className="py-6 px-4 flex justify-center items-center">
           <img src={logo} alt="Camusat" className="w-full max-h-24 object-contain" />
         </div>
@@ -145,7 +151,7 @@ export default function EmployeeSidebar() {
 
       {/* Sidebar Mobile */}
       <aside
-        className={`fixed z-50 top-0 left-0 h-full w-64 bg-white shadow-md border-r transition-transform duration-300 flex flex-col ${
+        className={`fixed z-50 top-0 left-0 h-full w-72 bg-white shadow-md border-r transition-transform duration-300 flex flex-col ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:hidden`}
       >

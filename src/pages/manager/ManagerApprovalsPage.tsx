@@ -4,12 +4,13 @@ import {
   ClipboardCheck, CheckCircle2, Clock, XCircle, AlertCircle,
   Calendar, ChevronLeft, ChevronRight, Filter, User,
   MessageSquare, ThumbsUp, ThumbsDown, Search, RefreshCw,
-  Hash, Briefcase, Building2, Download, FileText, X, Ban,
+  Hash, Briefcase, Building2, Download, FileText, X, Ban, LogOut,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
 import { leaveRequestService } from "@/services/leaveService";
 import { LeaveRequest } from "@/types/leave";
+import ExitAuthorizationPanel from "@/components/leaves/ExitAuthorizationPanel";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import jsPDF from "jspdf";
@@ -947,6 +948,7 @@ function ApprovalCard({
 
 // ─── Page principale ─────────────────────────────────────────────────────────
 type Tab = "pending" | "history";
+type SectionTab = "leaves" | "exits";
 
 interface ManagerApprovalsPageProps {
   layout?: React.ComponentType<{ children: React.ReactNode }>;
@@ -956,6 +958,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
   const { user } = useAuth();
   const employeeId = user?.employee_id;
 
+  const [sectionTab,   setSectionTab]   = useState<SectionTab>("leaves");
   const [tab,          setTab]          = useState<Tab>("pending");
   const [requests,     setRequests]     = useState<LeaveRequest[]>([]);
   const [loading,      setLoading]      = useState(true);
@@ -1060,10 +1063,10 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
   };
 
   const statsCards = [
-    { label: "En attente",    count: pending.length,                                     color: "text-blue-700",  bg: "bg-blue-50",   border: "border-blue-100",   tab: "pending" as Tab },
-    { label: "Approuvées",    count: history.filter(r => r.status === "APPROVED").length, color: "text-green-600", bg: "bg-green-50",  border: "border-green-100",  tab: "history" as Tab },
-    { label: "Rejetées",      count: history.filter(r => r.status === "REJECTED").length, color: "text-red-600",   bg: "bg-red-50",    border: "border-red-100",    tab: "history" as Tab },
-    { label: "Total traités", count: history.length,                                      color: "text-gray-600",  bg: "bg-gray-50",   border: "border-gray-100",   tab: "history" as Tab },
+    { label: "En attente",    count: pending.length,                                      dot: "bg-amber-400",  tab: "pending" as Tab },
+    { label: "Approuvées",    count: history.filter(r => r.status === "APPROVED").length, dot: "bg-green-500",  tab: "history" as Tab },
+    { label: "Rejetées",      count: history.filter(r => r.status === "REJECTED").length, dot: "bg-red-500",    tab: "history" as Tab },
+    { label: "Total traités", count: history.length,                                      dot: "bg-slate-300",  tab: "history" as Tab },
   ];
 
   return (
@@ -1073,23 +1076,73 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
         {/* ── Header ── */}
         <motion.div
           initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          className="flex items-start justify-between flex-wrap gap-3 mb-6"
+          className="flex items-center justify-between flex-wrap gap-3 mb-6"
         >
           <div>
             <h1 className="text-2xl font-bold text-[#003c71] flex items-center gap-2">
               <ClipboardCheck size={22} />
-              Approbations Congés
+              Approbations
             </h1>
-            <p className="text-gray-500 text-sm mt-0.5">Validez les demandes de congé de vos employés</p>
+            <p className="text-gray-500 text-sm mt-0.5">Validez les demandes de congé et de sortie de vos employés</p>
           </div>
-          <button
-            onClick={refresh}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition"
-          >
-            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            Actualiser
-          </button>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* ── Onglets de section ── */}
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl">
+              <button
+                onClick={() => setSectionTab("leaves")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                  sectionTab === "leaves"
+                    ? "bg-white text-[#003c71] shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <ClipboardCheck size={15} />
+                Congés
+                {pending.length > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${sectionTab === "leaves" ? "bg-[#003c71] text-white" : "bg-gray-300 text-gray-700"}`}>
+                    {pending.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setSectionTab("exits")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                  sectionTab === "exits"
+                    ? "bg-white text-[#003c71] shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <LogOut size={15} />
+                Sorties
+              </button>
+            </div>
+
+            {/* ── Actualiser ── */}
+            <button
+              onClick={refresh}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition"
+            >
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+              Actualiser
+            </button>
+          </div>
         </motion.div>
+
+        {/* ── Section Autorisations de sortie ── */}
+        {sectionTab === "exits" && employeeId && (
+          <ExitAuthorizationPanel
+            managerId={employeeId}
+            canCreate={false}
+            showEmployeeName
+            canReview
+            hideHeader
+          />
+        )}
+
+        {/* ── Section Congés ── */}
+        {sectionTab === "leaves" && (
+        <>
 
         {/* ── Stats ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
@@ -1100,10 +1153,17 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06 }}
               onClick={() => changeTab(s.tab)}
-              className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition hover:shadow-sm text-center ${s.bg} ${s.border}`}
+              className={`flex flex-col items-center justify-center p-4 rounded-2xl border bg-white transition hover:shadow-sm text-center ${
+                tab === s.tab
+                  ? "border-[#003c71] ring-2 ring-[#003c71]/20"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
             >
-              <span className={`text-2xl font-bold ${s.color}`}>{loading ? "…" : s.count}</span>
-              <span className={`text-xs mt-0.5 font-medium ${s.color} opacity-80`}>{s.label}</span>
+              <span className="text-2xl font-bold text-[#003c71]">{loading ? "…" : s.count}</span>
+              <span className="text-xs mt-0.5 font-medium text-gray-600 inline-flex items-center gap-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                {s.label}
+              </span>
             </motion.button>
           ))}
         </div>
@@ -1254,6 +1314,8 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
             </>
           )}
         </div>
+        </>
+        )}
       </div>
 
       {/* Modals */}

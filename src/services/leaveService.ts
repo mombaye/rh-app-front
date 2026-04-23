@@ -23,6 +23,9 @@ import {
   HolidayCheckResult,
   ManagerDelegation,
   ManagerDelegationCreate,
+  ExitAuthorization,
+  ExitAuthorizationCreate,
+  ExitAuthorizationFilters,
 } from "../types/leave";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
@@ -659,6 +662,58 @@ export const leaveApprovalRuleService = {
   },
   checkRules: async (employeeId: number, leaveTypeId: number, days: number) => {
     const res = await axios.post(`${API}/approval-rules/check/`, { employee_id: employeeId, leave_type_id: leaveTypeId, days }, { headers: getAuthHeaders() });
+    return res.data;
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ExitAuthorization  →  /api/leaves/exit-authorizations/
+// ─────────────────────────────────────────────────────────────────────────────
+export const exitAuthorizationService = {
+  getAll: async (filters?: ExitAuthorizationFilters): Promise<ExitAuthorization[]> => {
+    const res = await axios.get(`${API}/exit-authorizations/`, {
+      headers: getAuthHeaders(),
+      params:  filters,
+    });
+    return res.data;
+  },
+
+  getByEmployee: async (employeeId: number): Promise<ExitAuthorization[]> => {
+    const res = await axios.get(`${API}/exit-authorizations/employee/${employeeId}/`, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
+
+  create: async (data: ExitAuthorizationCreate): Promise<ExitAuthorization> => {
+    const res = await axios.post(`${API}/exit-authorizations/`, data, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
+
+  approve: async (id: number, reviewerId?: number): Promise<ExitAuthorization> => {
+    const res = await axios.post(
+      `${API}/exit-authorizations/${id}/approve/`,
+      reviewerId ? { reviewer_id: reviewerId } : {},
+      { headers: getAuthHeaders() },
+    );
+    return res.data;
+  },
+
+  reject: async (id: number, rejectReason: string, reviewerId?: number): Promise<ExitAuthorization> => {
+    const res = await axios.post(
+      `${API}/exit-authorizations/${id}/reject/`,
+      { reject_reason: rejectReason, ...(reviewerId ? { reviewer_id: reviewerId } : {}) },
+      { headers: getAuthHeaders() },
+    );
+    return res.data;
+  },
+
+  cancel: async (id: number): Promise<ExitAuthorization> => {
+    const res = await axios.post(`${API}/exit-authorizations/${id}/cancel/`, {}, {
+      headers: getAuthHeaders(),
+    });
     return res.data;
   },
 };

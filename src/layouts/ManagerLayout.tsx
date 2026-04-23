@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import ManagerSidebar from "@/components/manager/ManagerSidebar";
 import { useAuth } from "@/contexts/useAuth";
-import { leaveRequestService } from "@/services/leaveService";
+import { leaveRequestService, exitAuthorizationService } from "@/services/leaveService";
 
 export default function ManagerLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -10,18 +10,14 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
   const fetchPending = useCallback(async () => {
     if (!user?.employee_id) return;
     try {
-      const reqs = await leaveRequestService.getAll({
-        manager_employee_id: user.employee_id,
-        status: "PENDING",
-      } as any);
-      // Exclure les propres demandes du manager du compteur
-      const others = reqs.filter(r => r.employee.id !== user.employee_id);
-      const pending2 = await leaveRequestService.getAll({
-        manager_employee_id: user.employee_id,
-        status: "PENDING_SECOND",
-      } as any);
+      const [reqs, pending2, exits] = await Promise.all([
+        leaveRequestService.getAll({ manager_employee_id: user.employee_id, status: "PENDING" } as any),
+        leaveRequestService.getAll({ manager_employee_id: user.employee_id, status: "PENDING_SECOND" } as any),
+        exitAuthorizationService.getAll({ manager_employee_id: user.employee_id, status: "PENDING" }),
+      ]);
+      const others  = reqs.filter(r => r.employee.id !== user.employee_id);
       const others2 = pending2.filter(r => r.employee.id !== user.employee_id);
-      setPendingCount(others.length + others2.length);
+      setPendingCount(others.length + others2.length + exits.length);
     } catch {
       // silencieux
     }

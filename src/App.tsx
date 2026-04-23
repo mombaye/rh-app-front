@@ -17,27 +17,30 @@ import InterneEmployeesPage from "./pages/InterneEmployeesPage";
 import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
 import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
 import PlanningPage from "@/pages/PlanningPage";
-import EmployeeDashboardPage  from "@/pages/employee/EmployeeDashboardPage";
-import EmployeeLeavesPage     from "@/pages/employee/EmployeeLeavesPage";
-import EmployeePayslipPage    from "@/pages/employee/EmployeePayslipPage";
-import EmployeeDossierPage    from "@/pages/employee/EmployeeDossierPage";
-import EmployeeAttendancePage from "@/pages/employee/EmployeeAttendancePage";
-import EmployeeDocumentsPage  from "@/pages/employee/EmployeeDocumentsPage";
+import EmployeeDashboardPage          from "@/pages/employee/EmployeeDashboardPage";
+import EmployeeLeavesPage             from "@/pages/employee/EmployeeLeavesPage";
+import EmployeePayslipPage            from "@/pages/employee/EmployeePayslipPage";
+import EmployeeDossierPage            from "@/pages/employee/EmployeeDossierPage";
+import EmployeeAttendancePage         from "@/pages/employee/EmployeeAttendancePage";
+import EmployeeDocumentsPage          from "@/pages/employee/EmployeeDocumentsPage";
+import EmployeeExitAuthorizationPage  from "@/pages/employee/EmployeeExitAuthorizationPage";
 // Manager pages
-import ManagerDashboardPage  from "@/pages/manager/ManagerDashboardPage";
-import ManagerLeavesPage     from "@/pages/manager/ManagerLeavesPage";
+import ManagerDashboardPage       from "@/pages/manager/ManagerDashboardPage";
+import ManagerLeavesPage          from "@/pages/manager/ManagerLeavesPage";
+import ManagerExitAuthorizationPage from "@/pages/manager/ManagerExitAuthorizationPage";
 import ManagerPayslipPage    from "@/pages/manager/ManagerPayslipPage";
 import ManagerDossierPage    from "@/pages/manager/ManagerDossierPage";
 import ManagerApprovalsPage  from "@/pages/manager/ManagerApprovalsPage";
 import ManagerDocumentsPage  from "@/pages/manager/ManagerDocumentsPage";
 import { useAuth } from "@/contexts/useAuth";
 // RH espace employé
-import RhLeavesPage      from "@/pages/rh/RhLeavesPage";
-import RhPayslipPage     from "@/pages/rh/RhPayslipPage";
-import RhDossierPage     from "@/pages/rh/RhDossierPage";
-import RhAttendancePage  from "@/pages/rh/RhAttendancePage";
-import RhApprovalsPage   from "@/pages/rh/RhApprovalsPage";
-import RhDocumentsPage   from "@/pages/rh/RhDocumentsPage";
+import RhLeavesPage               from "@/pages/rh/RhLeavesPage";
+import RhPayslipPage              from "@/pages/rh/RhPayslipPage";
+import RhDossierPage              from "@/pages/rh/RhDossierPage";
+import RhAttendancePage           from "@/pages/rh/RhAttendancePage";
+import RhApprovalsPage            from "@/pages/rh/RhApprovalsPage";
+import RhDocumentsPage            from "@/pages/rh/RhDocumentsPage";
+import RhExitAuthorizationPage    from "@/pages/rh/RhExitAuthorizationPage";
 
 // ── Helpers de rôles basés sur activeRole ────────────────────────────────────
 
@@ -160,14 +163,20 @@ function App() {
             <EmployeeDocumentsPage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
+        <Route path="/employee/exits" element={
+          <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
+            <EmployeeExitAuthorizationPage />
+          </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />
 
         {/* ── Espace Manager ───────────────────────────────────── */}
-        <Route path="/manager/dashboard"  element={<MgrRoute><ManagerDashboardPage  /></MgrRoute>} />
-        <Route path="/manager/leaves"     element={<MgrRoute><ManagerLeavesPage     /></MgrRoute>} />
-        <Route path="/manager/payslips"   element={<MgrRoute><ManagerPayslipPage    /></MgrRoute>} />
-        <Route path="/manager/dossier"    element={<MgrRoute><ManagerDossierPage    /></MgrRoute>} />
-        <Route path="/manager/approvals"  element={<MgrRoute><ManagerApprovalsPage  /></MgrRoute>} />
-        <Route path="/manager/documents"  element={<MgrRoute><ManagerDocumentsPage  /></MgrRoute>} />
+        <Route path="/manager/dashboard"  element={<MgrRoute><ManagerDashboardPage         /></MgrRoute>} />
+        <Route path="/manager/leaves"     element={<MgrRoute><ManagerLeavesPage            /></MgrRoute>} />
+        <Route path="/manager/exits"      element={<MgrRoute><ManagerExitAuthorizationPage /></MgrRoute>} />
+        <Route path="/manager/payslips"   element={<MgrRoute><ManagerPayslipPage           /></MgrRoute>} />
+        <Route path="/manager/dossier"    element={<MgrRoute><ManagerDossierPage           /></MgrRoute>} />
+        <Route path="/manager/approvals"  element={<MgrRoute><ManagerApprovalsPage         /></MgrRoute>} />
+        <Route path="/manager/documents"  element={<MgrRoute><ManagerDocumentsPage         /></MgrRoute>} />
 
         {/* ── Planning Manager ─────────────────────────────────── */}
         <Route path="/planning" element={
@@ -232,6 +241,11 @@ function App() {
         <Route path="/leaves/hierarchie" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <LeavesHierarchiePage />
+          </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/leaves/autorisations" element={
+          <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
+            <RhExitAuthorizationPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
 

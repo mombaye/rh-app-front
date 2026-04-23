@@ -2,8 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import {
-  CalendarDays, ClipboardCheck, CheckCircle2, Clock,
-  AlertCircle, TrendingUp, ArrowRight, Users,
+  CalendarDays, ClipboardCheck, CheckCircle2,
+  AlertCircle, TrendingUp, ArrowRight,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
@@ -84,38 +84,30 @@ export default function ManagerDashboardPage() {
 
   const stats = [
     {
-      label:   "Mon solde CP",
-      value:   loading ? "…" : `${remaining.toFixed(1)} j`,
-      icon:    CalendarDays,
-      color:   "text-[#003c71]",
-      bg:      "bg-blue-50",
-      sub:     cpBalance ? `${parseFloat(cpBalance.acquired).toFixed(1)} j acquis` : "—",
+      label: "Mon solde CP",
+      value: loading ? "…" : `${remaining.toFixed(1)} j`,
+      dot:   "bg-[#003c71]",
+      sub:   cpBalance ? `${parseFloat(cpBalance.acquired).toFixed(1)} j acquis` : "—",
     },
     {
-      label:   "En attente",
-      value:   loading ? "…" : pendingSubords.length,
-      icon:    Clock,
-      color:   "text-amber-600",
-      bg:      "bg-amber-50",
-      sub:     "demandes à valider",
-      link:    "/manager/approvals",
-      alert:   pendingSubords.length > 0,
+      label: "En attente",
+      value: loading ? "…" : pendingSubords.length,
+      dot:   "bg-amber-400",
+      sub:   "demandes à valider",
+      link:  "/manager/approvals",
+      alert: pendingSubords.length > 0,
     },
     {
-      label:   "Approuvées",
-      value:   loading ? "…" : approvedThisMonth,
-      icon:    CheckCircle2,
-      color:   "text-green-600",
-      bg:      "bg-green-50",
-      sub:     "ce mois-ci",
+      label: "Approuvées",
+      value: loading ? "…" : approvedThisMonth,
+      dot:   "bg-emerald-500",
+      sub:   "ce mois-ci",
     },
     {
-      label:   "Mes employés",
-      value:   loading ? "…" : new Set(pendingSubords.map(r => r.employee.id)).size,
-      icon:    Users,
-      color:   "text-purple-600",
-      bg:      "bg-purple-50",
-      sub:     "en attente de validation",
+      label: "Mes employés",
+      value: loading ? "…" : new Set(pendingSubords.map(r => r.employee.id)).size,
+      dot:   "bg-purple-500",
+      sub:   "en attente de validation",
     },
   ];
 
@@ -295,19 +287,17 @@ export default function ManagerDashboardPage() {
   );
 }
 
-function StatCard({ s }: { s: { label: string; value: any; icon: any; color: string; bg: string; sub: string; alert?: boolean } }) {
-  const Icon = s.icon;
+function StatCard({ s }: { s: { label: string; value: any; dot: string; sub: string; alert?: boolean } }) {
   return (
-    <div className={`bg-white rounded-2xl border shadow-sm p-5 hover:shadow-md transition ${s.alert ? "border-red-200 ring-1 ring-red-100" : "border-gray-100"}`}>
-      <div className="flex items-start justify-between mb-3">
-        <div className={`${s.bg} p-2.5 rounded-xl`}>
-          <Icon size={20} className={s.color} />
-        </div>
-        {s.alert && <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />}
-      </div>
-      <div className={`text-2xl font-bold mb-0.5 ${s.color}`}>{s.value}</div>
-      <div className="text-xs text-gray-500 font-medium">{s.label}</div>
-      <div className="text-[10px] text-gray-400 mt-0.5">{s.sub}</div>
+    <div className={`flex flex-col items-center justify-center p-4 rounded-2xl border bg-white transition hover:shadow-sm text-center ${
+      s.alert ? "border-amber-300 ring-2 ring-amber-100" : "border-gray-200 hover:border-gray-300"
+    }`}>
+      <span className="text-2xl font-bold text-[#003c71]">{s.value}</span>
+      <span className="text-xs mt-1 font-medium text-gray-600 inline-flex items-center gap-1.5">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
+        {s.label}
+      </span>
+      <span className="text-[10px] text-gray-400 mt-0.5">{s.sub}</span>
     </div>
   );
 }

@@ -1081,6 +1081,7 @@ function RequestCard({ req, onView, onEdit, onCancel, onReminder, onSelfApprove,
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────────
+
 interface EmployeeLeavesPageProps {
   layout?: React.ComponentType<{ children: React.ReactNode }>;
   canSelfApprove?: boolean;
@@ -1195,15 +1196,15 @@ export default function EmployeeLeavesPage({
     <Layout>
       <div className="px-4 md:px-6 pb-10">
 
-        {/* ── Header ── */}
+        {/* ── Header unifié ── */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between mb-6 flex-wrap gap-3"
+          className="flex items-center justify-between mb-5 flex-wrap gap-3"
         >
           <div>
             <h1 className="text-2xl font-bold text-[#003c71]">Mes Congés</h1>
-            <p className="text-gray-500 text-sm mt-0.5">Gérez et suivez vos demandes de congés</p>
+            <p className="text-gray-500 text-sm mt-0.5">Gérez vos demandes de congé</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {!loading && primaryBalance && (
@@ -1213,7 +1214,7 @@ export default function EmployeeLeavesPage({
               >
                 <TrendingUp size={15} className="shrink-0" />
                 <span className="text-sm font-medium">
-                  Solde congé : <span className="font-bold">{soldeRestant} jour{soldeRestant > 1 ? "s" : ""}</span>
+                  Solde : <span className="font-bold">{soldeRestant} j</span>
                 </span>
               </div>
             )}
@@ -1234,6 +1235,8 @@ export default function EmployeeLeavesPage({
             </button>
           </div>
         </motion.div>
+
+        {/* ── Vue Congés ── */}
 
         {/* ── Stats rapides ── */}
         {!loading && requests.length > 0 && (
@@ -1567,6 +1570,7 @@ export default function EmployeeLeavesPage({
           </motion.div>
         </div>
       )}
+
     </Layout>
   );
 }

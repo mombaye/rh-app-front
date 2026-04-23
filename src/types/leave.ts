@@ -408,3 +408,39 @@ export interface RevokePayload {
   revoker_id?:   number;
   recall_date?:  string;
 }
+
+// ── ExitAuthorization ─────────────────────────────────────────────────────────
+export type ExitAuthStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+
+export interface ExitAuthorization {
+  id:                   number;
+  employee:             number;
+  employee_name:        string;
+  employee_matricule:   string;
+  employee_service:     string | null;
+  datetime_exit:        string;   // ISO datetime
+  datetime_return:      string;   // ISO datetime
+  motif:                string;
+  status:               ExitAuthStatus;
+  status_label:         string;
+  reviewed_by:          number | null;
+  reviewed_by_name:     string | null;
+  reviewed_at:          string | null;
+  reject_reason:        string;
+  created_at:           string;
+  updated_at:           string;
+}
+
+export interface ExitAuthorizationCreate {
+  employee_id:     number;
+  datetime_exit:   string;
+  datetime_return: string;
+  motif:           string;
+}
+
+export interface ExitAuthorizationFilters {
+  employee_id?:         number;
+  status?:              ExitAuthStatus;
+  manager_employee_id?: number;
+}
+
