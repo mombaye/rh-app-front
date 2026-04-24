@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Clock, CalendarDays, ChevronLeft, ChevronRight,
   FileDown, Loader2, CheckCircle2, XCircle, AlertTriangle,
-  BarChart3, X, Filter,
+  BarChart3, X, Filter, ShieldAlert, Send, ChevronDown, History,
 } from "lucide-react";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
-import { fetchMyAttendance } from "@/services/employeeService";
+import { fetchMyAttendance, submitDispute, fetchMyDisputes, AttendanceDispute } from "@/services/employeeService";
 import { useAuth } from "@/contexts/useAuth";
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
@@ -328,6 +328,182 @@ function ExportModal({
   );
 }
 
+// ─── Modal de justification d'absence ────────────────────────────────────────
+function JustifyModal({
+  defaultDate,
+  disputedDates,
+  onClose,
+  onSubmitted,
+}: {
+  defaultDate: string;
+  disputedDates: Set<string>;
+  onClose: () => void;
+  onSubmitted: (date: string) => void;
+}) {
+  const now = new Date();
+  const [selectedDate, setSelectedDate] = useState(defaultDate);
+  const [dayRecord,    setDayRecord]    = useState<DayRecord | null>(null);
+  const [loadingRec,   setLoadingRec]   = useState(false);
+  const [text,         setText]         = useState("");
+  const [submitting,   setSubmitting]   = useState(false);
+
+  const alreadyDisputed = disputedDates.has(selectedDate);
+
+  // Charge le pointage de l'employé pour la date sélectionnée
+  useEffect(() => {
+    if (!selectedDate) { setDayRecord(null); return; }
+    setLoadingRec(true);
+    setDayRecord(null);
+    fetchMyAttendance(selectedDate, selectedDate)
+      .then(r => setDayRecord(r.days[0] ?? null))
+      .catch(() => setDayRecord(null))
+      .finally(() => setLoadingRec(false));
+  }, [selectedDate]);
+
+  const hasProof = dayRecord && (dayRecord.in_time || dayRecord.out_time || dayRecord.worked_minutes > 0);
+
+  const handleSubmit = async () => {
+    if (!selectedDate) { toast.error("Veuillez sélectionner une date."); return; }
+    if (!text.trim())  { toast.error("Veuillez saisir une justification."); return; }
+    setSubmitting(true);
+    try {
+      await submitDispute(selectedDate, text.trim());
+      toast.success("Justification envoyée au service RH.");
+      onSubmitted(selectedDate);
+      onClose();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(msg || "Erreur lors de l'envoi.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+         onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1,    y: 0 }}
+        exit={{    opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ duration: 0.16 }}
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* En-tête */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#003c71]/10 flex items-center justify-center">
+              <ShieldAlert size={15} className="text-[#003c71]" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">Justifier une absence</p>
+              <p className="text-xs text-gray-400">Vérifiez vos données de pointage et soumettez au RH</p>
+            </div>
+          </div>
+          <button onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Corps */}
+        <div className="p-5 space-y-4">
+
+          {/* Sélecteur de date */}
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1">
+              <CalendarDays size={12}/> Date à justifier
+            </label>
+            <input
+              type="date"
+              value={selectedDate}
+              max={toDateStr(now)}
+              onChange={e => { setSelectedDate(e.target.value); setText(""); }}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30"
+            />
+            {alreadyDisputed && selectedDate && (
+              <p className="mt-1.5 text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-1.5 border border-amber-200 flex items-center gap-1.5">
+                <ShieldAlert size={11}/> Une justification est déjà en cours de traitement pour cette date.
+              </p>
+            )}
+          </div>
+
+          {/* Données de pointage de l'employé — la preuve */}
+          {selectedDate && (
+            <div>
+              <p className="text-xs font-semibold text-gray-600 mb-2">
+                Vos données de pointage pour cette date
+              </p>
+              {loadingRec ? (
+                <div className="flex justify-center py-5">
+                  <Loader2 size={20} className="animate-spin text-[#003c71]" />
+                </div>
+              ) : hasProof ? (
+                <div className="rounded-xl border border-green-200 bg-green-50 overflow-hidden">
+                  <div className="flex items-center gap-2 px-4 py-2 border-b border-green-100">
+                    <CheckCircle2 size={14} className="text-green-600 shrink-0" />
+                    <p className="text-xs font-semibold text-green-700">
+                      Données trouvées — seront jointes comme preuve
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 divide-x divide-green-100">
+                    {[
+                      { label: "Arrivée",  value: dayRecord!.in_time  ?? "—", icon: <Clock size={13} className="text-green-500"/> },
+                      { label: "Départ",   value: dayRecord!.out_time ?? "—", icon: <Clock size={13} className="text-red-400"/>   },
+                      { label: "Durée",    value: formatMinutes(dayRecord!.worked_minutes), icon: <CalendarDays size={13} className="text-[#003c71]"/> },
+                    ].map(item => (
+                      <div key={item.label} className="px-3 py-3 text-center">
+                        <div className="flex justify-center mb-1">{item.icon}</div>
+                        <div className="text-sm font-bold text-gray-800">{item.value}</div>
+                        <div className="text-[10px] text-gray-400">{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-50 rounded-xl px-4 py-3 text-xs text-gray-400 text-center border border-gray-100">
+                  Aucune donnée de pointage trouvée pour cette date.<br/>
+                  <span className="text-gray-300">Vous pouvez quand même soumettre une explication écrite.</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Texte justificatif */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
+              Votre explication <span className="text-red-400">*</span>
+            </label>
+            <textarea
+              rows={3}
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="Expliquez pourquoi le RH vous a marqué absent alors que vos données montrent le contraire…"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 resize-none"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-2 justify-end px-5 py-4 border-t border-gray-100">
+          <button onClick={onClose}
+            className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">
+            Annuler
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || !text.trim() || !selectedDate || alreadyDisputed}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition disabled:opacity-50">
+            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            Envoyer au RH
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Tableau commun ───────────────────────────────────────────────────────────
 function AttendanceTable({ days }: { days: DayRecord[] }) {
   if (days.length === 0) return (
@@ -556,8 +732,34 @@ interface Props { layout?: React.ComponentType<{ children: React.ReactNode }>; }
 
 export default function EmployeeAttendancePage({ layout: Layout = EmployeeLayout }: Props) {
   const { user } = useAuth();
-  const [view,       setView]      = useState<ViewMode>("daily");
-  const [showExport, setShowExport] = useState(false);
+  const [view,             setView]            = useState<ViewMode>("daily");
+  const [showExport,       setShowExport]       = useState(false);
+  const [showJustify,      setShowJustify]      = useState(false);
+  const [showHistory,      setShowHistory]      = useState(false);
+  const [showViewDropdown, setShowViewDropdown] = useState(false);
+  const viewDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (viewDropdownRef.current && !viewDropdownRef.current.contains(e.target as Node))
+        setShowViewDropdown(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // ── Disputes ──────────────────────────────────────────────────────────────
+  const [disputedDates, setDisputedDates] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetchMyDisputes()
+      .then(list => setDisputedDates(new Set(list.map((d: AttendanceDispute) => d.work_date))))
+      .catch(() => {});
+  }, []);
+
+  const handleJustifySubmitted = (date: string) => {
+    setDisputedDates(prev => new Set([...prev, date]));
+  };
 
   const now = new Date();
   const [date,      setDate]      = useState<Date>(() => { const d=new Date(); d.setHours(12,0,0,0); return d; });
@@ -605,20 +807,53 @@ export default function EmployeeAttendancePage({ layout: Layout = EmployeeLayout
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {VIEW_OPTIONS.map(v => (
-              <button key={v.key} onClick={() => setView(v.key)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
-                  view === v.key
-                    ? "bg-[#003c71] text-white shadow-sm"
-                    : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
-                }`}>
-                {v.icon} {v.label}
+            {/* Sélecteur de vue — dropdown */}
+            <div className="relative" ref={viewDropdownRef}>
+              <button
+                onClick={() => setShowViewDropdown(p => !p)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
+              >
+                {VIEW_OPTIONS.find(v => v.key === view)?.icon}
+                {VIEW_OPTIONS.find(v => v.key === view)?.label}
+                <ChevronDown size={14} className={`text-gray-400 transition-transform ${showViewDropdown ? "rotate-180" : ""}`} />
               </button>
-            ))}
+              {showViewDropdown && (
+                <div className="absolute left-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-20">
+                  {VIEW_OPTIONS.map(v => (
+                    <button
+                      key={v.key}
+                      onClick={() => { setView(v.key); setShowViewDropdown(false); }}
+                      className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition ${
+                        view === v.key
+                          ? "bg-[#003c71]/5 text-[#003c71] font-semibold"
+                          : "text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      {v.icon} {v.label}
+                      {view === v.key && <CheckCircle2 size={13} className="ml-auto text-[#003c71]" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
+            {/* Séparateur */}
+            <div className="w-px h-7 bg-gray-200 mx-1 hidden sm:block" />
+
+            {/* Actions */}
             <button onClick={() => setShowExport(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 hover:border-gray-400 transition shrink-0">
+              <FileDown size={15} className="text-[#003c71]"/> Télécharger PDF
+            </button>
+
+            <button onClick={() => setShowJustify(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition shrink-0">
-              <FileDown size={15}/> Télécharger PDF
+              <ShieldAlert size={15}/> Justifier une absence
+            </button>
+
+            <button onClick={() => setShowHistory(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition shrink-0">
+              <History size={15} className="text-[#003c71]"/> Historique
             </button>
           </div>
         </motion.div>
@@ -640,6 +875,18 @@ export default function EmployeeAttendancePage({ layout: Layout = EmployeeLayout
             employeeName={employeeName}
             matricule={matricule}
           />
+        )}
+        {showJustify && (
+          <JustifyModal
+            key="justify-modal"
+            defaultDate={defaultRange().start}
+            disputedDates={disputedDates}
+            onClose={() => setShowJustify(false)}
+            onSubmitted={handleJustifySubmitted}
+          />
+        )}
+        {showHistory && (
+          <HistoryModal key="history-modal" onClose={() => setShowHistory(false)} />
         )}
       </AnimatePresence>
     </Layout>

@@ -63,8 +63,9 @@ export default function Sidebar() {
       path: "/attendance",
       icon: <Clock size={20} />,
       subItems: [
-        { label: "Normales", path: "/attendance/normales" },
-        { label: "Shifts",   path: "/attendance/shifts"   },
+        { label: "Normales",         path: "/attendance/normales"         },
+        { label: "Shifts",           path: "/attendance/shifts"           },
+        { label: "Justifications",   path: "/attendance/justifications"   },
       ],
     },
     {

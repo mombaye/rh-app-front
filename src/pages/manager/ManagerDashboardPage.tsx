@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import {
   CalendarDays, ClipboardCheck, CheckCircle2,
-  AlertCircle, TrendingUp, ArrowRight,
+  AlertCircle, TrendingUp, ArrowRight, Clock, Users,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
@@ -76,38 +76,35 @@ export default function ManagerDashboardPage() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Meilleur solde CP
-  const cpBalance = balances.find(b =>
-    ["CP", "CONGE_PAYE", "CONGE", "ANNUAL"].includes(b.leave_type.code)
-  ) ?? balances[0];
-  const remaining = cpBalance ? parseFloat(cpBalance.remaining) : 0;
+  const totalRemaining = balances.reduce((s, b) => s + parseFloat(b.remaining || "0"), 0);
 
   const stats = [
     {
-      label: "Mon solde CP",
-      value: loading ? "…" : `${remaining.toFixed(1)} j`,
-      dot:   "bg-[#003c71]",
-      sub:   cpBalance ? `${parseFloat(cpBalance.acquired).toFixed(1)} j acquis` : "—",
+      label: "Jours restants",
+      value: loading ? "…" : totalRemaining.toFixed(1),
+      icon:  <CalendarDays size={22} />,
+      color: "bg-blue-50 text-[#003c71]",
+      link:  "/manager/leaves",
     },
     {
       label: "En attente",
       value: loading ? "…" : pendingSubords.length,
-      dot:   "bg-amber-400",
-      sub:   "demandes à valider",
+      icon:  <Clock size={22} />,
+      color: "bg-amber-50 text-amber-700",
       link:  "/manager/approvals",
       alert: pendingSubords.length > 0,
     },
     {
-      label: "Approuvées",
+      label: "Approuvées ce mois",
       value: loading ? "…" : approvedThisMonth,
-      dot:   "bg-emerald-500",
-      sub:   "ce mois-ci",
+      icon:  <CheckCircle2 size={22} />,
+      color: "bg-emerald-50 text-emerald-700",
     },
     {
-      label: "Mes employés",
+      label: "Employés en attente",
       value: loading ? "…" : new Set(pendingSubords.map(r => r.employee.id)).size,
-      dot:   "bg-purple-500",
-      sub:   "en attente de validation",
+      icon:  <Users size={22} />,
+      color: "bg-purple-50 text-purple-700",
     },
   ];
 
@@ -134,13 +131,7 @@ export default function ManagerDashboardPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.07 }}
             >
-              {s.link ? (
-                <Link to={s.link} className="block">
-                  <StatCard s={s} />
-                </Link>
-              ) : (
-                <StatCard s={s} />
-              )}
+              <StatCard s={s} />
             </motion.div>
           ))}
         </div>
@@ -244,30 +235,24 @@ export default function ManagerDashboardPage() {
 
         {/* ── Soldes ── */}
         {!loading && balances.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mt-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp size={18} className="text-[#003c71]" />
-              <span className="font-semibold text-gray-800">Mes soldes {new Date().getFullYear()}</span>
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
+            className="mt-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp size={18} className="text-[#003c71]" />
+                <span className="font-semibold text-gray-800">Mes soldes {new Date().getFullYear()}</span>
+              </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {balances.map(b => {
-                const rem = parseFloat(b.remaining || "0");
-                const acq = parseFloat(b.acquired  || "0");
-                const pct = acq > 0 ? Math.round((rem / acq) * 100) : 0;
-                return (
-                  <div key={b.id} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-                    <div className="text-xs text-gray-500 font-medium mb-1.5 truncate">{b.leave_type.label}</div>
-                    <div className="flex items-end gap-1 mb-1.5">
-                      <span className="text-xl font-bold text-[#003c71]">{rem.toFixed(1)}</span>
-                      <span className="text-xs text-gray-400 mb-0.5">/ {acq.toFixed(1)} j</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: pct > 50 ? "#059669" : pct > 20 ? "#d97706" : "#dc2626" }} />
-                    </div>
-                    <div className="text-[10px] text-gray-400 mt-1">{pct}% restant</div>
-                  </div>
-                );
-              })}
+            <div className="flex-1 flex flex-col items-center justify-center py-4">
+              <span className="text-6xl font-black text-[#003c71] leading-none">
+                {totalRemaining.toFixed(1)}
+              </span>
+              <span className="text-sm text-gray-400 mt-2">jours restants</span>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Link to="/manager/leaves" className="text-xs text-[#003c71] hover:underline">
+                Voir tout →
+              </Link>
             </div>
           </motion.div>
         )}
@@ -287,17 +272,17 @@ export default function ManagerDashboardPage() {
   );
 }
 
-function StatCard({ s }: { s: { label: string; value: any; dot: string; sub: string; alert?: boolean } }) {
-  return (
-    <div className={`flex flex-col items-center justify-center p-4 rounded-2xl border bg-white transition hover:shadow-sm text-center ${
-      s.alert ? "border-amber-300 ring-2 ring-amber-100" : "border-gray-200 hover:border-gray-300"
+function StatCard({ s }: { s: { label: string; value: any; icon: React.ReactNode; color: string; link?: string; alert?: boolean } }) {
+  const inner = (
+    <div className={`bg-white rounded-2xl border shadow-sm p-5 hover:shadow-md transition-all ${
+      s.alert ? "border-amber-300 ring-2 ring-amber-100" : "border-gray-100 hover:border-[#003c71]/20"
     }`}>
-      <span className="text-2xl font-bold text-[#003c71]">{s.value}</span>
-      <span className="text-xs mt-1 font-medium text-gray-600 inline-flex items-center gap-1.5">
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
-        {s.label}
-      </span>
-      <span className="text-[10px] text-gray-400 mt-0.5">{s.sub}</span>
+      <div className="flex items-center justify-between mb-3">
+        <div className={`inline-flex p-2.5 rounded-xl ${s.color}`}>{s.icon}</div>
+        <div className="text-3xl font-black text-gray-800">{s.value}</div>
+      </div>
+      <div className="text-sm font-medium text-gray-600">{s.label}</div>
     </div>
   );
+  return s.link ? <Link to={s.link} className="block">{inner}</Link> : inner;
 }

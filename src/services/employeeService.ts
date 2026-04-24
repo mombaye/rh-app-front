@@ -600,3 +600,44 @@ export const fetchMyAttendance = async (start: string, end: string) =>
       flags: Record<string, unknown>;
     }[];
   };
+
+// ─── Pointages bruts machine (justification d'absence) ───────────────────────
+export type RawPunchRecord = {
+  time: string;
+  person_id: string;
+  device_ip: string;
+  checkpoint: string | null;
+};
+
+export const fetchMyRawPunches = async (date: string) =>
+  (await api.get("/api/attendance/my-punches/", { params: { date } })).data as {
+    date: string;
+    employee_id: number;
+    matricule: string;
+    punches: RawPunchRecord[];
+    message?: string;
+  };
+
+// ─── Justifications d'absence (disputes) ─────────────────────────────────────
+export type AttendanceDispute = {
+  id: number;
+  work_date: string;
+  justification_text: string;
+  status: "pending" | "approved" | "rejected";
+  raw_punch_count: number;
+  created_at: string;
+  resolved_at: string | null;
+  resolution_note: string;
+};
+
+export const fetchMyDisputes = async (): Promise<AttendanceDispute[]> =>
+  (await api.get("/api/attendance/my-disputes/")).data;
+
+export const submitDispute = async (work_date: string, justification_text: string) =>
+  (await api.post("/api/attendance/my-disputes/", { work_date, justification_text })).data as {
+    id: number;
+    work_date: string;
+    status: string;
+    raw_punch_count: number;
+    created_at: string;
+  };

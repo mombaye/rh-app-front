@@ -424,3 +424,36 @@ export async function downloadShiftExportCSV(params: {
     throw error;
   }
 }
+
+// ─── Justifications d'absence — vue RH ───────────────────────────────────────
+export type RhDispute = {
+  id: number;
+  employee_id: number;
+  employee_name: string;
+  employee_matricule: string;
+  work_date: string;
+  justification_text: string;
+  attendance_evidence: {
+    status?: string;
+    in_time?: string | null;
+    out_time?: string | null;
+    worked_minutes?: number;
+    late_minutes?: number;
+    delta_minutes?: number;
+  } | null;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution_note: string;
+};
+
+export async function getRhDisputes(status?: string): Promise<RhDispute[]> {
+  const params = status ? { status } : {};
+  const { data } = await api.get("/api/attendance/rh-disputes/", { params });
+  return data;
+}
+
+export async function resolveDispute(id: number, status: "approved" | "rejected", resolution_note: string): Promise<void> {
+  await api.patch("/api/attendance/rh-disputes/", { id, status, resolution_note });
+}
