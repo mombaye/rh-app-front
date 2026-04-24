@@ -12,7 +12,7 @@ import toast from "react-hot-toast";
 import { Employee } from "@/types/employee";
 import { patchEmployee } from "@/services/employeeService";
 import { Department, DepartmentCreate, EmployeeHierarchy } from "@/types/leave";
-import { departmentService, employeeHierarchyService } from "@/services/hierarchyService";
+import { departmentService, employeeHierarchyService, GlobalDGInfo } from "@/services/hierarchyService";
 import { getEmployees } from "@/services/employeeService";
 
 // ─── Sections ───────────────────────────────────────────────────────────────
@@ -156,18 +156,21 @@ function OrgChartTab() {
   const [bulkSelected,  setBulkSelected]  = useState<Set<number>>(new Set());
   const [bulkSearch,    setBulkSearch]    = useState("");
   const [bulkSaving,    setBulkSaving]    = useState(false);
+  const [globalDg,      setGlobalDg]      = useState<GlobalDGInfo | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [depts, hier, emps] = await Promise.all([
+      const [depts, hier, emps, dgRes] = await Promise.all([
         departmentService.getAll(),
         employeeHierarchyService.getAll(),
         getEmployees({ status: "ACTIVE" }),
+        employeeHierarchyService.getGlobalDG(),
       ]);
       setDepartments(depts);
       setEmployees(hier);
       setAllEmployees(emps);
+      setGlobalDg(dgRes.dg);
     } catch {
       toast.error("Impossible de charger l'organigramme.");
     } finally {
@@ -441,9 +444,13 @@ function OrgChartTab() {
       <div className="flex flex-col items-center gap-0">
         <div className="bg-indigo-100 border-2 border-indigo-400 rounded-2xl px-10 py-4 text-center min-w-[240px]">
           <p className="text-xs font-bold uppercase tracking-widest text-indigo-500 mb-1">Direction Générale</p>
-          <p className="font-black text-indigo-900 text-base">PDG / DG / Directeur</p>
+          <p className="font-black text-indigo-900 text-base">
+            {globalDg?.fonction || "PDG / DG / Directeur"}
+          </p>
           {dgNames.length > 0 ? (
             <p className="text-sm text-indigo-600 mt-1">{dgNames.join(" · ")}</p>
+          ) : globalDg ? (
+            <p className="text-sm text-indigo-600 mt-1">{globalDg.full_name}</p>
           ) : (
             <p className="text-xs text-indigo-400 italic mt-1">Non défini</p>
           )}

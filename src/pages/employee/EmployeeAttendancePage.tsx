@@ -594,17 +594,17 @@ export default function EmployeeAttendancePage({ layout: Layout = EmployeeLayout
     <Layout>
       <div className="px-4 md:px-6 pb-10">
 
-        {/* Header */}
-        <motion.div initial={{ opacity:0, y:-10 }} animate={{ opacity:1, y:0 }} className="mb-6">
-          <h1 className="text-2xl font-bold text-[#003c71]">Mes Pointages</h1>
-          <p className="text-gray-500 text-sm mt-0.5">
-            Consultez vos horaires d'arrivée et de départ. Téléchargez un relevé PDF personnalisé.
-          </p>
-        </motion.div>
+        {/* Header + filtres + bouton PDF */}
+        <motion.div initial={{ opacity:0, y:-10 }} animate={{ opacity:1, y:0 }}
+          className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-[#003c71]">Mes Pointages</h1>
+            <p className="text-gray-500 text-sm mt-0.5">
+              Consultez vos horaires d'arrivée et de départ.
+            </p>
+          </div>
 
-        {/* Barre filtres + bouton export — même niveau */}
-        <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             {VIEW_OPTIONS.map(v => (
               <button key={v.key} onClick={() => setView(v.key)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
@@ -615,13 +615,13 @@ export default function EmployeeAttendancePage({ layout: Layout = EmployeeLayout
                 {v.icon} {v.label}
               </button>
             ))}
-          </div>
 
-          <button onClick={() => setShowExport(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#003c71] text-[#003c71] text-sm font-medium hover:bg-[#003c71]/5 transition shrink-0">
-            <FileDown size={15}/> Télécharger PDF
-          </button>
-        </div>
+            <button onClick={() => setShowExport(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition shrink-0">
+              <FileDown size={15}/> Télécharger PDF
+            </button>
+          </div>
+        </motion.div>
 
         {/* Contenu */}
         {view === "daily"   && <DailyView   date={date}       setDate={setDate} />}

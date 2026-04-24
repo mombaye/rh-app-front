@@ -143,12 +143,13 @@ export default function EmployeeDashboardPage() {
                 to={card.link}
                 className="block bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md hover:border-camublue-900/20 transition-all"
               >
-                <div className={`inline-flex p-2.5 rounded-xl mb-3 ${card.color}`}>
-                  {card.icon}
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`inline-flex p-2.5 rounded-xl ${card.color}`}>
+                    {card.icon}
+                  </div>
+                  <div className="text-3xl font-black text-gray-800">{card.value}</div>
                 </div>
-                <div className="text-2xl font-bold text-gray-800">{card.value}</div>
-                <div className="text-sm font-medium text-gray-700 mt-0.5">{card.label}</div>
-                <div className="text-xs text-gray-400 mt-1">{card.sub}</div>
+                <div className="text-sm font-medium text-gray-600">{card.label}</div>
               </Link>
             </motion.div>
           ))}
@@ -160,51 +161,31 @@ export default function EmployeeDashboardPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col justify-between"
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-800 flex items-center gap-2">
                 <TrendingUp size={18} className="text-camublue-900" />
                 Soldes de congés {new Date().getFullYear()}
               </h2>
+            </div>
+            {loading ? (
+              <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
+            ) : balances.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-6">Aucun solde disponible</p>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center py-4">
+                <span className="text-6xl font-black text-camublue-900 leading-none">
+                  {totalRemaining.toFixed(1)}
+                </span>
+                <span className="text-sm text-gray-400 mt-2">jours restants</span>
+              </div>
+            )}
+            <div className="mt-4 flex justify-end">
               <Link to="/employee/leaves" className="text-xs text-camublue-900 hover:underline">
                 Voir tout →
               </Link>
             </div>
-            {loading ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />
-                ))}
-              </div>
-            ) : balances.length === 0 ? (
-              <p className="text-gray-400 text-sm text-center py-6">Aucun solde disponible</p>
-            ) : (
-              <div className="space-y-3">
-                {balances.map((b) => {
-                  const rem  = parseFloat(b.remaining || "0");
-                  const acq  = parseFloat(b.acquired || "0");
-                  const pct  = acq > 0 ? Math.min(100, (rem / acq) * 100) : 0;
-                  return (
-                    <div key={b.id}>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm font-medium text-gray-700">{b.leave_type.label}</span>
-                        <span className="text-sm font-bold text-camublue-900">{rem.toFixed(1)}j</span>
-                      </div>
-                      <div className="w-full bg-gray-100 rounded-full h-2">
-                        <div
-                          className="bg-camublue-900 h-2 rounded-full transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <div className="text-xs text-gray-400 mt-0.5">
-                        Acquis : {acq.toFixed(1)}j · Pris : {parseFloat(b.taken || "0").toFixed(1)}j
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </motion.div>
 
           {/* Dernières demandes */}
