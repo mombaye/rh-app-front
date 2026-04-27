@@ -1086,7 +1086,11 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
                     <span>Jour</span><span>Date</span><span>Statut</span><span>Entrée</span><span>Sortie</span>
                   </div>
                   {pointages.map((p, i) => {
-                    const rowBg = p.status === "ok" ? "bg-white border-slate-100" : "bg-rose-50 border-rose-100";
+                    const rowBg =
+                      p.status === "ok"         ? "bg-white border-slate-100"
+                      : p.status === "on_leave"  ? "bg-sky-50 border-sky-100"
+                      : p.status === "on_mission"? "bg-purple-50 border-purple-100"
+                      :                            "bg-rose-50 border-rose-100";
                     return (
                       <div key={i} className={`rounded-xl border p-3 ${rowBg}`}>
                         <div className="hidden sm:grid grid-cols-5 gap-4 items-center">

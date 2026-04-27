@@ -346,8 +346,27 @@ function JustifyModal({
   const [loadingRec,   setLoadingRec]   = useState(false);
   const [text,         setText]         = useState("");
   const [submitting,   setSubmitting]   = useState(false);
+  const [showHist,     setShowHist]     = useState(false);
+  const [histList,     setHistList]     = useState<AttendanceDispute[]>([]);
+  const [loadingHist,  setLoadingHist]  = useState(false);
 
   const alreadyDisputed = disputedDates.has(selectedDate);
+
+  // Charge l'historique des justifications
+  useEffect(() => {
+    if (!showHist) return;
+    setLoadingHist(true);
+    fetchMyDisputes()
+      .then(list => setHistList(list as AttendanceDispute[]))
+      .catch(() => setHistList([]))
+      .finally(() => setLoadingHist(false));
+  }, [showHist]);
+
+  function disputeStatusBadge(status: string) {
+    if (status === "approved") return { label: "Approuvé",  cls: "bg-green-100 text-green-700", dot: "bg-green-500" };
+    if (status === "rejected") return { label: "Rejeté",    cls: "bg-red-100 text-red-600",     dot: "bg-red-500"   };
+    return                            { label: "En attente", cls: "bg-amber-100 text-amber-700", dot: "bg-amber-500" };
+  }
 
   // Charge le pointage de l'employé pour la date sélectionnée
   useEffect(() => {
@@ -483,6 +502,67 @@ function JustifyModal({
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 resize-none"
             />
           </div>
+        </div>
+
+        {/* ─ Historique des justifications ─ */}
+        <div className="px-5 pb-3">
+          <button
+            onClick={() => setShowHist(p => !p)}
+            className="flex items-center gap-2 text-xs font-medium text-[#003c71] hover:underline transition"
+          >
+            <History size={13} />
+            {showHist ? "Masquer l'historique" : "Voir mes justifications"}
+            <ChevronDown size={12} className={`text-[#003c71]/70 transition-transform ${showHist ? "rotate-180" : ""}`} />
+          </button>
+
+          <AnimatePresence>
+            {showHist && (
+              <motion.div
+                key="hist-panel"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{    opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-3 max-h-52 overflow-y-auto space-y-2 pr-1">
+                  {loadingHist ? (
+                    <div className="flex justify-center py-4">
+                      <Loader2 size={18} className="animate-spin text-[#003c71]" />
+                    </div>
+                  ) : histList.length === 0 ? (
+                    <p className="text-center text-xs text-gray-400 py-4">Aucune justification envoyée.</p>
+                  ) : (
+                    histList.map(d => {
+                      const badge = disputeStatusBadge(d.status);
+                      const dt    = new Date(d.work_date + "T12:00:00");
+                      return (
+                        <div key={d.id} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 flex items-start gap-3">
+                          <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${badge.dot}`} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2 mb-0.5">
+                              <span className="text-xs font-semibold text-gray-700">
+                                {DAYS_FR[dt.getDay()]} {dt.getDate()} {MONTHS_FR[dt.getMonth()]} {dt.getFullYear()}
+                              </span>
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${badge.cls}`}>
+                                {badge.label}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-500 truncate">{d.justification_text}</p>
+                            {d.resolution_note && (
+                              <p className="text-[10px] text-gray-400 italic mt-0.5 truncate">
+                                RH : {d.resolution_note}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Footer */}
@@ -735,7 +815,6 @@ export default function EmployeeAttendancePage({ layout: Layout = EmployeeLayout
   const [view,             setView]            = useState<ViewMode>("daily");
   const [showExport,       setShowExport]       = useState(false);
   const [showJustify,      setShowJustify]      = useState(false);
-  const [showHistory,      setShowHistory]      = useState(false);
   const [showViewDropdown, setShowViewDropdown] = useState(false);
   const viewDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -850,11 +929,6 @@ export default function EmployeeAttendancePage({ layout: Layout = EmployeeLayout
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition shrink-0">
               <ShieldAlert size={15}/> Justifier une absence
             </button>
-
-            <button onClick={() => setShowHistory(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition shrink-0">
-              <History size={15} className="text-[#003c71]"/> Historique
-            </button>
           </div>
         </motion.div>
 
@@ -884,9 +958,6 @@ export default function EmployeeAttendancePage({ layout: Layout = EmployeeLayout
             onClose={() => setShowJustify(false)}
             onSubmitted={handleJustifySubmitted}
           />
-        )}
-        {showHistory && (
-          <HistoryModal key="history-modal" onClose={() => setShowHistory(false)} />
         )}
       </AnimatePresence>
     </Layout>

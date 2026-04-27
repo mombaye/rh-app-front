@@ -876,7 +876,7 @@ function ApprovalCard({
                 <><span className="text-gray-200">·</span><span className="flex items-center gap-1"><Briefcase size={10} />{req.employee.fonction}</span></>
               )}
               {req.status === "PENDING_SECOND" && (
-                <span className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold text-[10px] border border-blue-300">Validation N+2</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-semibold text-[10px] border border-indigo-300">2ème validation</span>
               )}
               {req.status === "PENDING" && req.employee.n2_manager_id && (
                 <span className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold text-[10px] border border-blue-200">2 niveaux requis</span>
@@ -896,6 +896,17 @@ function ApprovalCard({
               <p className="text-[11px] text-gray-400 italic mt-1.5 truncate max-w-sm">
                 <MessageSquare size={10} className="inline mr-1" />"{req.motif}"
               </p>
+            )}
+            {/* Bandeau N+1 déjà validé — visible uniquement pour PENDING_SECOND */}
+            {req.status === "PENDING_SECOND" && req.reviewed_by && (
+              <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 rounded-lg bg-green-50 border border-green-200">
+                <CheckCircle2 size={11} className="text-green-600 shrink-0" />
+                <p className="text-[11px] text-green-700 font-medium">
+                  Validé par {req.reviewed_by.full_name}
+                  {req.reviewed_at && <span className="text-green-500 font-normal"> · {fmt(req.reviewed_at.slice(0, 10))}</span>}
+                  {" "}— En attente de votre validation
+                </p>
+              </div>
             )}
             {req.reject_reason && (
               <div className="flex items-start gap-1.5 mt-1.5">
