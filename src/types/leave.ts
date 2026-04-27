@@ -167,6 +167,28 @@ export interface CarryoverResult {
   total_days_carried:  number;
 }
 
+// ── MigrationImportResult ── mirrors migration_import() action ────────────────
+export interface MigrationImportRow {
+  row:               number;
+  status:            "ok" | "not_found" | "ambiguous" | "error";
+  employee:          string;
+  matricule?:        string;
+  match_type?:       "matricule" | "name_exact" | "name_fuzzy" | "not_found" | "ambiguous";
+  current_remaining: number | null;
+  new_remaining:     number | null;
+  delta?:            number;
+  message?:          string;
+}
+export interface MigrationImportResult {
+  dry_run:           boolean;
+  year:              number;
+  leave_type:        string;
+  leave_type_label:  string;
+  processed:         number;
+  errors_count:      number;
+  results:           MigrationImportRow[];
+}
+
 // ── LeaveSummary ── mirrors summary() action ──────────────────────────────────
 export interface LeaveSummary {
   total:               number;

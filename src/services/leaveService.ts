@@ -8,6 +8,7 @@ import {
   LeaveBalanceAdjust,
   LeaveBalanceHistory,
   CarryoverResult,
+  MigrationImportResult,
   LeaveRequest,
   LeaveRequestCreate,
   LeaveRequestFilters,
@@ -136,6 +137,26 @@ export const leaveBalanceService = {
     form.append("file", file);
     const res = await axios.post(`${API}/balances/bulk_import/`, form, {
       headers: { ...getAuthHeaders(), "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
+  /**
+   * POST /api/leaves/balances/migration_import/
+   * Import souple depuis une autre plateforme (colonnes auto-détectées).
+   * dry_run=true → prévisualisation sans enregistrement.
+   */
+  migrationImport: async (
+    file: File,
+    opts: { dry_run?: boolean; year?: number; leave_type_code?: string }
+  ): Promise<MigrationImportResult> => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("dry_run", opts.dry_run ? "true" : "false");
+    if (opts.year)            form.append("year",            String(opts.year));
+    if (opts.leave_type_code) form.append("leave_type_code", opts.leave_type_code);
+    const res = await axios.post(`${API}/balances/migration_import/`, form, {
+      headers: getAuthHeaders(),   // laisser axios définir Content-Type + boundary automatiquement
     });
     return res.data;
   },

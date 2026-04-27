@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   FolderOpen, FileText, Download, ChevronRight, Loader2,
-  Home, Folder, Eye, X, ExternalLink, FileImage, FileSpreadsheet,
+  Home, Folder, Eye, X, ExternalLink,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
@@ -10,28 +10,17 @@ import { getEmployeeDocuments, downloadEmployeeDocument, DocumentItem } from "@/
 import toast from "react-hot-toast";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const getExt = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";
 const fmtSize = (b?: number) => !b ? "" : b < 1024 ? `${b} o` : b < 1048576 ? `${(b/1024).toFixed(1)} Ko` : `${(b/1048576).toFixed(1)} Mo`;
 const fmtDate = (d?: string) => !d ? "" : new Date(d).toLocaleDateString("fr-FR");
 
-type PreviewKind = "pdf" | "image" | "office" | "none";
+type PreviewKind = "pdf";
 
-function getPreviewKind(name: string): PreviewKind {
-  const ext = getExt(name);
-  if (ext === "pdf") return "pdf";
-  if (["jpg","jpeg","png","gif","webp","svg"].includes(ext)) return "image";
-  if (["doc","docx","xls","xlsx","ppt","pptx"].includes(ext)) return "office";
-  return "none";
+function getPreviewKind(_name: string): PreviewKind {
+  return "pdf";
 }
 
-function FileIcon({ name, size = 20 }: { name: string; size?: number }) {
-  const ext = getExt(name);
-  if (["jpg","jpeg","png","gif","webp","svg"].includes(ext)) return <FileImage size={size} className="text-purple-500" />;
-  if (["xls","xlsx","csv"].includes(ext)) return <FileSpreadsheet size={size} className="text-green-600" />;
-  if (ext === "pdf") return <FileText size={size} className="text-red-500" />;
-  if (["doc","docx"].includes(ext)) return <FileText size={size} className="text-blue-600" />;
-  if (["ppt","pptx"].includes(ext)) return <FileText size={size} className="text-orange-500" />;
-  return <FileText size={size} className="text-gray-500" />;
+function FileIcon({ size = 20 }: { name?: string; size?: number }) {
+  return <FileText size={size} className="text-red-500" />;
 }
 
 async function fetchFileBlob(employeeId: number, filePath: string): Promise<Blob> {
@@ -80,22 +69,6 @@ function PreviewModal({ state, onClose, color = "#003c71" }: { state: PreviewSta
               </a>
             </div>
           </object>
-        )}
-        {kind === "image" && <img src={blobUrl} alt={title} className="max-w-full max-h-full object-contain rounded-lg shadow-xl" />}
-        {kind === "office" && (
-          <div className="flex flex-col items-center gap-5 text-white text-center">
-            <FileText size={60} className="opacity-30" />
-            <div>
-              <p className="text-lg font-semibold">Aperçu Office</p>
-              <p className="text-sm text-gray-400 mt-1 max-w-sm">
-                Les fichiers Word, Excel et PowerPoint ne peuvent pas être prévisualisés directement.<br />
-                Téléchargez le fichier pour l'ouvrir.
-              </p>
-            </div>
-            <a href={blobUrl} download={title} className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition hover:opacity-80" style={{ backgroundColor: color }}>
-              <Download size={16} />Télécharger {title}
-            </a>
-          </div>
         )}
       </div>
     </div>
@@ -174,7 +147,7 @@ export default function ManagerDossierPage({ layout: Layout = ManagerLayout }: M
   };
 
   const folders = items.filter(i => i.type === "folder");
-  const files   = items.filter(i => i.type === "file");
+  const files   = items.filter(i => i.type === "file" && i.name.toLowerCase().endsWith(".pdf"));
 
   return (
     <Layout>

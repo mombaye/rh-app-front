@@ -8,6 +8,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import PayslipPage from "@/pages/PayslipPage";
 import LeavePage from "@/pages/LeavePage";
 import LeavesHierarchiePage from "@/pages/LeavesHierarchiePage";
+import LeavesMigrationPage  from "@/pages/LeavesMigrationPage";
 import ChangePasswordPage from "@/components/users/ChangePasswordPage";
 import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -252,6 +253,11 @@ function App() {
         <Route path="/leaves/autorisations" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <RhExitAuthorizationPage />
+          </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/leaves/migration" element={
+          <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
+            <LeavesMigrationPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
 

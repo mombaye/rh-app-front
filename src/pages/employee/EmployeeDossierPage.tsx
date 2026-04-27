@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import {
   FolderOpen, FileText, Download, ChevronRight, Loader2,
   Home, Folder, Eye, X, ExternalLink,
-  FileImage, FileSpreadsheet,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
@@ -11,10 +10,6 @@ import { getEmployeeDocuments, downloadEmployeeDocument, DocumentItem } from "@/
 import toast from "react-hot-toast";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getExt(name: string) {
-  return name.split(".").pop()?.toLowerCase() ?? "";
-}
 
 function fmtSize(bytes?: number) {
   if (!bytes) return "";
@@ -28,29 +23,14 @@ function fmtDate(d?: string) {
   return new Date(d).toLocaleDateString("fr-FR");
 }
 
-type PreviewKind = "pdf" | "image" | "office" | "none";
+type PreviewKind = "pdf";
 
-function getPreviewKind(name: string): PreviewKind {
-  const ext = getExt(name);
-  if (ext === "pdf") return "pdf";
-  if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext)) return "image";
-  if (["doc", "docx", "xls", "xlsx", "ppt", "pptx"].includes(ext)) return "office";
-  return "none";
+function getPreviewKind(_name: string): PreviewKind {
+  return "pdf";
 }
 
-function FileIcon({ name, size = 20 }: { name: string; size?: number }) {
-  const ext = getExt(name);
-  if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext))
-    return <FileImage size={size} className="text-purple-500" />;
-  if (["xls", "xlsx", "csv"].includes(ext))
-    return <FileSpreadsheet size={size} className="text-green-600" />;
-  if (ext === "pdf")
-    return <FileText size={size} className="text-red-500" />;
-  if (["doc", "docx"].includes(ext))
-    return <FileText size={size} className="text-blue-600" />;
-  if (["ppt", "pptx"].includes(ext))
-    return <FileText size={size} className="text-orange-500" />;
-  return <FileText size={size} className="text-gray-500" />;
+function FileIcon({ size = 20 }: { name?: string; size?: number }) {
+  return <FileText size={size} className="text-red-500" />;
 }
 
 // ── Récupère le fichier comme Blob (requête authentifiée) ─────────────────────
@@ -142,37 +122,6 @@ function PreviewModal({ state, onClose }: { state: PreviewState; onClose: () => 
           </object>
         )}
 
-        {kind === "image" && (
-          <img
-            src={blobUrl}
-            alt={title}
-            className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
-          />
-        )}
-
-        {/* Word / Excel / PPT — les Blob URLs ne fonctionnent pas avec MS Viewer.
-            On affiche le fichier en iframe via blob: ce qui ouvre le viewer natif
-            du navigateur si disponible, sinon propose de télécharger. */}
-        {kind === "office" && (
-          <div className="w-full h-full flex flex-col items-center justify-center gap-5 text-white text-center">
-            <FileText size={60} className="opacity-30" />
-            <div>
-              <p className="text-lg font-semibold">Aperçu Office</p>
-              <p className="text-sm text-gray-400 mt-1 max-w-sm">
-                Les fichiers Word, Excel et PowerPoint ne peuvent pas être prévisualisés
-                directement dans le navigateur. Téléchargez le fichier pour l'ouvrir.
-              </p>
-            </div>
-            <a
-              href={blobUrl}
-              download={title}
-              className="flex items-center gap-2 px-6 py-3 rounded-lg bg-camublue-900 text-white font-medium hover:bg-camublue-900/90 transition"
-            >
-              <Download size={16} />
-              Télécharger {title}
-            </a>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -271,7 +220,7 @@ export default function EmployeeDossierPage() {
   };
 
   const folders = items.filter(i => i.type === "folder");
-  const files   = items.filter(i => i.type === "file");
+  const files   = items.filter(i => i.type === "file" && i.name.toLowerCase().endsWith(".pdf"));
 
   return (
     <EmployeeLayout>

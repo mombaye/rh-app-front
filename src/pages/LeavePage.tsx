@@ -10,6 +10,7 @@ import { Employee } from "@/types/employee";
 import {
   ContractType, LeaveRequest, LeaveStatus, LeaveSummary, LeaveType,
   ApprovePayload, RevokePayload, LeaveBalance,
+  MigrationImportResult, MigrationImportRow,
 } from "@/types/leave";
 import {
   CalendarDays, RefreshCw, Plus, X, CheckCircle2, XCircle,
@@ -124,19 +125,23 @@ function StatusBadge({ status, isConsumed = false, isInProgress = false }: {
 }
 
 // ─── KpiCard ──────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, color, onClick, active }: {
+function KpiCard({ label, value, sub, dot, onClick, active }: {
   label: string; value: number | string; sub?: string;
-  color: string; onClick?: () => void; active?: boolean;
+  dot: string; onClick?: () => void; active?: boolean;
 }) {
   return (
     <button onClick={onClick}
-      className={`flex-1 min-w-[110px] rounded-2xl px-4 py-3 text-left transition-all border-2 ${
-        active ? "border-current shadow-md scale-[1.02]" : "border-transparent bg-white shadow-sm hover:shadow-md hover:scale-[1.01]"
-      }`}
-      style={{ color, backgroundColor: active ? color + "18" : undefined }}>
-      <p className="text-2xl font-black tabular-nums">{value}</p>
-      <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5 opacity-75">{label}</p>
-      {sub && <p className="text-[9px] opacity-55 mt-0.5">{sub}</p>}
+      className={`flex flex-col items-center justify-center p-3 rounded-2xl border bg-white transition hover:shadow-sm ${
+        active
+          ? "border-[#003c71] ring-2 ring-[#003c71]/20 shadow-sm"
+          : "border-gray-200 hover:border-gray-300"
+      }`}>
+      <span className="text-2xl font-bold text-[#003c71] tabular-nums">{value}</span>
+      <span className="text-xs mt-0.5 font-medium text-gray-600 inline-flex items-center gap-1.5">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+        {label}
+      </span>
+      {sub && <span className="text-[10px] text-gray-400 mt-0.5">{sub}</span>}
     </button>
   );
 }
@@ -554,21 +559,21 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
 
                 {/* Ligne 2 : KPI Cards (filtrées par type de contrat si sous-section) */}
                 {contractSummary && (
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    <KpiCard label="Total"      value={contractSummary.total}    color="#003c71" />
-                    <KpiCard label="En attente" value={contractSummary.pending}  color="#d97706"
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    <KpiCard label="Total"      value={contractSummary.total}         dot="bg-slate-400" />
+                    <KpiCard label="En attente" value={contractSummary.pending}        dot="bg-amber-400"
                       active={statusFilter === "PENDING" || statusFilter === "PENDING_SECOND"}
                       onClick={() => setStatusFilter(
                         (statusFilter === "PENDING" || statusFilter === "PENDING_SECOND") ? "ALL" : "PENDING"
                       )} />
-                    <KpiCard label="Approuvés"  value={contractSummary.approved} color="#059669"
+                    <KpiCard label="Approuvés"  value={contractSummary.approved}       dot="bg-emerald-500"
                       sub={`${contractSummary.total_days_approved}j accordés`}
                       active={statusFilter === "APPROVED"}
                       onClick={() => setStatusFilter(statusFilter === "APPROVED" ? "ALL" : "APPROVED")} />
-                    <KpiCard label="Rejetés"    value={contractSummary.rejected} color="#dc2626"
+                    <KpiCard label="Rejetés"    value={contractSummary.rejected}       dot="bg-red-500"
                       active={statusFilter === "REJECTED"}
                       onClick={() => setStatusFilter(statusFilter === "REJECTED" ? "ALL" : "REJECTED")} />
-                    <KpiCard label="Révoqués"   value={contractSummary.revoked ?? 0} color="#b45309"
+                    <KpiCard label="Révoqués"   value={contractSummary.revoked ?? 0}   dot="bg-orange-500"
                       active={statusFilter === "REVOKED"}
                       onClick={() => setStatusFilter(statusFilter === "REVOKED" ? "ALL" : "REVOKED")} />
                   </div>
@@ -1413,7 +1418,8 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
   const [searchQuery,  setSearchQuery]  = useState("");
   const [page,         setPage]         = useState(1);
   const [pageSize,     setPageSize]     = useState<typeof PAGE_SIZE_OPTIONS[number]>(20);
-  const [importOpen,   setImportOpen]   = useState(false);
+  const [importOpen,     setImportOpen]     = useState(false);
+  const [migrationOpen,  setMigrationOpen]  = useState(false);
   const currentYear = new Date().getFullYear();
   const todayDay    = new Date().getDate();
   const isMonthStart = todayDay <= 5;
@@ -1491,6 +1497,13 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMigrationOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-xl transition shadow-sm"
+          >
+            <Upload className="h-4 w-4" />
+            Migration Soldes
+          </button>
           <button
             onClick={() => setImportOpen(true)}
             className="flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition shadow-sm"
@@ -1690,6 +1703,15 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
           <ImportBalancesModal
             onClose={() => setImportOpen(false)}
             onImported={() => { setImportOpen(false); load(); }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {migrationOpen && (
+          <MigrationImportModal
+            onClose={() => setMigrationOpen(false)}
+            onImported={() => { setMigrationOpen(false); load(); }}
           />
         )}
       </AnimatePresence>
@@ -1901,6 +1923,344 @@ function ImportBalancesModal({ onClose, onImported }: { onClose: () => void; onI
             {uploading ? <ImSpinner2 className="animate-spin" size={14} /> : <Upload className="h-4 w-4" />}
             {uploading ? "Import en cours…" : "Importer"}
           </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Modal Migration Soldes (import depuis plateforme externe) ───────────────
+function MigrationImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const inputRef   = useRef<HTMLInputElement>(null);
+  const currentYear = new Date().getFullYear();
+
+  const [file,        setFile]        = useState<File | null>(null);
+  const [year,        setYear]        = useState<number>(currentYear);
+  const [leaveCode,   setLeaveCode]   = useState<string>("CONGE_PAYE");
+  const [loading,     setLoading]     = useState(false);
+  const [preview,     setPreview]     = useState<MigrationImportResult | null>(null);
+  const [confirmed,   setConfirmed]   = useState(false);
+
+  const handleFile = (f: File | undefined) => {
+    if (!f) return;
+    if (!f.name.match(/\.(xlsx|xls|csv)$/i)) {
+      toast.error("Fichier Excel (.xlsx / .xls) ou CSV requis.");
+      return;
+    }
+    setFile(f);
+    setPreview(null);
+    setConfirmed(false);
+  };
+
+  const matchBadge = (row: MigrationImportRow) => {
+    if (row.status === "not_found") return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600">Introuvable</span>;
+    if (row.status === "ambiguous") return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-600">Ambigu</span>;
+    if (row.status === "error")     return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600">Erreur</span>;
+    const mt = row.match_type;
+    if (mt === "matricule")   return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">Matricule</span>;
+    if (mt === "name_exact")  return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-700">Nom exact</span>;
+    if (mt === "name_fuzzy")  return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700">Nom approx.</span>;
+    return null;
+  };
+
+  const handlePreview = async () => {
+    if (!file) return;
+    setLoading(true);
+    try {
+      const res = await leaveBalanceService.migrationImport(file, { dry_run: true, year, leave_type_code: leaveCode || undefined });
+      setPreview(res);
+      setConfirmed(false);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors de la prévisualisation.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!file) return;
+    setLoading(true);
+    try {
+      const res = await leaveBalanceService.migrationImport(file, { dry_run: false, year, leave_type_code: leaveCode || undefined });
+      setConfirmed(true);
+      setPreview(res);
+      toast.success(`Migration réussie — ${res.processed} employé(s) mis à jour.`);
+      onImported();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors de la migration.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["NOM_PRENOM", "MATRICULE", "SOLDE_RESTANT"],
+      ["Jean Dupont", "EMP001",   15.5],
+      ["Marie Martin", "EMP002",  8],
+    ]);
+    ws["!cols"] = [{ wch: 28 }, { wch: 14 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `Migration ${year}`);
+    XLSX.writeFile(wb, `template_migration_soldes_${year}.xlsx`);
+  };
+
+  const okRows    = preview?.results.filter(r => r.status === "ok") ?? [];
+  const errRows   = preview?.results.filter(r => r.status !== "ok") ?? [];
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 8 }}
+        transition={{ duration: 0.15 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-violet-600">
+              <Upload className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800">Migration des soldes de congés</h3>
+              <p className="text-xs text-slate-500">Importez les soldes depuis votre ancienne plateforme</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 transition">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+          {/* Options */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Année de migration</label>
+              <select
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none transition"
+              >
+                {[currentYear - 1, currentYear, currentYear + 1].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Code type de congé</label>
+              <input
+                type="text"
+                value={leaveCode}
+                onChange={(e) => setLeaveCode(e.target.value.toUpperCase())}
+                placeholder="Ex : CONGE_PAYE"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none transition font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Zone de dépôt */}
+          <div
+            className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition ${
+              file ? "border-violet-400 bg-violet-50/50" : "border-slate-200 hover:border-violet-400 hover:bg-violet-50/30"
+            }`}
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}
+          >
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={(e) => handleFile(e.target.files?.[0])}
+            />
+            {file ? (
+              <div className="flex items-center justify-center gap-3">
+                <FileSpreadsheet className="h-8 w-8 text-violet-600" />
+                <div className="text-left">
+                  <p className="font-semibold text-slate-800 text-sm">{file.name}</p>
+                  <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} Ko</p>
+                </div>
+                <button
+                  className="ml-2 text-slate-400 hover:text-red-500 transition"
+                  onClick={(e) => { e.stopPropagation(); setFile(null); setPreview(null); setConfirmed(false); }}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div>
+                <Upload className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-600">Glissez un fichier ici</p>
+                <p className="text-xs text-slate-400 mt-1">ou cliquez pour parcourir (.xlsx, .xls, .csv)</p>
+              </div>
+            )}
+          </div>
+
+          {/* Format attendu */}
+          <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+            <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">Format attendu (colonnes auto-détectées)</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[10px] border-collapse">
+                <thead>
+                  <tr className="bg-violet-700 text-white">
+                    <th className="px-2 py-1.5 border-r border-violet-600 font-bold text-center whitespace-nowrap">NOM_PRENOM <span className="font-normal opacity-70">ou</span> MATRICULE</th>
+                    <th className="px-2 py-1.5 border-r border-violet-600 font-bold text-center whitespace-nowrap">MATRICULE <span className="font-normal opacity-70">(optionnel)</span></th>
+                    <th className="px-2 py-1.5 font-bold text-center whitespace-nowrap bg-emerald-600/50">SOLDE_RESTANT</th>
+                  </tr>
+                </thead>
+                <tbody className="font-mono text-slate-700">
+                  <tr className="border-b border-slate-200">
+                    <td className="px-2 py-1 border border-slate-200 text-center">Jean Dupont</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center text-slate-400">EMP001</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center bg-emerald-50 font-bold">15.5</td>
+                  </tr>
+                  <tr>
+                    <td className="px-2 py-1 border border-slate-200 text-center">Marie Martin</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center text-slate-400">EMP002</td>
+                    <td className="px-2 py-1 border border-slate-200 text-center bg-emerald-50 font-bold">8</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-[11px] text-slate-500">• La colonne <strong>SOLDE_RESTANT</strong> contiendra le nombre de jours restants à reprendre.</p>
+              <p className="text-[11px] text-slate-500">• Le système détecte automatiquement les colonnes (NOM, PRENOM, MATRICULE, SOLDE, DUREE…).</p>
+              <p className="text-[11px] text-slate-500">• La recherche est insensible aux accents et à la casse.</p>
+            </div>
+          </div>
+
+          {/* Résultats de prévisualisation */}
+          {preview && (
+            <div className="space-y-3">
+              {/* KPIs */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-black text-emerald-700">{preview.processed}</p>
+                  <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">À mettre à jour</p>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-black text-red-600">{preview.errors_count}</p>
+                  <p className="text-[11px] text-red-500 font-semibold mt-0.5">Erreur(s)</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-black text-slate-700">{preview.results.length}</p>
+                  <p className="text-[11px] text-slate-500 font-semibold mt-0.5">Total lignes</p>
+                </div>
+              </div>
+
+              {/* Bannière dry_run */}
+              {preview.dry_run && !confirmed && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 font-medium">
+                    Ceci est une <strong>prévisualisation</strong> — aucun solde n'a encore été modifié.
+                    Vérifiez les résultats ci-dessous puis cliquez sur <strong>Confirmer l'import</strong>.
+                  </p>
+                </div>
+              )}
+
+              {confirmed && (
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                  <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <p className="text-xs text-emerald-800 font-semibold">Migration appliquée avec succès.</p>
+                </div>
+              )}
+
+              {/* Tableau résultats */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead className="sticky top-0 bg-slate-700 text-white">
+                      <tr>
+                        <th className="px-2 py-2 text-left font-bold border-r border-slate-600">#</th>
+                        <th className="px-2 py-2 text-left font-bold border-r border-slate-600">Employé</th>
+                        <th className="px-2 py-2 text-center font-bold border-r border-slate-600">Détection</th>
+                        <th className="px-2 py-2 text-center font-bold border-r border-slate-600">Solde actuel</th>
+                        <th className="px-2 py-2 text-center font-bold border-r border-slate-600">Nouveau solde</th>
+                        <th className="px-2 py-2 text-center font-bold">Δ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.results.map((row) => (
+                        <tr key={row.row} className={`border-b border-slate-100 ${
+                          row.status === "ok" ? "hover:bg-slate-50" : "bg-red-50"
+                        }`}>
+                          <td className="px-2 py-1.5 border-r border-slate-100 text-slate-400 font-mono">{row.row}</td>
+                          <td className="px-2 py-1.5 border-r border-slate-100">
+                            <p className="font-semibold text-slate-800">{row.employee}</p>
+                            {row.matricule && <p className="text-[10px] text-slate-400 font-mono">{row.matricule}</p>}
+                            {row.message   && <p className="text-[10px] text-red-500">{row.message}</p>}
+                          </td>
+                          <td className="px-2 py-1.5 border-r border-slate-100 text-center">{matchBadge(row)}</td>
+                          <td className="px-2 py-1.5 border-r border-slate-100 text-center font-mono text-slate-600">
+                            {row.current_remaining !== null ? row.current_remaining.toFixed(2) : "—"}
+                          </td>
+                          <td className="px-2 py-1.5 border-r border-slate-100 text-center font-mono font-bold text-slate-800">
+                            {row.new_remaining !== null ? row.new_remaining.toFixed(2) : "—"}
+                          </td>
+                          <td className={`px-2 py-1.5 text-center font-mono font-bold ${
+                            (row.delta ?? 0) > 0 ? "text-emerald-600" : (row.delta ?? 0) < 0 ? "text-red-600" : "text-slate-400"
+                          }`}>
+                            {row.delta !== undefined
+                              ? `${row.delta > 0 ? "+" : ""}${row.delta.toFixed(2)}`
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 pt-3 border-t border-slate-100 flex gap-3 shrink-0">
+          <button
+            onClick={downloadTemplate}
+            className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-50 transition"
+          >
+            <Download className="h-4 w-4" /> Modèle
+          </button>
+
+          {!confirmed && (
+            <>
+              <button
+                onClick={handlePreview}
+                disabled={!file || loading}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition disabled:opacity-50"
+              >
+                {loading && !preview ? <ImSpinner2 className="animate-spin" size={14} /> : <CheckCircle2 className="h-4 w-4" />}
+                Prévisualiser
+              </button>
+
+              {preview && preview.processed > 0 && (
+                <button
+                  onClick={handleConfirm}
+                  disabled={loading}
+                  className="flex-1 flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold py-2 rounded-xl transition disabled:opacity-50"
+                >
+                  {loading ? <ImSpinner2 className="animate-spin" size={14} /> : <Upload className="h-4 w-4" />}
+                  {loading ? "Migration en cours…" : `Confirmer l'import (${preview.processed} employé(s))`}
+                </button>
+              )}
+            </>
+          )}
+
+          {confirmed && (
+            <button
+              onClick={onClose}
+              className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold py-2 rounded-xl transition"
+            >
+              <CheckCircle className="h-4 w-4" /> Fermer
+            </button>
+          )}
         </div>
       </motion.div>
     </div>

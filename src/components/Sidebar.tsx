@@ -52,10 +52,11 @@ export default function Sidebar() {
       path: "/leaves",
       icon: <CalendarDays size={20} />,
       subItems: [
-        { label: "Internes",       path: "/leaves/internes"      },
-        { label: "Intérimaires",   path: "/leaves/interimaires"  },
-        { label: "Hiérarchie",     path: "/leaves/hierarchie"    },
-        { label: "Autorisations",  path: "/leaves/autorisations" },
+        { label: "Internes",          path: "/leaves/internes"      },
+        { label: "Intérimaires",    path: "/leaves/interimaires"  },
+        { label: "Hiérarchie",      path: "/leaves/hierarchie"    },
+        { label: "Autorisations",   path: "/leaves/autorisations" },
+        { label: "Migration Soldes", path: "/leaves/migration"    },
       ],
     },
     {
