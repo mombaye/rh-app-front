@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, CalendarDays, BadgeDollarSign,
-  FolderOpen, ClipboardCheck, X, Menu, UserCircle2, FileStack, LogOut,
+  FolderOpen, ClipboardCheck, X, Menu, UserCircle2, FileStack, LogOut, Users,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -26,8 +26,9 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
 
   const navItems: NavItem[] = [
     { label: "Tableau de bord", path: "/manager/dashboard", icon: <LayoutDashboard size={20} /> },
-    { label: "Approbations",   path: "/manager/approvals", icon: <ClipboardCheck size={20} />, badge: pendingCount > 0 ? pendingCount : undefined },
-    { label: "Mes Congés",    path: "/manager/leaves",    icon: <CalendarDays size={20} /> },
+    { label: "Approbations",   path: "/manager/approvals",   icon: <ClipboardCheck size={20} />, badge: pendingCount > 0 ? pendingCount : undefined },
+    { label: "Équipe en congé", path: "/manager/team-leaves", icon: <Users size={20} /> },
+    { label: "Mes Congés",    path: "/manager/leaves",      icon: <CalendarDays size={20} /> },
     { label: "Mes Sorties",   path: "/manager/exits",     icon: <LogOut size={20} /> },
     { label: "Mes Bulletins", path: "/manager/payslips",  icon: <BadgeDollarSign size={20} /> },
     { label: "Mon Dossier",   path: "/manager/dossier",   icon: <FolderOpen size={20} /> },

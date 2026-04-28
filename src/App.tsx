@@ -26,6 +26,7 @@ import EmployeeDossierPage            from "@/pages/employee/EmployeeDossierPage
 import EmployeeAttendancePage         from "@/pages/employee/EmployeeAttendancePage";
 import EmployeeDocumentsPage          from "@/pages/employee/EmployeeDocumentsPage";
 import EmployeeExitAuthorizationPage  from "@/pages/employee/EmployeeExitAuthorizationPage";
+import EmployeeServiceLeavesPage      from "@/pages/employee/EmployeeServiceLeavesPage";
 // Manager pages
 import ManagerDashboardPage       from "@/pages/manager/ManagerDashboardPage";
 import ManagerLeavesPage          from "@/pages/manager/ManagerLeavesPage";
@@ -33,7 +34,8 @@ import ManagerExitAuthorizationPage from "@/pages/manager/ManagerExitAuthorizati
 import ManagerPayslipPage    from "@/pages/manager/ManagerPayslipPage";
 import ManagerDossierPage    from "@/pages/manager/ManagerDossierPage";
 import ManagerApprovalsPage  from "@/pages/manager/ManagerApprovalsPage";
-import ManagerDocumentsPage  from "@/pages/manager/ManagerDocumentsPage";
+import ManagerDocumentsPage   from "@/pages/manager/ManagerDocumentsPage";
+import ManagerTeamLeavesPage  from "@/pages/manager/ManagerTeamLeavesPage";
 import { useAuth } from "@/contexts/useAuth";
 // RH espace employé
 import RhLeavesPage               from "@/pages/rh/RhLeavesPage";
@@ -170,6 +172,11 @@ function App() {
             <EmployeeExitAuthorizationPage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
+        <Route path="/employee/service-leaves" element={
+          <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
+            <EmployeeServiceLeavesPage />
+          </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />
 
         {/* ── Espace Manager ───────────────────────────────────── */}
         <Route path="/manager/dashboard"  element={<MgrRoute><ManagerDashboardPage         /></MgrRoute>} />
@@ -177,8 +184,9 @@ function App() {
         <Route path="/manager/exits"      element={<MgrRoute><ManagerExitAuthorizationPage /></MgrRoute>} />
         <Route path="/manager/payslips"   element={<MgrRoute><ManagerPayslipPage           /></MgrRoute>} />
         <Route path="/manager/dossier"    element={<MgrRoute><ManagerDossierPage           /></MgrRoute>} />
-        <Route path="/manager/approvals"  element={<MgrRoute><ManagerApprovalsPage         /></MgrRoute>} />
-        <Route path="/manager/documents"  element={<MgrRoute><ManagerDocumentsPage         /></MgrRoute>} />
+        <Route path="/manager/approvals"   element={<MgrRoute><ManagerApprovalsPage         /></MgrRoute>} />
+        <Route path="/manager/documents"   element={<MgrRoute><ManagerDocumentsPage         /></MgrRoute>} />
+        <Route path="/manager/team-leaves" element={<MgrRoute><ManagerTeamLeavesPage        /></MgrRoute>} />
 
         {/* ── Planning Manager ─────────────────────────────────── */}
         <Route path="/planning" element={

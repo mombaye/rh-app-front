@@ -11,6 +11,7 @@ import {
   FileStack,
   ClipboardCheck,
   LogOut,
+  Users,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -36,6 +37,11 @@ const baseNavItems = [
     label: "Mes Congés",
     path: "/employee/leaves",
     icon: <CalendarDays size={20} />,
+  },
+  {
+    label: "Mon Service",
+    path: "/employee/service-leaves",
+    icon: <Users size={20} />,
   },
   {
     label: "Mes sorties",
