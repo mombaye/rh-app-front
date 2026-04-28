@@ -404,18 +404,24 @@ export interface ManagerDelegationCreate {
 
 // ── ApprovalChainStep ─────────────────────────────────────────────────────────
 export interface ApprovalChainStep {
-  level:          string;        // "N+1", "N+2", "DG"
+  level:          string;        // "N+1", "N+2", "N+3"…
   approver_id:    number | null;
   approver_name:  string | null;
-  is_on_leave?:   boolean;       // true si le manager est actuellement en congé
+  is_on_leave?:   boolean;
 }
 
 export interface ApprovalChainInfo {
   is_department_head: boolean;
   department:         string | null;
-  /** DG_ONLY = responsable dept racine | N1_ONLY = employé sous dept racine | HIERARCHY = employé sous-département */
-  approval_flow:      "HIERARCHY" | "DG_ONLY" | "N1_ONLY";
-  steps:              ApprovalChainStep[];
+  /**
+   * DG_ONLY   = responsable de département racine → seul le DG valide
+   * SINGLE    = 1 seul validateur (ex : FLOTTE)
+   * MULTI     = N validateurs selon l'arborescence (ex : FO-NEU → FO)
+   * N1_ONLY / HIERARCHY = valeurs legacy (rétrocompatibilité)
+   */
+  approval_flow: "DG_ONLY" | "SINGLE" | "MULTI" | "N1_ONLY" | "HIERARCHY";
+  steps:         ApprovalChainStep[];
+  total_steps?:  number;
 }
 
 // ── ApprovePayload ────────────────────────────────────────────────────────────

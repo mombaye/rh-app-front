@@ -13,7 +13,7 @@ import { Department } from "@/types/leave";
 import {
   User, Users, Briefcase, Building2,
   ChevronRight, Check, X,
-  Mail, UserCheck, Search, AlertCircle,
+  Mail, UserCheck, Search, AlertCircle, Crown,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -607,6 +607,20 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                   </div>
 
                   <Divider label="Hiérarchie" />
+
+                  {/* Badge Directeur Général — affiché uniquement si is_dg=true */}
+                  {initialData?.is_dg && (
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-50 border border-indigo-200">
+                      <Crown size={18} className="text-indigo-600 shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-indigo-800">Directeur Général</p>
+                        <p className="text-xs text-indigo-500 mt-0.5">
+                          {initialData.email || "—"} · Ce rôle est fixe et géré par l'administrateur
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-bold bg-indigo-600 text-white px-2 py-0.5 rounded-full">DG</span>
+                    </div>
+                  )}
 
                   {detectingManagers && (
                     <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 border"

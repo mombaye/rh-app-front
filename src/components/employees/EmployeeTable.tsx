@@ -710,7 +710,14 @@ export default function EmployeesTable({
                 </td>
 
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.matricule}</td>
-                <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">{emp.nom}</td>
+                <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">
+                  <div className="flex items-center gap-1.5">
+                    {emp.nom}
+                    {emp.is_dg && (
+                      <span className="text-[9px] font-bold bg-indigo-600 text-white px-1.5 py-0.5 rounded-full leading-none">DG</span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.prenom}</td>
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.fonction || <span className="text-slate-300">—</span>}</td>
 

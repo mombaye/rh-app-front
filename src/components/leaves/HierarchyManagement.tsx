@@ -390,11 +390,13 @@ function OrgChartTab() {
 
       {/* ── Toolbar : Actions + Toggle employés ──────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
           <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-indigo-400 bg-indigo-100 inline-block" />DG</div>
-          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-amber-400 bg-amber-50 inline-block" />Dept. parent</div>
-          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-teal-400 bg-teal-50 inline-block" />Sous-dept.</div>
-          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-emerald-400 bg-emerald-50 inline-block" />Dept. simple</div>
+          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-amber-400 bg-amber-50 inline-block" />Niv. 1</div>
+          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-teal-400 bg-teal-50 inline-block" />Niv. 2</div>
+          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-purple-400 bg-purple-50 inline-block" />Niv. 3</div>
+          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-sky-400 bg-sky-50 inline-block" />Niv. 4+</div>
+          <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-emerald-400 bg-emerald-50 inline-block" />Feuille</div>
           {showEmployees && <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2 border-blue-300 bg-blue-50 inline-block" />Employés</div>}
         </div>
         <div className="flex items-center gap-2">
@@ -490,29 +492,23 @@ function OrgChartTab() {
         )}
       </div>
 
-      {/* ── Responsables de département ───────────────────────────────────────── */}
+      {/* ── Responsables de département (arbre récursif N niveaux) ─────────────── */}
       {departments.length > 0 && (() => {
-        // Séparer les départements racines (sans parent) des sous-départements
-        const rootDepts = departments.filter(d => !d.parent);
-        const childDeptMap: Record<number, typeof departments> = {};
-        departments.forEach(d => {
-          if (d.parent) {
-            if (!childDeptMap[d.parent]) childDeptMap[d.parent] = [];
-            childDeptMap[d.parent].push(d);
-          }
-        });
+        const deptTree = buildDeptTree(departments);
+        const orphans  = departments.filter(d => d.parent && !departments.find(p => p.id === d.parent));
 
         return (
           <>
-            <p className="text-center text-xs text-gray-400 italic -mt-4">Niveau Managers — validés directement par le DG</p>
+            <p className="text-center text-xs text-gray-400 italic -mt-4">
+              Niveau Managers — validés directement par le DG
+            </p>
             <div className="overflow-x-auto pb-2">
               <div className="flex justify-start min-w-max px-2">
-                {rootDepts.map((dept, idx) => (
-                  <DeptColumn
+                {deptTree.map((dept, idx) => (
+                  <DeptNode
                     key={dept.id}
                     dept={dept}
-                    employees={empsByDept[dept.name] ?? []}
-                    subDepartments={childDeptMap[dept.id] ?? []}
+                    depth={0}
                     empsByDept={empsByDept}
                     onEditEmployee={openEditEmp}
                     onEditDept={openEditDept}
@@ -520,22 +516,21 @@ function OrgChartTab() {
                     deletingDept={deletingDept}
                     onBulkAssign={openBulkAssign}
                     showEmployees={showEmployees}
-                    treePosition={{ isFirst: idx === 0, isLast: idx === rootDepts.length - 1, isOnly: rootDepts.length === 1 }}
+                    treePosition={{ isFirst: idx === 0, isLast: idx === deptTree.length - 1, isOnly: deptTree.length === 1 }}
                   />
                 ))}
               </div>
             </div>
 
             {/* Sous-départements orphelins (parent supprimé) */}
-            {departments.filter(d => d.parent && !departments.find(p => p.id === d.parent)).length > 0 && (
+            {orphans.length > 0 && (
               <div className="overflow-x-auto pb-2 mt-4">
                 <div className="flex gap-6 justify-start min-w-max px-2">
-                  {departments.filter(d => d.parent && !departments.find(p => p.id === d.parent)).map(dept => (
-                    <DeptColumn
+                  {orphans.map(dept => (
+                    <DeptNode
                       key={dept.id}
-                      dept={dept}
-                      employees={empsByDept[dept.name] ?? []}
-                      subDepartments={[]}
+                      dept={{ ...dept, children: [] }}
+                      depth={0}
                       empsByDept={empsByDept}
                       onEditEmployee={openEditEmp}
                       onEditDept={openEditDept}
@@ -687,97 +682,178 @@ function OrgChartTab() {
       )}
 
       {/* ── Modal : création/édition département ─────────────────────────────── */}
-      {showDeptForm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
-          onClick={() => { setShowDeptForm(false); setEditingDept(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-800">{editingDept ? "Modifier le département" : "Nouveau département"}</h3>
-              <button onClick={() => { setShowDeptForm(false); setEditingDept(null); }}
-                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="Nom *">
-                <input value={deptForm.name}
-                  onChange={e => setDeptForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  placeholder="ex : Ressources Humaines" />
-              </FormField>
-              <FormField label="Code *">
-                <input value={deptForm.code}
-                  onChange={e => setDeptForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  placeholder="ex : RH" />
-              </FormField>
-              <FormField label="Département parent" className="sm:col-span-2">
-                <select
-                  value={deptForm.parent_id ?? ""}
-                  onChange={e => setDeptForm(f => ({ ...f, parent_id: e.target.value ? Number(e.target.value) : null }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                >
-                  <option value="">— Aucun (département racine)</option>
-                  {departments
-                    .filter(d => !editingDept || d.id !== editingDept.id)
-                    .filter(d => !d.parent)
-                    .map(d => (
-                      <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
-                    ))
-                  }
-                </select>
-                {deptForm.parent_id && (
-                  <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                    <FolderTree size={11} />
-                    Sous-département : son responsable = N+1, le responsable du parent = N+2
-                  </p>
-                )}
-              </FormField>
-              <FormField label={deptForm.parent_id ? "Responsable (N+1)" : "Responsable N+1"}>
-                <EmployeeSelect
-                  employees={activeEmps.filter(e =>
-                    // Exclure les employés déjà responsables d'un AUTRE département
-                    !departments.some(d => d.head === e.id && d.id !== (editingDept?.id ?? -1))
-                  )}
-                  value={deptForm.head_id ?? null}
-                  onChange={v => setDeptForm(f => ({ ...f, head_id: v }))}
-                  placeholder="Chef de département..." />
-                {deptForm.head_id !== null && departments.some(d => d.head === deptForm.head_id && d.id !== (editingDept?.id ?? -1)) && (
-                  <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                    <AlertCircle size={11} /> Cet employé est déjà responsable d&apos;un autre département.
-                  </p>
-                )}
-              </FormField>
-              {!deptForm.parent_id && (
-                <FormField label="Validateur DG (N+2)">
-                  <EmployeeSelect employees={activeEmps} value={deptForm.dg_validator_id ?? null}
-                    onChange={v => setDeptForm(f => ({ ...f, dg_validator_id: v }))}
-                    placeholder="Directeur général..." />
+      {showDeptForm && (() => {
+        // ── Calcul de la chaîne de validation selon l'arbre ──────────────────
+        // Simule ce que le backend calculera pour les MEMBRES de ce département.
+        // Règle : le DG ne valide QUE les responsables de département racine
+        // directement rattachés à lui — il n'apparaît PAS dans le circuit des
+        // employés ordinaires.
+        // Remonte l'arbre : dept → parent → grand-parent → … jusqu'à la racine.
+        const computeChainPreview = (): { label: string; name: string; isHead: boolean }[] => {
+          const chain: { label: string; name: string; isHead: boolean }[] = [];
+
+          // Étape 1 : responsable du département courant (N+1)
+          if (deptForm.head_id) {
+            const headEmp = activeEmps.find(e => e.id === deptForm.head_id);
+            if (headEmp) chain.push({ label: "N+1", name: `${headEmp.nom} ${headEmp.prenom}`, isHead: true });
+          }
+
+          // Étape 2+ : remonter les responsables des départements parents
+          let currentParentId = deptForm.parent_id;
+          let level = 2;
+          const visited = new Set<number>();
+          while (currentParentId && !visited.has(currentParentId)) {
+            visited.add(currentParentId);
+            const parentDept = departments.find(d => d.id === currentParentId);
+            if (!parentDept) break;
+            if (parentDept.head) {
+              const parentHead = activeEmps.find(e => e.id === parentDept.head);
+              if (parentHead) chain.push({ label: `N+${level}`, name: `${parentHead.nom} ${parentHead.prenom}`, isHead: false });
+            }
+            currentParentId = parentDept.parent ?? null;
+            level++;
+          }
+
+          // Le DG n'apparaît QUE si aucun validateur n'a été trouvé (département
+          // sans responsable ni parent configuré → fallback DG directement).
+          if (chain.length === 0) {
+            chain.push({ label: "DG", name: globalDg?.full_name ?? "Directeur Général", isHead: false });
+          }
+
+          return chain;
+        };
+
+        const chainPreview = computeChainPreview();
+        const STEP_COLORS = [
+          "bg-amber-50 border-amber-300 text-amber-800",
+          "bg-orange-50 border-orange-300 text-orange-800",
+          "bg-purple-50 border-purple-300 text-purple-800",
+          "bg-rose-50 border-rose-300 text-rose-800",
+        ];
+
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+            onClick={() => { setShowDeptForm(false); setEditingDept(null); }}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <h3 className="font-bold text-gray-800">{editingDept ? "Modifier le département" : "Nouveau département"}</h3>
+                <button onClick={() => { setShowDeptForm(false); setEditingDept(null); }}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="px-6 py-5 space-y-4">
+                {/* Nom + Code */}
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField label="Nom *">
+                    <input value={deptForm.name}
+                      onChange={e => setDeptForm(f => ({ ...f, name: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      placeholder="ex : Ressources Humaines" />
+                  </FormField>
+                  <FormField label="Code *">
+                    <input value={deptForm.code}
+                      onChange={e => setDeptForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      placeholder="ex : RH" />
+                  </FormField>
+                </div>
+
+                {/* Département parent */}
+                <FormField label="Département parent">
+                  <select
+                    value={deptForm.parent_id ?? ""}
+                    onChange={e => setDeptForm(f => ({ ...f, parent_id: e.target.value ? Number(e.target.value) : null }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+                    <option value="">— Aucun (département racine)</option>
+                    {departments
+                      .filter(d => !editingDept || d.id !== editingDept.id)
+                      .map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.parent ? "  ↳ " : ""}{d.name} ({d.code})
+                        </option>
+                      ))}
+                  </select>
                 </FormField>
-              )}
-              <FormField label="Description" className="sm:col-span-2">
-                <textarea value={deptForm.description}
-                  onChange={e => setDeptForm(f => ({ ...f, description: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  rows={2}
-                  placeholder="Description optionnelle..." />
-              </FormField>
-            </div>
-            <div className="flex gap-2 justify-end px-6 py-4 border-t border-gray-100 bg-gray-50">
-              <button onClick={() => { setShowDeptForm(false); setEditingDept(null); }}
-                className="px-4 py-2 text-sm border rounded-xl hover:bg-gray-100 font-medium transition">
-                Annuler
-              </button>
-              <button onClick={handleSaveDept} disabled={savingDept}
-                className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60 font-bold transition">
-                {savingDept ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                {editingDept ? "Enregistrer" : "Créer"}
-              </button>
+
+                {/* Responsable */}
+                <FormField label="Responsable du département">
+                  <EmployeeSelect
+                    employees={activeEmps.filter(e =>
+                      !departments.some(d => d.head === e.id && d.id !== (editingDept?.id ?? -1))
+                    )}
+                    value={deptForm.head_id ?? null}
+                    onChange={v => setDeptForm(f => ({ ...f, head_id: v }))}
+                    placeholder="Sélectionner le responsable..." />
+                </FormField>
+
+                {/* ── Aperçu dynamique de la chaîne de validation ────────────── */}
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <GitBranch size={12} />
+                    Circuit de validation — calculé automatiquement
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {/* Employé */}
+                    <div className="flex flex-col items-center">
+                      <span className="text-[10px] px-2 py-1 rounded-lg border bg-blue-50 border-blue-200 text-blue-700 font-semibold">
+                        Employé
+                      </span>
+                    </div>
+
+                    {chainPreview.map((step, i) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        {/* Flèche */}
+                        <span className="text-gray-300 text-sm font-bold">→</span>
+                        {/* Étape */}
+                        <div className={`flex flex-col items-center px-2 py-1 rounded-lg border text-[10px] font-semibold ${
+                          step.label === "DG"
+                            ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                            : (STEP_COLORS[i] ?? STEP_COLORS[STEP_COLORS.length - 1])
+                        }`}>
+                          <span className="font-bold">{step.label}</span>
+                          <span className="font-normal opacity-75 max-w-[90px] truncate">{step.name}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="text-[10px] text-gray-400 mt-3 italic">
+                    {chainPreview[0]?.label === "DG"
+                      ? "Aucun responsable configuré — les employés seront validés directement par le DG"
+                      : deptForm.parent_id
+                        ? `${chainPreview.length} niveau(x) de validation — déterminés par l'arborescence`
+                        : `1 niveau de validation — responsable du département uniquement`}
+                  </p>
+                </div>
+
+                {/* Description */}
+                <FormField label="Description">
+                  <textarea value={deptForm.description}
+                    onChange={e => setDeptForm(f => ({ ...f, description: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    rows={2}
+                    placeholder="Description optionnelle..." />
+                </FormField>
+              </div>
+
+              <div className="flex gap-2 justify-end px-6 py-4 border-t border-gray-100 bg-gray-50">
+                <button onClick={() => { setShowDeptForm(false); setEditingDept(null); }}
+                  className="px-4 py-2 text-sm border rounded-xl hover:bg-gray-100 font-medium transition">
+                  Annuler
+                </button>
+                <button onClick={handleSaveDept} disabled={savingDept}
+                  className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60 font-bold transition">
+                  {savingDept ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  {editingDept ? "Enregistrer" : "Créer"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Modal : assignation en masse des membres ─────────────────────────── */}
       {bulkDept && (() => {
@@ -935,13 +1011,88 @@ function OrgChartTab() {
   );
 }
 
-// ── DeptColumn : colonne département dans l'organigramme ─────────────────────
-function DeptColumn({
-  dept, employees, subDepartments, empsByDept, onEditEmployee, onEditDept, onDeleteDept, deletingDept, onBulkAssign, showEmployees, treePosition,
+// ─────────────────────────────────────────────────────────────────────────────
+// Organigramme récursif — arbre N niveaux
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Nœud de l'arbre (Department + enfants imbriqués) */
+interface DeptTreeNode extends Department {
+  children: DeptTreeNode[];
+}
+
+/** Construit l'arbre récursif à partir d'une liste plate de départements */
+function buildDeptTree(departments: Department[]): DeptTreeNode[] {
+  const byId = new Map<number, DeptTreeNode>();
+  departments.forEach(d => byId.set(d.id, { ...d, children: [] }));
+
+  const roots: DeptTreeNode[] = [];
+  byId.forEach(node => {
+    if (!node.parent) {
+      roots.push(node);
+    } else {
+      const parent = byId.get(node.parent);
+      if (parent) parent.children.push(node);
+    }
+  });
+  return roots;
+}
+
+/**
+ * Palette de couleurs par profondeur.
+ * connHex : couleur hexadécimale pour les connecteurs (inline style — évite
+ *           les limitations du JIT Tailwind sur les classes dynamiques).
+ */
+const DEPTH_PALETTE = [
+  { // 0 — racine
+    bg: "bg-amber-50",   border: "border-amber-400",   hover: "hover:bg-amber-100",
+    badge: "bg-amber-600",  text: "text-amber-900",  muted: "text-amber-700",  faint: "text-amber-500",
+    ftBorder: "border-amber-200",  ftBg: "bg-amber-100",  ftText: "text-amber-700",
+    connHex: "#fbbf24",
+  },
+  { // 1
+    bg: "bg-teal-50",    border: "border-teal-400",    hover: "hover:bg-teal-100",
+    badge: "bg-teal-600",   text: "text-teal-900",   muted: "text-teal-700",   faint: "text-teal-500",
+    ftBorder: "border-teal-200",   ftBg: "bg-teal-100",   ftText: "text-teal-700",
+    connHex: "#2dd4bf",
+  },
+  { // 2
+    bg: "bg-purple-50",  border: "border-purple-400",  hover: "hover:bg-purple-100",
+    badge: "bg-purple-600", text: "text-purple-900", muted: "text-purple-700", faint: "text-purple-500",
+    ftBorder: "border-purple-200", ftBg: "bg-purple-100", ftText: "text-purple-700",
+    connHex: "#c084fc",
+  },
+  { // 3
+    bg: "bg-sky-50",     border: "border-sky-400",     hover: "hover:bg-sky-100",
+    badge: "bg-sky-600",    text: "text-sky-900",    muted: "text-sky-700",    faint: "text-sky-500",
+    ftBorder: "border-sky-200",    ftBg: "bg-sky-100",    ftText: "text-sky-700",
+    connHex: "#38bdf8",
+  },
+  { // 4+
+    bg: "bg-rose-50",    border: "border-rose-400",    hover: "hover:bg-rose-100",
+    badge: "bg-rose-600",   text: "text-rose-900",   muted: "text-rose-700",   faint: "text-rose-500",
+    ftBorder: "border-rose-200",   ftBg: "bg-rose-100",   ftText: "text-rose-700",
+    connHex: "#fb7185",
+  },
+] as const;
+
+/** Palette pour un département sans enfants (feuille) — toujours emerald */
+const LEAF_PALETTE = {
+  bg: "bg-emerald-50",  border: "border-emerald-400",  hover: "hover:bg-emerald-100",
+  badge: "bg-emerald-600", text: "text-emerald-900", muted: "text-emerald-700", faint: "text-emerald-500",
+  ftBorder: "border-emerald-200", ftBg: "bg-emerald-100", ftText: "text-emerald-700",
+  connHex: "#34d399",
+} as const;
+
+/** Couleur du connecteur entrant depuis le DG vers les départements racine */
+const DG_CONN_HEX = "#818cf8"; // indigo-400
+
+// ── DeptNode : composant récursif (rendu d'un département à n'importe quelle profondeur) ──
+function DeptNode({
+  dept, depth, empsByDept, onEditEmployee, onEditDept, onDeleteDept,
+  deletingDept, onBulkAssign, showEmployees, treePosition,
 }: {
-  dept: Department;
-  employees: EmployeeHierarchy[];
-  subDepartments: Department[];
+  dept: DeptTreeNode;
+  depth: number;
   empsByDept: Record<string, EmployeeHierarchy[]>;
   onEditEmployee: (emp: EmployeeHierarchy) => void;
   onEditDept: (dept: Department) => void;
@@ -952,255 +1103,151 @@ function DeptColumn({
   treePosition?: { isFirst: boolean; isLast: boolean; isOnly: boolean };
 }) {
   const [expanded, setExpanded] = useState(true);
-  const hasSubDepts = subDepartments.length > 0;
+
+  const hasChildren   = dept.children.length > 0;
+  const c             = hasChildren ? DEPTH_PALETTE[Math.min(depth, DEPTH_PALETTE.length - 1)] : LEAF_PALETTE;
+  const incomingConn  = depth === 0 ? DG_CONN_HEX : DEPTH_PALETTE[Math.min(depth - 1, DEPTH_PALETTE.length - 1)].connHex;
+  const directEmps    = empsByDept[dept.name] ?? [];
+
+  // Taille décroissante avec la profondeur
+  const cardWidth = depth === 0
+    ? "min-w-[175px] max-w-[240px]"
+    : depth === 1
+      ? "min-w-[155px] max-w-[210px]"
+      : "min-w-[135px] max-w-[190px]";
+
+  const iconSize   = depth >= 2 ? 10 : 12;
+  const nameSize   = depth === 0 ? "text-sm font-black" : "text-xs font-bold";
+  const headSize   = depth === 0 ? "text-xs" : "text-[11px]";
+  const countSize  = "text-[10px]";
+  const px         = depth === 0 ? "px-4" : "px-3";
+  const py         = depth === 0 ? "pt-3 pb-2" : "pt-2.5 pb-1.5";
+  const hPad       = Math.max(16 - depth * 3, 6);
 
   return (
-    <div className="flex flex-col items-center relative px-4">
-      {/* Barre horizontale en T reliant les départements frères */}
+    <div
+      className="flex flex-col items-center relative"
+      style={{ paddingLeft: hPad, paddingRight: hPad }}
+    >
+      {/* ── Barre horizontale T entre frères ────────────────────────────────── */}
       {treePosition && !treePosition.isOnly && (
-        <div className={`absolute top-0 h-0.5 bg-indigo-300 ${
-          treePosition.isFirst ? "left-1/2 right-0" :
-          treePosition.isLast  ? "left-0 right-1/2" :
-          "inset-x-0"
-        }`} />
+        <div
+          className={`absolute top-0 h-0.5 ${
+            treePosition.isFirst ? "left-1/2 right-0" :
+            treePosition.isLast  ? "left-0 right-1/2" :
+            "inset-x-0"
+          }`}
+          style={{ backgroundColor: incomingConn }}
+        />
       )}
-      {/* Connecteur vertical + flèche vers le bas */}
-      <div className="w-0.5 h-8 bg-indigo-400 relative z-10" />
-      <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-indigo-400" />
 
-      {/* Carte département */}
-      <div className={`border-2 rounded-2xl min-w-[175px] max-w-[240px] overflow-hidden shadow-sm ${
-        hasSubDepts ? "bg-amber-50 border-amber-400" : "bg-emerald-50 border-emerald-400"
-      }`}>
+      {/* ── Connecteur vertical entrant ──────────────────────────────────────── */}
+      <div className="w-0.5 h-8 relative z-10" style={{ backgroundColor: incomingConn }} />
+      <div
+        className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent"
+        style={{ borderTopColor: incomingConn }}
+      />
+
+      {/* ── Carte département ────────────────────────────────────────────────── */}
+      <div className={`border-2 rounded-2xl ${cardWidth} overflow-hidden shadow-sm ${c.bg} ${c.border}`}>
         <button
           onClick={() => onEditDept(dept)}
-          className={`w-full px-4 pt-3 pb-2 text-center transition ${
-            hasSubDepts ? "hover:bg-amber-100" : "hover:bg-emerald-100"
-          }`}
+          className={`w-full ${px} ${py} text-center transition ${c.hover}`}
         >
-          <div className="flex items-center justify-center gap-1.5">
-            <span className={`text-white text-[10px] font-black px-2 py-0.5 rounded-md tracking-wider ${
-              hasSubDepts ? "bg-amber-600" : "bg-emerald-600"
-            }`}>
+          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+            <span className={`text-white text-[10px] font-black px-2 py-0.5 rounded-md tracking-wider ${c.badge}`}>
               {dept.code}
             </span>
-            {hasSubDepts && (
-              <span className="text-[9px] text-amber-600 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-md font-semibold">
-                <FolderTree size={9} className="inline mr-0.5" />{subDepartments.length} sous-dept.
+            {hasChildren && (
+              <span className={`text-[9px] ${c.faint} bg-white/50 border ${c.ftBorder} px-1.5 py-0.5 rounded-md font-semibold`}>
+                <FolderTree size={9} className="inline mr-0.5" />{dept.children.length} sous-dept.
               </span>
             )}
           </div>
-          <p className={`font-black text-sm mt-1.5 ${hasSubDepts ? "text-amber-900" : "text-emerald-900"}`}>{dept.name}</p>
-          <p className={`text-xs mt-0.5 truncate max-w-full ${hasSubDepts ? "text-amber-700" : "text-emerald-700"}`}>
-            {dept.head_name ? (
-              <>
-                {dept.head_name}
-                {hasSubDepts && <span className="text-[10px] ml-1 opacity-70">(N+2)</span>}
-              </>
-            ) : (
-              <span className={`italic ${hasSubDepts ? "text-amber-400" : "text-emerald-400"}`}>Sans responsable</span>
-            )}
+          <p className={`mt-1.5 ${nameSize} ${c.text}`}>{dept.name}</p>
+          <p className={`mt-0.5 truncate max-w-full ${headSize} ${c.muted}`}>
+            {dept.head_name
+              ? dept.head_name
+              : <span className="italic opacity-50">Sans responsable</span>}
           </p>
-          {dept.dg_validator_name && (
-            <p className={`text-[10px] mt-0.5 ${hasSubDepts ? "text-amber-500" : "text-emerald-500"}`}>
-              DG : {dept.dg_validator_name}
-            </p>
-          )}
-          <p className={`text-[10px] mt-1 ${hasSubDepts ? "text-amber-500" : "text-emerald-500"}`}>
-            {hasSubDepts ? (
-              <>
-                <span className="font-semibold">{dept.employee_count}</span> employé(s) au total
-                {(dept.children || []).length > 0 && (
-                  <span className="opacity-70 ml-1">
-                    ({(dept.children || []).reduce((sum, c) => sum + (c.employee_count || 0), 0)} dans sous-depts)
-                  </span>
-                )}
-              </>
-            ) : (
-              <>{dept.employee_count} employé(s)</>
-            )}
+          <p className={`mt-1 ${countSize} ${c.faint}`}>
+            {dept.employee_count} employé(s)
           </p>
         </button>
 
-        {/* Boutons : Membres / Supprimer / Toggle */}
-        <div className={`flex border-t ${hasSubDepts ? "border-amber-200" : "border-emerald-200"}`}>
+        {/* ── Pied de carte : Membres / Supprimer / Plier ─────────────────── */}
+        <div className={`flex border-t ${c.ftBorder}`}>
           <button
             onClick={() => onBulkAssign(dept)}
-            className={`flex-1 flex items-center justify-center gap-1 px-2 py-2 text-xs font-semibold transition ${
-              hasSubDepts
-                ? "bg-amber-100 hover:bg-amber-600 hover:text-white text-amber-700"
-                : "bg-emerald-100 hover:bg-emerald-600 hover:text-white text-emerald-700"
-            }`}
-            title="Assigner des employés en masse"
+            className={`flex-1 flex items-center justify-center gap-1 px-2 py-2 font-semibold transition
+              ${c.ftBg} ${c.ftText} hover:opacity-80`}
+            style={{ fontSize: iconSize }}
+            title="Membres"
           >
-            <UserCheck size={12} /> Membres
+            <UserCheck size={iconSize} /> Membres
           </button>
           <button
             onClick={() => onDeleteDept(dept.id)}
             disabled={deletingDept === dept.id}
-            className={`px-2 py-2 transition border-l ${
-              hasSubDepts
-                ? "bg-amber-100 hover:bg-red-100 text-red-400 border-amber-200"
-                : "bg-emerald-100 hover:bg-red-100 text-red-400 border-emerald-200"
-            } disabled:opacity-50`}
-            title="Supprimer le département"
-          >
-            {deletingDept === dept.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-          </button>
-          <button
-            onClick={() => setExpanded(e => !e)}
-            className={`px-3 py-2 transition border-l ${
-              hasSubDepts
-                ? "bg-amber-100 hover:bg-amber-200 text-amber-600 border-amber-200"
-                : "bg-emerald-100 hover:bg-emerald-200 text-emerald-600 border-emerald-200"
-            }`}
-            title={expanded ? "Replier" : "Déplier"}
-          >
-            {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Contenu étendu : sous-départements OU employés directs */}
-      {expanded && (
-        <>
-          {/* Sous-départements */}
-          {hasSubDepts ? (
-            <>
-              <div className="w-0.5 h-4 bg-amber-400" />
-              <div className="flex">
-                {subDepartments.map((subDept, idx) => {
-                  const isFirst = idx === 0;
-                  const isLast = idx === subDepartments.length - 1;
-                  const isOnly = subDepartments.length === 1;
-                  return (
-                    <div key={subDept.id} className="flex flex-col items-center px-3 relative">
-                      {/* Barre horizontale en T entre sous-départements */}
-                      {!isOnly && (
-                        <div
-                          className={`absolute top-0 h-0.5 bg-amber-400 ${
-                            isFirst ? "left-1/2 right-0" :
-                            isLast  ? "left-0 right-1/2" :
-                            "inset-x-0"
-                          }`}
-                        />
-                      )}
-                      {/* Connecteur vertical + flèche */}
-                      <div className="w-0.5 h-4 bg-amber-400 relative z-10" />
-                      <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-amber-400" />
-                      {/* Carte sous-département */}
-                      <SubDeptCard
-                        dept={subDept}
-                        employees={empsByDept[subDept.name] ?? []}
-                        onEditEmployee={onEditEmployee}
-                        onEditDept={onEditDept}
-                        onDeleteDept={onDeleteDept}
-                        deletingDept={deletingDept}
-                        onBulkAssign={onBulkAssign}
-                        showEmployees={showEmployees}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Employés directs du département parent (s'il y en a) */}
-              {showEmployees && employees.length > 0 && (
-                <>
-                  <div className="flex flex-col items-center">
-                    <div className="w-0.5 h-4 bg-emerald-400" />
-                    <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-emerald-400" />
-                  </div>
-                  <EmployeeList employees={employees} onEditEmployee={onEditEmployee} />
-                </>
-              )}
-            </>
-          ) : (
-            showEmployees && (
-              <>
-                <div className="flex flex-col items-center">
-                  <div className="w-0.5 h-4 bg-emerald-400" />
-                  <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-emerald-400" />
-                </div>
-                <EmployeeList employees={employees} onEditEmployee={onEditEmployee} />
-              </>
-            )
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-// ── SubDeptCard : carte sous-département dans l'organigramme ──────────────────
-function SubDeptCard({
-  dept, employees, onEditEmployee, onEditDept, onDeleteDept, deletingDept, onBulkAssign, showEmployees,
-}: {
-  dept: Department;
-  employees: EmployeeHierarchy[];
-  onEditEmployee: (emp: EmployeeHierarchy) => void;
-  onEditDept: (dept: Department) => void;
-  onDeleteDept: (id: number) => void;
-  deletingDept: number | null;
-  onBulkAssign: (dept: Department) => void;
-  showEmployees: boolean;
-}) {
-  const [expanded, setExpanded] = useState(true);
-
-  return (
-    <div className="flex flex-col items-center">
-      <div className="bg-teal-50 border-2 border-teal-400 rounded-2xl min-w-[160px] max-w-[200px] overflow-hidden shadow-sm">
-        <button
-          onClick={() => onEditDept(dept)}
-          className="w-full px-3 pt-2.5 pb-1.5 text-center hover:bg-teal-100 transition"
-        >
-          <span className="bg-teal-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md tracking-wider">
-            {dept.code}
-          </span>
-          <p className="font-bold text-teal-900 text-xs mt-1">{dept.name}</p>
-          <p className="text-[11px] text-teal-700 mt-0.5 truncate max-w-full">
-            {dept.head_name ? (
-              <>
-                {dept.head_name}
-                <span className="text-[9px] ml-1 opacity-70">(N+1)</span>
-              </>
-            ) : (
-              <span className="italic text-teal-400">Sans responsable</span>
-            )}
-          </p>
-          <p className="text-[10px] text-teal-500 mt-0.5">{dept.employee_count} employé(s)</p>
-        </button>
-        <div className="flex border-t border-teal-200">
-          <button
-            onClick={() => onBulkAssign(dept)}
-            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-teal-100 hover:bg-teal-600 hover:text-white text-[10px] font-semibold text-teal-700 transition"
-          >
-            <UserCheck size={10} /> Membres
-          </button>
-          <button
-            onClick={() => onDeleteDept(dept.id)}
-            disabled={deletingDept === dept.id}
-            className="px-2 py-1.5 bg-teal-100 hover:bg-red-100 text-red-400 border-l border-teal-200 transition disabled:opacity-50"
+            className={`px-2 py-2 transition border-l ${c.ftBorder} ${c.ftBg} hover:bg-red-100 text-red-400 disabled:opacity-50`}
             title="Supprimer"
           >
-            {deletingDept === dept.id ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+            {deletingDept === dept.id ? <Loader2 size={iconSize} className="animate-spin" /> : <Trash2 size={iconSize} />}
           </button>
           <button
             onClick={() => setExpanded(e => !e)}
-            className="px-2 py-1.5 bg-teal-100 hover:bg-teal-200 text-teal-600 border-l border-teal-200 transition"
+            className={`px-3 py-2 transition border-l ${c.ftBorder} ${c.ftBg} ${c.ftText} hover:opacity-80`}
+            title={expanded ? "Replier" : "Déplier"}
           >
-            {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+            {expanded ? <ChevronUp size={iconSize} /> : <ChevronDown size={iconSize} />}
           </button>
         </div>
       </div>
 
-      {expanded && showEmployees && (
+      {/* ── Contenu étendu ───────────────────────────────────────────────────── */}
+      {expanded && (
         <>
-          <div className="flex flex-col items-center">
-            <div className="w-0.5 h-3 bg-teal-400" />
-            <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-teal-400" />
-          </div>
-          <EmployeeList employees={employees} onEditEmployee={onEditEmployee} compact />
+          {/* Sous-départements (récursif) */}
+          {hasChildren && (
+            <>
+              <div className="w-0.5 h-4" style={{ backgroundColor: c.connHex }} />
+              <div className="flex">
+                {dept.children.map((child, idx) => (
+                  <DeptNode
+                    key={child.id}
+                    dept={child}
+                    depth={depth + 1}
+                    empsByDept={empsByDept}
+                    onEditEmployee={onEditEmployee}
+                    onEditDept={onEditDept}
+                    onDeleteDept={onDeleteDept}
+                    deletingDept={deletingDept}
+                    onBulkAssign={onBulkAssign}
+                    showEmployees={showEmployees}
+                    treePosition={{
+                      isFirst: idx === 0,
+                      isLast:  idx === dept.children.length - 1,
+                      isOnly:  dept.children.length === 1,
+                    }}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Employés directs de ce département */}
+          {showEmployees && directEmps.length > 0 && (
+            <>
+              <div className="flex flex-col items-center">
+                <div className="w-0.5 h-4" style={{ backgroundColor: LEAF_PALETTE.connHex }} />
+                <div
+                  className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent"
+                  style={{ borderTopColor: LEAF_PALETTE.connHex }}
+                />
+              </div>
+              <EmployeeList employees={directEmps} onEditEmployee={onEditEmployee} compact={depth > 0} />
+            </>
+          )}
         </>
       )}
     </div>

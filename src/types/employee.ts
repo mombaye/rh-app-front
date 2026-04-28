@@ -82,14 +82,18 @@ export interface Employee {
 
   // ── Workflow congés — hiérarchie N+1 / N+2 ──────────────
   requires_two_approvals?: boolean;
-  n1_manager?:       number | null;   // FK id du N+1
-  n2_manager?:       number | null;   // FK id du N+2
-  n1_manager_name?:   string | null;
-  n2_manager_name?:   string | null;
-  user_id?:           number | null;
-  // Détection automatique rôle manager : nombre d'employés managés
-  manages_n1_count?:  number;
-  manages_n2_count?:  number;
+  n1_manager?:       number | null;
+  n2_manager?:       number | null;
+  n1_manager_name?:  string | null;
+  n2_manager_name?:  string | null;
+  user_id?:          number | null;
+  manages_n1_count?: number;
+  manages_n2_count?: number;
+
+  // ── Directeur Général (fixe) ─────────────────────────────
+  // Un seul employé peut avoir is_dg=True — c'est Edouard MAIRET.
+  // Seul le RH/Admin peut modifier ce champ.
+  is_dg?: boolean;
 }
 
 export interface EmployeeHistoryEntry {

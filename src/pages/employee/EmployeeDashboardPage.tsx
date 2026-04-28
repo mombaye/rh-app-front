@@ -272,94 +272,78 @@ export default function EmployeeDashboardPage() {
             </div>
             <p className="text-xs text-gray-400 mb-4">Circuit de validation appliqué à vos demandes de congé</p>
 
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-0 sm:gap-3 justify-center">
-              {/* Employé (moi) */}
-              <div className="flex flex-col items-center text-center min-w-[140px]">
-                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 mb-2">
-                  <User size={22} className="text-blue-700" />
+            {/* Palette de couleurs par niveau (N+1 → N+2 → N+3 → …) */}
+            {(() => {
+              const STEP_COLORS = [
+                { bg: "bg-amber-50",  border: "border-amber-200",  icon: "text-amber-700",  text: "text-amber-800",  sub: "text-amber-500",  badge: "text-amber-700 bg-amber-50"   },
+                { bg: "bg-orange-50", border: "border-orange-200", icon: "text-orange-700", text: "text-orange-800", sub: "text-orange-500", badge: "text-orange-700 bg-orange-50"  },
+                { bg: "bg-purple-50", border: "border-purple-200", icon: "text-purple-700", text: "text-purple-800", sub: "text-purple-500", badge: "text-purple-700 bg-purple-50"  },
+                { bg: "bg-rose-50",   border: "border-rose-200",   icon: "text-rose-700",   text: "text-rose-800",   sub: "text-rose-500",   badge: "text-rose-700 bg-rose-50"     },
+              ];
+              const Connector = () => (
+                <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
+                  <ArrowDown size={16} className="text-gray-300 sm:hidden" />
+                  <div className="hidden sm:block w-8 h-0.5 bg-gray-300 rounded" />
+                  <div className="hidden sm:block w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[6px] border-l-gray-300" />
                 </div>
-                <span className="text-xs font-bold text-blue-800 leading-tight">{hierarchy.employee.full_name}</span>
-                <span className="text-[10px] text-blue-500 mt-0.5">{hierarchy.employee.fonction || hierarchy.employee.service}</span>
-                <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded mt-1">Vous</span>
-              </div>
+              );
 
-              {/* Connecteur → */}
-              <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
-                <ArrowDown size={16} className="text-gray-300 sm:hidden" />
-                <div className="hidden sm:block w-8 h-0.5 bg-gray-300 rounded" />
-                <div className="hidden sm:block w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[6px] border-l-gray-300" />
-              </div>
+              // Utilise approval_chain si disponible, sinon rétrocompat n1/n2
+              const chain = hierarchy.approval_chain?.length
+                ? hierarchy.approval_chain
+                : [
+                    ...(hierarchy.n1_manager ? [{ step: 1, label: "N+1", approver: hierarchy.n1_manager }] : []),
+                    ...(hierarchy.n2_manager ? [{ step: 2, label: "N+2", approver: hierarchy.n2_manager }] : []),
+                  ];
 
-              {/* Approbateur principal : DG (responsable dept racine) ou N+1 */}
-              {hierarchy.approval_flow === "DG_ONLY" ? (
-                <div className="flex flex-col items-center text-center min-w-[140px]">
-                  <div className="p-3 rounded-xl mb-2 bg-indigo-50 border border-indigo-300">
-                    <ShieldCheck size={22} className="text-indigo-700" />
-                  </div>
-                  <span className="text-xs font-bold text-indigo-800 leading-tight">Direction Générale</span>
-                  <span className="text-[10px] text-indigo-500 mt-0.5">Validation directe</span>
-                  <span className="text-[9px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded mt-1">DG</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center text-center min-w-[140px]">
-                  <div className={`p-3 rounded-xl mb-2 ${hierarchy.n1_manager ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
-                    <ShieldCheck size={22} className={hierarchy.n1_manager ? "text-amber-700" : "text-gray-400"} />
-                  </div>
-                  {hierarchy.n1_manager ? (
-                    <>
-                      <span className="text-xs font-bold text-amber-800 leading-tight">{hierarchy.n1_manager.full_name}</span>
-                      <span className="text-[10px] text-amber-500 mt-0.5">{hierarchy.n1_manager.fonction || hierarchy.n1_manager.service}</span>
-                    </>
-                  ) : (
-                    <span className="text-xs text-gray-400 italic">Non défini</span>
-                  )}
-                  <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded mt-1">N+1</span>
-                </div>
-              )}
-
-              {/* N+2 — uniquement pour les employés dans un sous-département */}
-              {hierarchy.approval_flow === "HIERARCHY" && hierarchy.requires_two_approvals && (
-                <>
-                  <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
-                    <ArrowDown size={16} className="text-gray-300 sm:hidden" />
-                    <div className="hidden sm:block w-8 h-0.5 bg-gray-300 rounded" />
-                    <div className="hidden sm:block w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[6px] border-l-gray-300" />
-                  </div>
-
+              return (
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-0 sm:gap-3 justify-center flex-wrap">
+                  {/* Employé (moi) */}
                   <div className="flex flex-col items-center text-center min-w-[140px]">
-                    <div className={`p-3 rounded-xl mb-2 ${hierarchy.n2_manager ? "bg-orange-50 border border-orange-200" : "bg-gray-50 border border-gray-200"}`}>
-                      <ShieldCheck size={22} className={hierarchy.n2_manager ? "text-orange-700" : "text-gray-400"} />
+                    <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 mb-2">
+                      <User size={22} className="text-blue-700" />
                     </div>
-                    {hierarchy.n2_manager ? (
-                      <>
-                        <span className="text-xs font-bold text-orange-800 leading-tight">{hierarchy.n2_manager.full_name}</span>
-                        <span className="text-[10px] text-orange-500 mt-0.5">{hierarchy.n2_manager.fonction || hierarchy.n2_manager.service}</span>
-                      </>
-                    ) : (
-                      <span className="text-xs text-gray-400 italic">Non défini</span>
-                    )}
-                    <span className="text-[9px] font-semibold text-orange-700 bg-orange-50 px-2 py-0.5 rounded mt-1">N+2</span>
+                    <span className="text-xs font-bold text-blue-800 leading-tight">{hierarchy.employee.full_name}</span>
+                    <span className="text-[10px] text-blue-500 mt-0.5">{hierarchy.employee.fonction || hierarchy.employee.service}</span>
+                    <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded mt-1">Vous</span>
                   </div>
-                </>
-              )}
 
-              {/* Connecteur → RH */}
-              <div className="flex flex-col sm:flex-row items-center justify-center py-1 sm:py-0 sm:pt-5">
-                <ArrowDown size={16} className="text-gray-300 sm:hidden" />
-                <div className="hidden sm:block w-8 h-0.5 bg-gray-300 rounded" />
-                <div className="hidden sm:block w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[6px] border-l-gray-300" />
-              </div>
+                  {/* Étapes dynamiques de la chaîne */}
+                  {chain.map((step, idx) => {
+                    const isDg = hierarchy.approval_flow === "DG_ONLY";
+                    const c    = isDg
+                      ? { bg: "bg-indigo-50", border: "border-indigo-300", icon: "text-indigo-700", text: "text-indigo-800", sub: "text-indigo-500", badge: "text-indigo-700 bg-indigo-50" }
+                      : (STEP_COLORS[idx] ?? STEP_COLORS[STEP_COLORS.length - 1]);
+                    return (
+                      <div key={step.step} className="flex flex-col sm:flex-row items-center sm:items-start gap-0 sm:gap-3">
+                        <Connector />
+                        <div className="flex flex-col items-center text-center min-w-[140px]">
+                          <div className={`p-3 rounded-xl mb-2 ${c.bg} border ${c.border}`}>
+                            <ShieldCheck size={22} className={c.icon} />
+                          </div>
+                          <span className={`text-xs font-bold leading-tight ${c.text}`}>{step.approver.full_name}</span>
+                          <span className={`text-[10px] mt-0.5 ${c.sub}`}>{step.approver.fonction || step.approver.service}</span>
+                          <span className={`text-[9px] font-semibold px-2 py-0.5 rounded mt-1 ${c.badge}`}>
+                            {isDg ? "DG" : step.label}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
 
-              {/* RH */}
-              <div className="flex flex-col items-center text-center min-w-[140px]">
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 mb-2">
-                  <CheckCircle2 size={22} className="text-emerald-700" />
+                  {/* RH */}
+                  <Connector />
+                  <div className="flex flex-col items-center text-center min-w-[140px]">
+                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 mb-2">
+                      <CheckCircle2 size={22} className="text-emerald-700" />
+                    </div>
+                    <span className="text-xs font-bold text-emerald-800 leading-tight">Service RH</span>
+                    <span className="text-[10px] text-emerald-500 mt-0.5">Validation finale</span>
+                    <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded mt-1">RH</span>
+                  </div>
                 </div>
-                <span className="text-xs font-bold text-emerald-800 leading-tight">Service RH</span>
-                <span className="text-[10px] text-emerald-500 mt-0.5">Validation finale</span>
-                <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded mt-1">RH</span>
-              </div>
-            </div>
+              );
+            })()}
           </motion.div>
         )}
 

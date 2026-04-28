@@ -144,16 +144,25 @@ export interface GlobalDGInfo {
   email: string;
 }
 
+export interface ApprovalChainStep {
+  step:     number;          // 1-indexed
+  label:    string;          // "N+1", "N+2", "N+3"…
+  approver: HierarchyMini;
+}
+
 export interface MyHierarchyChain {
   employee: HierarchyMini;
+  /** Chaîne complète dynamique calculée depuis l'arborescence des départements */
+  approval_chain: ApprovalChainStep[];
+  total_steps: number;
+  /** DG_ONLY = responsable dept racine | SINGLE = 1 validateur | MULTI = N validateurs */
+  approval_flow: "DG_ONLY" | "SINGLE" | "MULTI";
+  rh_validation: boolean;
   requires_two_approvals: boolean;
+  // Rétrocompatibilité (step 1 et 2 uniquement)
   n1_manager: HierarchyMini | null;
   n2_manager: HierarchyMini | null;
-  /** DG_ONLY = responsable dept racine | N1_ONLY = employé sous dept racine | HIERARCHY = employé sous-département */
-  approval_flow: "DG_ONLY" | "N1_ONLY" | "HIERARCHY";
-  rh_validation: boolean;
-  /** Info DG (Direction Générale) — présent quand approval_flow = "DG_ONLY" */
-  dg_info: HierarchyMini | null;
+  dg_info:    HierarchyMini | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
