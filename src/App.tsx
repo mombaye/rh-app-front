@@ -15,6 +15,9 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import FirstLoginGuard from "@/components/FirstLoginGuard";
 import InterimEmployeesPage from "@/pages/InterimEmployeesPage";
 import InterneEmployeesPage from "./pages/InterneEmployeesPage";
+import AlertesEmployesPage from "@/pages/AlertesEmployesPage";
+import GestionQuestionnairesPage from "@/pages/GestionQuestionnairesPage";
+import QuestionnaireSortiePage from "@/pages/QuestionnaireSortiePage";
 import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
 import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
 import AttendanceJustificationsPage from "@/pages/AttendanceJustificationsPage";
@@ -45,6 +48,7 @@ import RhAttendancePage           from "@/pages/rh/RhAttendancePage";
 import RhApprovalsPage            from "@/pages/rh/RhApprovalsPage";
 import RhDocumentsPage            from "@/pages/rh/RhDocumentsPage";
 import RhExitAuthorizationPage    from "@/pages/rh/RhExitAuthorizationPage";
+import RhAnticipationPage         from "@/pages/rh/RhAnticipationPage";
 
 // ── Helpers de rôles basés sur activeRole ────────────────────────────────────
 
@@ -219,6 +223,19 @@ function App() {
             <InterimEmployeesPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
+        <Route path="/employees/alertes" element={
+          <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
+            <AlertesEmployesPage />
+          </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/employees/questionnaires" element={
+          <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
+            <GestionQuestionnairesPage />
+          </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+
+        {/* ── Questionnaire de sortie public (sans auth) ───────── */}
+        <Route path="/questionnaire-sortie/:token" element={<QuestionnaireSortiePage />} />
         <Route path="/payslip" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <PayslipPage />
@@ -261,6 +278,11 @@ function App() {
         <Route path="/leaves/autorisations" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <RhExitAuthorizationPage />
+          </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/leaves/anticipation" element={
+          <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
+            <RhAnticipationPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
         <Route path="/leaves/migration" element={

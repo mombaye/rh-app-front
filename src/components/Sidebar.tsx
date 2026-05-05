@@ -43,8 +43,10 @@ export default function Sidebar() {
       path: "/employees",
       icon: <Users2 size={20} />,
       subItems: [
-        { label: "Internes",     path: "/employees/internes" },
-        { label: "Intérimaires", path: "/employees/interims" },
+        { label: "Internes",              path: "/employees/internes"      },
+        { label: "Intérimaires",          path: "/employees/interims"      },
+        { label: "Alertes",               path: "/employees/alertes"       },
+        { label: "Questionnaires sortie", path: "/employees/questionnaires" },
       ],
     },
     {
@@ -52,11 +54,12 @@ export default function Sidebar() {
       path: "/leaves",
       icon: <CalendarDays size={20} />,
       subItems: [
-        { label: "Internes",          path: "/leaves/internes"      },
-        { label: "Intérimaires",    path: "/leaves/interimaires"  },
-        { label: "Hiérarchie",      path: "/leaves/hierarchie"    },
-        { label: "Autorisations",   path: "/leaves/autorisations" },
-        { label: "Migration Soldes", path: "/leaves/migration"    },
+        { label: "Internes",          path: "/leaves/internes"       },
+        { label: "Intérimaires",    path: "/leaves/interimaires"   },
+        { label: "Hiérarchie",      path: "/leaves/hierarchie"     },
+        { label: "Autorisations",   path: "/leaves/autorisations"  },
+        { label: "Anticipation",    path: "/leaves/anticipation"   },
+        { label: "Migration Soldes", path: "/leaves/migration"     },
       ],
     },
     {

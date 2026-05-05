@@ -1161,7 +1161,10 @@ export default function DashboardPage() {
     ]);
   }, []);
 
-  useEffect(() => { fetchEmployees(empFilter); fetchAttendance(dateStart, dateEnd); }, []);
+  useEffect(() => {
+    fetchEmployees(empFilter);
+    fetchAttendance(dateStart, dateEnd);
+  }, []);
   useEffect(() => { fetchAttendance(dateStart, dateEnd); }, [dateStart, dateEnd]);
   useEffect(() => { fetchEmployees(empFilter); }, [empFilter]);
 

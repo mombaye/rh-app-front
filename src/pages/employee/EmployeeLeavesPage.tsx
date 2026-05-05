@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/useAuth";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
 import { leaveBalanceService, leaveRequestService, leaveTypeService } from "@/services/leaveService";
 import { LeaveBalance, LeaveRequest, LeaveRequestCreate, LeaveType } from "@/types/leave";
+import AnticipationLeaveForm from "@/components/leaves/AnticipationLeaveForm";
 import toast from "react-hot-toast";
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
@@ -24,12 +25,13 @@ const STATUS_CONFIG: Record<string, {
   label: string; color: string; bg: string; dot: string;
   Icon: React.ElementType; textColor: string; borderColor: string;
 }> = {
-  PENDING:        { label: "En attente",      color: "#d97706", bg: "#fffbeb", dot: "bg-amber-400",   Icon: Clock,        textColor: "text-amber-700",  borderColor: "border-amber-200"  },
-  PENDING_SECOND: { label: "2ème validation", color: "#ea580c", bg: "#fff7ed", dot: "bg-orange-400",  Icon: Clock,        textColor: "text-orange-700", borderColor: "border-orange-200" },
-  APPROVED:       { label: "Approuvé",        color: "#059669", bg: "#f0fdf4", dot: "bg-green-500",   Icon: CheckCircle2, textColor: "text-green-700",  borderColor: "border-green-200"  },
-  REJECTED:       { label: "Rejeté",          color: "#dc2626", bg: "#fef2f2", dot: "bg-red-500",     Icon: XCircle,      textColor: "text-red-700",    borderColor: "border-red-200"    },
-  CANCELLED:      { label: "Annulé",          color: "#64748b", bg: "#f8fafc", dot: "bg-gray-400",    Icon: XCircle,      textColor: "text-gray-500",   borderColor: "border-gray-200"   },
-  REVOKED:        { label: "Révoqué",         color: "#7c3aed", bg: "#f5f3ff", dot: "bg-purple-500",  Icon: AlertCircle,  textColor: "text-purple-700", borderColor: "border-purple-200" },
+  PENDING:        { label: "En attente",        color: "#d97706", bg: "#fffbeb", dot: "bg-amber-400",   Icon: Clock,        textColor: "text-amber-700",  borderColor: "border-amber-200"  },
+  PENDING_SECOND: { label: "2ème validation",   color: "#ea580c", bg: "#fff7ed", dot: "bg-orange-400",  Icon: Clock,        textColor: "text-orange-700", borderColor: "border-orange-200" },
+  PENDING_RH:     { label: "Validation RH",     color: "#7c3aed", bg: "#f5f3ff", dot: "bg-purple-400",  Icon: Clock,        textColor: "text-purple-700", borderColor: "border-purple-200" },
+  APPROVED:       { label: "Approuvé",          color: "#059669", bg: "#f0fdf4", dot: "bg-green-500",   Icon: CheckCircle2, textColor: "text-green-700",  borderColor: "border-green-200"  },
+  REJECTED:       { label: "Rejeté",            color: "#dc2626", bg: "#fef2f2", dot: "bg-red-500",     Icon: XCircle,      textColor: "text-red-700",    borderColor: "border-red-200"    },
+  CANCELLED:      { label: "Annulé",            color: "#64748b", bg: "#f8fafc", dot: "bg-gray-400",    Icon: XCircle,      textColor: "text-gray-500",   borderColor: "border-gray-200"   },
+  REVOKED:        { label: "Révoqué",           color: "#7c3aed", bg: "#f5f3ff", dot: "bg-purple-500",  Icon: AlertCircle,  textColor: "text-purple-700", borderColor: "border-purple-200" },
 };
 
 const MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
@@ -1098,7 +1100,8 @@ export default function EmployeeLeavesPage({
   const [requests,      setRequests]     = useState<LeaveRequest[]>([]);
   const [leaveTypes,    setLeaveTypes]   = useState<LeaveType[]>([]);
   const [loading,       setLoading]      = useState(true);
-  const [showForm,      setShowForm]     = useState(false);
+  const [showForm,            setShowForm]           = useState(false);
+  const [showAnticipation,    setShowAnticipation]   = useState(false);
   const [editTarget,    setEditTarget]   = useState<LeaveRequest | null>(null);
   const [detailTarget,  setDetailTarget] = useState<LeaveRequest | null>(null);
   const [cancelTarget,  setCancelTarget] = useState<LeaveRequest | null>(null);
@@ -1196,28 +1199,17 @@ export default function EmployeeLeavesPage({
     <Layout>
       <div className="px-4 md:px-6 pb-10">
 
-        {/* ── Header unifié ── */}
+        {/* ── Header — titre + boutons ── */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between mb-5 flex-wrap gap-3"
+          className="flex items-center justify-between mb-4 flex-wrap gap-3"
         >
           <div>
             <h1 className="text-2xl font-bold text-[#003c71]">Mes Congés</h1>
             <p className="text-gray-500 text-sm mt-0.5">Gérez vos demandes de congé</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {!loading && primaryBalance && (
-              <div
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#003c71]/5 border-2 border-[#003c71]/40 text-[#003c71] shadow-sm"
-                title={`Solde ${soldeLabel} ${new Date().getFullYear()}`}
-              >
-                <TrendingUp size={15} className="shrink-0" />
-                <span className="text-sm font-medium">
-                  Solde : <span className="font-bold">{soldeRestant} j</span>
-                </span>
-              </div>
-            )}
             <button
               onClick={() => setShowExport(true)}
               disabled={requests.length === 0}
@@ -1225,6 +1217,13 @@ export default function EmployeeLeavesPage({
             >
               <FileDown size={16} />
               Exporter PDF
+            </button>
+            <button
+              onClick={() => setShowAnticipation(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition shadow-sm font-medium"
+            >
+              <TrendingUp size={16} />
+              Anticipation
             </button>
             <button
               onClick={() => { setEditTarget(null); setShowForm(true); }}
@@ -1235,6 +1234,29 @@ export default function EmployeeLeavesPage({
             </button>
           </div>
         </motion.div>
+
+        {/* ── Solde disponible — bannière centrée ── */}
+        {!loading && primaryBalance && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="mb-6"
+          >
+            <div
+              className="bg-[#003c71] rounded-2xl shadow-md px-8 py-5 flex flex-col items-center justify-center text-center"
+              title={`Solde ${soldeLabel} ${new Date().getFullYear()}`}
+            >
+              <p className="text-blue-200 text-xs font-semibold uppercase tracking-widest mb-1">
+                Solde disponible
+              </p>
+              <p className="text-white font-extrabold leading-none">
+                <span className="text-5xl">{soldeRestant}</span>
+                <span className="text-xl ml-2 opacity-70 font-semibold">jours</span>
+              </p>
+            </div>
+          </motion.div>
+        )}
 
         {/* ── Vue Congés ── */}
 
@@ -1506,6 +1528,16 @@ export default function EmployeeLeavesPage({
           onSaved={() => { setShowForm(false); setEditTarget(null); refresh(); }}
         />
       )}
+
+      {/* ── Modal anticipation ── */}
+      <AnimatePresence>
+        {showAnticipation && (
+          <AnticipationLeaveForm
+            onClose={() => setShowAnticipation(false)}
+            onSuccess={() => { setShowAnticipation(false); refresh(); }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ── Modal export ── */}
       {showExport && (

@@ -476,6 +476,36 @@ export const exportBulletinsLogs = async (opts?: {
 export const deleteBulletinLog = async (id: number) =>
   (await api.delete(`/api/employees/bulletins/logs/${id}/`)).data;
 
+// ══════════════════════════════════════════════════════
+//  ALERTES PÉRIODE D'ESSAI
+// ══════════════════════════════════════════════════════
+export type AlertePeriodeEssai = {
+  id: number;
+  matricule: string;
+  nom: string;
+  prenom: string;
+  fonction: string;
+  service: string;
+  localisation: string;
+  type_contrat: string;
+  date_fin_periode_essai: string;
+  jours_restants: number;
+};
+
+export type AlertesPeriodeEssaiResult = {
+  count: number;
+  results: AlertePeriodeEssai[];
+};
+
+export const getAlertesPeriodeEssai = async (
+  jours = 30
+): Promise<AlertesPeriodeEssaiResult> => {
+  const res = await api.get("/api/employees/alertes-periode-essai/", {
+    params: { jours },
+  });
+  return res.data;
+};
+
 /** DELETE /api/employees/bulletins/logs/by-month/?year=&month= */
 export const deleteBulletinsByMonth = async (
   year: number,

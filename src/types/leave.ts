@@ -103,20 +103,24 @@ export interface LeaveRequest {
   marked_as_absent_by: EmployeeMini | null;
   marked_as_absent_at: string | null;
 
+  // Congé par anticipation
+  is_anticipation: boolean;
+
   created_at:    string;
   updated_at:    string;
 }
 
 // ── LeaveRequestCreate ── mirrors LeaveRequestCreateSerializer ────────────────
 export interface LeaveRequestCreate {
-  employee_id:    number;
-  leave_type_id:  number;
-  start_date:     string;
-  end_date:       string;
-  days:           number;
-  motif:          string;
-  half_day_start?: boolean;
-  half_day_end?:   boolean;
+  employee_id:      number;
+  leave_type_id:    number;
+  start_date:       string;
+  end_date:         string;
+  days:             number;
+  motif:            string;
+  half_day_start?:  boolean;
+  half_day_end?:    boolean;
+  is_anticipation?: boolean;
 }
 
 // ── LeaveBalance ── mirrors LeaveBalanceSerializer ───────────────────────────
