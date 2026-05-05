@@ -70,6 +70,7 @@ export type CareerHistoryEntry = {
   event_type_display: string;
   event_date: string;
   description: string;
+  matricule: string | null;
   type_contrat: string | null;
   fonction: string | null;
   categorie: string | null;

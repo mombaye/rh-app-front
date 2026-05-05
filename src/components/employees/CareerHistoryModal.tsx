@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaTimes, FaBriefcase, FaChevronDown,
   FaArrowUp, FaExchangeAlt, FaRedo, FaSignOutAlt, FaSignInAlt, FaStar, FaLayerGroup,
+  FaIdCard,
 } from "react-icons/fa";
 import { ImSpinner2 } from "react-icons/im";
 import { Employee } from "@/types/employee";
@@ -45,10 +46,26 @@ function EventRow({ entry }: { entry: CareerHistoryEntry }) {
   const { Icon } = cfg;
 
   const details = DETAIL_FIELDS
-    .map(f => ({ label: f.label, value: f.key === "date_fin_cdd" ? (entry.date_fin_cdd ? formatDate(entry.date_fin_cdd) : null) : (entry[f.key] as string | null) }))
+    .map(f => ({
+      label: f.label,
+      value: f.key === "date_fin_cdd"
+        ? (entry.date_fin_cdd ? formatDate(entry.date_fin_cdd) : null)
+        : (entry[f.key] as string | null),
+    }))
     .filter(d => d.value);
 
-  const hasDetails = details.length > 0 || !!entry.description;
+  // Un événement est cliquable dès qu'il a du contenu à afficher
+  const hasDetails = details.length > 0 || !!entry.description || !!entry.matricule;
+
+  // Style du badge matricule selon le type d'événement
+  const matriculeCfg: Record<string, { bg: string; text: string; border: string; label: string }> = {
+    EMBAUCHE:           { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", label: "Matricule d'embauche" },
+    CHANGEMENT_CONTRAT: { bg: "bg-orange-50",  text: "text-orange-700",  border: "border-orange-200",  label: "Matricule" },
+    TITULARISATION:     { bg: "bg-blue-50",    text: "text-blue-700",    border: "border-blue-200",    label: "Nouveau matricule" },
+    PROMOTION:          { bg: "bg-blue-50",    text: "text-blue-700",    border: "border-blue-200",    label: "Matricule" },
+    REINTEGRATION:      { bg: "bg-teal-50",    text: "text-teal-700",    border: "border-teal-200",    label: "Matricule" },
+  };
+  const matStyle = matriculeCfg[entry.event_type] ?? { bg: "bg-slate-50", text: "text-slate-600", border: "border-slate-200", label: "Matricule" };
 
   return (
     <div className="relative">
@@ -66,9 +83,16 @@ function EventRow({ entry }: { entry: CareerHistoryEntry }) {
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <Icon className={`shrink-0 ${cfg.iconColor}`} size={13} />
-          <span className="text-sm font-medium text-slate-700 truncate">
-            {cfg.label}
-          </span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-medium text-slate-700 truncate">{cfg.label}</span>
+            {/* Badge matricule — visible directement dans la ligne pour tous les événements */}
+            {entry.matricule && (
+              <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded mt-0.5 w-fit border ${matStyle.bg} ${matStyle.text} ${matStyle.border}`}>
+                <FaIdCard size={8} />
+                {entry.matricule}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-3">
           <span className="text-xs text-slate-400">{formatDate(entry.event_date)}</span>
@@ -92,11 +116,24 @@ function EventRow({ entry }: { entry: CareerHistoryEntry }) {
             className="overflow-hidden"
           >
             <div className="mx-3 mb-3 bg-slate-50 rounded-lg border border-slate-100 px-4 py-3 space-y-2">
+
+              {/* ── Matricule — toujours en tête du panneau ── */}
+              {entry.matricule && (
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border ${matStyle.bg} ${matStyle.text} ${matStyle.border}`}>
+                  <FaIdCard size={11} />
+                  <span className="font-medium">{matStyle.label} :</span>
+                  <span className="font-bold tracking-wide">{entry.matricule}</span>
+                </div>
+              )}
+
+              {/* ── Description ── */}
               {entry.description && (
-                <p className="text-xs text-slate-600 italic border-b border-slate-100 pb-2 mb-2">
+                <p className="text-xs text-slate-600 italic border-b border-slate-100 pb-2">
                   {entry.description}
                 </p>
               )}
+
+              {/* ── Champs carrière ── */}
               {details.length > 0 && (
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                   {details.map(({ label, value }) => (
