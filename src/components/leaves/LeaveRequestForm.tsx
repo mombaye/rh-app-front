@@ -184,6 +184,12 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     if (!form.days || Number(form.days) <= 0) {
       setError("La date de fin doit être postérieure ou égale à la date de début."); return;
     }
+    if (selectedType?.max_days_per_request > 0 && Number(form.days) > selectedType.max_days_per_request) {
+      setError(`Ce type de congé est limité à ${selectedType.max_days_per_request} jour(s) par demande.`); return;
+    }
+    if (selectedType?.min_days_per_request > 0 && Number(form.days) < selectedType.min_days_per_request) {
+      setError(`Ce type de congé requiert au minimum ${selectedType.min_days_per_request} jour(s) par demande.`); return;
+    }
     setLoading(true); setError(null);
     try {
       const created = await leaveRequestService.create({
@@ -477,17 +483,33 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                 <ImSpinner2 className="animate-spin" size={12} /> Chargement…
               </p>
             )}
-            {needsDoc && (
-              <AnimatePresence>
-                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+            <AnimatePresence>
+              {/* Contraintes de durée */}
+              {selectedType && (selectedType.max_days_per_request > 0 || selectedType.min_days_per_request > 0) && (
+                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="mt-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 flex items-start gap-2">
+                  <span className="shrink-0 mt-0.5 text-blue-500 text-sm">⏱</span>
+                  <p className="text-xs text-blue-700">
+                    {selectedType.min_days_per_request > 0 && selectedType.max_days_per_request > 0
+                      ? <>Ce type de congé est limité à <strong>{selectedType.min_days_per_request}–{selectedType.max_days_per_request} jour(s)</strong> par demande.</>
+                      : selectedType.max_days_per_request > 0
+                        ? <>Ce type de congé est limité à <strong>{selectedType.max_days_per_request} jour(s)</strong> par demande.</>
+                        : <>Ce type de congé requiert au minimum <strong>{selectedType.min_days_per_request} jour(s)</strong> par demande.</>
+                    }
+                  </p>
+                </motion.div>
+              )}
+              {/* Justificatif requis */}
+              {needsDoc && (
+                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                   className="mt-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-start gap-2">
                   <Paperclip className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-700">
                     Ce type de congé nécessite un justificatif (acte officiel). Vous pourrez le fournir à l'étape suivante.
                   </p>
                 </motion.div>
-              </AnimatePresence>
-            )}
+              )}
+            </AnimatePresence>
           </div>
 
           {/* ── Dates ───────────────────────────────────────────────── */}
@@ -530,6 +552,28 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                       </>
                   }
                 </div>
+
+                {/* Durée maximale dépassée */}
+                {!checkingDays && selectedType && selectedType.max_days_per_request > 0 && Number(form.days) > selectedType.max_days_per_request && (
+                  <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                    className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-2.5 flex items-start gap-2">
+                    <span className="shrink-0 mt-0.5">🚫</span>
+                    <p className="text-xs font-semibold">
+                      Durée maximale dépassée : ce type de congé est limité à <strong>{selectedType.max_days_per_request} jour(s)</strong> par demande.
+                    </p>
+                  </motion.div>
+                )}
+
+                {/* Durée minimale non atteinte */}
+                {!checkingDays && selectedType && selectedType.min_days_per_request > 0 && Number(form.days) < selectedType.min_days_per_request && (
+                  <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                    className="bg-orange-50 border border-orange-200 text-orange-700 rounded-xl px-4 py-2.5 flex items-start gap-2">
+                    <span className="shrink-0 mt-0.5">⚠️</span>
+                    <p className="text-xs font-semibold">
+                      Durée insuffisante : ce type de congé requiert au minimum <strong>{selectedType.min_days_per_request} jour(s)</strong> par demande.
+                    </p>
+                  </motion.div>
+                )}
 
                 {/* Détail des fériés */}
                 {holidayCheck && holidayCheck.holidays_count > 0 && (
@@ -597,7 +641,12 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               className="flex-1 border border-gray-200 text-gray-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition">
               Annuler
             </button>
-            <button onClick={handleSubmit} disabled={loading || isLoadingTypes || (form.days && Number(form.days) > (balance?.remaining ?? 0))}
+            <button onClick={handleSubmit} disabled={
+                loading || isLoadingTypes ||
+                !!(form.days && Number(form.days) > (balance?.remaining ?? 0) && selectedType && !selectedType.is_special_leave) ||
+                !!(form.days && selectedType && selectedType.max_days_per_request > 0 && Number(form.days) > selectedType.max_days_per_request) ||
+                !!(form.days && selectedType && selectedType.min_days_per_request > 0 && Number(form.days) < selectedType.min_days_per_request)
+              }
               className="flex-[2] bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
               {loading
                 ? <><ImSpinner2 className="animate-spin" size={14} /> Envoi en cours…</>

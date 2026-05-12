@@ -1,5 +1,20 @@
-import { CheckCircle } from "lucide-react";
+import { useState } from "react";
+import { Search } from "lucide-react";
+import { ImSpinner2 } from "react-icons/im";
+import { FaBell } from "react-icons/fa";
 import type { AlertePeriodeEssai } from "@/services/employeeService";
+import AlerteEmployeeDetailModal from "./AlerteEmployeeDetailModal";
+
+function fmtDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function urgencyBadge(j: number): string {
+  if (j <= 7)  return "bg-red-100 text-red-700 ring-1 ring-red-200";
+  if (j <= 15) return "bg-amber-100 text-amber-700 ring-1 ring-amber-200";
+  return "bg-green-100 text-green-700 ring-1 ring-green-200";
+}
 
 export default function AlertesPeriodeEssaiPanel({
   alertes,
@@ -8,113 +23,116 @@ export default function AlertesPeriodeEssaiPanel({
   alertes: AlertePeriodeEssai[];
   loading: boolean;
 }) {
-  const fmtDate = (iso: string) => {
-    const [y, m, d] = iso.split("-");
-    return `${d}/${m}/${y}`;
-  };
+  const [search,   setSearch]   = useState("");
+  const [selected, setSelected] = useState<AlertePeriodeEssai | null>(null);
 
-  const badgeStyle = (j: number) =>
-    j <= 7
-      ? "bg-red-100 text-red-700 ring-1 ring-red-200"
-      : j <= 15
-      ? "bg-amber-100 text-amber-700 ring-1 ring-amber-200"
-      : "bg-green-100 text-green-700 ring-1 ring-green-200";
-
-  const urgents = alertes.filter((a) => a.jours_restants <= 7);
-  const proches = alertes.filter((a) => a.jours_restants > 7 && a.jours_restants <= 15);
-  const aVenir  = alertes.filter((a) => a.jours_restants > 15);
+  const q = search.trim().toLowerCase();
+  const rows = q
+    ? alertes.filter((a) =>
+        a.matricule.toLowerCase().includes(q) ||
+        a.nom.toLowerCase().includes(q)       ||
+        a.prenom.toLowerCase().includes(q)    ||
+        (a.service || "").toLowerCase().includes(q)
+      )
+    : alertes;
 
   if (loading) {
     return (
-      <div className="space-y-3 animate-pulse p-4">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-10 bg-slate-100 rounded-lg" />
-        ))}
+      <div className="flex items-center justify-center h-40">
+        <ImSpinner2 className="animate-spin text-camublue-900" size={28} />
       </div>
     );
   }
-
-  if (alertes.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
-        <CheckCircle className="h-10 w-10 text-green-400" />
-        <p className="text-sm font-medium text-slate-500">
-          Aucune fin de période d'essai dans les 30 prochains jours
-        </p>
-        <p className="text-xs">Tous les employés en période d'essai sont à jour.</p>
-      </div>
-    );
-  }
-
-  const groups = [
-    { label: "Urgents", sub: "Expire dans 7 jours ou moins", rows: urgents, color: "text-red-700",   dot: "bg-red-500"   },
-    { label: "Proches", sub: "8 à 15 jours",                 rows: proches, color: "text-amber-700", dot: "bg-amber-500" },
-    { label: "À venir", sub: "16 à 30 jours",                rows: aVenir,  color: "text-green-700", dot: "bg-green-500" },
-  ].filter((g) => g.rows.length > 0);
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      {/* KPI résumé */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "Urgents ≤7j",   value: urgents.length, cls: "text-red-600",   bg: "bg-red-50 border-red-100"     },
-          { label: "Proches 8–15j", value: proches.length, cls: "text-amber-600", bg: "bg-amber-50 border-amber-100" },
-          { label: "À venir 16–30j",value: aVenir.length,  cls: "text-green-600", bg: "bg-green-50 border-green-100" },
-        ].map((k) => (
-          <div key={k.label} className={`rounded-xl border p-3 text-center ${k.bg}`}>
-            <p className={`text-2xl font-bold ${k.cls}`}>{k.value}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">{k.label}</p>
+    <>
+      <div className="flex flex-col h-full">
+
+        {/* ── Barre de recherche ── */}
+        <div className="px-4 py-3 border-b border-slate-100 shrink-0 flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Rechercher par matricule, nom, service…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-8 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30"
+            />
           </div>
-        ))}
+          {rows.length > 0 && (
+            <span className="text-xs text-slate-500 shrink-0">
+              {rows.length} employé{rows.length > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+
+        {/* ── Table / Empty ── */}
+        {rows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center flex-1 gap-3">
+            <FaBell size={36} className="text-slate-200" />
+            <p className="text-slate-400 text-sm">
+              {alertes.length === 0
+                ? "Aucune alerte dans les 30 prochains jours"
+                : "Aucun résultat pour cette recherche"}
+            </p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10">
+              <tr>
+                {["Employé", "Matricule", "Fonction", "Service", "Type", "Date fin", "Jours"].map((h) => (
+                  <th
+                    key={h}
+                    className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {rows.map((a) => (
+                <tr
+                  key={`${a.id}-${a.type_alerte}`}
+                  onClick={() => setSelected(a)}
+                  className="hover:bg-slate-50/50 transition-colors cursor-pointer"
+                >
+                  <td className="px-4 py-3 font-medium text-slate-800">
+                    {a.prenom} {a.nom}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-slate-500 text-xs">{a.matricule}</td>
+                  <td className="px-4 py-3 text-slate-600 text-xs">{a.fonction || "—"}</td>
+                  <td className="px-4 py-3 text-slate-600 text-xs">{a.service || "—"}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                      a.type_alerte === "PERIODE_ESSAI"
+                        ? "bg-violet-100 text-violet-700"
+                        : "bg-orange-100 text-orange-700"
+                    }`}>
+                      {a.type_alerte === "PERIODE_ESSAI" ? "Période d'essai" : "Fin CDD"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-700 font-medium tabular-nums text-xs">
+                    {fmtDate(a.date_fin)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${urgencyBadge(a.jours_restants)}`}>
+                      {a.jours_restants}j
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {/* Tableaux par groupe */}
-      {groups.map((g) => (
-        <div key={g.label} className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100">
-            <span className={`h-2 w-2 rounded-full shrink-0 ${g.dot}`} />
-            <span className={`text-xs font-bold ${g.color}`}>{g.label}</span>
-            <span className="text-xs text-slate-400">— {g.sub}</span>
-            <span className="ml-auto text-xs font-semibold text-slate-600">
-              {g.rows.length} employé{g.rows.length > 1 ? "s" : ""}
-            </span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-slate-50">
-                  <th className="px-4 py-2 text-left font-semibold text-slate-400">Matricule</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-400">Nom Prénom</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-400 hidden sm:table-cell">Fonction</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-400 hidden md:table-cell">Service</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-400 hidden lg:table-cell">Localisation</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-400">Fin essai</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-400">Jours restants</th>
-                </tr>
-              </thead>
-              <tbody>
-                {g.rows.map((a) => (
-                  <tr key={a.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-2.5 font-mono font-semibold text-slate-700">{a.matricule}</td>
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{a.nom} {a.prenom}</td>
-                    <td className="px-4 py-2.5 text-slate-500 hidden sm:table-cell">{a.fonction || "–"}</td>
-                    <td className="px-4 py-2.5 text-slate-500 hidden md:table-cell">{a.service || "–"}</td>
-                    <td className="px-4 py-2.5 text-slate-500 hidden lg:table-cell">{a.localisation || "–"}</td>
-                    <td className="px-4 py-2.5 text-slate-700 font-medium tabular-nums">
-                      {fmtDate(a.date_fin_periode_essai)}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${badgeStyle(a.jours_restants)}`}>
-                        {a.jours_restants}j
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
-    </div>
+      {/* ── Modal détail employé ── */}
+      <AlerteEmployeeDetailModal
+        alerte={selected}
+        onClose={() => setSelected(null)}
+      />
+    </>
   );
 }

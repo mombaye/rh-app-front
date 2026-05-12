@@ -25,6 +25,7 @@ import type { LeaveSummary, LeaveRequest } from "@/types/leave";
 import {
   getEmployees, getEmployeesByContractType, fetchBulletinsSummary,
 } from "@/services/employeeService";
+import DashboardAlertesBar from "@/components/dashboard/DashboardAlertesBar";
 import {
   getDailyStats, getWeeklyStats, getMonthlyStats, getShiftDailyStats,
 } from "@/services/attendanceService";
@@ -1681,6 +1682,9 @@ export default function DashboardPage() {
             </AnimatePresence>
           </div>
         </div>
+
+        {/* ── Barre d'alertes RH (bas de page) ── */}
+        <DashboardAlertesBar />
 
       </div>
 

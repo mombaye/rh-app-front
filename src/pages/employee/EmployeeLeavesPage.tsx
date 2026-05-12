@@ -193,7 +193,11 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
   const balanceShortfall = selectedType?.deducts_from_balance
     && requestedDays > 0
     && (availableDays === null || requestedDays > availableDays);
-  const needsDoc = selectedType?.requires_justification ?? false;
+  const needsDoc   = selectedType?.requires_justification ?? false;
+  const maxDays    = selectedType?.max_days_per_request ?? 0;
+  const minDays    = selectedType?.min_days_per_request ?? 0;
+  const exceedsMax = maxDays > 0 && requestedDays > 0 && requestedDays > maxDays;
+  const belowMin   = minDays > 0 && requestedDays > 0 && requestedDays < minDays;
 
   useEffect(() => {
     if (form.start_date && form.end_date && form.end_date >= form.start_date) {
@@ -225,6 +229,22 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
     }
     if (!form.days || form.days <= 0) {
       setFormError("Impossible de calculer la durée. Vérifiez les dates saisies.");
+      return;
+    }
+
+    // Vérification des contraintes de durée du type de congé
+    if (exceedsMax) {
+      setFormError(
+        `Ce type de congé est limité à ${maxDays} jour${maxDays > 1 ? "s" : ""} par demande. ` +
+        `Vous en avez sélectionné ${form.days}.`
+      );
+      return;
+    }
+    if (belowMin) {
+      setFormError(
+        `Ce type de congé requiert au minimum ${minDays} jour${minDays > 1 ? "s" : ""} par demande. ` +
+        `Vous en avez sélectionné ${form.days}.`
+      );
       return;
     }
 
@@ -289,13 +309,33 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
         </div>
 
         <div className="px-6 py-5 space-y-4">
-          {/* Bannière solde insuffisant */}
+          {/* Bannières d'alerte en haut */}
           <AnimatePresence>
+            {exceedsMax && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 font-semibold"
+              >
+                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                <span>
+                  Durée maximale dépassée — ce congé est limité à <strong>{maxDays} jour{maxDays > 1 ? "s" : ""}</strong> par demande. Raccourcissez la période.
+                </span>
+              </motion.div>
+            )}
+            {belowMin && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="flex items-start gap-2.5 bg-orange-50 border border-orange-200 text-orange-700 text-sm rounded-xl px-4 py-3 font-semibold"
+              >
+                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                <span>
+                  Durée insuffisante — ce congé requiert au minimum <strong>{minDays} jour{minDays > 1 ? "s" : ""}</strong> par demande.
+                </span>
+              </motion.div>
+            )}
             {balanceShortfall && (
               <motion.div
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
+                initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 font-semibold"
               >
                 <AlertTriangle size={16} className="shrink-0 mt-0.5" />
@@ -334,6 +374,26 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
                 <option key={lt.id} value={lt.id}>{lt.label}</option>
               ))}
             </select>
+
+            {/* Contraintes de durée du type sélectionné */}
+            <AnimatePresence>
+              {selectedType && (maxDays > 0 || minDays > 0) && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="mt-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 flex items-start gap-2"
+                >
+                  <span className="shrink-0 mt-0.5 text-blue-500 text-sm">⏱</span>
+                  <p className="text-xs text-blue-700">
+                    {minDays > 0 && maxDays > 0
+                      ? <>Durée autorisée : <strong>{minDays}–{maxDays} jour{maxDays > 1 ? "s" : ""}</strong> par demande.</>
+                      : maxDays > 0
+                        ? <>Ce type de congé est limité à <strong>{maxDays} jour{maxDays > 1 ? "s" : ""}</strong> par demande.</>
+                        : <>Ce type de congé requiert au minimum <strong>{minDays} jour{minDays > 1 ? "s" : ""}</strong> par demande.</>
+                    }
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Info type de congé nécessitant un justificatif */}
             {needsDoc && (
@@ -442,7 +502,7 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
             </button>
             <button
               onClick={handleSave}
-              disabled={saving || !!balanceShortfall}
+              disabled={saving || !!balanceShortfall || exceedsMax || belowMin}
               className="flex-[2] px-4 py-2.5 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-sm"
             >
               {saving && <Loader2 size={15} className="animate-spin" />}

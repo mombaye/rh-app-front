@@ -17,18 +17,20 @@ import {
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
+import { useAlertes } from "@/contexts/AlertesContext";
 import { useState, useEffect } from "react";
 
 type NavItem = {
   label: string;
   path: string;
   icon: React.ReactNode;
-  subItems?: { label: string; path: string }[];
+  subItems?: { label: string; path: string; badge?: number }[];
 };
 
 export default function Sidebar() {
   const location = useLocation();
   const { user, logout, availableRoles } = useAuth();
+  const { totalCount, urgentsCount } = useAlertes();
 
   const isRhManager = availableRoles.includes("manager1") || availableRoles.includes("manager2");
 
@@ -43,9 +45,9 @@ export default function Sidebar() {
       path: "/employees",
       icon: <Users2 size={20} />,
       subItems: [
-        { label: "Internes",              path: "/employees/internes"      },
-        { label: "Intérimaires",          path: "/employees/interims"      },
-        { label: "Alertes",               path: "/employees/alertes"       },
+        { label: "Internes",              path: "/employees/internes"       },
+        { label: "Intérimaires",          path: "/employees/interims"       },
+        { label: "Alertes",               path: "/employees/alertes",  badge: totalCount },
         { label: "Questionnaires sortie", path: "/employees/questionnaires" },
       ],
     },
@@ -54,11 +56,11 @@ export default function Sidebar() {
       path: "/leaves",
       icon: <CalendarDays size={20} />,
       subItems: [
-        { label: "Internes",          path: "/leaves/internes"       },
-        { label: "Intérimaires",    path: "/leaves/interimaires"   },
-        { label: "Hiérarchie",      path: "/leaves/hierarchie"     },
-        { label: "Autorisations",   path: "/leaves/autorisations"  },
-        { label: "Anticipation",    path: "/leaves/anticipation"   },
+        { label: "Internes",         path: "/leaves/internes"      },
+        { label: "Intérimaires",     path: "/leaves/interimaires"  },
+        { label: "Hiérarchie",       path: "/leaves/hierarchie"    },
+        { label: "Autorisations",    path: "/leaves/autorisations" },
+        { label: "Anticipation",     path: "/leaves/anticipation"  },
         { label: "Migration Soldes", path: "/leaves/migration"     },
       ],
     },
@@ -67,9 +69,9 @@ export default function Sidebar() {
       path: "/attendance",
       icon: <Clock size={20} />,
       subItems: [
-        { label: "Normales",         path: "/attendance/normales"         },
-        { label: "Shifts",           path: "/attendance/shifts"           },
-        { label: "Justifications",   path: "/attendance/justifications"   },
+        { label: "Normales",       path: "/attendance/normales"       },
+        { label: "Shifts",         path: "/attendance/shifts"         },
+        { label: "Justifications", path: "/attendance/justifications" },
       ],
     },
     {
@@ -134,6 +136,9 @@ export default function Sidebar() {
     const isOpen = openMenus[item.path] ?? false;
     const parentActive = isParentActive(item);
 
+    // Badge agrégé sur le parent (nombre d'alertes)
+    const parentBadge = item.subItems?.reduce((sum, s) => sum + (s.badge ?? 0), 0) ?? 0;
+
     if (hasChildren) {
       return (
         <div>
@@ -149,11 +154,21 @@ export default function Sidebar() {
               <span className="shrink-0">{item.icon}</span>
               <span className="truncate">{item.label}</span>
             </div>
-            {isOpen ? (
-              <ChevronDown size={15} className="shrink-0 text-gray-400" />
-            ) : (
-              <ChevronRight size={15} className="shrink-0 text-gray-400" />
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Badge sur le parent quand le menu est fermé */}
+              {!isOpen && parentBadge > 0 && (
+                <span className={`min-w-[20px] h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center px-1.5 leading-none ${
+                  urgentsCount > 0 ? "bg-red-500" : "bg-amber-500"
+                }`}>
+                  {parentBadge}
+                </span>
+              )}
+              {isOpen ? (
+                <ChevronDown size={15} className="text-gray-400" />
+              ) : (
+                <ChevronRight size={15} className="text-gray-400" />
+              )}
+            </div>
           </button>
 
           {isOpen && (
@@ -171,12 +186,20 @@ export default function Sidebar() {
                         : "text-gray-600 hover:bg-camublue-900/10 hover:text-camublue-900"
                     }`}
                   >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        isActive ? "bg-white" : "bg-gray-400"
-                      }`}
-                    />
-                    {sub.label}
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? "bg-white" : "bg-gray-400"}`} />
+                    <span className="flex-1 truncate">{sub.label}</span>
+                    {/* Badge sur le sous-item */}
+                    {(sub.badge ?? 0) > 0 && (
+                      <span className={`min-w-[20px] h-5 rounded-full text-[10px] font-bold flex items-center justify-center px-1.5 leading-none ${
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : urgentsCount > 0
+                          ? "bg-red-100 text-red-700"
+                          : "bg-amber-100 text-amber-700"
+                      }`}>
+                        {sub.badge}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -249,7 +272,7 @@ export default function Sidebar() {
         onClick={() => setMobileOpen(false)}
       />
 
-      {/* Sidebar Desktop — largeur augmentée à w-72 pour que les labels tiennent sur une ligne */}
+      {/* Sidebar Desktop */}
       <aside className="bg-white shadow-md w-72 min-h-screen hidden md:flex md:flex-col border-r">
         <div className="py-6 px-4 flex justify-center items-center">
           <img src={logo} alt="Camusat" className="w-full max-h-24 object-contain" />

@@ -47,6 +47,9 @@ export const updateEmployee = async (id: number, data: Partial<Employee>) =>
 export const patchEmployee = async (id: number, data: Partial<Employee>) =>
   (await api.patch(`/api/employees/${id}/`, data)).data;
 
+export const getEmployeeById = async (id: number): Promise<Employee> =>
+  (await api.get(`/api/employees/${id}/`)).data;
+
 export const getEmployeeHistory = async (id: number): Promise<EmployeeHistoryEntry[]> =>
   (await api.get(`/api/employees/${id}/history/`)).data;
 
@@ -480,6 +483,8 @@ export const deleteBulletinLog = async (id: number) =>
 // ══════════════════════════════════════════════════════
 //  ALERTES PÉRIODE D'ESSAI
 // ══════════════════════════════════════════════════════
+export type TypeAlerte = "PERIODE_ESSAI" | "FIN_CDD";
+
 export type AlertePeriodeEssai = {
   id: number;
   matricule: string;
@@ -489,12 +494,15 @@ export type AlertePeriodeEssai = {
   service: string;
   localisation: string;
   type_contrat: string;
-  date_fin_periode_essai: string;
+  type_alerte: TypeAlerte;
+  date_fin: string;
+  date_fin_periode_essai: string; // alias compat — même valeur que date_fin
   jours_restants: number;
 };
 
 export type AlertesPeriodeEssaiResult = {
   count: number;
+  jours: number;
   results: AlertePeriodeEssai[];
 };
 

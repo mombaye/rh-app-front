@@ -14,6 +14,7 @@ export interface LeaveType {
   color:                    string;
   monthly_accrual:          string;
   max_days_per_request:     number;
+  min_days_per_request:     number;   // durée minimale légale (0 = sans minimum)
   max_days_per_year:        number;   // plafond annuel (0 = illimité)
   carry_forward_days:       number;   // jours reportables max (0 = pas de report)
   exclude_weekends:         boolean;  // exclure sam/dim du décompte
