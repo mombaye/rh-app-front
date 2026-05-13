@@ -60,7 +60,7 @@ function CreateModal({ employeeId, onClose, onSaved }: CreateModalProps) {
         datetime_return: new Date(datetimeReturn).toISOString(),
         motif:           motif.trim(),
       });
-      toast.success("Demande envoyée — votre manager va être notifié.");
+      toast.success("Demande de sortie soumise — votre manager N+1 va être notifié.");
       onSaved();
     } catch (err: any) {
       const msg = err?.response?.data?.datetime_return?.[0] || err?.response?.data?.detail || "Erreur lors de la soumission.";
@@ -78,8 +78,8 @@ function CreateModal({ employeeId, onClose, onSaved }: CreateModalProps) {
       >
         {/* Header */}
         <div className="sticky top-0 z-10 bg-gradient-to-r from-[#003c71] to-[#0055a4] px-6 py-5 rounded-t-3xl sm:rounded-t-2xl">
-          <h3 className="text-white font-bold text-lg">Nouvelle demande d'autorisation</h3>
-          <p className="text-blue-200 text-xs mt-0.5">Votre manager sera notifié automatiquement</p>
+          <h3 className="text-white font-bold text-lg">Nouvelle demande de sortie</h3>
+          <p className="text-blue-200 text-xs mt-0.5">Votre manager N+1 sera notifié automatiquement</p>
         </div>
 
         <div className="px-6 py-5 space-y-4">
@@ -179,7 +179,7 @@ function DetailModal({ item, onClose }: DetailModalProps) {
                 <Icon size={22} className="text-white" />
               </div>
               <div>
-                <p className="text-white/70 text-xs font-medium uppercase tracking-wide mb-0.5">Demande d'autorisation</p>
+                <p className="text-white/70 text-xs font-medium uppercase tracking-wide mb-0.5">Demande de sortie</p>
                 <h2 className="text-white font-bold text-lg leading-tight">Sortie #{item.id}</h2>
               </div>
             </div>
@@ -205,42 +205,26 @@ function DetailModal({ item, onClose }: DetailModalProps) {
               ))}
             </div>
 
-            {/* Chaîne de validation */}
+            {/* Validation */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-              <p className="text-xs text-slate-500 uppercase font-semibold mb-3 tracking-wide">Chaîne de validation</p>
-              <div className="space-y-2">
-                {/* Étape 1 : Manager */}
-                <div className="flex items-center gap-2 text-sm">
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
-                    item.reviewed_by_name
-                      ? "bg-emerald-500"
-                      : item.status === "PENDING"
-                      ? "bg-amber-400 animate-pulse"
-                      : "bg-slate-300"
-                  }`}>
-                    {item.reviewed_by_name ? "✓" : "1"}
-                  </span>
-                  <span className="font-medium text-slate-700">Manager</span>
-                  <span className="text-slate-400">—</span>
-                  <span className={item.reviewed_by_name ? "text-emerald-700 font-semibold" : "text-slate-400"}>
-                    {item.reviewed_by_name
-                      ? `${item.reviewed_by_name}${item.reviewed_at ? ` (${new Date(item.reviewed_at).toLocaleDateString("fr")})` : ""}`
-                      : "En attente de validation"}
-                  </span>
-                </div>
-                {/* Étape 2 : RH */}
-                <div className="flex items-center gap-2 text-sm">
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
-                    item.status === "APPROVED" ? "bg-emerald-500" : "bg-slate-300"
-                  }`}>
-                    {item.status === "APPROVED" ? "✓" : "2"}
-                  </span>
-                  <span className="font-medium text-slate-700">RH</span>
-                  <span className="text-slate-400">—</span>
-                  <span className={item.status === "APPROVED" ? "text-emerald-700 font-semibold" : "text-slate-400"}>
-                    {item.status === "APPROVED" ? "Transmis à la RH" : "En attente"}
-                  </span>
-                </div>
+              <p className="text-xs text-slate-500 uppercase font-semibold mb-3 tracking-wide">Validation</p>
+              <div className="flex items-center gap-2 text-sm">
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
+                  item.reviewed_by_name
+                    ? "bg-emerald-500"
+                    : item.status === "PENDING"
+                    ? "bg-amber-400 animate-pulse"
+                    : "bg-slate-300"
+                }`}>
+                  {item.reviewed_by_name ? "✓" : "1"}
+                </span>
+                <span className="font-medium text-slate-700">Manager N+1</span>
+                <span className="text-slate-400">—</span>
+                <span className={item.reviewed_by_name ? "text-emerald-700 font-semibold" : "text-slate-400"}>
+                  {item.reviewed_by_name
+                    ? `${item.reviewed_by_name}${item.reviewed_at ? ` (${new Date(item.reviewed_at).toLocaleDateString("fr")})` : ""}`
+                    : "En attente de validation"}
+                </span>
               </div>
             </div>
 
@@ -317,7 +301,7 @@ function ExitCard({ item, onView, onCancel, compact = false }: CardProps) {
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className={`flex items-center gap-2 flex-wrap ${compact ? "mb-0.5" : "mb-1.5"}`}>
-              <span className="font-semibold text-gray-800 text-sm truncate">Demande d'autorisation</span>
+              <span className="font-semibold text-gray-800 text-sm truncate">Demande de sortie</span>
               <span
                 className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.textColor} ${cfg.borderColor}`}
                 style={{ backgroundColor: cfg.bg }}
@@ -566,7 +550,7 @@ export default function EmployeeExitAuthorizationPage({ layout: Layout = Employe
               </div>
               <p className="text-sm font-medium text-gray-500">Aucune demande trouvée</p>
               <p className="text-xs mt-1 text-gray-400">
-                {filterStatus !== "ALL" ? "Aucune demande pour ce statut" : "Créez votre première demande d'autorisation"}
+                {filterStatus !== "ALL" ? "Aucune demande pour ce statut" : "Créez votre première demande de sortie"}
               </p>
               {filterStatus === "ALL" && (
                 <button onClick={() => setShowCreate(true)}

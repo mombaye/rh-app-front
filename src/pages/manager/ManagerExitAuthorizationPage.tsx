@@ -11,7 +11,7 @@ export default function ManagerExitAuthorizationPage() {
       <div className="px-4 md:px-6 pb-10">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-[#003c71]">Mes Sorties</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Gérez vos demandes d'autorisation de sortie</p>
+          <p className="text-gray-500 text-sm mt-0.5">Vos demandes de sortie temporaire</p>
         </div>
         {employeeId ? (
           <ExitAuthorizationPanel

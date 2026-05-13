@@ -323,6 +323,20 @@ export const leaveRequestService = {
   },
 
   /**
+   * POST /api/leaves/requests/recalculate-chains/
+   * Recalcule pending_approver_id pour toutes les demandes PENDING en attente.
+   * À appeler après une mise à jour de la hiérarchie (n1_manager ou département).
+   */
+  recalculateChains: async (): Promise<{ message: string }> => {
+    const res = await axios.post(
+      `${API}/requests/recalculate-chains/`,
+      {},
+      { headers: getAuthHeaders() }
+    );
+    return res.data;
+  },
+
+  /**
    * POST /api/leaves/requests/<id>/reminder/
    * L'employé relance le manager qui n'a pas encore validé.
    */

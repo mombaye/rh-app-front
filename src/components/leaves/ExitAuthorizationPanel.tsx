@@ -90,7 +90,7 @@ function DetailModal({
               </div>
               <div>
                 <p className="text-white/70 text-xs font-medium uppercase tracking-wide mb-0.5">
-                  Autorisation de sortie
+                  Demande de sortie
                 </p>
                 <h2 className="text-white font-bold text-lg leading-tight">Sortie #{item.id}</h2>
               </div>
@@ -144,38 +144,24 @@ function DetailModal({
               ))}
             </div>
 
-            {/* Chaîne de validation */}
+            {/* Validation manager */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-              <p className="text-xs text-slate-500 uppercase font-semibold mb-3 tracking-wide">Chaîne de validation</p>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
-                    item.reviewed_by_name
-                      ? "bg-emerald-500"
-                      : item.status === "PENDING" ? "bg-amber-400 animate-pulse" : "bg-slate-300"
-                  }`}>
-                    {item.reviewed_by_name ? "✓" : "1"}
-                  </span>
-                  <span className="font-medium text-slate-700">Manager</span>
-                  <span className="text-slate-400">—</span>
-                  <span className={item.reviewed_by_name ? "text-emerald-700 font-semibold" : "text-slate-400"}>
-                    {item.reviewed_by_name
-                      ? `${item.reviewed_by_name}${item.reviewed_at ? ` (${new Date(item.reviewed_at).toLocaleDateString("fr")})` : ""}`
-                      : "En attente de validation"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
-                    item.status === "APPROVED" ? "bg-emerald-500" : "bg-slate-300"
-                  }`}>
-                    {item.status === "APPROVED" ? "✓" : "2"}
-                  </span>
-                  <span className="font-medium text-slate-700">RH</span>
-                  <span className="text-slate-400">—</span>
-                  <span className={item.status === "APPROVED" ? "text-emerald-700 font-semibold" : "text-slate-400"}>
-                    {item.status === "APPROVED" ? "Transmis à la RH" : "En attente"}
-                  </span>
-                </div>
+              <p className="text-xs text-slate-500 uppercase font-semibold mb-3 tracking-wide">Validation</p>
+              <div className="flex items-center gap-2 text-sm">
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
+                  item.reviewed_by_name
+                    ? "bg-emerald-500"
+                    : item.status === "PENDING" ? "bg-amber-400 animate-pulse" : "bg-slate-300"
+                }`}>
+                  {item.reviewed_by_name ? "✓" : "1"}
+                </span>
+                <span className="font-medium text-slate-700">Manager N+1</span>
+                <span className="text-slate-400">—</span>
+                <span className={item.reviewed_by_name ? "text-emerald-700 font-semibold" : "text-slate-400"}>
+                  {item.reviewed_by_name
+                    ? `${item.reviewed_by_name}${item.reviewed_at ? ` (${new Date(item.reviewed_at).toLocaleDateString("fr")})` : ""}`
+                    : "En attente de validation"}
+                </span>
               </div>
             </div>
 
@@ -411,7 +397,7 @@ export default function ExitAuthorizationPanel({
         datetime_return: new Date(datetimeReturn).toISOString(),
         motif:           motif.trim(),
       });
-      toast.success("Demande soumise — votre manager va être notifié.");
+      toast.success("Demande de sortie soumise — votre manager N+1 va être notifié.");
       setShowForm(false);
       setDatetimeExit(""); setDatetimeReturn(""); setMotif("");
       load();
@@ -520,7 +506,7 @@ export default function ExitAuthorizationPanel({
       {/* ── Formulaire de création ── */}
       {showForm && (
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 space-y-4">
-          <h3 className="font-semibold text-[#003c71] text-sm">Nouvelle demande d'autorisation</h3>
+          <h3 className="font-semibold text-[#003c71] text-sm">Nouvelle demande de sortie</h3>
 
           {!employeeId && employees.length > 0 && (
             <div>

@@ -73,7 +73,7 @@ function DetailModal({ item, onClose }: DetailModalProps) {
                 <Icon size={22} className="text-white" />
               </div>
               <div>
-                <p className="text-white/70 text-xs font-medium uppercase tracking-wide mb-0.5">Demande d'autorisation</p>
+                <p className="text-white/70 text-xs font-medium uppercase tracking-wide mb-0.5">Demande de sortie</p>
                 <h2 className="text-white font-bold text-lg leading-tight">{item.employee_name}</h2>
               </div>
             </div>
@@ -400,7 +400,7 @@ export default function RhExitAuthorizationPage() {
               </div>
               <p className="text-sm font-medium text-gray-500">Aucune demande trouvée</p>
               <p className="text-xs mt-1 text-gray-400">
-                {filterStatus !== "ALL" || search ? "Aucune demande pour ces critères" : "Aucune demande d'autorisation enregistrée"}
+                {filterStatus !== "ALL" || search ? "Aucune demande pour ces critères" : "Aucune demande de sortie enregistrée"}
               </p>
             </div>
           ) : (

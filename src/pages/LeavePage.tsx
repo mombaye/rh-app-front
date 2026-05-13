@@ -190,6 +190,9 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   const [deleteLoading,    setDeleteLoading]    = useState(false);
   const [relaunchRequest,  setRelaunchRequest]  = useState<LeaveRequest | null>(null);
   const [cancelInProgressRequest, setCancelInProgressRequest] = useState<LeaveRequest | null>(null);
+  const [reminderLoadingId, setReminderLoadingId] = useState<number | null>(null);
+  const [manageTarget,      setManageTarget]      = useState<LeaveRequest | null>(null);
+  const [revokeTarget,      setRevokeTarget]      = useState<LeaveRequest | null>(null);
 
   const advancedFilterCount = [
     filterLeaveTypeId, filterStartDate, filterEndDate,
@@ -235,6 +238,18 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   }, [statusFilter, filterLeaveTypeId, filterStartDate, filterEndDate, filterDepartment, filterEmployeeName, filterYear]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const handleSendReminder = async (id: number) => {
+    setReminderLoadingId(id);
+    try {
+      await leaveRequestService.sendReminder(id);
+      toast.success("Email de relance envoyé au manager.");
+    } catch {
+      toast.error("Impossible d'envoyer la relance.");
+    } finally {
+      setReminderLoadingId(null);
+    }
+  };
 
   const resetAdvancedFilters = () => {
     setFilterLeaveTypeId(""); setFilterStartDate(""); setFilterEndDate("");
@@ -720,80 +735,13 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
 
                                   {/* Actions */}
                                   <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex flex-col gap-1.5">
-                                      {isPending && (
-                                        <>
-                                          <ApprovalStepIndicator request={r} />
-                                          <div className="flex gap-1.5">
-                                            <button onClick={(e) => { e.stopPropagation(); setEditTarget(r); }}
-                                              className="flex-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center justify-center gap-1">
-                                              <Pencil className="h-3 w-3" /> Modifier
-                                            </button>
-                                          </div>
-                                        </>
-                                      )}
-                                      {r.status === "APPROVED" && (
-                                        r.is_ended ? (
-                                          <div className="flex gap-1.5">
-                                            <button
-                                              disabled
-                                              title="Congé terminé"
-                                              className="flex-1 px-2.5 py-1 bg-gray-100 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed whitespace-nowrap flex items-center justify-center gap-1">
-                                              <CheckCircle2 className="h-3 w-3" /> Terminé
-                                            </button>
-                                            <button
-                                              onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(r.id); }}
-                                              title="Supprimer ce congé terminé"
-                                              className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
-                                              <Trash2 className="h-3 w-3" />
-                                            </button>
-                                          </div>
-                                        ) : r.is_in_progress ? (
-                                          <div className="flex gap-1.5">
-                                            <button
-                                              onClick={(e) => { e.stopPropagation(); setCancelInProgressRequest(r); }}
-                                              title="Annuler ce congé en cours"
-                                              className="flex-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center justify-center gap-1">
-                                              <X className="h-3 w-3" /> Annuler
-                                            </button>
-                                            <button
-                                              onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(r.id); }}
-                                              title="Supprimer ce congé"
-                                              className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
-                                              <Trash2 className="h-3 w-3" />
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          <div className="flex gap-1.5">
-                                            <QuickRevokeBtn request={r} onDone={fetchAll} />
-                                          </div>
-                                        )
-                                      )}
-                                      {r.status === "CANCELLED" && (
-                                        <div className="flex gap-1.5">
-                                          <button
-                                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(r.id); }}
-                                            className="flex-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center justify-center gap-1">
-                                            <Trash2 className="h-3 w-3" /> Supprimer
-                                          </button>
-                                        </div>
-                                      )}
-                                      {r.status === "REVOKED" && (
-                                        <div className="flex gap-1.5">
-                                          <button
-                                            onClick={(e) => { e.stopPropagation(); setRelaunchRequest(r); }}
-                                            className="flex-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center justify-center gap-1">
-                                            <Send className="h-3 w-3" /> Relancer
-                                          </button>
-                                          <button
-                                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(r.id); }}
-                                            title="Supprimer ce congé"
-                                            className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-1">
-                                            <Trash2 className="h-3 w-3" />
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setManageTarget(r); }}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#003c71] hover:bg-[#003c71]/90 text-white text-xs font-semibold rounded-lg transition shadow-sm whitespace-nowrap"
+                                    >
+                                      <Settings2 className="h-3.5 w-3.5" />
+                                      Gérer
+                                    </button>
                                   </td>
                                 </motion.tr>
                               );
@@ -935,6 +883,34 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
             request={cancelInProgressRequest}
             onClose={() => setCancelInProgressRequest(null)}
             onDone={() => { setCancelInProgressRequest(null); fetchAll(); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Modal Gérer */}
+      <AnimatePresence>
+        {manageTarget && (
+          <ManageModal
+            request={manageTarget}
+            reminderLoadingId={reminderLoadingId}
+            onClose={() => setManageTarget(null)}
+            onEdit={(r)     => { setManageTarget(null); setEditTarget(r); }}
+            onReminder={(r) => { setManageTarget(null); handleSendReminder(r.id); }}
+            onRevoke={(r)   => { setManageTarget(null); setRevokeTarget(r); }}
+            onCancel={(r)   => { setManageTarget(null); setCancelInProgressRequest(r); }}
+            onRelaunch={(r) => { setManageTarget(null); setRelaunchRequest(r); }}
+            onDelete={(r)   => { setManageTarget(null); setConfirmDeleteId(r.id); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Modal Révoquer (depuis Gérer) */}
+      <AnimatePresence>
+        {revokeTarget && (
+          <QuickRevokeModal
+            request={revokeTarget}
+            onClose={() => setRevokeTarget(null)}
+            onDone={() => { setRevokeTarget(null); fetchAll(); }}
           />
         )}
       </AnimatePresence>
@@ -2354,6 +2330,186 @@ function LeaveHistoryModal({ employeeId, employeeName, onClose }: {
               })}
             </div>
           )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Modal Gérer — toutes les actions d'une demande en un seul endroit ──────────
+interface ManageModalProps {
+  request:           LeaveRequest;
+  reminderLoadingId: number | null;
+  onClose:    ()                      => void;
+  onEdit:     (r: LeaveRequest)       => void;
+  onReminder: (r: LeaveRequest)       => void;
+  onRevoke:   (r: LeaveRequest)       => void;
+  onCancel:   (r: LeaveRequest)       => void;
+  onRelaunch: (r: LeaveRequest)       => void;
+  onDelete:   (r: LeaveRequest)       => void;
+}
+
+function ManageModal({
+  request: r, reminderLoadingId,
+  onClose, onEdit, onReminder, onRevoke, onCancel, onRelaunch, onDelete,
+}: ManageModalProps) {
+  const isPending     = r.status === "PENDING" || r.status === "PENDING_SECOND";
+  const isApproved    = r.status === "APPROVED";
+  const isRevoked     = r.status === "REVOKED";
+  const isCancelled   = r.status === "CANCELLED";
+  const isInProgress  = !!r.is_in_progress;
+  const isEnded       = !!r.is_ended;
+  const lc            = r.leave_type?.color ?? "#003c71";
+  const isReminderBusy = reminderLoadingId === r.id;
+
+  const ActionBtn = ({
+    icon: Icon, label, description, onClick, variant = "default", disabled = false,
+  }: {
+    icon: React.ElementType; label: string; description?: string;
+    onClick: () => void; variant?: "default" | "danger" | "warning" | "success"; disabled?: boolean;
+  }) => {
+    const styles = {
+      default: "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200",
+      danger:  "bg-red-50   hover:bg-red-100   text-red-700   border-red-200",
+      warning: "bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200",
+      success: "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200",
+    };
+    return (
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl border transition disabled:opacity-50 disabled:cursor-not-allowed ${styles[variant]}`}
+      >
+        <div className={`p-2 rounded-xl ${styles[variant]} shrink-0`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="text-left flex-1 min-w-0">
+          <p className="text-sm font-semibold leading-tight">{label}</p>
+          {description && <p className="text-xs opacity-60 mt-0.5 leading-snug">{description}</p>}
+        </div>
+        {disabled && <ImSpinner2 className="h-3.5 w-3.5 animate-spin shrink-0 opacity-50" />}
+      </button>
+    );
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 30, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 30, scale: 0.97 }}
+        transition={{ duration: 0.22, ease: "easeOut" }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+      >
+        {/* Header */}
+        <div className="relative px-5 py-4" style={{ backgroundColor: lc }}>
+          <button
+            onClick={onClose}
+            className="absolute top-3.5 right-3.5 w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
+          >
+            <X className="h-3.5 w-3.5 text-white" />
+          </button>
+          <div className="flex items-center gap-3 pr-8">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white font-black text-sm shrink-0">
+              {(r.employee?.full_name ?? "?").slice(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <p className="text-white/70 text-[11px] font-semibold uppercase tracking-wide mb-0.5">Gérer la demande</p>
+              <p className="text-white font-bold text-sm leading-tight truncate max-w-[200px]">
+                {r.employee?.full_name ?? "—"}
+              </p>
+              <p className="text-white/70 text-xs mt-0.5">
+                {r.leave_type?.label ?? "—"} · {r.days ?? r.duration_days ?? "?"}j
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="p-4 space-y-2">
+          {/* ── En attente de validation ── */}
+          {isPending && (
+            <>
+              <ActionBtn
+                icon={Pencil}
+                label="Modifier"
+                description="Changer les dates, le type ou le motif"
+                onClick={() => onEdit(r)}
+              />
+              <ActionBtn
+                icon={isReminderBusy ? ImSpinner2 : Mail}
+                label="Relancer le manager"
+                description="Envoyer un email de rappel au manager en attente"
+                onClick={() => onReminder(r)}
+                variant="warning"
+                disabled={isReminderBusy}
+              />
+            </>
+          )}
+
+          {/* ── Approuvé – pas encore commencé ── */}
+          {isApproved && !isInProgress && !isEnded && (
+            <ActionBtn
+              icon={RotateCcw}
+              label="Révoquer"
+              description="Annuler ce congé approuvé (urgence, rappel anticipé)"
+              onClick={() => onRevoke(r)}
+              variant="warning"
+            />
+          )}
+
+          {/* ── Approuvé – en cours ── */}
+          {isApproved && isInProgress && (
+            <ActionBtn
+              icon={X}
+              label="Annuler le congé en cours"
+              description="Interrompre le congé actuellement en cours"
+              onClick={() => onCancel(r)}
+              variant="danger"
+            />
+          )}
+
+          {/* ── Approuvé terminé ── */}
+          {isApproved && isEnded && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-gray-50 border border-gray-100">
+              <CheckCircle2 className="h-4 w-4 text-gray-400 shrink-0" />
+              <p className="text-sm text-gray-500 font-medium">Congé terminé — aucune action disponible</p>
+            </div>
+          )}
+
+          {/* ── Révoqué ── */}
+          {isRevoked && (
+            <ActionBtn
+              icon={Send}
+              label="Relancer la demande"
+              description="Soumettre à nouveau cette demande révoquée"
+              onClick={() => onRelaunch(r)}
+            />
+          )}
+
+          {/* ── Supprimer (tous sauf en cours) ── */}
+          {!isInProgress && (
+            <ActionBtn
+              icon={Trash2}
+              label="Supprimer"
+              description="Supprimer définitivement cette demande"
+              onClick={() => onDelete(r)}
+              variant="danger"
+            />
+          )}
+        </div>
+
+        <div className="px-4 pb-4">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition"
+          >
+            Fermer
+          </button>
         </div>
       </motion.div>
     </div>
