@@ -25,6 +25,7 @@ const PAGE_SIZE = 8;
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; Icon: React.ElementType; textColor: string; borderColor: string }> = {
   PENDING:        { label: "En attente",      color: "#1d4ed8", bg: "#eff6ff", Icon: Clock,        textColor: "text-blue-700",   borderColor: "border-blue-200"  },
   PENDING_SECOND: { label: "2ème validation", color: "#1e40af", bg: "#dbeafe", Icon: Clock,        textColor: "text-blue-800",   borderColor: "border-blue-300"  },
+  PENDING_RH:     { label: "Validation RH",   color: "#7c3aed", bg: "#f5f3ff", Icon: Clock,        textColor: "text-purple-700", borderColor: "border-purple-200" },
   APPROVED:       { label: "Approuvé",        color: "#059669", bg: "#f0fdf4", Icon: CheckCircle2, textColor: "text-green-700",  borderColor: "border-green-200"  },
   REJECTED:       { label: "Rejeté",          color: "#dc2626", bg: "#fef2f2", Icon: XCircle,      textColor: "text-red-700",    borderColor: "border-red-200"    },
   CANCELLED:      { label: "Annulé",          color: "#64748b", bg: "#f8fafc", Icon: XCircle,      textColor: "text-gray-500",   borderColor: "border-gray-200"   },
@@ -963,9 +964,10 @@ type SectionTab = "leaves" | "exits";
 
 interface ManagerApprovalsPageProps {
   layout?: React.ComponentType<{ children: React.ReactNode }>;
+  isRh?: boolean;
 }
 
-export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }: ManagerApprovalsPageProps) {
+export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, isRh = false }: ManagerApprovalsPageProps) {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
 
@@ -988,29 +990,47 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
     if (!employeeId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const [pending, pendingSecond, approved, rejected] = await Promise.all([
-        leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING"        } as any),
-        leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING_SECOND" } as any),
-        leaveRequestService.getAll({ manager_employee_id: employeeId, status: "APPROVED"       } as any),
-        leaveRequestService.getAll({ manager_employee_id: employeeId, status: "REJECTED"       } as any),
-      ]);
-      const exclude = (list: LeaveRequest[]) => list.filter(r => r.employee.id !== employeeId);
-      setRequests([
-        ...exclude(pending as LeaveRequest[]),
-        ...exclude(pendingSecond as LeaveRequest[]),
-        ...exclude(approved as LeaveRequest[]),
-        ...exclude(rejected as LeaveRequest[]),
-      ]);
+      if (isRh) {
+        // RH : voit toutes les demandes en attente de validation RH + historique global
+        const [pendingRh, approved, rejected] = await Promise.all([
+          leaveRequestService.getAll({ status: "PENDING_RH" } as any),
+          leaveRequestService.getAll({ status: "APPROVED"   } as any),
+          leaveRequestService.getAll({ status: "REJECTED"   } as any),
+        ]);
+        setRequests([
+          ...(pendingRh as LeaveRequest[]),
+          ...(approved  as LeaveRequest[]),
+          ...(rejected  as LeaveRequest[]),
+        ]);
+      } else {
+        // Manager : voit uniquement les demandes de ses subordonnés
+        const [pending, pendingSecond, approved, rejected] = await Promise.all([
+          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING"        } as any),
+          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING_SECOND" } as any),
+          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "APPROVED"       } as any),
+          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "REJECTED"       } as any),
+        ]);
+        const exclude = (list: LeaveRequest[]) => list.filter(r => r.employee.id !== employeeId);
+        setRequests([
+          ...exclude(pending as LeaveRequest[]),
+          ...exclude(pendingSecond as LeaveRequest[]),
+          ...exclude(approved as LeaveRequest[]),
+          ...exclude(rejected as LeaveRequest[]),
+        ]);
+      }
     } catch {
       toast.error("Erreur lors du chargement des demandes.");
     } finally {
       setLoading(false);
     }
-  }, [employeeId]);
+  }, [employeeId, isRh]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const pending = requests.filter(r => r.status === "PENDING" || r.status === "PENDING_SECOND");
+  const pending = requests.filter(r => isRh
+    ? r.status === "PENDING_RH"
+    : (r.status === "PENDING" || r.status === "PENDING_SECOND")
+  );
   const history = requests.filter(r => r.status === "APPROVED" || r.status === "REJECTED");
 
   const source = tab === "pending" ? pending : history;
@@ -1034,7 +1054,11 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
   const handleApprove = async (reqId: number) => {
     if (!employeeId) return;
     try {
-      await leaveRequestService.approve(reqId, { reviewer_id: employeeId });
+      if (isRh) {
+        await leaveRequestService.hrValidate(reqId, employeeId);
+      } else {
+        await leaveRequestService.approve(reqId, { reviewer_id: employeeId });
+      }
       toast.success("Demande approuvée !");
       setApproveTarget(null);
       refresh();
@@ -1046,7 +1070,11 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
   const handleReject = async (reqId: number, reason: string) => {
     if (!employeeId) return;
     try {
-      await leaveRequestService.reject(reqId, reason);
+      if (isRh) {
+        await leaveRequestService.hrReject(reqId, reason, employeeId);
+      } else {
+        await leaveRequestService.reject(reqId, reason);
+      }
       toast.success("Demande rejetée.");
       setRejectTarget(null);
       refresh();
@@ -1092,9 +1120,14 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout }:
           <div>
             <h1 className="text-2xl font-bold text-[#003c71] flex items-center gap-2">
               <ClipboardCheck size={22} />
-              Approbations
+              {isRh ? "Validation RH" : "Approbations"}
             </h1>
-            <p className="text-gray-500 text-sm mt-0.5">Validez les demandes de congé et de sortie de vos employés</p>
+            <p className="text-gray-500 text-sm mt-0.5">
+              {isRh
+                ? "Validez définitivement les demandes de congé transmises par les managers"
+                : "Validez les demandes de congé et de sortie de vos employés"
+              }
+            </p>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">

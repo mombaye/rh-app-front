@@ -7,16 +7,17 @@ import {
   X, CalendarDays, User, Hash, MessageSquare, ShieldCheck,
   ThumbsUp, Upload, FileCheck, Paperclip, ExternalLink,
   AlertTriangle, UserX, Trash2, Eye, RefreshCw,
-  LayoutGrid, List, ArrowUpDown,
+  LayoutGrid, List, ArrowUpDown, Star,
 } from "lucide-react";
+import { ImSpinner2 } from "react-icons/im";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 const PAGE_SIZE = 8;
 import { useAuth } from "@/contexts/useAuth";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
-import { leaveBalanceService, leaveRequestService, leaveTypeService } from "@/services/leaveService";
-import { LeaveBalance, LeaveRequest, LeaveRequestCreate, LeaveType } from "@/types/leave";
+import { leaveBalanceService, leaveRequestService, leaveTypeService, holidayService } from "@/services/leaveService";
+import { LeaveBalance, LeaveRequest, LeaveRequestCreate, LeaveType, HolidayCheckResult } from "@/types/leave";
 import AnticipationLeaveForm from "@/components/leaves/AnticipationLeaveForm";
 import toast from "react-hot-toast";
 
@@ -176,8 +177,10 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
     half_day_start: (initial as any)?.half_day_start ?? false,
     half_day_end:   (initial as any)?.half_day_end   ?? false,
   });
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [saving,       setSaving]       = useState(false);
+  const [formError,    setFormError]    = useState<string | null>(null);
+  const [holidayCheck, setHolidayCheck] = useState<HolidayCheckResult | null>(null);
+  const [checkingDays, setCheckingDays] = useState(false);
 
   // Justificatif optionnel (comme sur /leaves/internes)
   const [optDocFile, setOptDocFile] = useState<File | null>(null);
@@ -201,12 +204,34 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
 
   useEffect(() => {
     if (form.start_date && form.end_date && form.end_date >= form.start_date) {
-      const s = new Date(form.start_date);
-      const e = new Date(form.end_date);
-      let diff = Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
-      if (form.half_day_start) diff -= 0.5;
-      if (form.half_day_end)   diff -= 0.5;
-      setForm(p => ({ ...p, days: Math.max(0.5, diff) }));
+      setCheckingDays(true);
+      setHolidayCheck(null);
+      holidayService.checkDays(form.start_date, form.end_date)
+        .then(result => {
+          setHolidayCheck(result);
+          // effective_days = jours calendaires − dimanches − jours fériés
+          let effective = result.effective_days;
+          if (form.half_day_start) effective -= 0.5;
+          if (form.half_day_end)   effective -= 0.5;
+          setForm(p => ({ ...p, days: Math.max(0.5, effective) }));
+        })
+        .catch(() => {
+          // Fallback : calcul local (dimanches exclus) si l'API est indisponible
+          const s = new Date(form.start_date + "T12:00:00");
+          const e = new Date(form.end_date   + "T12:00:00");
+          let count = 0;
+          const cur = new Date(s);
+          while (cur <= e) {
+            if (cur.getDay() !== 0) count++;
+            cur.setDate(cur.getDate() + 1);
+          }
+          if (form.half_day_start) count -= 0.5;
+          if (form.half_day_end)   count -= 0.5;
+          setForm(p => ({ ...p, days: Math.max(0.5, count) }));
+        })
+        .finally(() => setCheckingDays(false));
+    } else {
+      setHolidayCheck(null);
     }
     setFormError(null);
   }, [form.start_date, form.end_date, form.half_day_start, form.half_day_end]);
@@ -232,6 +257,12 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
       return;
     }
 
+    // Justificatif obligatoire
+    if (needsDoc && !optDocFile) {
+      setFormError("Un justificatif est obligatoire pour ce type de congé. Veuillez joindre le document avant de soumettre.");
+      return;
+    }
+
     // Vérification des contraintes de durée du type de congé
     if (exceedsMax) {
       setFormError(
@@ -251,17 +282,11 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
     // Vérification du solde avant envoi
     if (selectedType?.deducts_from_balance && mode === "create") {
       if (availableDays === null) {
-        setFormError(
-          `Solde insuffisant pour ${selectedType.label} : 0j disponibles, ` +
-          `${form.days}j demandés. Contactez les RH pour configurer votre solde.`
-        );
+        setFormError(`Solde insuffisant — aucun solde configuré pour "${selectedType.label}". Contactez les RH.`);
         return;
       }
       if (form.days > availableDays) {
-        setFormError(
-          `Solde insuffisant pour ${selectedType.label} : ` +
-          `${availableDays.toFixed(1)}j disponibles, ${form.days}j demandés.`
-        );
+        setFormError(`Solde insuffisant — ${availableDays} jour${availableDays > 1 ? "s" : ""} disponible${availableDays > 1 ? "s" : ""}, ${form.days} demandé${form.days > 1 ? "s" : ""}.`);
         return;
       }
     }
@@ -336,10 +361,18 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
             {balanceShortfall && (
               <motion.div
                 initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 font-semibold"
+                className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3"
               >
                 <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                <span>Solde insuffisant — le bouton d'envoi est désactivé.</span>
+                <div>
+                  <p className="font-bold">Solde insuffisant</p>
+                  <p className="text-xs text-red-600 mt-0.5">
+                    {availableDays !== null
+                      ? `${availableDays} jour${availableDays > 1 ? "s" : ""} disponible${availableDays > 1 ? "s" : ""} · ${requestedDays} demandé${requestedDays > 1 ? "s" : ""}`
+                      : "Aucun solde configuré pour ce type de congé"
+                    }
+                  </p>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -435,30 +468,76 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
 
           {/* Résumé jours */}
           <AnimatePresence>
-            {form.days && form.days > 0 && (
+            {(checkingDays || (form.days && form.days > 0)) && (
               <motion.div
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 flex items-center gap-2"
+                className="space-y-2"
               >
-                <Calendar size={16} className="text-blue-500 shrink-0" />
-                <span className="text-sm text-blue-700 font-semibold">
-                  {form.days} jour{form.days > 1 ? "s" : ""} de congé calculé{form.days > 1 ? "s" : ""}
-                </span>
+                {/* Ligne principale */}
+                <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                  {checkingDays ? (
+                    <>
+                      <ImSpinner2 size={15} className="text-blue-400 animate-spin shrink-0" />
+                      <span className="text-sm text-blue-500">Calcul en cours…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Calendar size={16} className="text-blue-500 shrink-0" />
+                      <span className="text-sm text-blue-700 font-semibold">
+                        {form.days} jour{(form.days ?? 0) > 1 ? "s" : ""} de congé calculé{(form.days ?? 0) > 1 ? "s" : ""}
+                        {holidayCheck && holidayCheck.holidays_count > 0 && (
+                          <span className="ml-1 text-blue-500 font-normal text-xs">
+                            ({holidayCheck.total_days} calendaires − {holidayCheck.holidays_count} férié{holidayCheck.holidays_count > 1 ? "s" : ""})
+                          </span>
+                        )}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {/* Détail des fériés */}
+                {!checkingDays && holidayCheck && holidayCheck.holidays_count > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                    className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-start gap-2"
+                  >
+                    <Star size={14} className="text-amber-500 fill-amber-400 mt-0.5 shrink-0" />
+                    <div className="text-xs text-amber-700">
+                      <span className="font-semibold">
+                        {holidayCheck.holidays_count} jour{holidayCheck.holidays_count > 1 ? "s" : ""} férié{holidayCheck.holidays_count > 1 ? "s" : ""} dans cette période :
+                      </span>{" "}
+                      {holidayCheck.holidays.map(h => {
+                        const d = new Date(h.date + "T12:00:00");
+                        return `${h.name} (${d.getDate()}/${String(d.getMonth() + 1).padStart(2, "0")})`;
+                      }).join(", ")}
+                      . Ces jours <strong>ne seront pas déduits</strong> de votre solde.
+                    </div>
+                  </motion.div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Justificatif optionnel (identique à /leaves/internes) */}
+          {/* Justificatif — obligatoire si requires_justification, optionnel sinon */}
           {mode === "create" && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Justificatif <span className="text-gray-400 font-normal">(optionnel)</span>
+                Justificatif{" "}
+                {needsDoc
+                  ? <span className="text-red-500">*</span>
+                  : <span className="text-gray-400 font-normal">(optionnel)</span>
+                }
               </label>
+
               <div
-                className="flex items-center gap-3 border border-dashed border-gray-300 rounded-xl px-4 py-3 cursor-pointer hover:border-[#003c71] hover:bg-slate-50 transition"
                 onClick={() => optFileRef.current?.click()}
+                className={`flex items-center gap-3 border border-dashed rounded-xl px-4 py-3 cursor-pointer transition ${
+                  optDocFile
+                    ? "border-emerald-300 bg-emerald-50"
+                    : "border-gray-300 hover:border-[#003c71] hover:bg-slate-50"
+                }`}
               >
                 {optDocFile ? (
                   <>
@@ -482,6 +561,7 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
                   </>
                 )}
               </div>
+
               <input
                 ref={optFileRef}
                 type="file"
@@ -502,11 +582,11 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
             </button>
             <button
               onClick={handleSave}
-              disabled={saving || !!balanceShortfall || exceedsMax || belowMin}
+              disabled={saving || checkingDays || !!balanceShortfall || exceedsMax || belowMin || (needsDoc && !optDocFile)}
               className="flex-[2] px-4 py-2.5 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-sm"
             >
-              {saving && <Loader2 size={15} className="animate-spin" />}
-              {mode === "create" ? "Envoyer la demande" : "Enregistrer"}
+              {(saving || checkingDays) && <Loader2 size={15} className="animate-spin" />}
+              {checkingDays ? "Calcul en cours…" : mode === "create" ? "Envoyer la demande" : "Enregistrer"}
             </button>
           </div>
         </div>

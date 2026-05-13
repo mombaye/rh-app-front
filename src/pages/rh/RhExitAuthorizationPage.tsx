@@ -271,7 +271,7 @@ export default function RhExitAuthorizationPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-[#003c71]">Demandes d'autorisation</h1>
+            <h1 className="text-2xl font-bold text-[#003c71]">Demandes de sortie</h1>
             <p className="text-gray-500 text-sm mt-0.5">Autorisations de sortie de tous les employés</p>
           </div>
         </motion.div>

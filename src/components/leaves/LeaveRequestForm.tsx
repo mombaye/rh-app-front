@@ -184,6 +184,12 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     if (!form.days || Number(form.days) <= 0) {
       setError("La date de fin doit être postérieure ou égale à la date de début."); return;
     }
+    if (needsDoc && !optDocFile) {
+      setError("Un justificatif est obligatoire pour ce type de congé. Veuillez joindre le document avant de soumettre."); return;
+    }
+    if (selectedType?.deducts_from_balance && !selectedType.is_special_leave && balance !== null && Number(form.days) > (balance?.remaining ?? 0)) {
+      setError(`Solde insuffisant — ${balance?.remaining ?? 0} jour(s) disponible(s), ${form.days} jour(s) demandé(s).`); return;
+    }
     if (selectedType?.max_days_per_request > 0 && Number(form.days) > selectedType.max_days_per_request) {
       setError(`Ce type de congé est limité à ${selectedType.max_days_per_request} jour(s) par demande.`); return;
     }
@@ -200,22 +206,16 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         days:           parseFloat(form.days),
       });
 
-      // Si un fichier optionnel a été sélectionné en step 1, l'uploader maintenant
+      // Upload du justificatif (obligatoire ou optionnel) s'il a été sélectionné
       if (optDocFile) {
         try {
           await leaveRequestService.uploadDocument(created.id, optDocFile);
         } catch {
-          // Upload échoué : on continue quand même (la demande est créée)
+          // Upload échoué : la demande est créée, on continue
         }
-        onSuccess?.();
-        onClose();
-      } else if (needsDoc) {
-        // Type de congé qui exige un justificatif → étape 2
-        setCreatedId(created.id);
-      } else {
-        onSuccess?.();
-        onClose();
       }
+      onSuccess?.();
+      onClose();
     } catch (err: any) {
       setError(parseDRFErrors(err?.response?.data));
     } finally {
@@ -374,11 +374,18 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                 <span className="shrink-0 mt-0.5">⚠️</span><span>{error}</span>
               </motion.div>
             )}
-            {form.days && Number(form.days) > (balance?.remaining ?? 0) && selectedType && !selectedType.is_special_leave && (
+            {form.days && selectedType?.deducts_from_balance && !selectedType.is_special_leave &&
+              balance !== null && Number(form.days) > (balance?.remaining ?? 0) && (
               <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 flex items-start gap-2 font-semibold">
+                className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 flex items-start gap-2">
                 <span className="shrink-0 mt-0.5">🚫</span>
-                <span>Solde insuffisant pour cette demande</span>
+                <div>
+                  <p className="font-bold">Solde insuffisant</p>
+                  <p className="text-xs text-red-600 mt-0.5">
+                    {balance?.remaining ?? 0} jour{(balance?.remaining ?? 0) > 1 ? "s" : ""} disponible{(balance?.remaining ?? 0) > 1 ? "s" : ""}
+                    {" · "}{form.days} demandé{Number(form.days) > 1 ? "s" : ""}
+                  </p>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -499,16 +506,6 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                   </p>
                 </motion.div>
               )}
-              {/* Justificatif requis */}
-              {needsDoc && (
-                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  className="mt-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-start gap-2">
-                  <Paperclip className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-700">
-                    Ce type de congé nécessite un justificatif (acte officiel). Vous pourrez le fournir à l'étape suivante.
-                  </p>
-                </motion.div>
-              )}
             </AnimatePresence>
           </div>
 
@@ -594,47 +591,53 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
             )}
           </AnimatePresence>
 
-          {/* ── Justificatif optionnel ───────────────────────────────── */}
-          {!needsDoc && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
-                Justificatif <span className="text-gray-400 font-normal normal-case">(optionnel)</span>
-              </label>
-              <div
-                className="flex items-center gap-3 border border-dashed border-gray-300 rounded-xl px-4 py-3 cursor-pointer hover:border-camublue-900 hover:bg-slate-50 transition"
-                onClick={() => optFileRef.current?.click()}
-              >
-                {optDocFile ? (
-                  <>
-                    <FileCheck className="h-5 w-5 text-emerald-500 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700 truncate">{optDocFile.name}</p>
-                      <p className="text-xs text-slate-400">{(optDocFile.size / 1024).toFixed(0)} Ko</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setOptDocFile(null); }}
-                      className="text-slate-400 hover:text-slate-600 transition p-1 rounded-lg hover:bg-white"
-                    >
-                      <FiX size={14} />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <Paperclip className="h-5 w-5 text-gray-400 shrink-0" />
-                    <p className="text-sm text-gray-400">Joindre un document (PDF, JPEG, PNG — max 5 Mo)</p>
-                  </>
-                )}
-              </div>
-              <input
-                ref={optFileRef}
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                className="hidden"
-                onChange={(e) => { setOptDocFile(e.target.files?.[0] ?? null); }}
-              />
+          {/* ── Justificatif — obligatoire si needsDoc, optionnel sinon ── */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
+              Justificatif{" "}
+              {needsDoc
+                ? <span className="text-red-500 normal-case">*</span>
+                : <span className="text-gray-400 font-normal normal-case">(optionnel)</span>
+              }
+            </label>
+            <div
+              className={`flex items-center gap-3 border border-dashed rounded-xl px-4 py-3 cursor-pointer transition ${
+                optDocFile
+                  ? "border-emerald-300 bg-emerald-50"
+                  : "border-gray-300 hover:border-camublue-900 hover:bg-slate-50"
+              }`}
+              onClick={() => optFileRef.current?.click()}
+            >
+              {optDocFile ? (
+                <>
+                  <FileCheck className="h-5 w-5 text-emerald-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-700 truncate">{optDocFile.name}</p>
+                    <p className="text-xs text-slate-400">{(optDocFile.size / 1024).toFixed(0)} Ko</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setOptDocFile(null); }}
+                    className="text-slate-400 hover:text-slate-600 transition p-1 rounded-lg hover:bg-white"
+                  >
+                    <FiX size={14} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Paperclip className="h-5 w-5 text-gray-400 shrink-0" />
+                  <p className="text-sm text-gray-400">Joindre un document (PDF, JPEG, PNG — max 5 Mo)</p>
+                </>
+              )}
             </div>
-          )}
+            <input
+              ref={optFileRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="hidden"
+              onChange={(e) => { setOptDocFile(e.target.files?.[0] ?? null); }}
+            />
+          </div>
 
           <div className="flex gap-3 pt-2">
             <button onClick={onClose}
@@ -643,7 +646,8 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
             </button>
             <button onClick={handleSubmit} disabled={
                 loading || isLoadingTypes ||
-                !!(form.days && Number(form.days) > (balance?.remaining ?? 0) && selectedType && !selectedType.is_special_leave) ||
+                !!(needsDoc && !optDocFile) ||
+                !!(form.days && selectedType?.deducts_from_balance && !selectedType.is_special_leave && balance !== null && Number(form.days) > (balance?.remaining ?? 0)) ||
                 !!(form.days && selectedType && selectedType.max_days_per_request > 0 && Number(form.days) > selectedType.max_days_per_request) ||
                 !!(form.days && selectedType && selectedType.min_days_per_request > 0 && Number(form.days) < selectedType.min_days_per_request)
               }

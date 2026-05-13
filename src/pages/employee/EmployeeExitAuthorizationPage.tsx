@@ -383,7 +383,11 @@ function ExitCard({ item, onView, onCancel, compact = false }: CardProps) {
 }
 
 // ── Page principale ────────────────────────────────────────────────────────────
-export default function EmployeeExitAuthorizationPage() {
+interface EmployeeExitAuthorizationPageProps {
+  layout?: React.ComponentType<{ children: React.ReactNode }>;
+}
+
+export default function EmployeeExitAuthorizationPage({ layout: Layout = EmployeeLayout }: EmployeeExitAuthorizationPageProps) {
   const { user }   = useAuth();
   const employeeId = user?.employee_id;
 
@@ -440,7 +444,7 @@ export default function EmployeeExitAuthorizationPage() {
   };
 
   return (
-    <EmployeeLayout>
+    <Layout>
       <div className="px-4 md:px-6 pb-10">
 
         {/* Header */}
@@ -450,7 +454,7 @@ export default function EmployeeExitAuthorizationPage() {
           className="flex items-center justify-between mb-6 flex-wrap gap-3"
         >
           <div>
-            <h1 className="text-2xl font-bold text-[#003c71]">Demandes d'autorisation</h1>
+            <h1 className="text-2xl font-bold text-[#003c71]">Demandes de sortie</h1>
             <p className="text-gray-500 text-sm mt-0.5">Autorisations de sortie temporaire</p>
           </div>
           <button
@@ -646,6 +650,6 @@ export default function EmployeeExitAuthorizationPage() {
           </motion.div>
         </div>
       )}
-    </EmployeeLayout>
+    </Layout>
   );
 }

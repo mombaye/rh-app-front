@@ -48,6 +48,7 @@ import RhAttendancePage           from "@/pages/rh/RhAttendancePage";
 import RhApprovalsPage            from "@/pages/rh/RhApprovalsPage";
 import RhDocumentsPage            from "@/pages/rh/RhDocumentsPage";
 import RhExitAuthorizationPage    from "@/pages/rh/RhExitAuthorizationPage";
+import RhMyExitAuthorizationPage  from "@/pages/rh/RhMyExitAuthorizationPage";
 import RhAnticipationPage         from "@/pages/rh/RhAnticipationPage";
 
 // ── Helpers de rôles basés sur activeRole ────────────────────────────────────
@@ -205,6 +206,7 @@ function App() {
         <Route path="/rh/my-dossier"     element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDossierPage    /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-attendance"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttendancePage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-approvals"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhApprovalsPage  /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-exits"       element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMyExitAuthorizationPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/documents"      element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDocumentsPage  /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
 
         {/* ── Espace RH ────────────────────────────────────────── */}
