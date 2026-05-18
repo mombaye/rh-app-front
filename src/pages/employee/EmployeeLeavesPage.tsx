@@ -166,6 +166,14 @@ function parseLeaveError(err: any): string {
   return "Une erreur inattendue s'est produite. Veuillez réessayer.";
 }
 
+// ── Helpers date ─────────────────────────────────────────────────────────────
+const _ep = (n: number) => String(n).padStart(2, "0");
+function _eAddDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const r = new Date(y, m - 1, d + days);
+  return `${r.getFullYear()}-${_ep(r.getMonth() + 1)}-${_ep(r.getDate())}`;
+}
+
 function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClose, onSaved }: LeaveFormProps) {
   const [form, setForm] = useState<Partial<LeaveRequestCreate>>({
     employee_id:    employeeId,
@@ -196,12 +204,60 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
   const balanceShortfall = selectedType?.deducts_from_balance
     && requestedDays > 0
     && (availableDays === null || requestedDays > availableDays);
-  const needsDoc   = selectedType?.requires_justification ?? false;
   const maxDays    = selectedType?.max_days_per_request ?? 0;
   const minDays    = selectedType?.min_days_per_request ?? 0;
   const exceedsMax = maxDays > 0 && requestedDays > 0 && requestedDays > maxDays;
   const belowMin   = minDays > 0 && requestedDays > 0 && requestedDays < minDays;
 
+  // Durée fixe : min === max > 0 (mariage, baptême, décès…)
+  const isFixedDuration = minDays > 0 && minDays === maxDays;
+  const fixedDays       = isFixedDuration ? minDays : null;
+
+  // Justificatif : distinguer "obligatoire maintenant" vs "après le congé"
+  const needsDocNow   = (selectedType?.requires_justification ?? false) && !(selectedType?.justification_after_leave ?? false);
+  const needsDocLater = (selectedType?.requires_justification ?? false) && (selectedType?.justification_after_leave ?? false);
+
+  // Délai de prévenance
+  const noticeDays    = selectedType?.notice_days_required ?? 0;
+  const noticeViolated = noticeDays > 0 && !!form.start_date && (() => {
+    const minStart = new Date();
+    minStart.setDate(minStart.getDate() + noticeDays);
+    minStart.setHours(0, 0, 0, 0);
+    const [y, m, d] = form.start_date!.split("-").map(Number);
+    return new Date(y, m - 1, d) < minStart;
+  })();
+
+  // Plafond / plancher de date de fin
+  const maxEndDate = (!isFixedDuration && form.start_date && maxDays > 0)
+    ? _eAddDays(form.start_date, maxDays - 1) : undefined;
+  const minEndDate = (!isFixedDuration && form.start_date && minDays > 0)
+    ? _eAddDays(form.start_date, minDays - 1) : (form.start_date || undefined);
+
+  // ── Durée fixe : auto-calculer end_date ──────────────────────────────────
+  useEffect(() => {
+    if (!form.leave_type_id) return;
+    if (!isFixedDuration) {
+      setForm(f => f.end_date ? { ...f, end_date: "", days: undefined } : f);
+      setHolidayCheck(null);
+      return;
+    }
+    if (!form.start_date || fixedDays === null) return;
+    const endStr = _eAddDays(form.start_date, fixedDays - 1);
+    setForm(f => ({ ...f, end_date: endStr, days: fixedDays! }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.leave_type_id, form.start_date]);
+
+  // ── Recadrer end_date si elle dépasse le plafond ──────────────────────────
+  useEffect(() => {
+    if (isFixedDuration || !form.start_date || !form.end_date || !maxEndDate) return;
+    if (form.end_date > maxEndDate) {
+      setForm(f => ({ ...f, end_date: maxEndDate, days: undefined }));
+      setHolidayCheck(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.start_date, form.leave_type_id]);
+
+  // ── Vérification jours / fériés ───────────────────────────────────────────
   useEffect(() => {
     if (form.start_date && form.end_date && form.end_date >= form.start_date) {
       setCheckingDays(true);
@@ -209,11 +265,15 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
       holidayService.checkDays(form.start_date, form.end_date)
         .then(result => {
           setHolidayCheck(result);
-          // effective_days = jours calendaires − dimanches − jours fériés
-          let effective = result.effective_days;
-          if (form.half_day_start) effective -= 0.5;
-          if (form.half_day_end)   effective -= 0.5;
-          setForm(p => ({ ...p, days: Math.max(0.5, effective) }));
+          // Pour les types à durée fixe ne pas écraser la durée légale
+          setForm(p => {
+            const t = leaveTypes.find(lt => lt.id === p.leave_type_id);
+            const fixed = (t?.min_days_per_request ?? 0) > 0 && t?.min_days_per_request === t?.max_days_per_request;
+            let effective = result.effective_days;
+            if (p.half_day_start) effective -= 0.5;
+            if (p.half_day_end)   effective -= 0.5;
+            return { ...p, days: fixed ? t!.min_days_per_request : Math.max(0.5, effective) };
+          });
         })
         .catch(() => {
           // Fallback : calcul local (dimanches exclus) si l'API est indisponible
@@ -257,9 +317,14 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
       return;
     }
 
-    // Justificatif obligatoire
-    if (needsDoc && !optDocFile) {
+    // Justificatif obligatoire (congé maladie uniquement)
+    if (needsDocNow && !optDocFile) {
       setFormError("Un justificatif est obligatoire pour ce type de congé. Veuillez joindre le document avant de soumettre.");
+      return;
+    }
+    // Délai de prévenance
+    if (noticeViolated) {
+      setFormError(`Ce type de congé nécessite un délai de prévenance de ${noticeDays} jour(s). Veuillez choisir une date de début plus tardive.`);
       return;
     }
 
@@ -408,35 +473,70 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
               ))}
             </select>
 
-            {/* Contraintes de durée du type sélectionné */}
+            {/* Banneaux dynamiques selon le type */}
             <AnimatePresence>
-              {selectedType && (maxDays > 0 || minDays > 0) && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  className="mt-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 flex items-start gap-2"
-                >
-                  <span className="shrink-0 mt-0.5 text-blue-500 text-sm">⏱</span>
-                  <p className="text-xs text-blue-700">
-                    {minDays > 0 && maxDays > 0
-                      ? <>Durée autorisée : <strong>{minDays}–{maxDays} jour{maxDays > 1 ? "s" : ""}</strong> par demande.</>
-                      : maxDays > 0
-                        ? <>Ce type de congé est limité à <strong>{maxDays} jour{maxDays > 1 ? "s" : ""}</strong> par demande.</>
-                        : <>Ce type de congé requiert au minimum <strong>{minDays} jour{minDays > 1 ? "s" : ""}</strong> par demande.</>
-                    }
-                  </p>
+              {selectedType && (
+                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="mt-2 space-y-1.5">
+
+                  {/* Non payé */}
+                  {!selectedType.is_paid && (
+                    <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 flex items-start gap-2">
+                      <span className="shrink-0 mt-0.5 text-orange-500 text-sm">💸</span>
+                      <p className="text-xs text-orange-700">
+                        Ce congé est <strong>non payé</strong> — aucune indemnité ne sera versée.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Congé spécial */}
+                  {selectedType.is_special_leave && (
+                    <div className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 flex items-start gap-2">
+                      <span className="shrink-0 mt-0.5 text-violet-500 text-sm">⭐</span>
+                      <p className="text-xs text-violet-700">
+                        Congé spécial (Art. L147) — <strong>distinct du solde de congés annuels</strong>.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Délai de prévenance */}
+                  {noticeDays > 0 && (
+                    <div className={`rounded-xl px-3 py-2 flex items-start gap-2 border ${noticeViolated ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"}`}>
+                      <span className={`shrink-0 mt-0.5 text-sm ${noticeViolated ? "text-red-500" : "text-blue-500"}`}>📅</span>
+                      <p className={`text-xs ${noticeViolated ? "text-red-700 font-semibold" : "text-blue-700"}`}>
+                        {noticeViolated
+                          ? <>Date trop proche — ce type nécessite <strong>{noticeDays} jour(s)</strong> de prévenance minimum.</>
+                          : <>Délai de prévenance requis : <strong>{noticeDays} jour(s)</strong> minimum avant le début.</>
+                        }
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Durée fixe OU contraintes min/max */}
+                  {(maxDays > 0 || minDays > 0) && (
+                    isFixedDuration ? (
+                      <div className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 flex items-start gap-2">
+                        <span className="shrink-0 mt-0.5 text-violet-500 text-sm">📌</span>
+                        <p className="text-xs text-violet-700">
+                          Durée légale fixe : <strong>{fixedDays} jour{(fixedDays ?? 0) > 1 ? "s" : ""}</strong>. La date de fin sera <strong>calculée automatiquement</strong>.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 flex items-start gap-2">
+                        <span className="shrink-0 mt-0.5 text-blue-500 text-sm">⏱</span>
+                        <p className="text-xs text-blue-700">
+                          {maxDays > 0
+                            ? <>Durée maximale : <strong>{maxDays} jour{maxDays > 1 ? "s" : ""}</strong> par demande.</>
+                            : <>Durée minimale : <strong>{minDays} jour{minDays > 1 ? "s" : ""}</strong> par demande.</>
+                          }
+                        </p>
+                      </div>
+                    )
+                  )}
+
                 </motion.div>
               )}
             </AnimatePresence>
-
-            {/* Info type de congé nécessitant un justificatif */}
-            {needsDoc && (
-              <div className="mt-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-start gap-2">
-                <Paperclip size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-700">
-                  Ce type de congé nécessite un justificatif (acte officiel). Vous pouvez le joindre ci-dessous ou l'envoyer plus tard.
-                </p>
-              </div>
-            )}
           </div>
 
           {/* Dates */}
@@ -454,15 +554,35 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Date fin <span className="text-red-400">*</span>
+                Date fin{" "}
+                {isFixedDuration
+                  ? <span className="text-violet-600 font-normal text-xs">· calculée ({fixedDays}j)</span>
+                  : maxEndDate
+                  ? <span className="text-blue-500 font-normal text-xs">· max {maxDays}j</span>
+                  : <span className="text-red-400">*</span>
+                }
               </label>
               <input
                 type="date"
                 value={form.end_date ?? ""}
-                min={form.start_date || undefined}
-                onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
+                min={isFixedDuration ? undefined : minEndDate}
+                max={isFixedDuration ? undefined : maxEndDate}
+                readOnly={isFixedDuration}
+                onChange={isFixedDuration ? undefined : e => setForm(p => ({ ...p, end_date: e.target.value }))}
+                className={`w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none transition ${
+                  isFixedDuration
+                    ? "border-violet-200 bg-violet-50 text-violet-700 cursor-not-allowed"
+                    : "border-gray-200 focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
+                }`}
               />
+              {!isFixedDuration && maxEndDate && form.start_date && (
+                <p className="text-xs text-blue-400 mt-1">
+                  Limité au {new Date(maxEndDate + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} ({maxDays}j max)
+                </p>
+              )}
+              {isFixedDuration && !form.start_date && (
+                <p className="text-xs text-slate-400 mt-1">Choisissez d'abord la date de début.</p>
+              )}
             </div>
           </div>
 
@@ -482,11 +602,21 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
                       <ImSpinner2 size={15} className="text-blue-400 animate-spin shrink-0" />
                       <span className="text-sm text-blue-500">Calcul en cours…</span>
                     </>
+                  ) : isFixedDuration ? (
+                    <>
+                      <span className="text-violet-500 text-sm shrink-0">📌</span>
+                      <span className="text-sm text-violet-700 font-semibold">
+                        Durée légale : <strong>{fixedDays} jour{(fixedDays ?? 0) > 1 ? "s" : ""}</strong> fixe
+                        {holidayCheck && holidayCheck.holidays_count > 0 && (
+                          <span className="ml-1 font-normal text-xs opacity-75">· {holidayCheck.holidays_count} férié(s) dans la période</span>
+                        )}
+                      </span>
+                    </>
                   ) : (
                     <>
                       <Calendar size={16} className="text-blue-500 shrink-0" />
                       <span className="text-sm text-blue-700 font-semibold">
-                        {form.days} jour{(form.days ?? 0) > 1 ? "s" : ""} de congé calculé{(form.days ?? 0) > 1 ? "s" : ""}
+                        {form.days} jour{(form.days ?? 0) > 1 ? "s" : ""} de congé
                         {holidayCheck && holidayCheck.holidays_count > 0 && (
                           <span className="ml-1 text-blue-500 font-normal text-xs">
                             ({holidayCheck.total_days} calendaires − {holidayCheck.holidays_count} férié{holidayCheck.holidays_count > 1 ? "s" : ""})
@@ -520,22 +650,38 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
             )}
           </AnimatePresence>
 
-          {/* Justificatif — obligatoire si requires_justification, optionnel sinon */}
+          {/* Justificatif */}
           {mode === "create" && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Justificatif{" "}
-                {needsDoc
-                  ? <span className="text-red-500">*</span>
+                {needsDocNow
+                  ? <span className="text-red-500">Obligatoire *</span>
+                  : needsDocLater
+                  ? <span className="text-amber-600 font-normal text-xs">demandé après le congé</span>
                   : <span className="text-gray-400 font-normal">(optionnel)</span>
                 }
               </label>
+
+              {/* Notification : justificatif demandé après le congé */}
+              {needsDocLater && (
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-2">
+                  <span className="text-amber-500 text-sm shrink-0">📋</span>
+                  <p className="text-xs text-amber-700">
+                    Un justificatif officiel vous sera demandé dans les{" "}
+                    <strong>{selectedType!.justification_grace_days} jour{selectedType!.justification_grace_days > 1 ? "s" : ""}</strong>{" "}
+                    suivant votre retour. Vous pouvez déjà le joindre si vous l'avez.
+                  </p>
+                </div>
+              )}
 
               <div
                 onClick={() => optFileRef.current?.click()}
                 className={`flex items-center gap-3 border border-dashed rounded-xl px-4 py-3 cursor-pointer transition ${
                   optDocFile
                     ? "border-emerald-300 bg-emerald-50"
+                    : needsDocNow
+                    ? "border-red-200 hover:border-red-400 hover:bg-red-50"
                     : "border-gray-300 hover:border-[#003c71] hover:bg-slate-50"
                 }`}
               >
@@ -556,8 +702,8 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
                   </>
                 ) : (
                   <>
-                    <Paperclip className="h-5 w-5 text-gray-400 shrink-0" />
-                    <p className="text-sm text-gray-400">Joindre un document (PDF, JPEG, PNG — max 5 Mo)</p>
+                    <Paperclip className={`h-5 w-5 shrink-0 ${needsDocNow ? "text-red-400" : "text-gray-400"}`} />
+                    <p className="text-sm text-gray-400">PDF, JPEG, PNG — max 5 Mo</p>
                   </>
                 )}
               </div>
@@ -582,11 +728,15 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
             </button>
             <button
               onClick={handleSave}
-              disabled={saving || checkingDays || !!balanceShortfall || exceedsMax || belowMin || (needsDoc && !optDocFile)}
+              disabled={saving || checkingDays || !!balanceShortfall || exceedsMax || belowMin || (needsDocNow && !optDocFile) || noticeViolated}
               className="flex-[2] px-4 py-2.5 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-sm"
             >
               {(saving || checkingDays) && <Loader2 size={15} className="animate-spin" />}
-              {checkingDays ? "Calcul en cours…" : mode === "create" ? "Envoyer la demande" : "Enregistrer"}
+              {checkingDays ? "Calcul en cours…"
+                : mode === "create"
+                  ? needsDocNow ? "📎 Soumettre & joindre justificatif" : "📤 Envoyer la demande"
+                  : "Enregistrer"
+              }
             </button>
           </div>
         </div>

@@ -39,25 +39,39 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 // ─── Colonnes export personnalisé employés ────────────────────────────────────
 const EMP_EXPORT_COLS = [
-  { key: "Matricule",     label: "Matricule"        },
-  { key: "Nom",           label: "Nom"              },
-  { key: "Prénom",        label: "Prénom"           },
-  { key: "Email",         label: "Email"            },
-  { key: "Téléphone",     label: "Téléphone"        },
-  { key: "Genre",         label: "Genre"            },
-  { key: "Fonction",      label: "Fonction"         },
-  { key: "Service",       label: "Service"          },
-  { key: "Type contrat",  label: "Type de contrat"  },
-  { key: "Statut",        label: "Statut"           },
-  { key: "Date embauche", label: "Date d'embauche"  },
-  { key: "Date sortie",   label: "Date de sortie"   },
-  { key: "Motif sortie",  label: "Motif de sortie"  },
-  { key: "Manager",       label: "Manager"          },
-  { key: "Ancienneté",    label: "Ancienneté (ans)" },
+  // ── Identité ──────────────────────────────────────────────────────────────
+  { key: "Matricule",              label: "Matricule",                    group: "Identité"    },
+  { key: "Nom",                    label: "Nom",                          group: "Identité"    },
+  { key: "Prénom",                 label: "Prénom",                       group: "Identité"    },
+  { key: "Genre",                  label: "Genre",                        group: "Identité"    },
+  { key: "Date naissance",         label: "Date de naissance",            group: "Identité"    },
+  // ── Contacts ──────────────────────────────────────────────────────────────
+  { key: "Email",                  label: "Email",                        group: "Contacts"    },
+  { key: "Téléphone",              label: "Téléphone",                    group: "Contacts"    },
+  // ── Poste ─────────────────────────────────────────────────────────────────
+  { key: "Fonction",               label: "Fonction",                     group: "Poste"       },
+  { key: "Catégorie",              label: "Catégorie",                    group: "Poste"       },
+  { key: "Service",                label: "Service",                      group: "Poste"       },
+  { key: "Business Line",          label: "Business Line",                group: "Poste"       },
+  { key: "Localisation",           label: "Localisation",                 group: "Poste"       },
+  { key: "Manager",                label: "Manager",                      group: "Poste"       },
+  // ── Contrat ───────────────────────────────────────────────────────────────
+  { key: "Type contrat",           label: "Type de contrat",              group: "Contrat"     },
+  { key: "Statut",                 label: "Statut",                       group: "Contrat"     },
+  { key: "Date embauche",          label: "Date d'embauche",              group: "Contrat"     },
+  { key: "Date fin CDD",           label: "Date de fin de CDD",           group: "Contrat"     },
+  { key: "Fin période essai",      label: "Fin période d'essai",          group: "Contrat"     },
+  { key: "Fin essai renouvellé",   label: "Fin période d'essai (renouv.)", group: "Contrat"    },
+  // ── Sortie ────────────────────────────────────────────────────────────────
+  { key: "Date sortie",            label: "Date de sortie",               group: "Sortie"      },
+  { key: "Motif sortie",           label: "Motif de sortie",              group: "Sortie"      },
+  // ── Ancienneté ────────────────────────────────────────────────────────────
+  { key: "Ancienneté",             label: "Ancienneté (ans)",             group: "Ancienneté"  },
 ] as const;
 type EmpExportColKey = typeof EMP_EXPORT_COLS[number]["key"];
 const EMP_DEFAULT_COLS: EmpExportColKey[] = [
   "Matricule","Nom","Prénom","Email","Fonction","Service","Type contrat","Statut","Date embauche",
+  "Date fin CDD","Fin période essai",
 ];
 
 // ─── Export XLSX client-side employés ─────────────────────────────────────────
@@ -73,21 +87,34 @@ function exportEmployeesXLSX(employees: Employee[], selectedCols: EmpExportColKe
     String((e as any).service ?? (e as any).departement ?? (e as any).department ?? "").toUpperCase() || "—";
 
   const buildRow = (e: Employee): Record<EmpExportColKey, any> => ({
-    "Matricule":     e.matricule ?? "—",
-    "Nom":           e.nom ?? "—",
-    "Prénom":        e.prenom ?? "—",
-    "Email":         e.email ?? "—",
-    "Téléphone":     e.telephone ?? "—",
-    "Genre":         e.sexe ?? "—",
-    "Fonction":      e.fonction ?? "—",
-    "Service":       getSvc(e),
-    "Type contrat":  e.type_contrat ?? "—",
-    "Statut":        e.status === "ACTIVE" ? "Actif" : e.status === "EXITED" ? "Sorti" : e.status === "SUSPENDED" ? "Suspendu" : e.status ?? "—",
-    "Date embauche": fmtDate(e.date_embauche),
-    "Date sortie":   fmtDate(e.date_sortie),
-    "Motif sortie":  e.motif_sortie ?? "—",
-    "Manager":       e.manager ?? "—",
-    "Ancienneté":    e.anciennete != null ? String(e.anciennete) : "—",
+    // Identité
+    "Matricule":              e.matricule ?? "—",
+    "Nom":                    e.nom ?? "—",
+    "Prénom":                 e.prenom ?? "—",
+    "Genre":                  e.sexe === "H" ? "Homme" : e.sexe === "F" ? "Femme" : e.sexe ?? "—",
+    "Date naissance":         fmtDate(e.date_naissance),
+    // Contacts
+    "Email":                  e.email ?? "—",
+    "Téléphone":              e.telephone ?? "—",
+    // Poste
+    "Fonction":               e.fonction ?? "—",
+    "Catégorie":              e.categorie ?? "—",
+    "Service":                getSvc(e),
+    "Business Line":          e.business_line ?? "—",
+    "Localisation":           e.localisation ?? "—",
+    "Manager":                e.n1_manager_name ?? e.manager ?? "—",
+    // Contrat
+    "Type contrat":           e.type_contrat ?? "—",
+    "Statut":                 e.status === "ACTIVE" ? "Actif" : e.status === "EXITED" ? "Sorti" : e.status === "SUSPENDED" ? "Suspendu" : e.status ?? "—",
+    "Date embauche":          fmtDate(e.date_embauche),
+    "Date fin CDD":           fmtDate(e.date_fin_cdd),
+    "Fin période essai":      fmtDate(e.date_fin_periode_essai),
+    "Fin essai renouvellé":   fmtDate(e.date_fin_periode_essai_2),
+    // Sortie
+    "Date sortie":            fmtDate(e.date_sortie),
+    "Motif sortie":           e.motif_sortie ?? "—",
+    // Ancienneté
+    "Ancienneté":             e.anciennete != null ? String(e.anciennete) : "—",
   });
   const rows = employees.map((e) =>
     Object.fromEntries(selectedCols.map((k) => [k, buildRow(e)[k]]))
@@ -1231,7 +1258,7 @@ export default function EmployeesTable({
             className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4">
             <motion.div
               initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
                 <div>
@@ -1275,21 +1302,49 @@ export default function EmployeesTable({
                       className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
-                  {EMP_EXPORT_COLS.map((col) => {
-                    const checked = exportCols.includes(col.key);
+                <div className="max-h-72 overflow-y-auto pr-1 space-y-4">
+                  {Array.from(new Set(EMP_EXPORT_COLS.map((c) => c.group))).map((group) => {
+                    const groupCols = EMP_EXPORT_COLS.filter((c) => c.group === group);
+                    const allChecked = groupCols.every((c) => exportCols.includes(c.key));
                     return (
-                      <label key={col.key}
-                        className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer border transition text-sm ${
-                          checked ? "bg-camublue-50 border-camublue-200 text-camublue-800" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                        }`}>
-                        <input type="checkbox" checked={checked} onChange={() => {
-                          setExportCols((prev) =>
-                            prev.includes(col.key) ? prev.filter((k) => k !== col.key) : [...prev, col.key]
-                          );
-                        }} className="accent-camublue-700 w-3.5 h-3.5" />
-                        <span className="font-medium">{col.label}</span>
-                      </label>
+                      <div key={group}>
+                        {/* En-tête groupe + toggle tout le groupe */}
+                        <div className="flex items-center justify-between mb-1.5">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{group}</p>
+                          <button
+                            onClick={() =>
+                              setExportCols((prev) =>
+                                allChecked
+                                  ? prev.filter((k) => !groupCols.some((c) => c.key === k))
+                                  : [...new Set([...prev, ...groupCols.map((c) => c.key)])]
+                              )
+                            }
+                            className="text-[10px] text-camublue-700 hover:underline font-semibold"
+                          >
+                            {allChecked ? "Désélectionner" : "Tout sélectionner"}
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {groupCols.map((col) => {
+                            const checked = exportCols.includes(col.key);
+                            return (
+                              <label key={col.key}
+                                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition text-xs ${
+                                  checked
+                                    ? "bg-camublue-50 border-camublue-200 text-camublue-800"
+                                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                                }`}>
+                                <input type="checkbox" checked={checked} onChange={() => {
+                                  setExportCols((prev) =>
+                                    prev.includes(col.key) ? prev.filter((k) => k !== col.key) : [...prev, col.key]
+                                  );
+                                }} className="accent-camublue-700 w-3 h-3 shrink-0" />
+                                <span className="font-medium leading-tight">{col.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>

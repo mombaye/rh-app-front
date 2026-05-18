@@ -2355,6 +2355,7 @@ function ManageModal({
 }: ManageModalProps) {
   const isPending     = r.status === "PENDING" || r.status === "PENDING_SECOND";
   const isApproved    = r.status === "APPROVED";
+  const isRejected    = r.status === "REJECTED";
   const isRevoked     = r.status === "REVOKED";
   const isCancelled   = r.status === "CANCELLED";
   const isInProgress  = !!r.is_in_progress;
@@ -2428,6 +2429,31 @@ function ManageModal({
             </div>
           </div>
         </div>
+
+        {/* ── Motif de rejet ── */}
+        {isRejected && r.reject_reason && (
+          <div className="px-4 pt-4">
+            <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold text-red-500 uppercase tracking-wide mb-1">
+                  Motif du rejet
+                </p>
+                <p className="text-sm text-red-700 leading-snug whitespace-pre-wrap break-words">
+                  {r.reject_reason}
+                </p>
+                {r.reviewed_by?.full_name && (
+                  <p className="text-[11px] text-red-400 mt-1.5">
+                    Rejeté par <span className="font-semibold">{r.reviewed_by.full_name}</span>
+                    {r.reviewed_at && (
+                      <> le {new Date(r.reviewed_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="p-4 space-y-2">

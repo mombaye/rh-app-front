@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { leaveTypeService, leaveRequestService, leaveBalanceService, holidayService } from "@/services/leaveService";
 import { getEmployees } from "@/services/employeeService";
-import { ContractType, LeaveType, HolidayCheckResult } from "@/types/leave";
+import { ContractType, LeaveType, HolidayCheckResult, ApprovalChainInfo } from "@/types/leave";
 import { Employee } from "@/types/employee";
 import { FiX } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
-import { Upload, FileCheck, Paperclip, CheckCircle2, Search, User, Star } from "lucide-react";
+import { Upload, FileCheck, Paperclip, CheckCircle2, Search, User, Star, GitBranch, Loader2 } from "lucide-react";
 
 interface Props {
   onClose:       () => void;
@@ -27,6 +27,14 @@ const EMPTY_FORM: FormState = {
   employee_id: "", leave_type_id: "", start_date: "",
   end_date: "", days: "",
 };
+
+// ── Utilitaires de date ───────────────────────────────────────────────────────
+const _pad = (n: number) => String(n).padStart(2, "0");
+function _shiftDate(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const r = new Date(y, m - 1, d + days);
+  return `${r.getFullYear()}-${_pad(r.getMonth() + 1)}-${_pad(r.getDate())}`;
+}
 
 function parseDRFErrors(data: unknown): string {
   if (!data || typeof data !== "object") return "Une erreur est survenue.";
@@ -57,6 +65,10 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
 
   // Balance
   const [balance, setBalance] = useState<{ acquired: number; taken: number; remaining: number } | null>(null);
+
+  // Circuit de validation dynamique
+  const [chainInfo,    setChainInfo]    = useState<ApprovalChainInfo | null>(null);
+  const [loadingChain, setLoadingChain] = useState(false);
 
   // Document upload step
   const [createdId,   setCreatedId]   = useState<number | null>(null);
@@ -110,6 +122,16 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Charger le circuit de validation dès qu'un employé est sélectionné
+  useEffect(() => {
+    if (!selectedEmployee) { setChainInfo(null); return; }
+    setLoadingChain(true);
+    leaveRequestService.getApprovalChain(selectedEmployee.id)
+      .then(setChainInfo)
+      .catch(() => setChainInfo(null))
+      .finally(() => setLoadingChain(false));
+  }, [selectedEmployee]);
+
   // Load balance when employee and leave type are selected
   useEffect(() => {
     setBalance(null);
@@ -122,6 +144,35 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
       })
       .catch(() => {/* silent */});
   }, [form.employee_id, form.leave_type_id, form.start_date]);
+
+  // ── Durée fixe : auto-remplir end_date quand start_date ou type change ──────
+  useEffect(() => {
+    if (!form.leave_type_id) return;
+    if (!isFixedDuration) {
+      // Nouveau type non-fixe → effacer les dates pour que l'utilisateur re-saisisse
+      setForm((f) => f.end_date ? { ...f, end_date: "", days: "" } : f);
+      setHolidayCheck(null);
+      return;
+    }
+    if (!form.start_date || fixedDays === null) return;
+    const [y, m, d] = form.start_date.split("-").map(Number);
+    const endDate   = new Date(y, m - 1, d + fixedDays - 1);
+    const pad       = (n: number) => String(n).padStart(2, "0");
+    const endStr    = `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())}`;
+    setForm((f) => ({ ...f, end_date: endStr, days: String(fixedDays) }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.leave_type_id, form.start_date]);
+
+  // ── Recadrer end_date si elle dépasse le plafond (changement de start ou de type) ──
+  useEffect(() => {
+    if (isFixedDuration || !form.start_date || !form.end_date) return;
+    if (!maxEndDate) return;                        // pas de plafond configuré
+    if (form.end_date > maxEndDate) {               // dépassement → recadrer au plafond
+      setForm((f) => ({ ...f, end_date: maxEndDate, days: "" }));
+      setHolidayCheck(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.start_date, form.leave_type_id]);
 
   // Auto-calculate days + check holidays
   useEffect(() => {
@@ -141,7 +192,13 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         holidayService.checkDays(form.start_date, form.end_date)
           .then((result) => {
             setHolidayCheck(result);
-            setForm((f) => ({ ...f, days: String(result.effective_days) }));
+            // Pour les types à durée fixe (mariage, baptême…), ne pas écraser la durée légale
+            setForm((f) => {
+              const t = leaveTypes.find((lt) => String(lt.id) === f.leave_type_id);
+              const fixed = (t?.min_days_per_request ?? 0) > 0 &&
+                            t?.min_days_per_request === t?.max_days_per_request;
+              return { ...f, days: fixed ? String(t!.min_days_per_request) : String(result.effective_days) };
+            });
           })
           .catch(() => { setHolidayCheck(null); })
           .finally(() => setCheckingDays(false));
@@ -174,8 +231,40 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     setEmpSearch("");
   };
 
-  const selectedType = leaveTypes.find((t) => String(t.id) === form.leave_type_id);
-  const needsDoc     = selectedType?.requires_justification ?? false;
+  const selectedType   = leaveTypes.find((t) => String(t.id) === form.leave_type_id);
+
+  // ── Dérivés du type de congé sélectionné ─────────────────────────────────
+  // Durée fixe : min === max > 0 (mariage, baptême, décès…)
+  const isFixedDuration = (selectedType?.min_days_per_request ?? 0) > 0 &&
+                          selectedType?.min_days_per_request === selectedType?.max_days_per_request;
+  const fixedDays       = isFixedDuration ? selectedType!.min_days_per_request : null;
+
+  // Justificatif obligatoire AVANT soumission (repos médical : requires_justification=true, justification_after_leave=false)
+  const needsDocNow    = (selectedType?.requires_justification ?? false) && !(selectedType?.justification_after_leave ?? false);
+  // Justificatif demandé APRÈS le congé (mariage, baptême…)
+  const needsDocLater  = (selectedType?.requires_justification ?? false) && (selectedType?.justification_after_leave ?? false);
+  const needsDoc       = needsDocNow;
+
+  // Délai de prévenance : start_date doit être >= aujourd'hui + notice_days_required
+  const noticeDays     = selectedType?.notice_days_required ?? 0;
+  const noticeViolated = noticeDays > 0 && !!form.start_date && (() => {
+    const minStart = new Date();
+    minStart.setDate(minStart.getDate() + noticeDays);
+    minStart.setHours(0, 0, 0, 0);
+    const [y, m, d] = form.start_date.split("-").map(Number);
+    return new Date(y, m - 1, d) < minStart;
+  })();
+
+  // ── Plafond / plancher date de fin dérivés du type ────────────────────────
+  // Date de fin max autorisée (start + max_days - 1)
+  const maxEndDate: string | undefined = (!isFixedDuration && form.start_date && (selectedType?.max_days_per_request ?? 0) > 0)
+    ? _shiftDate(form.start_date, selectedType!.max_days_per_request - 1)
+    : undefined;
+
+  // Date de fin min (start + min_days - 1), sinon simplement la date de début
+  const minEndDate: string | undefined = (!isFixedDuration && form.start_date && (selectedType?.min_days_per_request ?? 0) > 0)
+    ? _shiftDate(form.start_date, selectedType!.min_days_per_request - 1)
+    : (form.start_date || undefined);
 
   const handleSubmit = async () => {
     if (!form.employee_id || !form.leave_type_id || !form.start_date || !form.end_date) {
@@ -187,14 +276,17 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     if (needsDoc && !optDocFile) {
       setError("Un justificatif est obligatoire pour ce type de congé. Veuillez joindre le document avant de soumettre."); return;
     }
+    if (noticeViolated) {
+      setError(`Ce type de congé nécessite un délai de prévenance de ${noticeDays} jour(s). Veuillez choisir une date de début plus tardive.`); return;
+    }
     if (selectedType?.deducts_from_balance && !selectedType.is_special_leave && balance !== null && Number(form.days) > (balance?.remaining ?? 0)) {
       setError(`Solde insuffisant — ${balance?.remaining ?? 0} jour(s) disponible(s), ${form.days} jour(s) demandé(s).`); return;
     }
-    if (selectedType?.max_days_per_request > 0 && Number(form.days) > selectedType.max_days_per_request) {
-      setError(`Ce type de congé est limité à ${selectedType.max_days_per_request} jour(s) par demande.`); return;
+    if ((selectedType?.max_days_per_request ?? 0) > 0 && Number(form.days) > selectedType!.max_days_per_request) {
+      setError(`Ce type de congé est limité à ${selectedType!.max_days_per_request} jour(s) par demande.`); return;
     }
-    if (selectedType?.min_days_per_request > 0 && Number(form.days) < selectedType.min_days_per_request) {
-      setError(`Ce type de congé requiert au minimum ${selectedType.min_days_per_request} jour(s) par demande.`); return;
+    if ((selectedType?.min_days_per_request ?? 0) > 0 && Number(form.days) < selectedType!.min_days_per_request) {
+      setError(`Ce type de congé requiert au minimum ${selectedType!.min_days_per_request} jour(s) par demande.`); return;
     }
     setLoading(true); setError(null);
     try {
@@ -204,6 +296,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         start_date:     form.start_date,
         end_date:       form.end_date,
         days:           parseFloat(form.days),
+        motif:          "",
       });
 
       // Upload du justificatif (obligatoire ou optionnel) s'il a été sélectionné
@@ -284,11 +377,15 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                     <Paperclip className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-bold text-amber-800">
-                        Ce type de congé nécessite un justificatif
+                        Justificatif requis — {selectedType?.label}
                       </p>
                       <p className="text-xs text-amber-600 mt-0.5">
-                        Veuillez fournir l'acte officiel correspondant (acte de mariage, de naissance,
-                        certificat de décès, etc.) en PDF, JPEG ou PNG (max 5 Mo).
+                        Veuillez fournir le document officiel correspondant à votre{" "}
+                        <strong>{selectedType?.label?.toLowerCase()}</strong> en PDF, JPEG ou PNG (max 5 Mo).
+                        {selectedType?.justification_grace_days
+                          ? ` Délai accordé : ${selectedType.justification_grace_days} jour(s) après la fin du congé.`
+                          : ""
+                        }
                       </p>
                     </div>
                   </div>
@@ -469,6 +566,76 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
             )}
           </div>
 
+          {/* ── Circuit de validation dynamique ──────────────────────── */}
+          <AnimatePresence>
+            {(loadingChain || chainInfo) && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                className="rounded-xl border border-gray-200 bg-gray-50 p-3.5"
+              >
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <GitBranch size={11} />
+                  Circuit de validation — calculé automatiquement
+                </p>
+
+                {loadingChain ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <Loader2 size={12} className="animate-spin" />
+                    Calcul du circuit en cours…
+                  </div>
+                ) : chainInfo && chainInfo.steps.length === 0 ? (
+                  <p className="text-xs text-amber-600 italic">
+                    ⚠️ Aucun validateur configuré pour cet employé. Contactez le service RH.
+                  </p>
+                ) : chainInfo && (
+                  <>
+                    {/* Visualisation Employé → N+1 → N+2 → … */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] px-2 py-1 rounded-lg border bg-blue-50 border-blue-200 text-blue-700 font-semibold">
+                        Employé
+                      </span>
+                      {chainInfo.steps.map((step, i) => {
+                        const STEP_COLORS = [
+                          "bg-amber-50 border-amber-300 text-amber-800",
+                          "bg-orange-50 border-orange-300 text-orange-800",
+                          "bg-violet-50 border-violet-300 text-violet-800",
+                          "bg-rose-50 border-rose-300 text-rose-800",
+                        ];
+                        const colorClass = step.level === "DG"
+                          ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                          : (STEP_COLORS[i] ?? STEP_COLORS[STEP_COLORS.length - 1]);
+                        return (
+                          <div key={i} className="flex items-center gap-1.5">
+                            <span className="text-gray-300 font-bold text-sm">→</span>
+                            <div className={`flex flex-col items-center px-2 py-1 rounded-lg border text-[10px] font-semibold ${colorClass}`}>
+                              <span className="font-bold">{step.level}</span>
+                              <span className="font-normal opacity-75 max-w-[110px] truncate">
+                                {step.approver_name ?? "—"}
+                                {step.is_on_leave ? " 🌴" : ""}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Légende */}
+                    <p className="text-[10px] text-gray-400 mt-2.5 italic">
+                      {chainInfo.steps.length === 1
+                        ? "1 niveau de validation"
+                        : `${chainInfo.steps.length} niveaux de validation — déterminés par l'arborescence`}
+                      {chainInfo.steps.some(s => s.is_on_leave) &&
+                        " · 🌴 Un validateur est actuellement en congé"}
+                    </p>
+                  </>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* ── Type de congé ───────────────────────────────────────── */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
@@ -480,7 +647,8 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               <option value="">— Sélectionner un type de congé —</option>
               {leaveTypes.map((type) => (
                 <option key={type.id} value={type.id}>
-                  {type.label} {type.is_paid ? "" : "· Non payé"}
+                  {type.label}
+                  {!type.is_paid ? " · Non payé" : ""}
                   {type.requires_justification ? " 📎" : ""}
                 </option>
               ))}
@@ -490,20 +658,72 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                 <ImSpinner2 className="animate-spin" size={12} /> Chargement…
               </p>
             )}
+
             <AnimatePresence>
-              {/* Contraintes de durée */}
-              {selectedType && (selectedType.max_days_per_request > 0 || selectedType.min_days_per_request > 0) && (
+              {selectedType && (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  className="mt-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 flex items-start gap-2">
-                  <span className="shrink-0 mt-0.5 text-blue-500 text-sm">⏱</span>
-                  <p className="text-xs text-blue-700">
-                    {selectedType.min_days_per_request > 0 && selectedType.max_days_per_request > 0
-                      ? <>Ce type de congé est limité à <strong>{selectedType.min_days_per_request}–{selectedType.max_days_per_request} jour(s)</strong> par demande.</>
-                      : selectedType.max_days_per_request > 0
-                        ? <>Ce type de congé est limité à <strong>{selectedType.max_days_per_request} jour(s)</strong> par demande.</>
-                        : <>Ce type de congé requiert au minimum <strong>{selectedType.min_days_per_request} jour(s)</strong> par demande.</>
-                    }
-                  </p>
+                  className="mt-2 space-y-1.5">
+
+                  {/* Congé non payé */}
+                  {!selectedType.is_paid && (
+                    <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 flex items-start gap-2">
+                      <span className="shrink-0 mt-0.5 text-orange-500 text-sm">💸</span>
+                      <p className="text-xs text-orange-700">
+                        Ce congé est <strong>non payé</strong> — aucune indemnité ne sera versée pour cette période.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Congé spécial — droit distinct, non déduit du solde */}
+                  {selectedType.is_special_leave && (
+                    <div className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 flex items-start gap-2">
+                      <span className="shrink-0 mt-0.5 text-violet-500 text-sm">⭐</span>
+                      <p className="text-xs text-violet-700">
+                        Congé spécial (Art. L147) — ce droit est <strong>distinct du solde de congés annuels</strong> et n'y sera pas déduit.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Délai de prévenance */}
+                  {selectedType.notice_days_required > 0 && (
+                    <div className={`rounded-xl px-3 py-2 flex items-start gap-2 border ${
+                      noticeViolated
+                        ? "bg-red-50 border-red-200"
+                        : "bg-blue-50 border-blue-200"
+                    }`}>
+                      <span className={`shrink-0 mt-0.5 text-sm ${noticeViolated ? "text-red-500" : "text-blue-500"}`}>📅</span>
+                      <p className={`text-xs ${noticeViolated ? "text-red-700 font-semibold" : "text-blue-700"}`}>
+                        {noticeViolated
+                          ? <>Date trop proche — ce type de congé nécessite <strong>{selectedType.notice_days_required} jour(s)</strong> de prévenance minimum.</>
+                          : <>Délai de prévenance requis : <strong>{selectedType.notice_days_required} jour(s)</strong> minimum avant le début du congé.</>
+                        }
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Durée fixe OU contraintes min/max */}
+                  {(selectedType.max_days_per_request > 0 || selectedType.min_days_per_request > 0) && (
+                    isFixedDuration ? (
+                      <div className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 flex items-start gap-2">
+                        <span className="shrink-0 mt-0.5 text-violet-500 text-sm">📌</span>
+                        <p className="text-xs text-violet-700">
+                          Durée légale fixe : <strong>{fixedDays} jour{(fixedDays ?? 0) > 1 ? "s" : ""}</strong>.
+                          La date de fin sera <strong>calculée automatiquement</strong> dès que vous choisissez la date de début.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 flex items-start gap-2">
+                        <span className="shrink-0 mt-0.5 text-blue-500 text-sm">⏱</span>
+                        <p className="text-xs text-blue-700">
+                          {selectedType.max_days_per_request > 0
+                            ? <>Durée maximale : <strong>{selectedType.max_days_per_request} jour(s)</strong> par demande.</>
+                            : <>Durée minimale légale : <strong>{selectedType.min_days_per_request} jour(s)</strong> par demande.</>
+                          }
+                        </p>
+                      </div>
+                    )
+                  )}
+
                 </motion.div>
               )}
             </AnimatePresence>
@@ -520,11 +740,40 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
-                Date fin <span className="text-red-500">*</span>
+                Date fin{" "}
+                {isFixedDuration
+                  ? <span className="text-violet-600 font-semibold normal-case">
+                      · calculée automatiquement ({fixedDays}j)
+                    </span>
+                  : maxEndDate
+                  ? <span className="text-blue-500 font-normal normal-case">
+                      · max {selectedType!.max_days_per_request}j
+                    </span>
+                  : <span className="text-red-500">*</span>
+                }
               </label>
-              <input type="date" name="end_date" value={form.end_date} min={form.start_date || undefined}
-                onChange={handleChange}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition" />
+              <input
+                type="date"
+                name="end_date"
+                value={form.end_date}
+                min={isFixedDuration ? undefined : minEndDate}
+                max={isFixedDuration ? undefined : maxEndDate}
+                onChange={isFixedDuration ? undefined : handleChange}
+                readOnly={isFixedDuration}
+                className={`w-full border rounded-xl px-4 py-2.5 text-sm outline-none transition ${
+                  isFixedDuration
+                    ? "border-violet-200 bg-violet-50 text-violet-700 cursor-not-allowed"
+                    : "border-gray-200 focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20"
+                }`}
+              />
+              {isFixedDuration && !form.start_date && (
+                <p className="text-xs text-slate-400 mt-1">Choisissez d'abord la date de début.</p>
+              )}
+              {!isFixedDuration && maxEndDate && form.start_date && (
+                <p className="text-xs text-blue-400 mt-1">
+                  Date de fin limitée au {new Date(maxEndDate + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} ({selectedType!.max_days_per_request}j max)
+                </p>
+              )}
             </div>
           </div>
 
@@ -533,16 +782,32 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className="space-y-2">
                 {/* Résumé jours */}
-                <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-700 flex items-center gap-2">
+                <div className={`rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 ${
+                  isFixedDuration
+                    ? "bg-violet-50 border border-violet-100 text-violet-700"
+                    : "bg-blue-50 border border-blue-100 text-blue-700"
+                }`}>
                   {checkingDays
                     ? <><ImSpinner2 className="animate-spin" size={13} /> Calcul en cours…</>
                     : <>
-                        <span>📅</span>
+                        <span>{isFixedDuration ? "📌" : "📅"}</span>
                         <span>
-                          Durée&nbsp;: <strong>{form.days}</strong> jour(s) prélevé(s) sur votre solde
-                          {holidayCheck && holidayCheck.holidays_count > 0 && (
-                            <span className="ml-1 text-blue-500 font-normal text-xs">
+                          {isFixedDuration
+                            ? <>Durée légale&nbsp;: <strong>{fixedDays} jour{(fixedDays ?? 0) > 1 ? "s" : ""}</strong> fixe</>
+                            : <>Durée&nbsp;: <strong>{form.days}</strong> jour(s)</>
+                          }
+                          {selectedType?.deducts_from_balance && !selectedType.is_special_leave
+                            ? <span className="font-normal"> — prélevé(s) sur votre solde</span>
+                            : <span className={`font-normal ${isFixedDuration ? "text-violet-500" : "text-violet-600"}`}> — sans déduction du solde</span>
+                          }
+                          {!isFixedDuration && holidayCheck && holidayCheck.holidays_count > 0 && (
+                            <span className="ml-1 font-normal text-xs opacity-75">
                               ({holidayCheck.total_days} calendaires − {holidayCheck.holidays_count} férié(s))
+                            </span>
+                          )}
+                          {isFixedDuration && holidayCheck && holidayCheck.holidays_count > 0 && (
+                            <span className="ml-1 font-normal text-xs opacity-75">
+                              · {holidayCheck.holidays_count} jour(s) férié(s) dans la période
                             </span>
                           )}
                         </span>
@@ -591,19 +856,36 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
             )}
           </AnimatePresence>
 
-          {/* ── Justificatif — obligatoire si needsDoc, optionnel sinon ── */}
+          {/* ── Justificatif ── */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
               Justificatif{" "}
-              {needsDoc
-                ? <span className="text-red-500 normal-case">*</span>
+              {needsDocNow
+                ? <span className="text-red-500">Obligatoire *</span>
+                : needsDocLater
+                ? <span className="text-amber-600 font-normal normal-case">demandé après le congé</span>
                 : <span className="text-gray-400 font-normal normal-case">(optionnel)</span>
               }
             </label>
+
+            {/* Notification : justificatif demandé après le congé (mariage, baptême…) */}
+            {needsDocLater && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-2">
+                <span className="text-amber-500 text-sm shrink-0">📋</span>
+                <p className="text-xs text-amber-700">
+                  Un justificatif officiel vous sera demandé dans les{" "}
+                  <strong>{selectedType!.justification_grace_days} jour{selectedType!.justification_grace_days > 1 ? "s" : ""}</strong>{" "}
+                  suivant votre retour. Vous pouvez déjà le joindre si vous l'avez.
+                </p>
+              </div>
+            )}
+
             <div
               className={`flex items-center gap-3 border border-dashed rounded-xl px-4 py-3 cursor-pointer transition ${
                 optDocFile
                   ? "border-emerald-300 bg-emerald-50"
+                  : needsDocNow
+                  ? "border-red-200 hover:border-red-400 hover:bg-red-50"
                   : "border-gray-300 hover:border-camublue-900 hover:bg-slate-50"
               }`}
               onClick={() => optFileRef.current?.click()}
@@ -625,8 +907,8 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                 </>
               ) : (
                 <>
-                  <Paperclip className="h-5 w-5 text-gray-400 shrink-0" />
-                  <p className="text-sm text-gray-400">Joindre un document (PDF, JPEG, PNG — max 5 Mo)</p>
+                  <Paperclip className={`h-5 w-5 shrink-0 ${needsDocNow ? "text-red-400" : "text-gray-400"}`} />
+                  <p className="text-sm text-gray-400">PDF, JPEG, PNG — max 5 Mo</p>
                 </>
               )}
             </div>
@@ -647,6 +929,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
             <button onClick={handleSubmit} disabled={
                 loading || isLoadingTypes ||
                 !!(needsDoc && !optDocFile) ||
+                !!noticeViolated ||
                 !!(form.days && selectedType?.deducts_from_balance && !selectedType.is_special_leave && balance !== null && Number(form.days) > (balance?.remaining ?? 0)) ||
                 !!(form.days && selectedType && selectedType.max_days_per_request > 0 && Number(form.days) > selectedType.max_days_per_request) ||
                 !!(form.days && selectedType && selectedType.min_days_per_request > 0 && Number(form.days) < selectedType.min_days_per_request)
@@ -654,8 +937,10 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               className="flex-[2] bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
               {loading
                 ? <><ImSpinner2 className="animate-spin" size={14} /> Envoi en cours…</>
-                : needsDoc
+                : needsDocNow
                   ? "📎 Soumettre & joindre justificatif"
+                  : needsDocLater
+                  ? "📤 Soumettre la demande"
                   : "📤 Soumettre la demande"
               }
             </button>

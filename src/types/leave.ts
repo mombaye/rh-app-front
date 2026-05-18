@@ -5,21 +5,28 @@ export type ContractType = "INTERNE" | "INTERIM";
 
 // ── LeaveType ── mirrors LeaveTypeSerializer ──────────────────────────────────
 export interface LeaveType {
-  id:                       number;
-  code:                     string;
-  label:                    string;
-  is_paid:                  boolean;
-  requires_justification:   boolean;
-  justification_grace_days: number;
-  color:                    string;
-  monthly_accrual:          string;
-  max_days_per_request:     number;
-  min_days_per_request:     number;   // durée minimale légale (0 = sans minimum)
-  max_days_per_year:        number;   // plafond annuel (0 = illimité)
-  carry_forward_days:       number;   // jours reportables max (0 = pas de report)
-  exclude_weekends:         boolean;  // exclure sam/dim du décompte
-  allow_negative_balance:   boolean;  // autoriser solde négatif
-  deducts_from_balance:     boolean;  // seuls les congés annuels déduisent du solde
+  id:                        number;
+  code:                      string;
+  label:                     string;
+  is_paid:                   boolean;
+  requires_justification:    boolean;
+  justification_after_leave: boolean;  // true = demandé après le congé (mariage, baptême…), false = obligatoire avant soumission (médical)
+  justification_grace_days:  number;   // délai (jours) pour fournir le justificatif après le congé
+  color:                     string;
+  monthly_accrual:           string;
+  max_days_per_request:      number;   // 0 = illimité
+  min_days_per_request:      number;   // 0 = sans minimum
+  max_days_per_year:         number;   // 0 = illimité
+  carry_forward_days:        number;   // jours reportables max (0 = pas de report)
+  max_carry_over_days:       number;
+  exclude_weekends:          boolean;
+  allow_negative_balance:    boolean;
+  deducts_from_balance:      boolean;  // seuls les CP déduisent du solde
+  is_special_leave:          boolean;  // congé spécial Art. L147 — droit distinct, non déduit du solde CP
+  notice_days_required:      number;   // délai de prévenance (0 = aucune contrainte)
+  count_mode:                string;   // "CALENDAR" | "WORKING" | "WORKABLE"
+  count_mode_display:        string;   // libellé lisible du mode de décompte
+  seniority_bonus_enabled:   boolean;
 }
 
 // ── EmployeeMini ── mirrors EmployeeMiniSerializer ────────────────────────────

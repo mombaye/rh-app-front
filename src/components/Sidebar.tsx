@@ -18,13 +18,14 @@ import {
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useAlertes } from "@/contexts/AlertesContext";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { leaveRequestService, exitAuthorizationService } from "@/services/leaveService";
 
 type NavItem = {
   label: string;
   path: string;
   icon: React.ReactNode;
-  subItems?: { label: string; path: string; badge?: number }[];
+  subItems?: { label: string; path: string; badge?: number; badgeRed?: boolean }[];
 };
 
 export default function Sidebar() {
@@ -33,6 +34,38 @@ export default function Sidebar() {
   const { totalCount, urgentsCount } = useAlertes();
 
   const isRhManager = availableRoles.includes("manager1") || availableRoles.includes("manager2");
+
+  // ── Badge approbation RH ──────────────────────────────────────────────────
+  const [approvalPendingCount, setApprovalPendingCount] = useState(0);
+
+  const fetchApprovalPending = useCallback(async () => {
+    if (!isRhManager || !user?.employee_id) return;
+    try {
+      const [pendingMgr, pendingSecond, pendingRh, exits] = await Promise.all([
+        leaveRequestService.getAll({ manager_employee_id: user.employee_id, status: "PENDING" } as any),
+        leaveRequestService.getAll({ manager_employee_id: user.employee_id, status: "PENDING_SECOND" } as any),
+        leaveRequestService.getAll({ status: "PENDING_RH" } as any),
+        exitAuthorizationService.getAll({ manager_employee_id: user.employee_id, status: "PENDING" }),
+      ]);
+      const eid = user.employee_id;
+      const count =
+        (pendingMgr  as any[]).filter(r => r.employee.id !== eid).length +
+        (pendingSecond as any[]).filter(r => r.employee.id !== eid).length +
+        (pendingRh   as any[]).length +
+        (exits       as any[]).filter(r => r.employee?.id !== eid).length;
+      setApprovalPendingCount(count);
+    } catch {
+      // silencieux
+    }
+  }, [isRhManager, user?.employee_id]);
+
+  useEffect(() => {
+    fetchApprovalPending();
+    // Rafraîchit toutes les 60 secondes
+    const id = setInterval(fetchApprovalPending, 60_000);
+    return () => clearInterval(id);
+  }, [fetchApprovalPending]);
+  // ──────────────────────────────────────────────────────────────────────────
 
   const navItems: NavItem[] = [
     {
@@ -96,7 +129,7 @@ export default function Sidebar() {
         ...(isRhManager
           ? [
               { label: "Mes Pointages", path: "/rh/my-attendance" },
-              { label: "Approbation",   path: "/rh/my-approvals"  },
+              { label: "Approbation",   path: "/rh/my-approvals",  badge: approvalPendingCount, badgeRed: true },
             ]
           : []),
       ],
@@ -139,6 +172,7 @@ export default function Sidebar() {
 
     // Badge agrégé sur le parent (nombre d'alertes)
     const parentBadge = item.subItems?.reduce((sum, s) => sum + (s.badge ?? 0), 0) ?? 0;
+    const parentBadgeRed = item.subItems?.some(s => s.badgeRed && (s.badge ?? 0) > 0) ?? false;
 
     if (hasChildren) {
       return (
@@ -159,7 +193,7 @@ export default function Sidebar() {
               {/* Badge sur le parent quand le menu est fermé */}
               {!isOpen && parentBadge > 0 && (
                 <span className={`min-w-[20px] h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center px-1.5 leading-none ${
-                  urgentsCount > 0 ? "bg-red-500" : "bg-amber-500"
+                  parentBadgeRed || urgentsCount > 0 ? "bg-red-500" : "bg-amber-500"
                 }`}>
                   {parentBadge}
                 </span>
@@ -194,7 +228,7 @@ export default function Sidebar() {
                       <span className={`min-w-[20px] h-5 rounded-full text-[10px] font-bold flex items-center justify-center px-1.5 leading-none ${
                         isActive
                           ? "bg-white/20 text-white"
-                          : urgentsCount > 0
+                          : sub.badgeRed || urgentsCount > 0
                           ? "bg-red-100 text-red-700"
                           : "bg-amber-100 text-amber-700"
                       }`}>

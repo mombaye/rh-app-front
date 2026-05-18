@@ -65,6 +65,27 @@ export default function AnticipationLeaveForm({ onClose, onSuccess }: Props) {
       .catch(() => setBalance(null));
   }, [user?.employee_id, form.leave_type_id, form.start_date]);
 
+  // ── Durée fixe : auto-calculer end_date ──────────────────────────────────
+  useEffect(() => {
+    if (!form.leave_type_id) return;
+    if (!isFixedDuration) {
+      setForm(f => f.end_date ? { ...f, end_date: "" } : f);
+      setHolidayCheck(null);
+      return;
+    }
+    if (!form.start_date || fixedDays === null) return;
+    const endStr = _aShift(form.start_date, fixedDays - 1);
+    setForm(f => ({ ...f, end_date: endStr }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.leave_type_id, form.start_date]);
+
+  // ── Recadrer end_date si dépassement ──────────────────────────────────────
+  useEffect(() => {
+    if (isFixedDuration || !form.start_date || !form.end_date || !maxEndDate) return;
+    if (form.end_date > maxEndDate) setForm(f => ({ ...f, end_date: maxEndDate }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.start_date, form.leave_type_id]);
+
   // Calculer les jours ouvrables
   useEffect(() => {
     if (!form.start_date || !form.end_date) { setHolidayCheck(null); return; }
@@ -77,6 +98,28 @@ export default function AnticipationLeaveForm({ onClose, onSuccess }: Props) {
       .catch(() => setHolidayCheck(null))
       .finally(() => setCheckingDays(false));
   }, [form.start_date, form.end_date]);
+
+  const selectedType     = leaveTypes.find(t => String(t.id) === form.leave_type_id);
+  const maxDays          = selectedType?.max_days_per_request ?? 0;
+  const minDays          = selectedType?.min_days_per_request ?? 0;
+  const isFixedDuration  = minDays > 0 && minDays === maxDays;
+  const fixedDays        = isFixedDuration ? minDays : null;
+  const noticeDays       = selectedType?.notice_days_required ?? 0;
+  const noticeViolated   = noticeDays > 0 && !!form.start_date && (() => {
+    const minStart = new Date();
+    minStart.setDate(minStart.getDate() + noticeDays);
+    minStart.setHours(0, 0, 0, 0);
+    const [y, m, d] = form.start_date.split("-").map(Number);
+    return new Date(y, m - 1, d) < minStart;
+  })();
+
+  const _ap = (n: number) => String(n).padStart(2, "0");
+  const _aShift = (ds: string, days: number) => {
+    const [y, m, d] = ds.split("-").map(Number);
+    const r = new Date(y, m - 1, d + days);
+    return `${r.getFullYear()}-${_ap(r.getMonth() + 1)}-${_ap(r.getDate())}`;
+  };
+  const maxEndDate = (!isFixedDuration && form.start_date && maxDays > 0) ? _aShift(form.start_date, maxDays - 1) : undefined;
 
   const effectiveDays    = holidayCheck?.effective_days ?? 0;
   const projectedBalance = balance !== null && effectiveDays > 0 ? balance - effectiveDays : null;
@@ -92,6 +135,9 @@ export default function AnticipationLeaveForm({ onClose, onSuccess }: Props) {
     }
     if (!effectiveDays || effectiveDays <= 0) {
       setError("La période sélectionnée ne contient aucun jour ouvrable."); return;
+    }
+    if (noticeViolated) {
+      setError(`Ce type de congé nécessite un délai de prévenance de ${noticeDays} jour(s). Veuillez choisir une date plus tardive.`); return;
     }
     if (!user?.employee_id) { setError("Employé introuvable."); return; }
 
@@ -181,6 +227,37 @@ export default function AnticipationLeaveForm({ onClose, onSuccess }: Props) {
               </p>
             </div>
 
+            {/* Délai de prévenance */}
+            {noticeDays > 0 && (
+              <div className={`rounded-xl p-3 flex items-start gap-2 border ${noticeViolated ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"}`}>
+                <span className={`text-sm shrink-0 ${noticeViolated ? "text-red-500" : "text-blue-500"}`}>📅</span>
+                <p className={`text-xs ${noticeViolated ? "text-red-700 font-semibold" : "text-blue-700"}`}>
+                  {noticeViolated
+                    ? <>Date trop proche — ce type nécessite <strong>{noticeDays} jour(s)</strong> de prévenance minimum.</>
+                    : <>Délai de prévenance : <strong>{noticeDays} jour(s)</strong> minimum avant le début du congé.</>
+                  }
+                </p>
+              </div>
+            )}
+
+            {/* Durée fixe */}
+            {isFixedDuration && (
+              <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 flex items-start gap-2">
+                <span className="text-violet-500 text-sm shrink-0">📌</span>
+                <p className="text-xs text-violet-700">
+                  Durée légale fixe : <strong>{fixedDays} jour{(fixedDays ?? 0) > 1 ? "s" : ""}</strong>. La date de fin est calculée automatiquement.
+                </p>
+              </div>
+            )}
+
+            {/* Max jours */}
+            {!isFixedDuration && maxDays > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
+                <span className="text-blue-500 text-sm shrink-0">⏱</span>
+                <p className="text-xs text-blue-700">Durée maximale : <strong>{maxDays} jour{maxDays > 1 ? "s" : ""}</strong> par demande.</p>
+              </div>
+            )}
+
             {/* Type de congé */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -233,16 +310,33 @@ export default function AnticipationLeaveForm({ onClose, onSuccess }: Props) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Date fin <span className="text-red-400">*</span>
+                  Date fin{" "}
+                  {isFixedDuration
+                    ? <span className="text-violet-600 font-normal text-xs">· calculée ({fixedDays}j)</span>
+                    : maxEndDate
+                    ? <span className="text-blue-500 font-normal text-xs">· max {maxDays}j</span>
+                    : <span className="text-red-400">*</span>
+                  }
                 </label>
                 <input
                   type="date"
                   name="end_date"
                   value={form.end_date}
-                  onChange={handleChange}
-                  min={form.start_date}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
+                  min={isFixedDuration ? undefined : (form.start_date || undefined)}
+                  max={isFixedDuration ? undefined : maxEndDate}
+                  readOnly={isFixedDuration}
+                  onChange={isFixedDuration ? undefined : handleChange}
+                  className={`w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none transition ${
+                    isFixedDuration
+                      ? "border-violet-200 bg-violet-50 text-violet-700 cursor-not-allowed"
+                      : "border-gray-200 focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
+                  }`}
                 />
+                {!isFixedDuration && maxEndDate && form.start_date && (
+                  <p className="text-xs text-blue-400 mt-1">
+                    Limité au {new Date(maxEndDate + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} ({maxDays}j max)
+                  </p>
+                )}
               </div>
             </div>
 
@@ -260,8 +354,8 @@ export default function AnticipationLeaveForm({ onClose, onSuccess }: Props) {
                     <span className="text-sm text-blue-700 font-semibold">
                       {effectiveDays} jour{effectiveDays > 1 ? "s" : ""} de congé calculé{effectiveDays > 1 ? "s" : ""}
                     </span>
-                    {holidayCheck?.holidays_in_range > 0 && (
-                      <span className="ml-auto text-xs text-amber-600">{holidayCheck.holidays_in_range} férié(s) exclu(s)</span>
+                    {(holidayCheck?.holidays_count ?? 0) > 0 && (
+                      <span className="ml-auto text-xs text-amber-600">{holidayCheck!.holidays_count} férié(s) exclu(s)</span>
                     )}
                   </>
                 ) : (
@@ -332,7 +426,7 @@ export default function AnticipationLeaveForm({ onClose, onSuccess }: Props) {
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={loading || !form.leave_type_id || !form.start_date || !form.end_date || !effectiveDays}
+                disabled={loading || !form.leave_type_id || !form.start_date || !form.end_date || !effectiveDays || noticeViolated}
                 className="flex-[2] px-4 py-2.5 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-sm"
               >
                 {loading ? <Loader2 size={15} className="animate-spin" /> : <TrendingUp size={15} />}

@@ -882,6 +882,12 @@ function ApprovalCard({
               {req.status === "PENDING" && req.employee.n2_manager_id && (
                 <span className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold text-[10px] border border-blue-200">2 niveaux requis</span>
               )}
+              {req.status === "PENDING_RH" && (
+                <span className="px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold text-[10px] border border-purple-300">Validation RH</span>
+              )}
+              {(req.status === "PENDING" || req.status === "PENDING_SECOND") && !isHistory && (
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold text-[10px] border border-amber-200">Votre validation manager</span>
+              )}
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
@@ -991,17 +997,28 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
     setLoading(true);
     try {
       if (isRh) {
-        // RH : voit toutes les demandes en attente de validation RH + historique global
-        const [pendingRh, approved, rejected] = await Promise.all([
+        // RH : voit les PENDING_RH (validation finale RH) + les PENDING/PENDING_SECOND
+        // dont il est lui-même le manager N+1 (double casquette RH + manager).
+        // L'historique (APPROVED/REJECTED) est limité aux employés directement rattachés à lui.
+        const [pendingRh, pendingMgr, pendingSecondMgr, approved, rejected] = await Promise.all([
           leaveRequestService.getAll({ status: "PENDING_RH" } as any),
-          leaveRequestService.getAll({ status: "APPROVED"   } as any),
-          leaveRequestService.getAll({ status: "REJECTED"   } as any),
+          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING"        } as any),
+          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING_SECOND" } as any),
+          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "APPROVED"       } as any),
+          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "REJECTED"       } as any),
         ]);
-        setRequests([
+        // Fusionne en excluant ses propres demandes + déduplique par ID
+        const exclude = (list: LeaveRequest[]) =>
+          (list as LeaveRequest[]).filter(r => r.employee.id !== employeeId);
+        const merged = [
           ...(pendingRh as LeaveRequest[]),
-          ...(approved  as LeaveRequest[]),
-          ...(rejected  as LeaveRequest[]),
-        ]);
+          ...exclude(pendingMgr),
+          ...exclude(pendingSecondMgr),
+          ...exclude(approved),
+          ...exclude(rejected),
+        ];
+        const seen = new Set<number>();
+        setRequests(merged.filter(r => seen.has(r.id) ? false : !!seen.add(r.id)));
       } else {
         // Manager : voit uniquement les demandes de ses subordonnés
         const [pending, pendingSecond, approved, rejected] = await Promise.all([
@@ -1027,9 +1044,9 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const pending = requests.filter(r => isRh
-    ? r.status === "PENDING_RH"
-    : (r.status === "PENDING" || r.status === "PENDING_SECOND")
+  const pending = requests.filter(r =>
+    r.status === "PENDING" || r.status === "PENDING_SECOND" ||
+    (isRh && r.status === "PENDING_RH")
   );
   const history = requests.filter(r => r.status === "APPROVED" || r.status === "REJECTED");
 
@@ -1053,10 +1070,13 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
 
   const handleApprove = async (reqId: number) => {
     if (!employeeId) return;
+    const req = requests.find(r => r.id === reqId);
     try {
-      if (isRh) {
+      if (isRh && req?.status === "PENDING_RH") {
+        // Validation finale RH
         await leaveRequestService.hrValidate(reqId, employeeId);
       } else {
+        // Approbation manager (N+1 ou N+2) — même si l'utilisateur est RH
         await leaveRequestService.approve(reqId, { reviewer_id: employeeId });
       }
       toast.success("Demande approuvée !");
@@ -1069,10 +1089,13 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
 
   const handleReject = async (reqId: number, reason: string) => {
     if (!employeeId) return;
+    const req = requests.find(r => r.id === reqId);
     try {
-      if (isRh) {
+      if (isRh && req?.status === "PENDING_RH") {
+        // Rejet RH
         await leaveRequestService.hrReject(reqId, reason, employeeId);
       } else {
+        // Rejet manager — même si l'utilisateur est RH
         await leaveRequestService.reject(reqId, reason);
       }
       toast.success("Demande rejetée.");
@@ -1117,17 +1140,18 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
           initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-between flex-wrap gap-3 mb-6"
         >
-          <div>
-            <h1 className="text-2xl font-bold text-[#003c71] flex items-center gap-2">
-              <ClipboardCheck size={22} />
-              {isRh ? "Validation RH" : "Approbations"}
-            </h1>
-            <p className="text-gray-500 text-sm mt-0.5">
-              {isRh
-                ? "Validez définitivement les demandes de congé transmises par les managers"
-                : "Validez les demandes de congé et de sortie de vos employés"
-              }
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-[#003c71] text-white shrink-0">
+              <ClipboardCheck size={20} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-[#003c71]">
+                Mes approbations
+              </h1>
+              <p className="text-gray-500 text-sm mt-0.5">
+                Demandes en attente et historique de vos employés rattachés
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
