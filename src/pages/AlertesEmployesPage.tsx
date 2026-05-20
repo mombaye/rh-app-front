@@ -56,6 +56,7 @@ export default function AlertesEmployesPage() {
   const total      = alertes.length;
   const countPE    = alertes.filter((a) => a.type_alerte === "PERIODE_ESSAI").length;
   const countCDD   = alertes.filter((a) => a.type_alerte === "FIN_CDD").length;
+  const countStage = alertes.filter((a) => a.type_alerte === "FIN_STAGE").length;
 
   // Filtrage par type pour le panneau
   const filtered = filtre === "TOUS"
@@ -77,7 +78,7 @@ export default function AlertesEmployesPage() {
               Alertes RH
             </h1>
             <p className="text-sm text-slate-400 mt-0.5">
-              Périodes d'essai &amp; contrats CDD arrivant à échéance dans les 30 prochains jours
+              Périodes d'essai, contrats CDD &amp; fins de stage arrivant à échéance dans les 30 prochains jours
             </p>
           </div>
           <button
@@ -91,7 +92,7 @@ export default function AlertesEmployesPage() {
         </div>
 
         {/* ── KPI cards (cliquables = filtre) ── */}
-        <div className="grid grid-cols-3 gap-3 shrink-0">
+        <div className="grid grid-cols-4 gap-3 shrink-0">
           <KpiCard
             label="Total alertes"
             value={total}
@@ -105,6 +106,13 @@ export default function AlertesEmployesPage() {
             dot="bg-violet-500"
             active={filtre === "PERIODE_ESSAI"}
             onClick={() => setFiltre(filtre === "PERIODE_ESSAI" ? "TOUS" : "PERIODE_ESSAI")}
+          />
+          <KpiCard
+            label="Fin de stage"
+            value={countStage}
+            dot="bg-blue-500"
+            active={filtre === "FIN_STAGE"}
+            onClick={() => setFiltre(filtre === "FIN_STAGE" ? "TOUS" : "FIN_STAGE")}
           />
           <KpiCard
             label="Fin CDD"

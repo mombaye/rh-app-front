@@ -996,22 +996,32 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
     if (!employeeId) { setLoading(false); return; }
     setLoading(true);
     try {
+      // Helper : récupère le résultat d'une promesse settled, tableau vide si rejetée
+      const settle = <T,>(r: PromiseSettledResult<T[]>): T[] => {
+        if (r.status === "fulfilled") return r.value;
+        console.warn("[ManagerApprovalsPage] Requête échouée :", (r as PromiseRejectedResult).reason);
+        return [];
+      };
+
       if (isRh) {
         // RH : voit les PENDING_RH (validation finale RH) + les PENDING/PENDING_SECOND
         // dont il est lui-même le manager N+1 (double casquette RH + manager).
         // L'historique (APPROVED/REJECTED) est limité aux employés directement rattachés à lui.
-        const [pendingRh, pendingMgr, pendingSecondMgr, approved, rejected] = await Promise.all([
+        // On utilise allSettled : si une requête échoue en prod (permissions, filtre),
+        // les autres continuent à alimenter la page normalement.
+        const results = await Promise.allSettled([
           leaveRequestService.getAll({ status: "PENDING_RH" } as any),
           leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING"        } as any),
           leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING_SECOND" } as any),
           leaveRequestService.getAll({ manager_employee_id: employeeId, status: "APPROVED"       } as any),
           leaveRequestService.getAll({ manager_employee_id: employeeId, status: "REJECTED"       } as any),
         ]);
+        const [pendingRh, pendingMgr, pendingSecondMgr, approved, rejected] = results.map(settle) as LeaveRequest[][];
+
         // Fusionne en excluant ses propres demandes + déduplique par ID
-        const exclude = (list: LeaveRequest[]) =>
-          (list as LeaveRequest[]).filter(r => r.employee.id !== employeeId);
+        const exclude = (list: LeaveRequest[]) => list.filter(r => r.employee.id !== employeeId);
         const merged = [
-          ...(pendingRh as LeaveRequest[]),
+          ...pendingRh,
           ...exclude(pendingMgr),
           ...exclude(pendingSecondMgr),
           ...exclude(approved),
@@ -1021,21 +1031,23 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
         setRequests(merged.filter(r => seen.has(r.id) ? false : !!seen.add(r.id)));
       } else {
         // Manager : voit uniquement les demandes de ses subordonnés
-        const [pending, pendingSecond, approved, rejected] = await Promise.all([
+        const results = await Promise.allSettled([
           leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING"        } as any),
           leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING_SECOND" } as any),
           leaveRequestService.getAll({ manager_employee_id: employeeId, status: "APPROVED"       } as any),
           leaveRequestService.getAll({ manager_employee_id: employeeId, status: "REJECTED"       } as any),
         ]);
+        const [pending, pendingSecond, approved, rejected] = results.map(settle) as LeaveRequest[][];
         const exclude = (list: LeaveRequest[]) => list.filter(r => r.employee.id !== employeeId);
         setRequests([
-          ...exclude(pending as LeaveRequest[]),
-          ...exclude(pendingSecond as LeaveRequest[]),
-          ...exclude(approved as LeaveRequest[]),
-          ...exclude(rejected as LeaveRequest[]),
+          ...exclude(pending),
+          ...exclude(pendingSecond),
+          ...exclude(approved),
+          ...exclude(rejected),
         ]);
       }
-    } catch {
+    } catch (err) {
+      console.error("[ManagerApprovalsPage] Erreur inattendue :", err);
       toast.error("Erreur lors du chargement des demandes.");
     } finally {
       setLoading(false);

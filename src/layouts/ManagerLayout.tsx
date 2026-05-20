@@ -10,13 +10,16 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
   const fetchPending = useCallback(async () => {
     if (!user?.employee_id) return;
     try {
-      const [reqs, pending2, exits] = await Promise.all([
-        leaveRequestService.getAll({ manager_employee_id: user.employee_id, status: "PENDING" } as any),
+      const results = await Promise.allSettled([
+        leaveRequestService.getAll({ manager_employee_id: user.employee_id, status: "PENDING"        } as any),
         leaveRequestService.getAll({ manager_employee_id: user.employee_id, status: "PENDING_SECOND" } as any),
         exitAuthorizationService.getAll({ manager_employee_id: user.employee_id, status: "PENDING" }),
       ]);
-      const others  = reqs.filter(r => r.employee.id !== user.employee_id);
-      const others2 = pending2.filter(r => r.employee.id !== user.employee_id);
+      const get = (r: PromiseSettledResult<any[]>): any[] => r.status === "fulfilled" ? r.value : [];
+      const [reqs, pending2, exits] = results.map(get);
+      const eid = user.employee_id;
+      const others  = reqs.filter((r: any)    => r.employee?.id !== eid);
+      const others2 = pending2.filter((r: any) => r.employee?.id !== eid);
       setPendingCount(others.length + others2.length + exits.length);
     } catch {
       // silencieux

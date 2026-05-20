@@ -41,18 +41,20 @@ export default function Sidebar() {
   const fetchApprovalPending = useCallback(async () => {
     if (!isRhManager || !user?.employee_id) return;
     try {
-      const [pendingMgr, pendingSecond, pendingRh, exits] = await Promise.all([
-        leaveRequestService.getAll({ manager_employee_id: user.employee_id, status: "PENDING" } as any),
+      const results = await Promise.allSettled([
+        leaveRequestService.getAll({ manager_employee_id: user.employee_id, status: "PENDING"        } as any),
         leaveRequestService.getAll({ manager_employee_id: user.employee_id, status: "PENDING_SECOND" } as any),
         leaveRequestService.getAll({ status: "PENDING_RH" } as any),
         exitAuthorizationService.getAll({ manager_employee_id: user.employee_id, status: "PENDING" }),
       ]);
+      const get = (r: PromiseSettledResult<any[]>): any[] => r.status === "fulfilled" ? r.value : [];
+      const [pendingMgr, pendingSecond, pendingRh, exits] = results.map(get);
       const eid = user.employee_id;
       const count =
-        (pendingMgr  as any[]).filter(r => r.employee.id !== eid).length +
-        (pendingSecond as any[]).filter(r => r.employee.id !== eid).length +
-        (pendingRh   as any[]).length +
-        (exits       as any[]).filter(r => r.employee?.id !== eid).length;
+        pendingMgr.filter((r: any)  => r.employee?.id  !== eid).length +
+        pendingSecond.filter((r: any) => r.employee?.id !== eid).length +
+        pendingRh.length +
+        exits.filter((r: any) => r.employee?.id !== eid).length;
       setApprovalPendingCount(count);
     } catch {
       // silencieux

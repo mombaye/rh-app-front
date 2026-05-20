@@ -108,9 +108,15 @@ export default function AlertesPeriodeEssaiPanel({
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                       a.type_alerte === "PERIODE_ESSAI"
                         ? "bg-violet-100 text-violet-700"
+                        : a.type_alerte === "FIN_STAGE"
+                        ? "bg-blue-100 text-blue-700"
                         : "bg-orange-100 text-orange-700"
                     }`}>
-                      {a.type_alerte === "PERIODE_ESSAI" ? "Période d'essai" : "Fin CDD"}
+                      {a.type_alerte === "PERIODE_ESSAI"
+                        ? "Période d'essai"
+                        : a.type_alerte === "FIN_STAGE"
+                        ? "Fin de stage"
+                        : "Fin CDD"}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-slate-700 font-medium tabular-nums text-xs">
