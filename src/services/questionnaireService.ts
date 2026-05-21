@@ -22,6 +22,8 @@ export type QuestionnaireSortieItem = {
   date_reponse: string | null;
   raison_depart: string | null;
   raison_depart_label: string | null;
+  user_id: number | null;
+  user_is_active: boolean | null;
 };
 
 export type QuestionnaireSortieDetail = QuestionnaireSortieItem & {
@@ -60,6 +62,32 @@ export type RepondrePayload = {
   points_positifs?: string;
   points_amelioration?: string;
   commentaires?: string;
+};
+
+export type MonQuestionnaire = {
+  id: number;
+  token: string;
+  statut: StatutQuestionnaire;
+  date_envoi: string;
+  date_reponse: string | null;
+  date_sortie: string | null;
+  employee_nom: string;
+  employee_prenom: string;
+  employee_matricule: string;
+};
+
+// ── RH : activer / désactiver le compte de l'employé ─────────────────────────
+export const toggleCompteQuestionnaire = async (
+  id: number
+): Promise<{ message: string; is_active: boolean }> => {
+  const res = await api.post(`/api/questionnaires-sortie/${id}/toggle-compte/`);
+  return res.data;
+};
+
+// ── Employé : son propre questionnaire ───────────────────────────────────────
+export const getMonQuestionnaire = async (): Promise<MonQuestionnaire> => {
+  const res = await api.get("/api/questionnaires-sortie/mon-questionnaire/");
+  return res.data;
 };
 
 // ── RH : liste ───────────────────────────────────────────────────────────────

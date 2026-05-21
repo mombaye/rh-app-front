@@ -30,6 +30,7 @@ import EmployeeAttendancePage         from "@/pages/employee/EmployeeAttendanceP
 import EmployeeDocumentsPage          from "@/pages/employee/EmployeeDocumentsPage";
 import EmployeeExitAuthorizationPage  from "@/pages/employee/EmployeeExitAuthorizationPage";
 import EmployeeServiceLeavesPage      from "@/pages/employee/EmployeeServiceLeavesPage";
+import EmployeeQuestionnairePage      from "@/pages/employee/EmployeeQuestionnairePage";
 // Manager pages
 import ManagerDashboardPage       from "@/pages/manager/ManagerDashboardPage";
 import ManagerLeavesPage          from "@/pages/manager/ManagerLeavesPage";
@@ -180,6 +181,11 @@ function App() {
         <Route path="/employee/service-leaves" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeServiceLeavesPage />
+          </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/employee/questionnaire" element={
+          <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
+            <EmployeeQuestionnairePage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
 

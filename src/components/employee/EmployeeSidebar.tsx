@@ -10,6 +10,7 @@ import {
   Clock,
   FileStack,
   ClipboardCheck,
+  ClipboardList,
   LogOut,
   Users,
 } from "lucide-react";
@@ -57,6 +58,11 @@ const baseNavItems = [
     label: "Documents",
     path: "/employee/documents",
     icon: <FileStack size={20} />,
+  },
+  {
+    label: "Questionnaire de sortie",
+    path: "/employee/questionnaire",
+    icon: <ClipboardList size={20} />,
   },
 ];
 

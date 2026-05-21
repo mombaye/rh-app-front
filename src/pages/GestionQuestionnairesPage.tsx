@@ -14,12 +14,16 @@ import {
   ChevronUp,
   Loader2,
   Search,
+  UserX,
+  UserCheck,
+  AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   getQuestionnaires,
   getQuestionnaireDetail,
   envoyerQuestionnaire,
+  toggleCompteQuestionnaire,
   RAISONS_DEPART,
   type QuestionnaireSortieItem,
   type QuestionnaireSortieDetail,
@@ -450,17 +454,23 @@ function EnvoiModal({
 
 // ── Page principale ────────────────────────────────────────────────────────────
 export default function GestionQuestionnairesPage() {
-  const [items, setItems]             = useState<QuestionnaireSortieItem[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [refreshing, setRefreshing]   = useState(false);
-  const [filtre, setFiltre]           = useState<"tous" | "envoye" | "complete">("tous");
-  const [showEnvoi, setShowEnvoi]     = useState(false);
-  const [selectedId, setSelectedId]   = useState<number | null>(null);
+  const [items, setItems]               = useState<QuestionnaireSortieItem[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [refreshing, setRefreshing]     = useState(false);
+  const [filtre, setFiltre]             = useState<"tous" | "envoye" | "complete">("tous");
+  const [showEnvoi, setShowEnvoi]       = useState(false);
+  const [selectedId, setSelectedId]     = useState<number | null>(null);
+  const [toggleTarget, setToggleTarget] = useState<QuestionnaireSortieItem | null>(null);
+  const [toggling, setToggling]         = useState(false);
 
   const fetchData = async () => {
-    const statut = filtre === "tous" ? undefined : (filtre as "envoye" | "complete");
-    const res = await getQuestionnaires(statut);
-    setItems(res.results);
+    try {
+      const statut = filtre === "tous" ? undefined : (filtre as "envoye" | "complete");
+      const res = await getQuestionnaires(statut);
+      setItems(res.results ?? []);
+    } catch {
+      setItems([]);
+    }
   };
 
   useEffect(() => {
@@ -472,6 +482,21 @@ export default function GestionQuestionnairesPage() {
     setRefreshing(true);
     await fetchData();
     setRefreshing(false);
+  };
+
+  const handleToggleCompte = async () => {
+    if (!toggleTarget) return;
+    setToggling(true);
+    try {
+      const res = await toggleCompteQuestionnaire(toggleTarget.id);
+      toast.success(res.message);
+      setToggleTarget(null);
+      await fetchData();
+    } catch {
+      toast.error("Erreur lors de la mise à jour du compte.");
+    } finally {
+      setToggling(false);
+    }
   };
 
   const total    = items.length;
@@ -552,11 +577,19 @@ export default function GestionQuestionnairesPage() {
               <p className="text-slate-400 text-sm">Aucun questionnaire pour ce filtre.</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-fixed">
+              <colgroup>
+                <col className="w-[22%]" />
+                <col className="w-[14%]" />
+                <col className="w-[18%]" />
+                <col className="w-[13%]" />
+                <col className="w-[13%]" />
+                <col className="w-[20%]" />
+              </colgroup>
               <thead className="border-b border-slate-100 bg-slate-50/50">
                 <tr>
-                  {["Employé", "Matricule", "Service", "Envoyé le", "Statut", ""].map((h) => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  {["Employé", "Matricule", "Service", "Envoyé le", "Statut", "Actions"].map((h) => (
+                    <th key={h} className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       {h}
                     </th>
                   ))}
@@ -565,28 +598,48 @@ export default function GestionQuestionnairesPage() {
               <tbody className="divide-y divide-slate-50">
                 {items.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-slate-800">
+                    <td className="px-4 py-3 text-center font-medium text-slate-800 truncate">
                       {item.employee_prenom} {item.employee_nom}
                     </td>
-                    <td className="px-4 py-3 font-mono text-slate-500 text-xs">
+                    <td className="px-4 py-3 text-center font-mono text-slate-500 text-xs">
                       {item.employee_matricule}
                     </td>
-                    <td className="px-4 py-3 text-slate-600 text-xs">
+                    <td className="px-4 py-3 text-center text-slate-600 text-xs truncate">
                       {item.employee_service || "—"}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 text-xs">
+                    <td className="px-4 py-3 text-center text-slate-500 text-xs">
                       {new Date(item.date_envoi).toLocaleDateString("fr-FR")}
                     </td>
-                    <td className="px-4 py-3">
-                      <StatutBadge statut={item.statut} />
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex justify-center">
+                        <StatutBadge statut={item.statut} />
+                      </div>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => setSelectedId(item.id)}
-                        className="flex items-center gap-1 text-camublue-900 hover:underline text-xs font-medium"
-                      >
-                        <Eye size={13} /> Voir
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => setSelectedId(item.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-camublue-900 hover:bg-camublue-800 text-white text-xs font-semibold transition"
+                        >
+                          <Eye size={12} /> Voir
+                        </button>
+                        {item.user_id !== null && (
+                          <button
+                            onClick={() => setToggleTarget(item)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                              item.user_is_active === false
+                                ? "bg-emerald-100 hover:bg-emerald-200 text-emerald-700"
+                                : "bg-red-100 hover:bg-red-200 text-red-600"
+                            }`}
+                          >
+                            {item.user_is_active === false ? (
+                              <><UserCheck size={12} /> Activer</>
+                            ) : (
+                              <><UserX size={12} /> Désactiver</>
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -606,6 +659,82 @@ export default function GestionQuestionnairesPage() {
         )}
         {selectedId !== null && (
           <DetailModal id={selectedId} onClose={() => setSelectedId(null)} />
+        )}
+
+        {/* Modal confirmation toggle compte */}
+        {toggleTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6"
+            >
+              {/* Icône */}
+              <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-4 ${
+                toggleTarget.user_is_active === false ? "bg-emerald-100" : "bg-red-100"
+              }`}>
+                {toggleTarget.user_is_active === false
+                  ? <UserCheck size={22} className="text-emerald-600" />
+                  : <UserX size={22} className="text-red-500" />
+                }
+              </div>
+
+              <h2 className="text-lg font-bold text-slate-800 text-center mb-1">
+                {toggleTarget.user_is_active === false ? "Activer le compte ?" : "Désactiver le compte ?"}
+              </h2>
+
+              <p className="text-sm text-slate-500 text-center mb-2">
+                <span className="font-semibold text-slate-700">
+                  {toggleTarget.employee_prenom} {toggleTarget.employee_nom}
+                </span>{" "}
+                — {toggleTarget.employee_matricule}
+              </p>
+
+              {toggleTarget.user_is_active !== false && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-5 text-xs text-red-700">
+                  <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                  <span>
+                    L'employé ne pourra plus se connecter à la plateforme. Un message lui indiquera que son compte est désactivé.
+                  </span>
+                </div>
+              )}
+              {toggleTarget.user_is_active === false && (
+                <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-5 text-xs text-emerald-700">
+                  <UserCheck size={13} className="shrink-0 mt-0.5" />
+                  <span>
+                    L'employé pourra à nouveau se connecter à la plateforme avec ses identifiants habituels.
+                  </span>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setToggleTarget(null)}
+                  disabled={toggling}
+                  className="flex-1 border border-slate-200 text-slate-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleToggleCompte}
+                  disabled={toggling}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-sm font-semibold transition disabled:opacity-50 ${
+                    toggleTarget.user_is_active === false
+                      ? "bg-emerald-600 hover:bg-emerald-700"
+                      : "bg-red-500 hover:bg-red-600"
+                  }`}
+                >
+                  {toggling
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : toggleTarget.user_is_active === false
+                    ? <><UserCheck size={14} /> Activer</>
+                    : <><UserX size={14} /> Désactiver</>
+                  }
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </AppLayout>
