@@ -595,10 +595,12 @@ export const holidayService = {
   },
 
   /** POST /api/leaves/holidays/check-days/ */
-  checkDays: async (startDate: string, endDate: string): Promise<HolidayCheckResult> => {
+  checkDays: async (startDate: string, endDate: string, leaveTypeId?: string | number): Promise<HolidayCheckResult> => {
+    const body: Record<string, unknown> = { start_date: startDate, end_date: endDate };
+    if (leaveTypeId) body.leave_type_id = leaveTypeId;
     const res = await axios.post(
       `${API}/holidays/check-days/`,
-      { start_date: startDate, end_date: endDate },
+      body,
       { headers: getAuthHeaders() },
     );
     return res.data;

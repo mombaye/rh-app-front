@@ -189,7 +189,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         setForm((f) => ({ ...f, days: String(totalDiff) }));
 
         setCheckingDays(true);
-        holidayService.checkDays(form.start_date, form.end_date)
+        holidayService.checkDays(form.start_date, form.end_date, form.leave_type_id || undefined)
           .then((result) => {
             setHolidayCheck(result);
             // Pour les types à durée fixe (mariage, baptême…), ne pas écraser la durée légale
@@ -209,7 +209,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     } else {
       setHolidayCheck(null);
     }
-  }, [form.start_date, form.end_date]);
+  }, [form.start_date, form.end_date, form.leave_type_id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));

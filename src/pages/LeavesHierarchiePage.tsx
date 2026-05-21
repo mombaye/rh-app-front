@@ -2,15 +2,17 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings2, X, Plus } from "lucide-react";
+import { Settings2, CalendarDays, X, Plus } from "lucide-react";
 import AppLayout from "@/layouts/AppLayout";
 import HierarchyManagement from "@/components/leaves/HierarchyManagement";
 import LeaveTypeManagement from "@/components/leaves/LeaveTypeManagement";
+import LeaveCountModePanel from "@/components/leaves/LeaveCountModePanel";
 
 export default function LeavesHierarchiePage() {
   const navigate = useNavigate();
-  const [showLeaveTypes, setShowLeaveTypes] = useState(false);
-  const [triggerNew, setTriggerNew] = useState(0);
+  const [showLeaveTypes,  setShowLeaveTypes]  = useState(false);
+  const [showCountMode,   setShowCountMode]   = useState(false);
+  const [triggerNew,      setTriggerNew]      = useState(0);
 
   return (
     <AppLayout>
@@ -20,6 +22,7 @@ export default function LeavesHierarchiePage() {
           onClose={() => navigate("/leaves/internes")}
           inline={true}
           onLeaveTypes={() => setShowLeaveTypes(true)}
+          onCountMode={() => setShowCountMode(true)}
         />
 
         {/* ── Modal Types de congés ─────────────────────────────────────────── */}
@@ -37,7 +40,6 @@ export default function LeavesHierarchiePage() {
                 className="bg-slate-50 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-5xl max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Header */}
                 <div className="shrink-0 flex items-center justify-between px-6 pt-5 pb-4 bg-white rounded-t-3xl border-b border-slate-100">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-xl bg-camublue-900 text-white">
@@ -61,10 +63,48 @@ export default function LeavesHierarchiePage() {
                     </button>
                   </div>
                 </div>
-
-                {/* Contenu scrollable */}
                 <div className="flex-1 overflow-y-auto px-6 py-5">
                   <LeaveTypeManagement triggerNew={triggerNew} />
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Modal Décompte des jours ──────────────────────────────────────── */}
+        <AnimatePresence>
+          {showCountMode && (
+            <div
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+              onClick={() => setShowCountMode(false)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97, y: 20 }}
+                transition={{ duration: 0.2 }}
+                className="bg-slate-50 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="shrink-0 flex items-center justify-between px-6 pt-5 pb-4 bg-white rounded-t-3xl border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-camublue-900 text-white">
+                      <CalendarDays className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h2 className="font-black text-slate-800 text-base">Décompte des jours</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">Ouvrables · Ouvrés · Calendaires</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowCountMode(false)}
+                    className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto px-6 py-5">
+                  <LeaveCountModePanel />
                 </div>
               </motion.div>
             </div>

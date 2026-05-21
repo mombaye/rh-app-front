@@ -483,7 +483,7 @@ export const deleteBulletinLog = async (id: number) =>
 // ══════════════════════════════════════════════════════
 //  ALERTES PÉRIODE D'ESSAI
 // ══════════════════════════════════════════════════════
-export type TypeAlerte = "PERIODE_ESSAI" | "FIN_CDD" | "FIN_STAGE";
+export type TypeAlerte = "PERIODE_ESSAI" | "FIN_CDD" | "FIN_STAGE" | "FIN_INTERIM";
 
 export type AlertePeriodeEssai = {
   id: number;

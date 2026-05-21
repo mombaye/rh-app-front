@@ -19,6 +19,7 @@ const EMPTY_FORM = {
   monthly_accrual:          "0",
   max_days_per_request:     "0",
   deducts_from_balance:     false,
+  count_mode:               "WORKABLE",
 };
 
 type FormState = typeof EMPTY_FORM;
@@ -79,6 +80,7 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
       monthly_accrual:          t.monthly_accrual ?? "0",
       max_days_per_request:     String(t.max_days_per_request ?? 0),
       deducts_from_balance:     t.deducts_from_balance ?? false,
+      count_mode:               t.count_mode ?? "WORKABLE",
     });
     setFormError(null);
     setShowForm(true);
@@ -116,6 +118,7 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
         monthly_accrual:          parseFloat(form.monthly_accrual) || 0,
         max_days_per_request:     parseInt(form.max_days_per_request) || 0,
         deducts_from_balance:     form.deducts_from_balance,
+        count_mode:               form.count_mode,
       };
       if (editTarget) {
         await leaveTypeService.update(editTarget.id, payload);

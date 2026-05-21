@@ -707,7 +707,7 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                 <div className="grid grid-cols-2 gap-5">
                   <F label="Type de contrat" req error={hasFieldError("type_contrat")}>
                     <Sel name="type_contrat" value={form.type_contrat} onChange={ch} ph="— Sélectionner —"
-                      opts={[{v:"CDI",l:"CDI"},{v:"CDD",l:"CDD"},{v:"STAGE",l:"Stage"},{v:"INTERIM",l:"Intérim"}]} />
+                      opts={[{v:"CDI",l:"CDI"},{v:"CDD",l:"CDD"},{v:"STAGE",l:"Stage"},{v:"INTERIM",l:"Intérim"},{v:"CONSULTANCE",l:"Consultance"}]} />
                     {hasFieldError("type_contrat") && (
                       <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle className="h-3 w-3" />Le type de contrat est requis</p>
                     )}
@@ -721,8 +721,13 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                   <F label="Date d'embauche">
                     <Input type="date" name="date_embauche" value={form.date_embauche} onChange={ch} className={inputCls()} />
                   </F>
-                  {(form.type_contrat === "CDD" || form.type_contrat === "STAGE") && (
-                    <F label={`Date de fin ${form.type_contrat === "STAGE" ? "stage" : "CDD"}`}>
+                  {(form.type_contrat === "CDD" || form.type_contrat === "STAGE" || form.type_contrat === "INTERIM" || form.type_contrat === "CONSULTANCE") && (
+                    <F label={
+                      form.type_contrat === "STAGE"       ? "Date de fin de stage"
+                      : form.type_contrat === "INTERIM"   ? "Fin de mission / contrat"
+                      : form.type_contrat === "CONSULTANCE" ? "Fin de consultance"
+                      : "Date de fin de CDD"
+                    }>
                       <Input type="date" name="date_fin_cdd" value={form.date_fin_cdd} onChange={ch} className={inputCls()} />
                     </F>
                   )}

@@ -48,9 +48,10 @@ export default function AlerteEmployeeDetailModal({ alerte, onClose }: Props) {
 
   if (!alerte) return null;
 
-  const badge    = urgencyBadge(alerte.jours_restants);
-  const isPE     = alerte.type_alerte === "PERIODE_ESSAI";
-  const isStage  = alerte.type_alerte === "FIN_STAGE";
+  const badge     = urgencyBadge(alerte.jours_restants);
+  const isPE      = alerte.type_alerte === "PERIODE_ESSAI";
+  const isStage   = alerte.type_alerte === "FIN_STAGE";
+  const isInterim = alerte.type_alerte === "FIN_INTERIM";
   const initials = `${alerte.prenom?.[0] ?? ""}${alerte.nom?.[0] ?? ""}`.toUpperCase();
 
   return (
@@ -97,25 +98,28 @@ export default function AlerteEmployeeDetailModal({ alerte, onClose }: Props) {
 
             {/* ── Bloc alerte ── */}
             <div className={`flex items-start gap-4 rounded-xl border p-4 ${
-              isPE      ? "bg-violet-50 border-violet-100"
-              : isStage ? "bg-blue-50 border-blue-100"
-              :           "bg-orange-50 border-orange-100"
+              isPE       ? "bg-violet-50 border-violet-100"
+              : isStage  ? "bg-blue-50 border-blue-100"
+              : isInterim? "bg-yellow-50 border-yellow-100"
+              :             "bg-orange-50 border-orange-100"
             }`}>
               <div className={`p-2.5 rounded-xl shrink-0 ${
-                isPE ? "bg-violet-100" : isStage ? "bg-blue-100" : "bg-orange-100"
+                isPE ? "bg-violet-100" : isStage ? "bg-blue-100" : isInterim ? "bg-yellow-100" : "bg-orange-100"
               }`}>
                 {isPE
                   ? <FaHourglass className="text-violet-600" size={16} />
                   : isStage
                   ? <FaFileContract className="text-blue-600" size={16} />
+                  : isInterim
+                  ? <FaFileContract className="text-yellow-600" size={16} />
                   : <FaFileContract className="text-orange-600" size={16} />
                 }
               </div>
               <div className="flex-1 min-w-0">
                 <p className={`text-sm font-bold ${
-                  isPE ? "text-violet-700" : isStage ? "text-blue-700" : "text-orange-700"
+                  isPE ? "text-violet-700" : isStage ? "text-blue-700" : isInterim ? "text-yellow-700" : "text-orange-700"
                 }`}>
-                  {isPE ? "Fin de période d'essai" : isStage ? "Fin de stage" : "Fin de contrat CDD"}
+                  {isPE ? "Fin de période d'essai" : isStage ? "Fin de stage" : isInterim ? "Fin de mission intérimaire" : "Fin de contrat CDD"}
                 </p>
                 <p className="text-sm text-slate-700 mt-0.5">
                   Le <span className="font-semibold">{fmtDate(alerte.date_fin)}</span>

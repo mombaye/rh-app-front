@@ -1,5 +1,5 @@
 export type EmployeeStatus = 'ACTIVE' | 'EXITED' | 'SUSPENDED';
-export type ContractType   = 'CDI' | 'CDD' | 'STAGE' | 'INTERIM';
+export type ContractType   = 'CDI' | 'CDD' | 'STAGE' | 'INTERIM' | 'CONSULTANCE';
 export type SexeType       = 'H' | 'F';
 export type TypePiece      = 'CNI' | 'PASSEPORT' | 'SEJOUR' | 'AUTRE';
 export type SituationMatrimoniale = 'celibataire' | 'marie' | 'concubinage' | 'divorce' | 'separe' | 'veuf';

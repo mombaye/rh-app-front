@@ -1,9 +1,11 @@
-import { useState } from "react";
-import { Search } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import { FaBell } from "react-icons/fa";
 import type { AlertePeriodeEssai } from "@/services/employeeService";
 import AlerteEmployeeDetailModal from "./AlerteEmployeeDetailModal";
+
+const PAGE_SIZE = 10;
 
 function fmtDate(iso: string): string {
   const [y, m, d] = iso.split("-");
@@ -25,6 +27,10 @@ export default function AlertesPeriodeEssaiPanel({
 }) {
   const [search,   setSearch]   = useState("");
   const [selected, setSelected] = useState<AlertePeriodeEssai | null>(null);
+  const [page,     setPage]     = useState(1);
+
+  // Réinitialiser la page quand la liste ou la recherche change
+  useEffect(() => { setPage(1); }, [alertes, search]);
 
   const q = search.trim().toLowerCase();
   const rows = q
@@ -35,6 +41,10 @@ export default function AlertesPeriodeEssaiPanel({
         (a.service || "").toLowerCase().includes(q)
       )
     : alertes;
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage   = Math.min(page, totalPages);
+  const paged      = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   if (loading) {
     return (
@@ -78,59 +88,118 @@ export default function AlertesPeriodeEssaiPanel({
             </p>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10">
-              <tr>
-                {["Employé", "Matricule", "Fonction", "Service", "Type", "Date fin", "Jours"].map((h) => (
-                  <th
-                    key={h}
-                    className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {rows.map((a) => (
-                <tr
-                  key={`${a.id}-${a.type_alerte}`}
-                  onClick={() => setSelected(a)}
-                  className="hover:bg-slate-50/50 transition-colors cursor-pointer"
-                >
-                  <td className="px-4 py-3 font-medium text-slate-800">
-                    {a.prenom} {a.nom}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-slate-500 text-xs">{a.matricule}</td>
-                  <td className="px-4 py-3 text-slate-600 text-xs">{a.fonction || "—"}</td>
-                  <td className="px-4 py-3 text-slate-600 text-xs">{a.service || "—"}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                      a.type_alerte === "PERIODE_ESSAI"
-                        ? "bg-violet-100 text-violet-700"
-                        : a.type_alerte === "FIN_STAGE"
-                        ? "bg-blue-100 text-blue-700"
-                        : "bg-orange-100 text-orange-700"
-                    }`}>
-                      {a.type_alerte === "PERIODE_ESSAI"
-                        ? "Période d'essai"
-                        : a.type_alerte === "FIN_STAGE"
-                        ? "Fin de stage"
-                        : "Fin CDD"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-700 font-medium tabular-nums text-xs">
-                    {fmtDate(a.date_fin)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${urgencyBadge(a.jours_restants)}`}>
-                      {a.jours_restants}j
-                    </span>
-                  </td>
+          <>
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10">
+                <tr>
+                  {["Employé", "Matricule", "Fonction", "Service", "Type", "Date fin", "Jours"].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide"
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {paged.map((a) => (
+                  <tr
+                    key={`${a.id}-${a.type_alerte}`}
+                    onClick={() => setSelected(a)}
+                    className="hover:bg-slate-50/50 transition-colors cursor-pointer"
+                  >
+                    <td className="px-4 py-3 font-medium text-slate-800">
+                      {a.prenom} {a.nom}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-slate-500 text-xs">{a.matricule}</td>
+                    <td className="px-4 py-3 text-slate-600 text-xs">{a.fonction || "—"}</td>
+                    <td className="px-4 py-3 text-slate-600 text-xs">{a.service || "—"}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                        a.type_alerte === "PERIODE_ESSAI"
+                          ? "bg-violet-100 text-violet-700"
+                          : a.type_alerte === "FIN_STAGE"
+                          ? "bg-blue-100 text-blue-700"
+                          : a.type_alerte === "FIN_INTERIM"
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-orange-100 text-orange-700"
+                      }`}>
+                        {a.type_alerte === "PERIODE_ESSAI"
+                          ? "Période d'essai"
+                          : a.type_alerte === "FIN_STAGE"
+                          ? "Fin de stage"
+                          : a.type_alerte === "FIN_INTERIM"
+                          ? "Fin intérim"
+                          : "Fin CDD"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-700 font-medium tabular-nums text-xs">
+                      {fmtDate(a.date_fin)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${urgencyBadge(a.jours_restants)}`}>
+                        {a.jours_restants}j
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* ── Pagination ── */}
+            {totalPages > 1 && (
+              <div className="shrink-0 flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-white">
+                <span className="text-xs text-slate-400">
+                  Page <span className="font-semibold text-slate-600">{safePage}</span> sur{" "}
+                  <span className="font-semibold text-slate-600">{totalPages}</span>
+                  <span className="ml-2 text-slate-300">·</span>
+                  <span className="ml-2">{rows.length} résultat{rows.length > 1 ? "s" : ""}</span>
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={safePage === 1}
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  {/* Numéros de page */}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                    .reduce<(number | "…")[]>((acc, p, idx, arr) => {
+                      if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) acc.push("…");
+                      acc.push(p);
+                      return acc;
+                    }, [])
+                    .map((item, idx) =>
+                      item === "…" ? (
+                        <span key={`sep-${idx}`} className="px-1 text-xs text-slate-400">…</span>
+                      ) : (
+                        <button
+                          key={item}
+                          onClick={() => setPage(item as number)}
+                          className={`min-w-[28px] h-7 rounded-lg text-xs font-semibold transition ${
+                            safePage === item
+                              ? "bg-camublue-900 text-white"
+                              : "border border-slate-200 text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          {item}
+                        </button>
+                      )
+                    )}
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={safePage === totalPages}
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

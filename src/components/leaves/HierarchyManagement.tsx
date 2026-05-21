@@ -6,7 +6,7 @@ import {
   Building2, Users, Plus, Pencil, Trash2,
   Search, ChevronDown, ChevronUp, X, Check, AlertCircle,
   GitBranch, UserCheck, RefreshCw, Loader2,
-  FolderTree, ArrowLeft, Eye, EyeOff, Settings2,
+  FolderTree, ArrowLeft, Eye, EyeOff, Settings2, CalendarDays,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Employee } from "@/types/employee";
@@ -25,7 +25,7 @@ const SECTIONS: { id: HierarchySection; label: string; description: string; Icon
 ];
 
 // ─── Component principal (Modal) ────────────────────────────────────────────
-export default function HierarchyManagement({ open, onClose, inline, onLeaveTypes }: { open: boolean; onClose: () => void; inline?: boolean; onLeaveTypes?: () => void }) {
+export default function HierarchyManagement({ open, onClose, inline, onLeaveTypes, onCountMode }: { open: boolean; onClose: () => void; inline?: boolean; onLeaveTypes?: () => void; onCountMode?: () => void }) {
   const [activeSection, setActiveSection] = useState<HierarchySection | null>(null);
 
   if (!inline && !open) return null;
@@ -68,13 +68,22 @@ export default function HierarchyManagement({ open, onClose, inline, onLeaveType
               )}
             </div>
           </div>
-          {onLeaveTypes && (
-            <button onClick={onLeaveTypes}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-camublue-300 text-sm font-semibold transition mr-1">
-              <Settings2 size={15} />
-              <span className="hidden sm:inline">Types de congés</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2 mr-1">
+            {onCountMode && (
+              <button onClick={onCountMode}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold transition shadow-sm">
+                <CalendarDays size={15} />
+                <span className="hidden sm:inline">Décompte</span>
+              </button>
+            )}
+            {onLeaveTypes && (
+              <button onClick={onLeaveTypes}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold transition shadow-sm">
+                <Settings2 size={15} />
+                <span className="hidden sm:inline">Types de congés</span>
+              </button>
+            )}
+          </div>
           <button onClick={handleClose}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
             <X size={18} />
