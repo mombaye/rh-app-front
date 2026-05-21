@@ -9,13 +9,8 @@ import * as XLSX from "xlsx";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import AppLayout from "@/layouts/AppLayout";
-import { leaveBalanceService } from "@/services/leaveService";
+import { leaveBalanceService, migrationSessionService } from "@/services/leaveService";
 import { MigrationImportResult, MigrationImportRow } from "@/types/leave";
-
-// ─── Clés localStorage ────────────────────────────────────────────────────────
-const LS_ROWS   = "migration_rows";
-const LS_FNAME  = "migration_filename";
-const LS_SYNCED = "migration_synced";
 
 // ─── Badge de détection ───────────────────────────────────────────────────────
 function MatchBadge({ row }: { row: MigrationImportRow }) {
@@ -98,20 +93,10 @@ export default function LeavesMigrationPage() {
   const currentYear = new Date().getFullYear();
 
   // ── Restauration depuis localStorage ──────────────────────────────────────
-  const [rows,        setRows]        = useState<EditableRow[]>(() => {
-    try {
-      const saved = localStorage.getItem(LS_ROWS);
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
-
-  const [fileName,    setFileName]    = useState<string>(() =>
-    localStorage.getItem(LS_FNAME) ?? ""
-  );
-
-  const [synced,      setSynced]      = useState<boolean>(() =>
-    localStorage.getItem(LS_SYNCED) === "true"
-  );
+  const [rows,        setRows]        = useState<EditableRow[]>([]);
+  const [fileName,    setFileName]    = useState<string>("");
+  const [synced,      setSynced]      = useState<boolean>(false);
+  const [sessionLoading, setSessionLoading] = useState(true);
 
   const [loadingPrev,   setLoadingPrev]   = useState(false);
   const [loadingSync,   setLoadingSync]   = useState(false);
@@ -120,26 +105,49 @@ export default function LeavesMigrationPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // ── Persistance automatique dans localStorage ──────────────────────────────
+  // ── Chargement de la session au montage (serveur en priorité, localStorage en fallback) ──
   useEffect(() => {
-    if (rows.length > 0) {
-      localStorage.setItem(LS_ROWS, JSON.stringify(rows));
-    } else {
-      localStorage.removeItem(LS_ROWS);
-    }
-  }, [rows]);
-
-  useEffect(() => {
-    if (fileName) {
-      localStorage.setItem(LS_FNAME, fileName);
-    } else {
-      localStorage.removeItem(LS_FNAME);
-    }
-  }, [fileName]);
-
-  useEffect(() => {
-    localStorage.setItem(LS_SYNCED, String(synced));
-  }, [synced]);
+    migrationSessionService.get(currentYear)
+      .then(session => {
+        if (session && session.rows.length > 0) {
+          // Données serveur → les utiliser
+          setFileName(session.filename);
+          setSynced(session.synced);
+          setRows(session.rows.map((r: any) => ({
+            ...r,
+            edited: r.edited ?? r.new_remaining ?? r.current_remaining ?? 0,
+          })));
+        } else {
+          // Pas de session serveur → tenter de récupérer le localStorage existant et le migrer
+          try {
+            const lsRows   = localStorage.getItem("migration_rows");
+            const lsFname  = localStorage.getItem("migration_filename");
+            const lsSynced = localStorage.getItem("migration_synced");
+            if (lsRows && lsFname) {
+              const parsed: EditableRow[] = JSON.parse(lsRows);
+              const syncedVal = lsSynced === "true";
+              setFileName(lsFname);
+              setSynced(syncedVal);
+              setRows(parsed);
+              // Migrer vers le serveur et nettoyer localStorage
+              migrationSessionService.save({
+                year: currentYear,
+                filename: lsFname,
+                synced: syncedVal,
+                rows: parsed,
+              }).then(() => {
+                localStorage.removeItem("migration_rows");
+                localStorage.removeItem("migration_filename");
+                localStorage.removeItem("migration_synced");
+              }).catch(() => {});
+            }
+          } catch { /* localStorage invalide, on ignore */ }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setSessionLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Chargement effectif d'un fichier ────────────────────────────────────────
   const loadFile = async (f: File) => {
@@ -158,6 +166,13 @@ export default function LeavesMigrationPage() {
         edited: r.new_remaining ?? r.current_remaining ?? 0,
       }));
       setRows(newRows);
+      // Sauvegarder la session sur le serveur (visible pour tous les utilisateurs)
+      migrationSessionService.save({
+        year: currentYear,
+        filename: f.name,
+        synced: false,
+        rows: newRows,
+      }).catch(() => {});
       if (res.errors_count > 0) {
         toast(`${res.processed} employé(s) détecté(s) · ${res.errors_count} ligne(s) non reconnue(s)`, { icon: "⚠️" });
       } else {
@@ -237,6 +252,13 @@ export default function LeavesMigrationPage() {
       setShowSyncBanner(true);
       setTimeout(() => setShowSyncBanner(false), 3000);
       toast.success("Synchronisation réussie — soldes mis à jour.");
+      // Mettre à jour la session serveur avec synced=true
+      migrationSessionService.save({
+        year: currentYear,
+        filename: fileName,
+        synced: true,
+        rows,
+      }).catch(() => {});
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors de la synchronisation.");
     } finally {
@@ -250,10 +272,8 @@ export default function LeavesMigrationPage() {
     setRows([]);
     setSynced(false);
     setSearch("");
-    localStorage.removeItem(LS_ROWS);
-    localStorage.removeItem(LS_FNAME);
-    localStorage.removeItem(LS_SYNCED);
     if (inputRef.current) inputRef.current.value = "";
+    migrationSessionService.clear(currentYear).catch(() => {});
   };
 
   const downloadTemplate = () => {
@@ -280,6 +300,16 @@ export default function LeavesMigrationPage() {
   return (
     <AppLayout>
       <div className="px-4 md:px-6 pb-10">
+
+        {/* ── Chargement initial session ───────────────────────────────────── */}
+        {sessionLoading && (
+          <div className="flex items-center justify-center py-24 gap-3">
+            <ImSpinner2 className="animate-spin text-[#003c71]" size={28} />
+            <p className="text-gray-500 text-sm font-medium">Chargement de la session…</p>
+          </div>
+        )}
+
+        {!sessionLoading && (<>
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <motion.div
@@ -552,6 +582,8 @@ export default function LeavesMigrationPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        </>)}
       </div>
 
       {/* ── Modal confirmation remplacement ─────────────────────────────── */}

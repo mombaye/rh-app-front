@@ -124,9 +124,9 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-4 w-full flex justify-end">
-              <a href="#" className="text-xs text-slate-400 hover:text-camublue-900 transition">
+              <Link to="/forgot-password" className="text-xs text-slate-400 hover:text-camublue-900 transition">
                 Mot de passe oublié ?
-              </a>
+              </Link>
             </div>
 
             <footer className="mt-8 text-slate-300 text-xs text-center">

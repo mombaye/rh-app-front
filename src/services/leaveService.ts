@@ -185,6 +185,43 @@ export const leaveBalanceService = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MigrationSession  →  /api/leaves/migration-session/
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface MigrationSessionData {
+  year:       number;
+  filename:   string;
+  synced:     boolean;
+  rows:       any[];
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export const migrationSessionService = {
+  get: async (year: number): Promise<MigrationSessionData | null> => {
+    const res = await axios.get(`${API}/migration-session/`, {
+      headers: getAuthHeaders(),
+      params: { year },
+    });
+    return res.data;
+  },
+
+  save: async (data: { year: number; filename: string; synced: boolean; rows: any[] }): Promise<MigrationSessionData> => {
+    const res = await axios.post(`${API}/migration-session/`, data, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
+
+  clear: async (year: number): Promise<void> => {
+    await axios.delete(`${API}/migration-session/`, {
+      headers: getAuthHeaders(),
+      params: { year },
+    });
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // LeaveRequest  →  /api/leaves/requests/
 // ─────────────────────────────────────────────────────────────────────────────
 export const leaveRequestService = {

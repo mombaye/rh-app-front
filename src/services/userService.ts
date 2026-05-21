@@ -1,4 +1,7 @@
-import api from "@/api/axios"
+import api from "@/api/axios";
+import axios from "axios";
+
+const BASE_URL = import.meta.env.VITE_API_URL ?? "";
 
 
 // Appel l'API login et retourne access/refresh tokens
@@ -47,5 +50,27 @@ export const updateAdminUser = async (
   data: { is_global_admin?: boolean; is_planning_manager?: boolean; is_active?: boolean }
 ) => {
   const res = await api.patch(`/api/users/admin/users/${userId}/`, data);
+  return res.data;
+};
+
+// ── Mot de passe oublié (sans auth) ──────────────────────────────────────────
+const publicApi = axios.create({ baseURL: BASE_URL });
+
+export const forgotPassword = async (email: string): Promise<{ detail: string; email: string }> => {
+  const res = await publicApi.post("/api/auth/forgot-password/", { email });
+  return res.data;
+};
+
+export const verifyOtp = async (email: string, code: string): Promise<{ detail: string }> => {
+  const res = await publicApi.post("/api/auth/verify-otp/", { email, code });
+  return res.data;
+};
+
+export const resetPasswordOtp = async (
+  email: string,
+  code: string,
+  new_password: string
+): Promise<{ detail: string }> => {
+  const res = await publicApi.post("/api/auth/reset-password/", { email, code, new_password });
   return res.data;
 };

@@ -51,6 +51,7 @@ import RhDocumentsPage            from "@/pages/rh/RhDocumentsPage";
 import RhExitAuthorizationPage    from "@/pages/rh/RhExitAuthorizationPage";
 import RhMyExitAuthorizationPage  from "@/pages/rh/RhMyExitAuthorizationPage";
 import RhAnticipationPage         from "@/pages/rh/RhAnticipationPage";
+import ForgotPasswordPage         from "@/pages/ForgotPasswordPage";
 
 // ── Helpers de rôles basés sur activeRole ────────────────────────────────────
 
@@ -133,6 +134,7 @@ function App() {
 
         {/* ── Auth ─────────────────────────────────────────────── */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route
           path="/change-password"
           element={

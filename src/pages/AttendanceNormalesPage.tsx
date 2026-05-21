@@ -12,10 +12,12 @@ import {
   sendAttendanceAlert,
 } from "@/services/attendanceService";
 import { getEmployees } from "@/services/employeeService";
+import { exitAuthorizationService } from "@/services/leaveService";
 import type {
   DailyStatsResponse, WeeklyStatsResponse, MonthlyStatsResponse,
   EmployeePeriodDetailResponse, DayDetail, ShiftTeamKey,
 } from "@/types/attendance";
+import type { ExitAuthorization } from "@/types/leave";
 import type { Employee } from "@/types/employee";
 import * as XLSX from "xlsx";
 
@@ -961,6 +963,7 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
 }) {
   const [pointages, setPointages] = useState<Pointage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [exitAuths, setExitAuths] = useState<ExitAuthorization[]>([]);
   const [selWeek, setSelWeek] = useState(initialWeek);
   const [periodType, setPeriodType] = useState<"weekly" | "monthly">("weekly");
   const [selMonth, setSelMonth] = useState(() => {
@@ -1008,6 +1011,14 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
   }, [employeeId, selWeek, selMonth, periodType, open]);
 
   useEffect(() => { fetchPointages(); }, [fetchPointages]);
+
+  // Charger les autorisations de sortie de l'employé
+  useEffect(() => {
+    if (!employeeId || !open) { setExitAuths([]); return; }
+    exitAuthorizationService.getByEmployee(employeeId)
+      .then(setExitAuths)
+      .catch(() => setExitAuths([]));
+  }, [employeeId, open]);
 
   const handleExport = () => {
     if (!pointages.length) return;
@@ -1091,6 +1102,10 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
                       : p.status === "on_leave"  ? "bg-sky-50 border-sky-100"
                       : p.status === "on_mission"? "bg-purple-50 border-purple-100"
                       :                            "bg-rose-50 border-rose-100";
+                    const exitAuth = exitAuths.find(ea =>
+                      ea.datetime_exit.startsWith(p.date) &&
+                      ea.status !== "CANCELLED" && ea.status !== "REJECTED"
+                    );
                     return (
                       <div key={i} className={`rounded-xl border p-3 ${rowBg}`}>
                         <div className="hidden sm:grid grid-cols-5 gap-4 items-center">
@@ -1098,14 +1113,31 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
                           <span className="text-sm text-slate-600">
                             {new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}
                           </span>
-                          <span><StatusPill status={p.status} /></span>
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            <StatusPill status={p.status} />
+                            {exitAuth && (
+                              <span
+                                title={`Sortie autorisée · ${exitAuth.motif}`}
+                                className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-md leading-none"
+                              >
+                                Sortie
+                              </span>
+                            )}
+                          </span>
                           <span className={`text-sm ${p.in_time ? "text-slate-700" : "text-slate-400"}`}>{p.in_time ? formatTime(p.in_time) : "—"}</span>
                           <span className={`text-sm ${p.out_time ? "text-slate-700" : "text-slate-400"}`}>{p.out_time ? formatTime(p.out_time) : "—"}</span>
                         </div>
                         {/* Mobile */}
-                        <div className="sm:hidden flex items-center justify-between gap-2">
+                        <div className="sm:hidden flex items-center justify-between gap-2 flex-wrap">
                           <span className="font-semibold text-sm text-slate-800">{p.day} · {new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"short"})}</span>
-                          <StatusPill status={p.status} />
+                          <div className="flex items-center gap-1">
+                            <StatusPill status={p.status} />
+                            {exitAuth && (
+                              <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-md leading-none">
+                                Sortie
+                              </span>
+                            )}
+                          </div>
                           <span className="text-xs text-slate-500">{p.in_time ? formatTime(p.in_time) : "—"} → {p.out_time ? formatTime(p.out_time) : "—"}</span>
                         </div>
                       </div>
