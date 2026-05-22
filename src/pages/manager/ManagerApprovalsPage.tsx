@@ -928,6 +928,12 @@ function ApprovalCard({
                 {req.reviewed_at && ` · ${fmt(req.reviewed_at.slice(0, 10))}`}
               </p>
             )}
+            {isHistory && req.status === "REVOKED" && (req as any).revoke_reason && (
+              <div className="flex items-start gap-1.5 mt-1.5">
+                <AlertCircle size={11} className="text-purple-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-purple-600">Révoqué : {(req as any).revoke_reason}</p>
+              </div>
+            )}
           </div>
 
           {/* Actions */}
@@ -977,14 +983,15 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
   const { user } = useAuth();
   const employeeId = user?.employee_id;
 
-  const [sectionTab,   setSectionTab]   = useState<SectionTab>("leaves");
-  const [tab,          setTab]          = useState<Tab>("pending");
-  const [requests,     setRequests]     = useState<LeaveRequest[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [search,       setSearch]       = useState("");
-  const [filterType,   setFilterType]   = useState("ALL");
-  const [currentPage,  setCurrentPage]  = useState(1);
-  const [showExport,   setShowExport]   = useState(false);
+  const [sectionTab,    setSectionTab]    = useState<SectionTab>("leaves");
+  const [tab,           setTab]           = useState<Tab>("pending");
+  const [requests,      setRequests]      = useState<LeaveRequest[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [search,        setSearch]        = useState("");
+  const [filterType,    setFilterType]    = useState("ALL");
+  const [filterStatus,  setFilterStatus]  = useState("ALL");
+  const [currentPage,   setCurrentPage]   = useState(1);
+  const [showExport,    setShowExport]    = useState(false);
 
   const [detailTarget,     setDetailTarget]     = useState<LeaveRequest | null>(null);
   const [approveTarget,    setApproveTarget]    = useState<LeaveRequest | null>(null);
@@ -1003,49 +1010,25 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
         return [];
       };
 
-      if (isRh) {
-        // RH : voit les PENDING_RH (validation finale RH) + les PENDING/PENDING_SECOND
-        // dont il est lui-même le manager N+1 (double casquette RH + manager).
-        // L'historique (APPROVED/REJECTED) est limité aux employés directement rattachés à lui.
-        // On utilise allSettled : si une requête échoue en prod (permissions, filtre),
-        // les autres continuent à alimenter la page normalement.
-        const results = await Promise.allSettled([
-          leaveRequestService.getAll({ status: "PENDING_RH" } as any),
-          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING"        } as any),
-          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING_SECOND" } as any),
-          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "APPROVED"       } as any),
-          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "REJECTED"       } as any),
-        ]);
-        const [pendingRh, pendingMgr, pendingSecondMgr, approved, rejected] = results.map(settle) as LeaveRequest[][];
+      // Un seul appel sans filtre de statut : le backend retourne
+      // toutes les demandes liées à ce manager (en attente + historique).
+      // Le tri pending/historique est fait côté frontend.
+      const settled = await Promise.allSettled([
+        // Toutes les demandes des subordonnés (pending + historique)
+        leaveRequestService.getAll({ manager_employee_id: employeeId } as any),
+        // RH : en plus, les PENDING_RH de toute l'entreprise
+        ...(isRh ? [leaveRequestService.getAll({ status: "PENDING_RH" } as any)] : []),
+      ]);
 
-        // Fusionne en excluant ses propres demandes + déduplique par ID
-        const exclude = (list: LeaveRequest[]) => list.filter(r => r.employee.id !== employeeId);
-        const merged = [
-          ...pendingRh,
-          ...exclude(pendingMgr),
-          ...exclude(pendingSecondMgr),
-          ...exclude(approved),
-          ...exclude(rejected),
-        ];
-        const seen = new Set<number>();
-        setRequests(merged.filter(r => seen.has(r.id) ? false : !!seen.add(r.id)));
-      } else {
-        // Manager : voit uniquement les demandes de ses subordonnés
-        const results = await Promise.allSettled([
-          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING"        } as any),
-          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "PENDING_SECOND" } as any),
-          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "APPROVED"       } as any),
-          leaveRequestService.getAll({ manager_employee_id: employeeId, status: "REJECTED"       } as any),
-        ]);
-        const [pending, pendingSecond, approved, rejected] = results.map(settle) as LeaveRequest[][];
-        const exclude = (list: LeaveRequest[]) => list.filter(r => r.employee.id !== employeeId);
-        setRequests([
-          ...exclude(pending),
-          ...exclude(pendingSecond),
-          ...exclude(approved),
-          ...exclude(rejected),
-        ]);
-      }
+      const allData = settled.flatMap(r => settle(r as PromiseSettledResult<LeaveRequest[]>));
+
+      // Exclure ses propres demandes + dédupliquer par ID
+      const seen = new Set<number>();
+      setRequests(
+        allData
+          .filter(r => r.employee.id !== employeeId)
+          .filter(r => seen.has(r.id) ? false : !!seen.add(r.id))
+      );
     } catch (err) {
       console.error("[ManagerApprovalsPage] Erreur inattendue :", err);
       toast.error("Erreur lors du chargement des demandes.");
@@ -1056,11 +1039,12 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const pending = requests.filter(r =>
-    r.status === "PENDING" || r.status === "PENDING_SECOND" ||
-    (isRh && r.status === "PENDING_RH")
-  );
-  const history = requests.filter(r => r.status === "APPROVED" || r.status === "REJECTED");
+  const PENDING_STATUSES = ["PENDING", "PENDING_SECOND", ...(isRh ? ["PENDING_RH"] : [])] as string[];
+
+  const pending = requests.filter(r => PENDING_STATUSES.includes(r.status));
+  // Historique = TOUTES les demandes des subordonnés (tous statuts)
+  // comme /employee/leaves montre toutes les demandes d'un employé.
+  const history = requests;
 
   const source = tab === "pending" ? pending : history;
 
@@ -1069,8 +1053,9 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
       r.employee.full_name, r.employee.matricule,
       r.employee.service, r.leave_type.label,
     ].some(v => v?.toLowerCase().includes(search.toLowerCase()));
-    const matchType = filterType === "ALL" || r.leave_type.code === filterType;
-    return matchSearch && matchType;
+    const matchType   = filterType   === "ALL" || r.leave_type.code === filterType;
+    const matchStatus = filterStatus === "ALL" || r.status === filterStatus;
+    return matchSearch && matchType && matchStatus;
   });
 
   const leaveTypes = [...new Map(requests.map(r => [r.leave_type.code, r.leave_type])).values()];
@@ -1078,7 +1063,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  const changeTab = (t: Tab) => { setTab(t); setCurrentPage(1); setSearch(""); setFilterType("ALL"); };
+  const changeTab = (t: Tab) => { setTab(t); setCurrentPage(1); setSearch(""); setFilterType("ALL"); setFilterStatus("ALL"); };
 
   const handleApprove = async (reqId: number) => {
     if (!employeeId) return;
@@ -1137,10 +1122,10 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
   };
 
   const statsCards = [
-    { label: "En attente",    count: pending.length,                                      dot: "bg-amber-400",  tab: "pending" as Tab },
-    { label: "Approuvées",    count: history.filter(r => r.status === "APPROVED").length, dot: "bg-green-500",  tab: "history" as Tab },
-    { label: "Rejetées",      count: history.filter(r => r.status === "REJECTED").length, dot: "bg-red-500",    tab: "history" as Tab },
-    { label: "Total traités", count: history.length,                                      dot: "bg-slate-300",  tab: "history" as Tab },
+    { label: "En attente",   count: pending.length,                                                                   dot: "bg-amber-400",  tab: "pending" as Tab },
+    { label: "Approuvées",   count: requests.filter(r => r.status === "APPROVED").length,                             dot: "bg-green-500",  tab: "history" as Tab },
+    { label: "Rejetées",     count: requests.filter(r => r.status === "REJECTED").length,                             dot: "bg-red-500",    tab: "history" as Tab },
+    { label: "Total congés", count: requests.length,                                                                   dot: "bg-slate-300",  tab: "history" as Tab },
   ];
 
   return (
@@ -1277,9 +1262,30 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
             </select>
           </div>
 
+          {/* Filtre statut — visible uniquement sur l'onglet historique */}
+          {tab === "history" && (
+            <div className="relative">
+              <Filter size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <select
+                value={filterStatus}
+                onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                className="pl-7 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white"
+              >
+                <option value="ALL">Tous les statuts</option>
+                <option value="APPROVED">Approuvé</option>
+                <option value="REJECTED">Rejeté</option>
+                <option value="PENDING">En attente (N+1)</option>
+                <option value="PENDING_SECOND">En attente (N+2)</option>
+                <option value="PENDING_RH">En attente (RH)</option>
+                <option value="REVOKED">Révoqué</option>
+                <option value="CANCELLED">Annulé</option>
+              </select>
+            </div>
+          )}
+
           {/* Tabs (En attente | Historique) */}
           <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-            {([["pending", "En attente", pending.length], ["history", "Historique", history.length]] as const).map(([t, label, count]) => (
+            {([ ["pending", "En attente", pending.length], ["history", `Historique`, history.length] ] as const).map(([t, label, count]) => (
               <button
                 key={t}
                 onClick={() => changeTab(t)}
@@ -1310,12 +1316,14 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
         {/* ── Liste ── */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           {/* Toolbar */}
-          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-gray-800">
-              {tab === "pending" ? "Demandes en attente" : "Historique des décisions"}
+              {tab === "pending" ? "Demandes en attente de validation" : "Toutes les demandes de mes employés"}
             </span>
-            {!loading && filtered.length > 0 && (
-              <span className="text-xs text-gray-400">({filtered.length} résultat{filtered.length > 1 ? "s" : ""})</span>
+            {!loading && (
+              <span className="text-xs text-gray-400">
+                ({filtered.length} résultat{filtered.length > 1 ? "s" : ""}{tab === "history" && requests.length !== filtered.length ? ` / ${history.length} total` : ""})
+              </span>
             )}
           </div>
 
@@ -1330,12 +1338,12 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
                 {tab === "pending" ? <Clock size={28} className="opacity-40" /> : <CheckCircle2 size={28} className="opacity-40" />}
               </div>
               <p className="text-sm font-medium text-gray-500">
-                {tab === "pending" ? "Aucune demande en attente" : "Aucun historique"}
+                {tab === "pending" ? "Aucune demande en attente" : "Aucune demande trouvée"}
               </p>
               <p className="text-xs mt-1 text-gray-400">
-                {search || filterType !== "ALL"
-                  ? "Aucun résultat pour cette recherche"
-                  : tab === "pending" ? "Toutes les demandes ont été traitées" : "Vous n'avez pas encore traité de demandes"
+                {search || filterType !== "ALL" || filterStatus !== "ALL"
+                  ? "Aucun résultat pour ces filtres"
+                  : tab === "pending" ? "Toutes les demandes ont été traitées" : "Vos employés n'ont encore soumis aucune demande"
                 }
               </p>
             </div>
