@@ -8,6 +8,8 @@ import {
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
+
+type LayoutComponent = React.ComponentType<{ children: React.ReactNode }>;
 import { attestationService, getAttestationProfile, AttestationProfile } from "@/services/attestationService";
 import {
   AttestationRequest, AttestationDocumentType,
@@ -32,7 +34,7 @@ const fmt = (d: string) => {
   return `${dt.getDate()} ${MONTHS_FR[dt.getMonth()]} ${dt.getFullYear()}`;
 };
 
-export default function EmployeeAttestationsPage() {
+export default function EmployeeAttestationsPage({ layout: Layout = EmployeeLayout }: { layout?: LayoutComponent }) {
   const [requests,    setRequests]    = useState<AttestationRequest[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [showModal,   setShowModal]   = useState(false);
@@ -92,7 +94,7 @@ export default function EmployeeAttestationsPage() {
   const rejected  = requests.filter(r => r.status === "REJECTED").length;
 
   return (
-    <EmployeeLayout>
+    <Layout>
       <div className="space-y-6">
 
         {/* ── Header ── */}
@@ -394,6 +396,6 @@ export default function EmployeeAttestationsPage() {
           </div>
         )}
       </AnimatePresence>
-    </EmployeeLayout>
+    </Layout>
   );
 }
