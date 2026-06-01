@@ -149,6 +149,7 @@ export default function Sidebar() {
         { label: "Mes Congés",    path: "/rh/my-leaves"    },
         { label: "Mes Bulletins", path: "/rh/my-payslips"  },
         { label: "Mon Dossier",   path: "/rh/my-dossier"   },
+        { label: "Mon Service",          path: "/rh/my-service-leaves" },
         { label: "Mes Sorties",          path: "/rh/my-exits"          },
         { label: "Questionnaire sortie", path: "/rh/my-questionnaire"  },
         ...(isRhManager

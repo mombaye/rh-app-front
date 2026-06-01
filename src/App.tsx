@@ -51,6 +51,7 @@ import RhDocumentsPage            from "@/pages/rh/RhDocumentsPage";
 import RhExitAuthorizationPage    from "@/pages/rh/RhExitAuthorizationPage";
 import RhMyExitAuthorizationPage  from "@/pages/rh/RhMyExitAuthorizationPage";
 import RhQuestionnairePage         from "@/pages/rh/RhQuestionnairePage";
+import RhServiceLeavesPage         from "@/pages/rh/RhServiceLeavesPage";
 import RhAnticipationPage         from "@/pages/rh/RhAnticipationPage";
 import RhAttestationsPage         from "@/pages/rh/RhAttestationsPage";
 import EmployeeAttestationsPage   from "@/pages/employee/EmployeeAttestationsPage";
@@ -227,7 +228,8 @@ function App() {
         <Route path="/rh/my-attendance"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttendancePage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-approvals"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhApprovalsPage  /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-exits"        element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMyExitAuthorizationPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
-        <Route path="/rh/my-questionnaire" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhQuestionnairePage        /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-questionnaire"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhQuestionnairePage        /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-service-leaves" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhServiceLeavesPage        /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/documents"      element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDocumentsPage      /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/attestations"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttestationsPage   /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
 

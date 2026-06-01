@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
+
+type LayoutComponent = React.ComponentType<{ children: React.ReactNode }>;
 import { leaveRequestService } from "@/services/leaveService";
 import { LeaveRequest } from "@/types/leave";
 import { ImSpinner2 } from "react-icons/im";
@@ -134,7 +136,7 @@ function LeaveCard({ req, index }: { req: LeaveRequest; index: number }) {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
-export default function EmployeeServiceLeavesPage() {
+export default function EmployeeServiceLeavesPage({ layout: Layout = EmployeeLayout }: { layout?: LayoutComponent }) {
   const { user } = useAuth();
 
   const [all,     setAll]     = useState<LeaveRequest[]>([]);
@@ -173,7 +175,7 @@ export default function EmployeeServiceLeavesPage() {
   );
 
   return (
-    <EmployeeLayout>
+    <Layout>
       <div className="px-4 md:px-6 pb-10">
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
@@ -275,6 +277,6 @@ export default function EmployeeServiceLeavesPage() {
           )}
         </AnimatePresence>
       </div>
-    </EmployeeLayout>
+    </Layout>
   );
 }
