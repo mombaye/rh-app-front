@@ -10,13 +10,17 @@ import {
 } from "@/services/employeeService";
 import toast from "react-hot-toast";
 
-const EVENT_TYPE_OPTIONS: { value: CareerEventType; label: string }[] = [
-  { value: "TITULARISATION",     label: "Titularisation (CDD → CDI)" },
-  { value: "RENOUVELLEMENT_CDD", label: "Renouvellement CDD" },
-  { value: "CHANGEMENT_CONTRAT", label: "Changement de contrat" },
-  { value: "PROMOTION",          label: "Promotion / Avancement" },
-  { value: "CHANGEMENT_SERVICE", label: "Transfert de service" },
-  { value: "AUTRE",              label: "Autre mutation" },
+const EVENT_TYPE_OPTIONS: { value: CareerEventType; label: string; group?: string }[] = [
+  // ── Changements de contrat ───────────────────────────────────────────────────
+  { value: "TITULARISATION",      label: "Titularisation (CDD → CDI)",   group: "Contrat" },
+  { value: "RENOUVELLEMENT_CDD",  label: "Renouvellement CDD",           group: "Contrat" },
+  { value: "RENOUVELLEMENT_STAGE",label: "Renouvellement stage",         group: "Contrat" },
+  { value: "STAGE_VERS_INTERIM",  label: "Changement Stage → Intérim",  group: "Contrat" },
+  { value: "CHANGEMENT_CONTRAT",  label: "Autre changement de contrat",  group: "Contrat" },
+  // ── Mobilité interne ─────────────────────────────────────────────────────────
+  { value: "PROMOTION",           label: "Promotion / Avancement",       group: "Mobilité" },
+  { value: "CHANGEMENT_SERVICE",  label: "Transfert de service",         group: "Mobilité" },
+  { value: "AUTRE",               label: "Autre mutation",               group: "Autre"    },
 ];
 
 const CONTRACT_TYPES = [
@@ -27,15 +31,17 @@ const CONTRACT_TYPES = [
 ];
 
 const FIELDS_BY_EVENT: Record<CareerEventType, string[]> = {
-  TITULARISATION:     ["type_contrat", "date_embauche", "date_fin_periode_essai", "fonction", "categorie"],
-  RENOUVELLEMENT_CDD: ["date_fin_cdd", "date_embauche"],
-  CHANGEMENT_CONTRAT: ["type_contrat", "date_embauche", "date_fin_cdd", "date_fin_periode_essai"],
-  PROMOTION:          ["fonction", "categorie", "service", "manager", "business_line"],
-  CHANGEMENT_SERVICE: ["service", "manager", "projet", "business_line", "localisation"],
-  SORTIE:             [],
-  REINTEGRATION:      [],
-  EMBAUCHE:           [],
-  AUTRE:              ["type_contrat", "date_embauche", "date_fin_cdd", "fonction", "categorie", "service", "manager", "projet", "business_line", "localisation"],
+  TITULARISATION:      ["type_contrat", "date_embauche", "date_fin_periode_essai", "fonction", "categorie"],
+  RENOUVELLEMENT_CDD:  ["date_fin_cdd", "date_embauche"],
+  RENOUVELLEMENT_STAGE:["date_fin_cdd", "date_embauche"],
+  STAGE_VERS_INTERIM:  ["type_contrat", "date_embauche", "date_fin_cdd"],
+  CHANGEMENT_CONTRAT:  ["type_contrat", "date_embauche", "date_fin_cdd", "date_fin_periode_essai"],
+  PROMOTION:           ["fonction", "categorie", "service", "manager", "business_line"],
+  CHANGEMENT_SERVICE:  ["service", "manager", "projet", "business_line", "localisation"],
+  SORTIE:              [],
+  REINTEGRATION:       [],
+  EMBAUCHE:            [],
+  AUTRE:               ["type_contrat", "date_embauche", "date_fin_cdd", "fonction", "categorie", "service", "manager", "projet", "business_line", "localisation"],
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -80,7 +86,12 @@ export default function ContractChangeModal({ open, employee, onClose, onSuccess
       : null);
 
   const visibleFields = (FIELDS_BY_EVENT[eventType] ?? []).filter(
-    (f) => !(f === "date_fin_cdd" && (effectiveContractType === "CDI" || effectiveContractType === "INTERIM"))
+    (f) => !(
+      f === "date_fin_cdd" &&
+      (effectiveContractType === "CDI" || effectiveContractType === "INTERIM") &&
+      // Exception : STAGE_VERS_INTERIM doit afficher la date de fin (durée du contrat intérim)
+      eventType !== "STAGE_VERS_INTERIM"
+    )
   );
 
   const handleTypeChange = (type: CareerEventType) => {
@@ -91,7 +102,13 @@ export default function ContractChangeModal({ open, employee, onClose, onSuccess
       const val = (employee as any)[f];
       if (val) prefill[f] = typeof val === "string" ? val : String(val);
     }
-    if (type === "TITULARISATION") prefill["type_contrat"] = "CDI";
+    if (type === "TITULARISATION")    prefill["type_contrat"] = "CDI";
+    if (type === "STAGE_VERS_INTERIM") prefill["type_contrat"] = "INTERIM";
+    // Renouvellement stage : on conserve STAGE, on efface la date de fin pour resaisir
+    if (type === "RENOUVELLEMENT_STAGE") {
+      prefill["type_contrat"] = "STAGE";
+      delete prefill["date_fin_cdd"];
+    }
     setFields(prefill);
   };
 
@@ -245,6 +262,28 @@ export default function ContractChangeModal({ open, employee, onClose, onSuccess
                   <span>
                     Ce changement de contrat basculera automatiquement cet employé
                     de la <strong>liste intérimaires</strong> vers la <strong>liste interne</strong>.
+                  </span>
+                </div>
+              )}
+
+              {/* Notice Stage → Intérim */}
+              {eventType === "STAGE_VERS_INTERIM" && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-700">
+                  <FaInfoCircle className="shrink-0 mt-0.5 text-amber-400" size={12} />
+                  <span>
+                    Le stagiaire sera basculé vers la <strong>liste intérimaires</strong>.
+                    L'historique du stage est conservé pour suivi des renouvellements.
+                  </span>
+                </div>
+              )}
+
+              {/* Notice Renouvellement stage */}
+              {eventType === "RENOUVELLEMENT_STAGE" && (
+                <div className="flex items-start gap-2 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2.5 text-xs text-cyan-700">
+                  <FaInfoCircle className="shrink-0 mt-0.5 text-cyan-400" size={12} />
+                  <span>
+                    Ce renouvellement sera tracé dans l'historique de carrière,
+                    permettant de comptabiliser le nombre de fois où le stage a été renouvelé.
                   </span>
                 </div>
               )}

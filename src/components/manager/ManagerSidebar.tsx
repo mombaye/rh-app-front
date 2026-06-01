@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, CalendarDays, BadgeDollarSign,
-  FolderOpen, ClipboardCheck, X, Menu, UserCircle2, FileStack, LogOut, Users,
+  FolderOpen, ClipboardCheck, X, Menu, UserCircle2, FileStack, LogOut, Users, FileBadge, Clock,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -25,14 +25,15 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const navItems: NavItem[] = [
-    { label: "Tableau de bord", path: "/manager/dashboard", icon: <LayoutDashboard size={20} /> },
-    { label: "Approbations",   path: "/manager/approvals",   icon: <ClipboardCheck size={20} />, badge: pendingCount > 0 ? pendingCount : undefined },
-    { label: "Équipe en congé", path: "/manager/team-leaves", icon: <Users size={20} /> },
-    { label: "Mes Congés",    path: "/manager/leaves",      icon: <CalendarDays size={20} /> },
-    { label: "Mes Sorties",   path: "/manager/exits",     icon: <LogOut size={20} /> },
-    { label: "Mes Bulletins", path: "/manager/payslips",  icon: <BadgeDollarSign size={20} /> },
-    { label: "Mon Dossier",   path: "/manager/dossier",   icon: <FolderOpen size={20} /> },
-    { label: "Documents",     path: "/manager/documents", icon: <FileStack size={20} /> },
+    { label: "Tableau de bord",      path: "/manager/dashboard",    icon: <LayoutDashboard size={20} />                                                    },
+    { label: "Approbations",         path: "/manager/approvals",    icon: <ClipboardCheck size={20} />, badge: pendingCount > 0 ? pendingCount : undefined },
+    { label: "Mon Dossier",          path: "/manager/dossier",      icon: <FolderOpen size={20} />                                                         },
+    { label: "Mes Bulletins",        path: "/manager/payslips",     icon: <BadgeDollarSign size={20} />                                                    },
+    { label: "Mes Pointages",        path: "/manager/attendance",   icon: <Clock size={20} />                                                              },
+    { label: "Mes Congés",           path: "/manager/leaves",       icon: <CalendarDays size={20} />                                                       },
+    { label: "Mes Sorties",          path: "/manager/exits",        icon: <LogOut size={20} />                                                             },
+    { label: "Demandes Attestation", path: "/manager/attestations", icon: <FileBadge size={20} />                                                          },
+    { label: "Documents RH",         path: "/manager/documents",    icon: <FileStack size={20} />                                                          },
   ];
 
   useEffect(() => {
@@ -110,7 +111,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
       />
 
       {/* Sidebar Desktop */}
-      <aside className="bg-white shadow-md w-64 min-h-screen hidden md:flex md:flex-col border-r">
+      <aside className="bg-white shadow-md w-72 min-h-screen hidden md:flex md:flex-col border-r">
         <div className="py-6 px-4 flex justify-center items-center">
           <img src={logo} alt="Camusat" className="w-full max-h-24 object-contain" />
         </div>
@@ -119,7 +120,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
 
       {/* Sidebar Mobile */}
       <aside
-        className={`fixed z-50 top-0 left-0 h-full w-64 bg-white shadow-md border-r transition-transform duration-300 flex flex-col ${
+        className={`fixed z-50 top-0 left-0 h-full w-72 bg-white shadow-md border-r transition-transform duration-300 flex flex-col ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:hidden`}
       >

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload, Download, FileSpreadsheet, X,
   CheckCircle, AlertTriangle, Search, AlertCircle,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import toast from "react-hot-toast";
@@ -104,6 +105,10 @@ export default function LeavesMigrationPage() {
   const [search,      setSearch]      = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // ── Pagination ──────────────────────────────────────────────────────────────
+  const [page,     setPage]     = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // ── Chargement de la session au montage (serveur en priorité, localStorage en fallback) ──
   useEffect(() => {
@@ -296,6 +301,23 @@ export default function LeavesMigrationPage() {
   const okCount  = rows.filter(r => r.status === "ok").length;
   const errCount = rows.filter(r => r.status !== "ok").length;
   const hasData  = rows.length > 0 || !!fileName;
+
+  // Pagination dérivée
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage   = Math.min(page, totalPages);
+  const paginated  = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  // Reset page si la recherche change
+  const prevSearch = useRef(search);
+  if (prevSearch.current !== search) { prevSearch.current = search; if (page !== 1) setPage(1); }
+
+  // Génère la liste de numéros de pages avec ellipsis
+  const pageNumbers = (() => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (safePage <= 4)  return [1, 2, 3, 4, 5, "…", totalPages];
+    if (safePage >= totalPages - 3) return [1, "…", totalPages-4, totalPages-3, totalPages-2, totalPages-1, totalPages];
+    return [1, "…", safePage - 1, safePage, safePage + 1, "…", totalPages];
+  })();
 
   return (
     <AppLayout>
@@ -518,14 +540,14 @@ export default function LeavesMigrationPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {filtered.length === 0 && (
+                      {paginated.length === 0 && (
                         <tr>
                           <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
                             Aucun résultat pour cette recherche.
                           </td>
                         </tr>
                       )}
-                      {filtered.map((row, idx) => {
+                      {paginated.map((row, idx) => {
                         const globalIdx = rows.indexOf(row);
                         const delta     = row.edited - (row.current_remaining ?? 0);
                         const isOk      = row.status === "ok";
@@ -534,7 +556,7 @@ export default function LeavesMigrationPage() {
                             key={row.row}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
-                            transition={{ delay: idx * 0.012 }}
+                            transition={{ delay: idx * 0.008 }}
                             className={`transition ${isOk ? "hover:bg-gray-50/50" : "bg-red-50/60"}`}
                           >
                             <td className="px-4 py-3 text-xs text-gray-400 font-mono">{row.row}</td>
@@ -579,6 +601,80 @@ export default function LeavesMigrationPage() {
                   </table>
                 </div>
               </div>
+
+              {/* ── Pagination ── */}
+              {filtered.length > 0 && (
+                <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+
+                  {/* Infos + sélecteur de taille */}
+                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <span>
+                      {filtered.length === 0
+                        ? "Aucun résultat"
+                        : <>
+                            <span className="font-semibold text-gray-700">
+                              {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)}
+                            </span>
+                            {" "}sur{" "}
+                            <span className="font-semibold text-gray-700">{filtered.length}</span>
+                            {" "}résultat{filtered.length > 1 ? "s" : ""}
+                          </>
+                      }
+                    </span>
+                    <select
+                      value={pageSize}
+                      onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+                      className="border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#003c71] bg-white"
+                    >
+                      {[10, 25, 50, 100].map(n => (
+                        <option key={n} value={n}>{n} / page</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Boutons de pages */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={safePage === 1}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+
+                      {pageNumbers.map((n, i) =>
+                        n === "…" ? (
+                          <span key={`ellipsis-${i}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xs select-none">
+                            …
+                          </span>
+                        ) : (
+                          <button
+                            key={n}
+                            onClick={() => setPage(n as number)}
+                            className={`w-8 h-8 rounded-lg text-xs font-semibold transition border ${
+                              safePage === n
+                                ? "bg-[#003c71] text-white border-[#003c71] shadow-sm"
+                                : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                            }`}
+                          >
+                            {n}
+                          </button>
+                        )
+                      )}
+
+                      <button
+                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        disabled={safePage === totalPages}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </motion.div>
           )}
         </AnimatePresence>

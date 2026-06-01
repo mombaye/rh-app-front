@@ -13,12 +13,14 @@ const EVENT_CONFIG: Record<CareerEventType, { label: string; dot: string; iconCo
   EMBAUCHE:           { label: "Embauche",               dot: "bg-emerald-500", iconColor: "text-emerald-600", Icon: FaBriefcase },
   PROMOTION:          { label: "Promotion",              dot: "bg-blue-500",    iconColor: "text-blue-600",    Icon: FaArrowUp },
   CHANGEMENT_CONTRAT: { label: "Changement de contrat",  dot: "bg-orange-500",  iconColor: "text-orange-600",  Icon: FaExchangeAlt },
-  RENOUVELLEMENT_CDD: { label: "Renouvellement CDD",     dot: "bg-yellow-500",  iconColor: "text-yellow-600",  Icon: FaRedo },
-  CHANGEMENT_SERVICE: { label: "Changement de service",  dot: "bg-purple-500",  iconColor: "text-purple-600",  Icon: FaLayerGroup },
-  TITULARISATION:     { label: "Titularisation",         dot: "bg-green-600",   iconColor: "text-green-700",   Icon: FaStar },
-  SORTIE:             { label: "Sortie",                 dot: "bg-red-500",     iconColor: "text-red-600",     Icon: FaSignOutAlt },
-  REINTEGRATION:      { label: "Réintégration",          dot: "bg-teal-500",    iconColor: "text-teal-600",    Icon: FaSignInAlt },
-  AUTRE:              { label: "Autre",                  dot: "bg-slate-400",   iconColor: "text-slate-500",   Icon: FaBriefcase },
+  RENOUVELLEMENT_CDD:   { label: "Renouvellement CDD",    dot: "bg-yellow-500",  iconColor: "text-yellow-600",  Icon: FaRedo        },
+  RENOUVELLEMENT_STAGE: { label: "Renouvellement stage",  dot: "bg-cyan-500",    iconColor: "text-cyan-600",    Icon: FaRedo        },
+  CHANGEMENT_SERVICE:   { label: "Changement de service", dot: "bg-purple-500",  iconColor: "text-purple-600",  Icon: FaLayerGroup  },
+  TITULARISATION:       { label: "Titularisation",        dot: "bg-green-600",   iconColor: "text-green-700",   Icon: FaStar        },
+  STAGE_VERS_INTERIM:   { label: "Stage → Intérim",       dot: "bg-amber-500",   iconColor: "text-amber-600",   Icon: FaExchangeAlt },
+  SORTIE:               { label: "Sortie",                dot: "bg-red-500",     iconColor: "text-red-600",     Icon: FaSignOutAlt  },
+  REINTEGRATION:        { label: "Réintégration",         dot: "bg-teal-500",    iconColor: "text-teal-600",    Icon: FaSignInAlt   },
+  AUTRE:                { label: "Autre",                 dot: "bg-slate-400",   iconColor: "text-slate-500",   Icon: FaBriefcase   },
 };
 
 function formatDate(dateStr: string | null): string {

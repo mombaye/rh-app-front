@@ -13,6 +13,7 @@ import {
   ClipboardList,
   LogOut,
   Users,
+  FileBadge,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -55,7 +56,12 @@ const baseNavItems = [
     icon: <BadgeDollarSign size={20} />,
   },
   {
-    label: "Documents",
+    label: "Demandes Attestation",
+    path: "/employee/attestations",
+    icon: <FileBadge size={20} />,
+  },
+  {
+    label: "Document RH",
     path: "/employee/documents",
     icon: <FileStack size={20} />,
   },

@@ -14,6 +14,7 @@ import {
   UserCircle,
   FolderOpen,
   FileStack,
+  FileBadge,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -118,6 +119,11 @@ export default function Sidebar() {
       label: "Gestion Ressources",
       path: "/rh/documents",
       icon: <FileStack size={20} />,
+    },
+    {
+      label: "Demandes Attestations",
+      path: "/rh/attestations",
+      icon: <FileBadge size={20} />,
     },
     {
       label: "Mon espace",
