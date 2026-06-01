@@ -6,6 +6,8 @@ import {
   ChevronRight, ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
+
+type LayoutComponent = React.ComponentType<{ children: React.ReactNode }>;
 import {
   getMonQuestionnaire,
   repondreQuestionnaire,
@@ -121,7 +123,7 @@ const STEPS = [
 const TOTAL = STEPS.length;
 
 // ── Page principale ────────────────────────────────────────────────────────────
-export default function EmployeeQuestionnairePage() {
+export default function EmployeeQuestionnairePage({ layout: Layout = EmployeeLayout }: { layout?: LayoutComponent }) {
   const [info,       setInfo]       = useState<MonQuestionnaire | null>(null);
   const [loading,    setLoading]    = useState(true);
   const [notFound,   setNotFound]   = useState(false);
@@ -309,7 +311,7 @@ export default function EmployeeQuestionnairePage() {
   };
 
   return (
-    <EmployeeLayout>
+    <Layout>
       <div ref={topRef} className="max-w-2xl mx-auto px-4 py-8 space-y-6">
 
         {/* Header */}
@@ -500,6 +502,6 @@ export default function EmployeeQuestionnairePage() {
           </div>
         )}
       </div>
-    </EmployeeLayout>
+    </Layout>
   );
 }

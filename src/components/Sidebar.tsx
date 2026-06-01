@@ -21,6 +21,7 @@ import { useAuth } from "@/contexts/useAuth";
 import { useAlertes } from "@/contexts/AlertesContext";
 import { useState, useEffect, useCallback } from "react";
 import { leaveRequestService, exitAuthorizationService } from "@/services/leaveService";
+import { getQuestionnaires } from "@/services/questionnaireService";
 
 type NavItem = {
   label: string;
@@ -35,6 +36,21 @@ export default function Sidebar() {
   const { totalCount, urgentsCount } = useAlertes();
 
   const isRhManager = availableRoles.includes("manager1") || availableRoles.includes("manager2");
+
+  // ── Badge questionnaires complétés ───────────────────────────────────────
+  const [questionnaireDoneCount, setQuestionnaireDoneCount] = useState(0);
+
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        const { count } = await getQuestionnaires("complete");
+        setQuestionnaireDoneCount(count);
+      } catch { /* silencieux */ }
+    };
+    fetch();
+    const id = setInterval(fetch, 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // ── Badge approbation RH ──────────────────────────────────────────────────
   const [approvalPendingCount, setApprovalPendingCount] = useState(0);
@@ -84,7 +100,7 @@ export default function Sidebar() {
         { label: "Internes",              path: "/employees/internes"       },
         { label: "Intérimaires",          path: "/employees/interims"       },
         { label: "Alertes",               path: "/employees/alertes",  badge: totalCount },
-        { label: "Questionnaires sortie", path: "/employees/questionnaires" },
+        { label: "Questionnaires sortie", path: "/employees/questionnaires", badge: questionnaireDoneCount || undefined, badgeRed: true },
       ],
     },
     {
@@ -133,7 +149,8 @@ export default function Sidebar() {
         { label: "Mes Congés",    path: "/rh/my-leaves"    },
         { label: "Mes Bulletins", path: "/rh/my-payslips"  },
         { label: "Mon Dossier",   path: "/rh/my-dossier"   },
-        { label: "Mes Sorties",   path: "/rh/my-exits"     },
+        { label: "Mes Sorties",          path: "/rh/my-exits"          },
+        { label: "Questionnaire sortie", path: "/rh/my-questionnaire"  },
         ...(isRhManager
           ? [
               { label: "Mes Pointages", path: "/rh/my-attendance" },
