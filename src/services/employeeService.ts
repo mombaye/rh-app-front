@@ -149,6 +149,23 @@ export const sendAccessCodesInterim = async (matricules?: string[]) => {
   return (await api.post("/api/employees/send-access-codes-interim/", payload)).data;
 };
 
+export type BulkCreateAccountsResult = {
+  total_sans_compte: number;
+  comptes_crees:     number;
+  details_crees:     { id: number; nom: string; email: string; role: string }[];
+  erreurs:           { id: number; nom: string; erreur: string }[];
+};
+
+export const bulkCreateAccounts = async (
+  contractType?: "INTERNE" | "INTERIM",
+  employeeIds?:  number[],
+): Promise<BulkCreateAccountsResult> => {
+  const payload: Record<string, unknown> = {};
+  if (contractType)              payload.contract_type  = contractType;
+  if (employeeIds?.length)       payload.employee_ids   = employeeIds;
+  return (await api.post("/api/employees/bulk-create-accounts/", payload)).data;
+};
+
 // ══════════════════════════════════════════════════════
 //  BASCULEMENT INTÉRIMAIRE → INTERNE
 // ══════════════════════════════════════════════════════

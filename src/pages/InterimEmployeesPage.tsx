@@ -36,6 +36,8 @@ import {
 } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
+import { UserPlus } from "lucide-react";
+import BulkCreateAccountsModal from "@/components/employees/BulkCreateAccountsModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ProfileFilter = "ALL" | "ACTIVE" | "EXITED";
@@ -853,7 +855,8 @@ export default function InterimEmployeesPage() {
   const [missionOpen, setMissionOpen] = useState(false);
   const [missionTarget, setMissionTarget] = useState<Employee | null>(null);
   const [isSendingCodes, setIsSendingCodes] = useState(false);
-  const [bulkMatOpen, setBulkMatOpen]         = useState(false);
+  const [bulkMatOpen, setBulkMatOpen]           = useState(false);
+  const [bulkAccountsOpen, setBulkAccountsOpen] = useState(false);
   const [bulkSwitchOpen, setBulkSwitchOpen]   = useState(false);
 
   // Close dropdown on outside click
@@ -1059,6 +1062,13 @@ export default function InterimEmployeesPage() {
             </button>
 
             <button
+              onClick={() => setBulkAccountsOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition"
+            >
+              <UserPlus size={14} /> Créer les comptes
+            </button>
+
+            <button
               onClick={handleCreate}
               className="bg-camublue-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-camublue-800 transition"
             >
@@ -1106,6 +1116,13 @@ export default function InterimEmployeesPage() {
         <ExitEmployeeModal open={exitOpen} onClose={() => setExitOpen(false)} employee={exitTarget} onConfirm={handleConfirmExit} />
         <ReinstateEmployeeModal open={reinstateOpen} onClose={() => setReinstateOpen(false)} employee={reinstateTarget} onConfirm={doReinstate} />
         <MissionModal open={missionOpen} onClose={() => setMissionOpen(false)} employee={missionTarget} onConfirm={handleConfirmMission} />
+
+        <BulkCreateAccountsModal
+          open={bulkAccountsOpen}
+          contractType="INTERIM"
+          employees={allEmployees}
+          onClose={() => setBulkAccountsOpen(false)}
+        />
 
         <AnimatePresence>
           {bulkMatOpen && (

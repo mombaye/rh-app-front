@@ -24,6 +24,7 @@ import {
   EmployeeDocumentsResult,
   ZipImportResult,
 } from "@/services/employeeService";
+import { UserPlus } from "lucide-react";
 import { FaPlus, FaUserCheck, FaUserTimes, FaUsers } from "react-icons/fa";
 import {
   FiCheckCircle,
@@ -44,6 +45,7 @@ import {
 } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
+import BulkCreateAccountsModal from "@/components/employees/BulkCreateAccountsModal";
 
 // ─── Types locaux ─────────────────────────────────────────────────────────────
 type ProfileFilter = "ALL" | "ACTIVE" | "EXITED";
@@ -1225,6 +1227,7 @@ export default function InterneEmployeesPage() {
   const [missionTarget, setMissionTarget]     = useState<Employee | null>(null);
   const [bulkMatOpen, setBulkMatOpen]         = useState(false);
   const [docsOpen, setDocsOpen]               = useState(false);
+  const [bulkAccountsOpen, setBulkAccountsOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -1470,6 +1473,14 @@ export default function InterneEmployeesPage() {
             />
 
             <button
+              onClick={() => setBulkAccountsOpen(true)}
+              disabled={isLoading || allEmployees.length === 0}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <UserPlus size={14} /> Créer les comptes
+            </button>
+
+            <button
               onClick={handleCreate}
               className="bg-camublue-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-camublue-800 transition"
             >
@@ -1540,6 +1551,13 @@ export default function InterneEmployeesPage() {
             />
           )}
         </AnimatePresence>
+
+        <BulkCreateAccountsModal
+          open={bulkAccountsOpen}
+          contractType="INTERNE"
+          employees={allEmployees}
+          onClose={() => setBulkAccountsOpen(false)}
+        />
 
         <AnimatePresence>
           {docsOpen && (
