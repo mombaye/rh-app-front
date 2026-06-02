@@ -1122,6 +1122,7 @@ export default function InterimEmployeesPage() {
           contractType="INTERIM"
           employees={allEmployees}
           onClose={() => setBulkAccountsOpen(false)}
+          onSuccess={fetchInterimEmployees}
         />
 
         <AnimatePresence>

@@ -20,12 +20,13 @@ interface Props {
   contractType: "INTERNE" | "INTERIM";
   employees:    Employee[];
   onClose:      () => void;
+  onSuccess?:   () => void;
 }
 
 // ─── Composant ───────────────────────────────────────────────────────────────
 
 export default function BulkCreateAccountsModal({
-  open, contractType, employees, onClose,
+  open, contractType, employees, onClose, onSuccess,
 }: Props) {
   const [step,     setStep]     = useState<Step>("choice");
   const [mode,     setMode]     = useState<BulkMode>("all");
@@ -80,6 +81,7 @@ export default function BulkCreateAccountsModal({
       setStep("result");
       if (res.comptes_crees > 0) {
         toast.success(`${res.comptes_crees} compte(s) créé(s) et email(s) envoyé(s) !`);
+        onSuccess?.();
       } else {
         toast(`Aucun nouveau compte à créer.`, { icon: "ℹ️" });
       }

@@ -390,6 +390,11 @@ export default function EmployeesTable({
         toast.success(`Compte créé et identifiants envoyés à ${emp.email} !`);
       }
       setCreateAccountConfirmEmp(null);
+      // Mise à jour immédiate : l'employé a maintenant un compte
+      setFiltered(prev =>
+        prev.map(e => e.id === emp.id ? { ...e, has_user: true } : e)
+      );
+      onEmployeeUpdated?.({ ...emp, has_user: true });
     } catch (err: any) {
       toast.error(err?.response?.data?.error || "Erreur lors de la création du compte");
     } finally {

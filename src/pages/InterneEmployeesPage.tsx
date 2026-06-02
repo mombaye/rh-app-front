@@ -1557,6 +1557,7 @@ export default function InterneEmployeesPage() {
           contractType="INTERNE"
           employees={allEmployees}
           onClose={() => setBulkAccountsOpen(false)}
+          onSuccess={fetchInternalEmployees}
         />
 
         <AnimatePresence>
