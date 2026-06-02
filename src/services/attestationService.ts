@@ -1,6 +1,6 @@
 // src/services/attestationService.ts
 import axios from "axios";
-import { AttestationRequest, AttestationDocumentType } from "@/types/attestation";
+import { AttestationRequest, AttestationDocumentType, AttestationTemplate, TemplatePlaceholder, AttestationHistory } from "@/types/attestation";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
 const API      = `${BASE_URL}/api/employees/attestations`;
@@ -68,6 +68,48 @@ export const attestationService = {
 
   delete: async (id: number): Promise<void> => {
     await axios.delete(`${API}/${id}/`, { headers: authHeaders() });
+  },
+
+  getHistory: async (id: number): Promise<AttestationHistory[]> => {
+    const res = await axios.get<AttestationHistory[]>(`${API}/${id}/history/`, {
+      headers: authHeaders(),
+    });
+    return res.data;
+  },
+};
+
+// ── Gestion des templates de documents ──────────────────────────────────────
+
+const TEMPLATE_API = `${BASE_URL}/api/employees/attestation-templates`;
+
+export const templateService = {
+  getAll: async (): Promise<AttestationTemplate[]> => {
+    const res = await axios.get<AttestationTemplate[]>(TEMPLATE_API + "/", {
+      headers: authHeaders(),
+    });
+    return res.data;
+  },
+
+  upload: async (documentType: AttestationDocumentType, file: File): Promise<AttestationTemplate> => {
+    const formData = new FormData();
+    formData.append("document_type",  documentType);
+    formData.append("template_file",  file);
+    const res = await axios.post<AttestationTemplate>(TEMPLATE_API + "/", formData, {
+      headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await axios.delete(`${TEMPLATE_API}/${id}/`, { headers: authHeaders() });
+  },
+
+  getPlaceholders: async (): Promise<TemplatePlaceholder[]> => {
+    const res = await axios.get<TemplatePlaceholder[]>(
+      `${BASE_URL}/api/employees/attestation-template-placeholders/`,
+      { headers: authHeaders() },
+    );
+    return res.data;
   },
 };
 

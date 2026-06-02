@@ -1,62 +1,103 @@
 // src/pages/rh/RhAttestationsPage.tsx
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FileText, CheckCircle, Clock, XCircle, Download,
-  RefreshCw, Search, X, AlertCircle, Eye, RotateCcw,
-  Send, ChevronDown, ChevronUp,
+  FileText, Download, RefreshCw, Search, X,
+  RotateCcw, LayoutTemplate, Settings2,
+  User, Calendar, Briefcase, Building2, FileCheck, Clock,
+  CheckCircle2, Ban, History, PlusCircle, Send, XCircle,
 } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
 import AppLayout from "@/layouts/AppLayout";
 import { attestationService } from "@/services/attestationService";
-import { AttestationRequest, AttestationStatus } from "@/types/attestation";
+import { AttestationRequest, AttestationStatus, AttestationHistory } from "@/types/attestation";
+import AttestationTemplatesPanel from "@/components/attestations/AttestationTemplatesPanel";
+
+type Tab = "requests" | "templates";
 
 const STATUS_CONFIG: Record<AttestationStatus, { label: string; cls: string; dotCls: string }> = {
-  PENDING:   { label: "En attente",  cls: "bg-amber-50 text-amber-700 border-amber-200",   dotCls: "bg-amber-400"   },
-  PROCESSED: { label: "Traité",      cls: "bg-emerald-50 text-emerald-700 border-emerald-200", dotCls: "bg-emerald-500" },
-  REJECTED:  { label: "Refusé",      cls: "bg-red-50 text-red-600 border-red-200",           dotCls: "bg-red-400"     },
+  PENDING:   { label: "En attente", cls: "bg-amber-50 text-amber-700 border-amber-200",       dotCls: "bg-amber-400"   },
+  PROCESSED: { label: "Traité",     cls: "bg-emerald-50 text-emerald-700 border-emerald-200", dotCls: "bg-emerald-500" },
+  REJECTED:  { label: "Refusé",     cls: "bg-red-50 text-red-600 border-red-200",             dotCls: "bg-red-400"     },
 };
 
 const fmtDate = (d: string | null) =>
   d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 const fmtDateTime = (d: string | null) =>
-  d
-    ? new Date(d).toLocaleDateString("fr-FR", {
-        day: "2-digit", month: "long", year: "numeric",
-        hour: "2-digit", minute: "2-digit",
-      })
-    : "—";
+  d ? new Date(d).toLocaleDateString("fr-FR", {
+    day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  }) : "—";
+
+const EXTRA_LABELS: Record<string, string> = {
+  date_debut_conges:    "Début des congés",
+  date_fin_conges:      "Fin des congés",
+  date_reprise:         "Date de reprise",
+  nom_banque:           "Banque",
+  rib:                  "RIB",
+  salaire_net_lettre:   "Salaire net (lettres)",
+  salaire_net_chiffre:  "Salaire net (chiffres)",
+  date_retraite:        "Date de retraite",
+  date_fin_cdd:         "Fin du CDD",
+};
+
+const HISTORY_CONFIG: Record<string, { icon: React.ReactNode; color: string; dot: string }> = {
+  CREATED:     { icon: <PlusCircle  size={13} />, color: "text-blue-600",    dot: "bg-blue-400"    },
+  PROCESSED:   { icon: <Send        size={13} />, color: "text-emerald-600", dot: "bg-emerald-500" },
+  REGENERATED: { icon: <RotateCcw   size={13} />, color: "text-violet-600",  dot: "bg-violet-400"  },
+  REJECTED:    { icon: <XCircle     size={13} />, color: "text-red-600",     dot: "bg-red-400"     },
+};
+
+// ── Séparateur section ──────────────────────────────────────────────────────
+function Divider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 my-1">
+      <div className="h-px flex-1 bg-gray-100" />
+      <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">{label}</span>
+      <div className="h-px flex-1 bg-gray-100" />
+    </div>
+  );
+}
 
 export default function RhAttestationsPage() {
-  const [requests,    setRequests]    = useState<AttestationRequest[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [search,      setSearch]      = useState("");
+  const [activeTab,    setActiveTab]    = useState<Tab>("requests");
+  const [requests,     setRequests]     = useState<AttestationRequest[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [search,       setSearch]       = useState("");
   const [filterStatus, setFilterStatus] = useState<AttestationStatus | "ALL">("ALL");
 
-  // Modal Traiter
-  const [processTarget, setProcessTarget] = useState<AttestationRequest | null>(null);
+  // Modal détails (clic sur une ligne)
+  const [detailTarget,  setDetailTarget]  = useState<AttestationRequest | null>(null);
+  const [detailHistory, setDetailHistory] = useState<AttestationHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Modal gérer (bouton Gérer)
+  const [manageTarget,  setManageTarget]  = useState<AttestationRequest | null>(null);
   const [processNotes,  setProcessNotes]  = useState("");
+  const [rejectNotes,   setRejectNotes]   = useState("");
   const [processing,    setProcessing]    = useState(false);
+  const [rejecting,     setRejecting]     = useState(false);
+  const [regenerating,  setRegenerating]  = useState(false);
 
-  // Modal Refuser
-  const [rejectTarget, setRejectTarget] = useState<AttestationRequest | null>(null);
-  const [rejectNotes,  setRejectNotes]  = useState("");
-  const [rejecting,    setRejecting]    = useState(false);
-
-  // Ligne expandée (détails)
-  const [expanded, setExpanded] = useState<number | null>(null);
+  const openDetail = async (r: AttestationRequest) => {
+    setDetailTarget(r);
+    setDetailHistory([]);
+    setHistoryLoading(true);
+    try {
+      setDetailHistory(await attestationService.getHistory(r.id));
+    } catch {
+      // silencieux — l'historique est facultatif
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
-    try {
-      setRequests(await attestationService.getAll());
-    } catch {
-      toast.error("Erreur chargement");
-    } finally {
-      setLoading(false);
-    }
+    try { setRequests(await attestationService.getAll()); }
+    catch { toast.error("Erreur chargement"); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
@@ -68,8 +109,7 @@ export default function RhAttestationsPage() {
       r.employee_nom_complet.toLowerCase().includes(q) ||
       r.employee_matricule.toLowerCase().includes(q) ||
       r.document_type_display.toLowerCase().includes(q);
-    const matchStatus = filterStatus === "ALL" || r.status === filterStatus;
-    return matchSearch && matchStatus;
+    return matchSearch && (filterStatus === "ALL" || r.status === filterStatus);
   });
 
   const counts = {
@@ -81,47 +121,49 @@ export default function RhAttestationsPage() {
 
   // ── Traiter ────────────────────────────────────────────────────────────────
   const handleProcess = async () => {
-    if (!processTarget) return;
+    if (!manageTarget) return;
     setProcessing(true);
     try {
-      const updated = await attestationService.process(processTarget.id, processNotes);
+      const updated = await attestationService.process(manageTarget.id, processNotes);
       setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
+      setManageTarget(updated);
+      if (detailTarget?.id === updated.id) await openDetail(updated);
       toast.success("Demande traitée — PDF envoyé à l'employé !");
-      setProcessTarget(null);
       setProcessNotes("");
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors du traitement");
-    } finally {
-      setProcessing(false);
-    }
+    } finally { setProcessing(false); }
   };
 
   // ── Refuser ────────────────────────────────────────────────────────────────
   const handleReject = async () => {
-    if (!rejectTarget) return;
+    if (!manageTarget) return;
     setRejecting(true);
     try {
-      const updated = await attestationService.reject(rejectTarget.id, rejectNotes);
+      const updated = await attestationService.reject(manageTarget.id, rejectNotes);
       setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
+      setManageTarget(updated);
+      if (detailTarget?.id === updated.id) await openDetail(updated);
       toast.success("Demande refusée — l'employé a été notifié.");
-      setRejectTarget(null);
       setRejectNotes("");
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur");
-    } finally {
-      setRejecting(false);
-    }
+    } finally { setRejecting(false); }
   };
 
-  // ── Re-générer ──────────────────────────────────────────────────────────────
-  const handleRegenerate = async (r: AttestationRequest) => {
+  // ── Re-générer ─────────────────────────────────────────────────────────────
+  const handleRegenerate = async () => {
+    if (!manageTarget) return;
+    setRegenerating(true);
     try {
-      const updated = await attestationService.regenerate(r.id);
-      setRequests(prev => prev.map(x => x.id === updated.id ? updated : x));
+      const updated = await attestationService.regenerate(manageTarget.id);
+      setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
+      setManageTarget(updated);
+      if (detailTarget?.id === updated.id) await openDetail(updated);
       toast.success("PDF re-généré avec succès");
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur");
-    }
+    } finally { setRegenerating(false); }
   };
 
   return (
@@ -132,100 +174,124 @@ export default function RhAttestationsPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-[#003c71]">Demandes d'attestation</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Gérez les demandes de documents officiels des employés
-            </p>
+            <p className="text-sm text-gray-500 mt-0.5">Gérez les demandes de documents officiels des employés</p>
           </div>
-          <button onClick={load} className="p-2 rounded-lg border bg-white hover:bg-gray-50 transition" title="Rafraîchir">
-            <RefreshCw size={16} className="text-gray-500" />
-          </button>
-        </div>
-
-        {/* ── Barre de recherche + filtres ── */}
-        <div className="flex items-center gap-3 flex-wrap">
-
-          {/* Recherche — côté gauche */}
-          <div className="relative flex-1 min-w-56">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Rechercher par nom, matricule, type…"
-              className="w-full pl-10 pr-9 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition bg-white"
-            />
-            {search && (
-              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                <X size={14} />
+          <div className="flex items-center gap-2">
+            {activeTab === "requests" && (
+              <button onClick={load} className="p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition" title="Rafraîchir">
+                <RefreshCw size={16} className="text-gray-500" />
               </button>
             )}
-          </div>
-
-          {/* Filtres statut — côté droit */}
-          <div className="flex gap-2 flex-wrap">
-            {(["ALL", "PENDING", "PROCESSED", "REJECTED"] as const).map(s => {
-              const label  = s === "ALL" ? "Toutes" : STATUS_CONFIG[s].label;
-              const count  = counts[s];
-              const active = filterStatus === s;
-              return (
-                <button
-                  key={s}
-                  onClick={() => setFilterStatus(s)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium border transition ${
-                    active
-                      ? "bg-[#003c71] text-white border-[#003c71] shadow-sm"
-                      : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  {label}
-                  <span className={`px-1.5 py-0.5 rounded-lg text-xs font-bold ${active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"}`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+            <button
+              onClick={() => setActiveTab("requests")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                activeTab === "requests"
+                  ? "bg-[#003c71] text-white shadow-sm"
+                  : "bg-white border border-[#003c71] text-[#003c71] hover:bg-[#003c71]/5"
+              }`}
+            >
+              <FileText size={15} />
+              Demandes
+              {counts.PENDING > 0 && (
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                  activeTab === "requests" ? "bg-white/25 text-white" : "bg-amber-400 text-white"
+                }`}>{counts.PENDING}</span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("templates")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                activeTab === "templates"
+                  ? "bg-[#003c71] text-white shadow-sm"
+                  : "bg-white border border-[#003c71] text-[#003c71] hover:bg-[#003c71]/5"
+              }`}
+            >
+              <LayoutTemplate size={15} />
+              Modèles
+            </button>
           </div>
         </div>
 
-        {/* ── Tableau ── */}
-        {loading ? (
-          <div className="flex justify-center py-16">
-            <ImSpinner2 className="animate-spin text-[#003c71]" size={28} />
+        {/* ── Onglet Modèles ── */}
+        {activeTab === "templates" && <AttestationTemplatesPanel />}
+
+        {/* ── Onglet Demandes ── */}
+        {activeTab === "requests" && <>
+
+          {/* Recherche + filtres */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-56">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Rechercher par nom, matricule, type…"
+                className="w-full pl-10 pr-9 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition bg-white"
+              />
+              {search && (
+                <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {(["ALL", "PENDING", "PROCESSED", "REJECTED"] as const).map(s => {
+                const label = s === "ALL" ? "Toutes" : STATUS_CONFIG[s].label;
+                const active = filterStatus === s;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setFilterStatus(s)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium border transition ${
+                      active ? "bg-[#003c71] text-white border-[#003c71] shadow-sm" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {label}
+                    <span className={`px-1.5 py-0.5 rounded-lg text-xs font-bold ${active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"}`}>
+                      {counts[s]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-            <FileText size={36} className="mx-auto mb-3 text-gray-200" />
-            <p className="text-gray-500">Aucune demande trouvée</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Employé</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Document demandé</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Date demande</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Statut</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filtered.map(r => {
-                  const cfg     = STATUS_CONFIG[r.status];
-                  const isOpen  = expanded === r.id;
-                  return (
-                    <>
+
+          {/* Tableau */}
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <ImSpinner2 className="animate-spin text-[#003c71]" size={28} />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
+              <FileText size={36} className="mx-auto mb-3 text-gray-200" />
+              <p className="text-gray-500">Aucune demande trouvée</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Employé</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Document demandé</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Date demande</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Statut</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filtered.map(r => {
+                    const cfg = STATUS_CONFIG[r.status];
+                    return (
                       <tr
                         key={r.id}
-                        className="hover:bg-gray-50/50 transition cursor-pointer"
-                        onClick={() => setExpanded(isOpen ? null : r.id)}
+                        className="hover:bg-gray-50/60 transition cursor-pointer"
+                        onClick={() => openDetail(r)}
                       >
                         <td className="px-4 py-3">
                           <p className="font-semibold text-gray-800">{r.employee_nom_complet}</p>
                           <p className="text-xs text-gray-400 font-mono">{r.employee_matricule} · {r.employee_service}</p>
                         </td>
-                        <td className="px-4 py-3">
-                          <p className="text-gray-700">{r.document_type_display}</p>
-                        </td>
+                        <td className="px-4 py-3 text-gray-700">{r.document_type_display}</td>
                         <td className="px-4 py-3 text-gray-500 text-xs">{fmtDate(r.created_at)}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${cfg.cls}`}>
@@ -233,176 +299,206 @@ export default function RhAttestationsPage() {
                             {cfg.label}
                           </span>
                         </td>
-                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1.5">
-                            {r.status === "PENDING" && (
-                              <>
-                                <button
-                                  onClick={() => { setProcessTarget(r); setProcessNotes(""); }}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition"
-                                >
-                                  <Send size={12} /> Traiter
-                                </button>
-                                <button
-                                  onClick={() => { setRejectTarget(r); setRejectNotes(""); }}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-xs font-semibold transition"
-                                >
-                                  <XCircle size={12} /> Refuser
-                                </button>
-                              </>
-                            )}
-                            {r.status === "PROCESSED" && (
-                              <>
-                                {r.pdf_url && (
-                                  <a
-                                    href={r.pdf_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    download
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003c71]/10 hover:bg-[#003c71]/20 text-[#003c71] rounded-lg text-xs font-semibold transition"
-                                  >
-                                    <Download size={12} /> PDF
-                                  </a>
-                                )}
-                                <button
-                                  onClick={() => handleRegenerate(r)}
-                                  className="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 transition"
-                                  title="Re-générer le PDF"
-                                >
-                                  <RotateCcw size={13} />
-                                </button>
-                              </>
-                            )}
-                            <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
-                              {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </button>
-                          </div>
+                        <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={() => { setManageTarget(r); setProcessNotes(""); setRejectNotes(""); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003c71] hover:bg-[#003c71]/90 text-white rounded-lg text-xs font-semibold transition ml-auto"
+                          >
+                            <Settings2 size={13} />
+                            Gérer
+                          </button>
                         </td>
                       </tr>
-
-                      {/* ── Ligne détaillée ── */}
-                      {isOpen && (
-                        <tr key={`${r.id}-detail`} className="bg-gray-50/50">
-                          <td colSpan={5} className="px-6 py-4">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                              <div>
-                                <p className="text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Fonction</p>
-                                <p className="text-gray-700">{r.employee_fonction}</p>
-                              </div>
-                              {r.processed_at && (
-                                <div>
-                                  <p className="text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Traité le</p>
-                                  <p className="text-gray-700">{fmtDateTime(r.processed_at)}</p>
-                                </div>
-                              )}
-                              {r.processed_by && (
-                                <div>
-                                  <p className="text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Traité par</p>
-                                  <p className="text-gray-700">{r.processed_by}</p>
-                                </div>
-                              )}
-                              {Object.keys(r.extra_data || {}).length > 0 && (
-                                <div className="col-span-2">
-                                  <p className="text-gray-400 uppercase tracking-wide font-semibold mb-1">Informations complémentaires</p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {Object.entries(r.extra_data).map(([k, v]) => (
-                                      <span key={k} className="px-2 py-0.5 bg-white border border-gray-200 rounded-lg text-gray-600">
-                                        <span className="text-gray-400">{k.replace(/_/g, " ")} :</span> {v}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              {r.notes && (
-                                <div className="col-span-2">
-                                  <p className="text-gray-400 uppercase tracking-wide font-semibold mb-0.5">
-                                    {r.status === "REJECTED" ? "Motif de refus" : "Notes"}
-                                  </p>
-                                  <p className={`${r.status === "REJECTED" ? "text-red-600" : "text-gray-700"}`}>{r.notes}</p>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>}
       </div>
 
-      {/* ══ Modal Traiter ════════════════════════════════════════════════════════ */}
+      {/* ══ Modal Détails ══════════════════════════════════════════════════════ */}
       <AnimatePresence>
-        {processTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => !processing && setProcessTarget(null)}>
+        {detailTarget && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={() => setDetailTarget(null)}
+          >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.15 }}
               onClick={e => e.stopPropagation()}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
             >
-              <div className="bg-emerald-600 px-6 py-4 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                  <Send size={18} className="text-white" />
+              {/* Header */}
+              <div className="bg-[#003c71] px-6 py-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                  <FileText size={18} className="text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-bold text-sm">Traiter la demande</p>
-                  <p className="text-white/70 text-xs truncate">{processTarget.employee_nom_complet} — {processTarget.document_type_display}</p>
+                  <p className="text-white font-bold">{detailTarget.employee_nom_complet}</p>
+                  <p className="text-white/70 text-xs truncate">{detailTarget.document_type_display}</p>
                 </div>
-                <button onClick={() => !processing && setProcessTarget(null)} className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
+                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${STATUS_CONFIG[detailTarget.status].cls}`}>
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${STATUS_CONFIG[detailTarget.status].dotCls}`} />
+                  {STATUS_CONFIG[detailTarget.status].label}
+                </span>
+                <button onClick={() => setDetailTarget(null)} className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition ml-1">
                   <X size={14} className="text-white" />
                 </button>
               </div>
 
+              {/* Body */}
               <div className="p-6 space-y-4">
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-                  <p className="text-xs text-emerald-700">
-                    Le PDF sera <strong>généré automatiquement</strong> avec les données du profil de l'employé,
-                    puis envoyé par email à <strong>{processTarget.employee_nom_complet}</strong>.
-                  </p>
+
+                {/* Infos employé */}
+                <Divider label="Employé" />
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex items-start gap-2">
+                    <User size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Matricule</p>
+                      <p className="font-mono font-semibold text-gray-700">{detailTarget.employee_matricule}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Briefcase size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Fonction</p>
+                      <p className="text-gray-700">{detailTarget.employee_fonction}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2 col-span-2">
+                    <Building2 size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Service</p>
+                      <p className="text-gray-700">{detailTarget.employee_service}</p>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Notes (optionnel)
-                  </label>
-                  <textarea
-                    value={processNotes}
-                    onChange={e => setProcessNotes(e.target.value)}
-                    rows={3}
-                    placeholder="Remarques pour l'employé…"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 resize-none transition"
-                  />
+                {/* Infos demande */}
+                <Divider label="Demande" />
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex items-start gap-2">
+                    <Calendar size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Date de demande</p>
+                      <p className="text-gray-700">{fmtDate(detailTarget.created_at)}</p>
+                    </div>
+                  </div>
+                  {detailTarget.processed_at && (
+                    <div className="flex items-start gap-2">
+                      <Clock size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-400 mb-0.5">Traité le</p>
+                        <p className="text-gray-700">{fmtDateTime(detailTarget.processed_at)}</p>
+                      </div>
+                    </div>
+                  )}
+                  {detailTarget.processed_by && (
+                    <div className="flex items-start gap-2 col-span-2">
+                      <User size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-400 mb-0.5">Traité par</p>
+                        <p className="text-gray-700">{detailTarget.processed_by}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex gap-2">
-                  <button onClick={() => !processing && setProcessTarget(null)}
-                    className="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition">
-                    Annuler
-                  </button>
-                  <button onClick={handleProcess} disabled={processing}
-                    className="flex-[2] bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-semibold transition flex items-center justify-center gap-2">
-                    {processing
-                      ? <><ImSpinner2 className="animate-spin" size={14} /> Génération PDF…</>
-                      : <><Send size={14} /> Générer &amp; Envoyer</>
-                    }
-                  </button>
-                </div>
+                {/* Données complémentaires */}
+                {Object.keys(detailTarget.extra_data || {}).length > 0 && (
+                  <>
+                    <Divider label="Informations complémentaires" />
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(detailTarget.extra_data).map(([k, v]) => (
+                        <div key={k} className="bg-gray-50 rounded-xl px-3 py-2">
+                          <p className="text-xs text-gray-400 mb-0.5">{EXTRA_LABELS[k] || k.replace(/_/g, " ")}</p>
+                          <p className="text-sm font-medium text-gray-700">{v}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Notes / motif de refus */}
+                {detailTarget.notes && (
+                  <div className={`p-3 rounded-xl border text-sm ${
+                    detailTarget.status === "REJECTED"
+                      ? "bg-red-50 border-red-200 text-red-700"
+                      : "bg-blue-50 border-blue-200 text-blue-700"
+                  }`}>
+                    <p className="text-xs font-semibold mb-1 uppercase tracking-wide opacity-70">
+                      {detailTarget.status === "REJECTED" ? "Motif de refus" : "Notes"}
+                    </p>
+                    {detailTarget.notes}
+                  </div>
+                )}
+
+                {/* ── Historique ── */}
+                <Divider label="Historique" />
+                {historyLoading ? (
+                  <div className="flex justify-center py-4">
+                    <ImSpinner2 className="animate-spin text-gray-400" size={18} />
+                  </div>
+                ) : detailHistory.length === 0 ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
+                    <History size={14} />
+                    Aucun historique disponible
+                  </div>
+                ) : (
+                  <ol className="relative border-l border-gray-200 space-y-4 ml-2">
+                    {detailHistory.map((h, i) => {
+                      const cfg = HISTORY_CONFIG[h.action] ?? HISTORY_CONFIG.CREATED;
+                      return (
+                        <li key={h.id} className="ml-4">
+                          {/* point sur la timeline */}
+                          <span className={`absolute -left-[7px] w-3.5 h-3.5 rounded-full border-2 border-white ${cfg.dot}`} />
+                          <div className="flex items-start gap-2">
+                            <span className={`mt-0.5 shrink-0 ${cfg.color}`}>{cfg.icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-semibold ${cfg.color}`}>{h.action_display}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                {h.performed_by && <span className="font-medium text-gray-500">{h.performed_by} · </span>}
+                                {new Date(h.performed_at).toLocaleDateString("fr-FR", {
+                                  day: "2-digit", month: "short", year: "numeric",
+                                  hour: "2-digit", minute: "2-digit",
+                                })}
+                              </p>
+                              {h.notes && (
+                                <p className="text-xs text-gray-500 mt-1 italic">"{h.notes}"</p>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+
+                <button
+                  onClick={() => setDetailTarget(null)}
+                  className="w-full border border-gray-200 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition mt-2"
+                >
+                  Fermer
+                </button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* ══ Modal Refuser ════════════════════════════════════════════════════════ */}
+      {/* ══ Modal Gérer ════════════════════════════════════════════════════════ */}
       <AnimatePresence>
-        {rejectTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => !rejecting && setRejectTarget(null)}>
+        {manageTarget && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={() => !processing && !rejecting && !regenerating && setManageTarget(null)}
+          >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -411,46 +507,155 @@ export default function RhAttestationsPage() {
               onClick={e => e.stopPropagation()}
               className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
             >
-              <div className="bg-red-500 px-6 py-4 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                  <AlertCircle size={18} className="text-white" />
+              {/* Header */}
+              <div className="bg-[#003c71] px-6 py-4 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                  <Settings2 size={18} className="text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-bold text-sm">Refuser la demande</p>
-                  <p className="text-white/70 text-xs truncate">{rejectTarget.employee_nom_complet} — {rejectTarget.document_type_display}</p>
+                  <p className="text-white font-bold text-sm">Gérer la demande</p>
+                  <p className="text-white/70 text-xs truncate">{manageTarget.employee_nom_complet} — {manageTarget.document_type_display}</p>
                 </div>
-                <button onClick={() => !rejecting && setRejectTarget(null)} className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
+                <button
+                  onClick={() => !processing && !rejecting && !regenerating && setManageTarget(null)}
+                  className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
+                >
                   <X size={14} className="text-white" />
                 </button>
               </div>
 
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Motif du refus <span className="text-red-400">*</span>
-                  </label>
-                  <textarea
-                    value={rejectNotes}
-                    onChange={e => setRejectNotes(e.target.value)}
-                    rows={4}
-                    placeholder="Ex : Informations manquantes dans votre dossier…"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-400/20 resize-none transition"
-                  />
-                </div>
+              <div className="p-6 space-y-3">
 
-                <div className="flex gap-2">
-                  <button onClick={() => !rejecting && setRejectTarget(null)}
-                    className="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition">
-                    Annuler
-                  </button>
-                  <button onClick={handleReject} disabled={rejecting || !rejectNotes.trim()}
-                    className="flex-[2] bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-semibold transition flex items-center justify-center gap-2">
-                    {rejecting
-                      ? <><ImSpinner2 className="animate-spin" size={14} /> En cours…</>
-                      : <><XCircle size={14} /> Confirmer le refus</>
-                    }
-                  </button>
-                </div>
+                {/* ── PENDING ── */}
+                {manageTarget.status === "PENDING" && (
+                  <>
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                      Cette demande est en attente de traitement. Générez le PDF ou refusez-la.
+                    </div>
+
+                    {/* Notes */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">Notes (optionnel)</label>
+                      <textarea
+                        value={processNotes}
+                        onChange={e => setProcessNotes(e.target.value)}
+                        rows={2}
+                        placeholder="Remarques pour l'employé…"
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 resize-none transition"
+                      />
+                    </div>
+
+                    {/* Traiter */}
+                    <button
+                      onClick={handleProcess}
+                      disabled={processing || rejecting}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition"
+                    >
+                      {processing
+                        ? <><ImSpinner2 className="animate-spin" size={15} /> Génération PDF en cours…</>
+                        : <><FileCheck size={15} /> Générer &amp; Envoyer le PDF</>
+                      }
+                    </button>
+
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center"><div className="w-full h-px bg-gray-100" /></div>
+                      <div className="relative flex justify-center"><span className="bg-white px-2 text-xs text-gray-400">ou</span></div>
+                    </div>
+
+                    {/* Refuser */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                        Motif de refus <span className="text-red-400">*</span>
+                      </label>
+                      <textarea
+                        value={rejectNotes}
+                        onChange={e => setRejectNotes(e.target.value)}
+                        rows={2}
+                        placeholder="Ex : Informations manquantes dans votre dossier…"
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-400/20 resize-none transition"
+                      />
+                    </div>
+                    <button
+                      onClick={handleReject}
+                      disabled={rejecting || processing || !rejectNotes.trim()}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-600 border border-red-200 rounded-xl text-sm font-semibold transition"
+                    >
+                      {rejecting
+                        ? <><ImSpinner2 className="animate-spin" size={15} /> En cours…</>
+                        : <><Ban size={15} /> Refuser la demande</>
+                      }
+                    </button>
+                  </>
+                )}
+
+                {/* ── PROCESSED ── */}
+                {manageTarget.status === "PROCESSED" && (
+                  <>
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 flex items-center gap-2">
+                      <CheckCircle2 size={14} className="shrink-0" />
+                      Demande traitée le {fmtDateTime(manageTarget.processed_at)}
+                      {manageTarget.processed_by && ` par ${manageTarget.processed_by}`}.
+                    </div>
+
+                    {/* Afficher PDF */}
+                    {manageTarget.pdf_url && (
+                      <a
+                        href={manageTarget.pdf_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-3 px-4 py-3.5 bg-[#003c71]/5 hover:bg-[#003c71]/10 border border-[#003c71]/20 rounded-xl transition group"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-[#003c71] flex items-center justify-center shrink-0">
+                          <Download size={16} className="text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-[#003c71]">Afficher le fichier PDF</p>
+                          <p className="text-xs text-gray-400">Ouvrir dans un nouvel onglet</p>
+                        </div>
+                      </a>
+                    )}
+
+                    {/* Re-générer */}
+                    <button
+                      onClick={handleRegenerate}
+                      disabled={regenerating}
+                      className="flex items-center gap-3 w-full px-4 py-3.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition disabled:opacity-60 text-left"
+                    >
+                      <div className="w-9 h-9 rounded-lg bg-gray-200 flex items-center justify-center shrink-0">
+                        {regenerating
+                          ? <ImSpinner2 className="animate-spin text-gray-500" size={16} />
+                          : <RotateCcw size={16} className="text-gray-500" />
+                        }
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-700">
+                          {regenerating ? "Re-génération en cours…" : "Re-générer le PDF"}
+                        </p>
+                        <p className="text-xs text-gray-400">Recréer le document avec les données actuelles</p>
+                      </div>
+                    </button>
+                  </>
+                )}
+
+                {/* ── REJECTED ── */}
+                {manageTarget.status === "REJECTED" && (
+                  <>
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
+                      <p className="font-semibold mb-1">Demande refusée</p>
+                      {manageTarget.notes && <p>{manageTarget.notes}</p>}
+                    </div>
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-500 text-center">
+                      Pour re-traiter cette demande, l'employé doit soumettre une nouvelle demande.
+                    </div>
+                  </>
+                )}
+
+                <button
+                  onClick={() => !processing && !rejecting && !regenerating && setManageTarget(null)}
+                  className="w-full border border-gray-200 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition"
+                >
+                  Fermer
+                </button>
               </div>
             </motion.div>
           </div>

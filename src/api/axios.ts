@@ -38,6 +38,15 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    // Si c'est l'endpoint refresh lui-même qui échoue → logout immédiat sans boucle
+    if (originalRequest?.url?.includes("/api/auth/token/refresh/")) {
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      window.location.href = "/login";
+      return Promise.reject(error);
+    }
+
     // Si non auth et refresh non déjà tenté
     if (
       error.response &&
@@ -71,8 +80,8 @@ api.interceptors.response.use(
         api.defaults.headers.Authorization = "Bearer " + newToken;
         onRefreshed(newToken);
         return api(originalRequest);
-      } catch (refreshError) {
-        // Échec du refresh, on logout tout
+      } catch (refreshError: any) {
+        // Échec du refresh (401, 500, ou toute erreur) → logout propre
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");
         window.location.href = "/login";

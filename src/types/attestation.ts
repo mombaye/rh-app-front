@@ -28,6 +28,31 @@ export interface AttestationRequest {
   processed_by:          string | null;
 }
 
+export interface AttestationHistory {
+  id:             number;
+  action:         "CREATED" | "PROCESSED" | "REGENERATED" | "REJECTED";
+  action_display: string;
+  performed_by:   string;
+  performed_at:   string;
+  notes:          string;
+}
+
+export interface AttestationTemplate {
+  id:                    number;
+  document_type:         AttestationDocumentType;
+  document_type_display: string;
+  template_url:          string | null;
+  original_filename:     string;
+  file_size:             number;
+  uploaded_by:           string;
+  uploaded_at:           string;
+}
+
+export interface TemplatePlaceholder {
+  variable:    string;
+  description: string;
+}
+
 // Champs supplémentaires requis par type de document
 export interface AttestationExtraFields {
   // Attestation de congés
