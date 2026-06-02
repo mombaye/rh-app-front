@@ -39,11 +39,10 @@ export const documentService = {
   },
 
   upload: async (formData: FormData): Promise<HRDocument> => {
+    // Ne pas forcer Content-Type : axios le génère automatiquement
+    // avec le bon boundary pour le multipart/form-data
     const res = await axios.post(`${API}/`, formData, {
-      headers: {
-        ...getAuthHeaders(),
-        "Content-Type": "multipart/form-data",
-      },
+      headers: getAuthHeaders(),
     });
     return res.data;
   },

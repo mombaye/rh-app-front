@@ -136,7 +136,7 @@ export const leaveBalanceService = {
     const form = new FormData();
     form.append("file", file);
     const res = await axios.post(`${API}/balances/bulk_import/`, form, {
-      headers: { ...getAuthHeaders(), "Content-Type": "multipart/form-data" },
+      headers: getAuthHeaders(),
     });
     return res.data;
   },
@@ -454,7 +454,7 @@ export const leaveRequestService = {
     const form = new FormData();
     form.append("document", file);
     const res = await axios.post(`${API}/requests/${id}/upload_document/`, form, {
-      headers: { ...getAuthHeaders(), "Content-Type": "multipart/form-data" },
+      headers: getAuthHeaders(),
     });
     return res.data;
   },

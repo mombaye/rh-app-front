@@ -32,9 +32,7 @@ export const getEmployeesByContractType = async (
 ) => getEmployees({ type_contrat: contractType, status });
 
 export const importEmployees = async (formData: FormData) => {
-  const res = await api.post("/api/employees/import/", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  const res = await api.post("/api/employees/import/", formData);
   return res.data;
 };
 
@@ -328,8 +326,7 @@ export const previewMatriculeChanges = async (
   formData.append("file", file);
   const res = await api.post(
     "/api/employees/preview-matricule-changes/",
-    formData,
-    { headers: { "Content-Type": "multipart/form-data" } }
+    formData
   );
   return res.data;
 };
@@ -380,9 +377,7 @@ export type BulletinMonthSummary = {
 
 /** POST /api/employees/send-bulletins/ */
 export const uploadPayslipPdf = async (formData: FormData) => {
-  const res = await api.post("/api/employees/send-bulletins/", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  const res = await api.post("/api/employees/send-bulletins/", formData);
   return res.data;
 };
 
@@ -390,8 +385,7 @@ export const uploadPayslipPdf = async (formData: FormData) => {
 export const startPreviewPayslipPdf = async (formData: FormData) => {
   const res = await api.post(
     "/api/employees/send-bulletins-preview/",
-    formData,
-    { headers: { "Content-Type": "multipart/form-data" } }
+    formData
   );
   return res.data;
 };
@@ -625,7 +619,6 @@ export const uploadDossierZip = async (
   const form = new FormData();
   form.append("file", file);
   const res = await api.post("/api/employees/upload-zip-dossiers/", form, {
-    headers: { "Content-Type": "multipart/form-data" },
     onUploadProgress: onUploadProgress
       ? (e) => {
           if (e.total) onUploadProgress(Math.round((e.loaded * 100) / e.total));
