@@ -25,6 +25,9 @@ import {
   envoyerQuestionnaire,
   toggleCompteQuestionnaire,
   RAISONS_DEPART,
+  SAT4_LABELS, SAT4_EMOJIS,
+  REL5_LABELS, REL5_EMOJIS,
+  OUI_NON_LABELS,
   type QuestionnaireSortieItem,
   type QuestionnaireSortieDetail,
   type StatutQuestionnaire,
@@ -86,149 +89,241 @@ function StatutBadge({ statut }: { statut: StatutQuestionnaire }) {
   );
 }
 
+// ── Helpers affichage ─────────────────────────────────────────────────────────
+function RatingBadge({ value, labels, emojis }: { value: number | null; labels: string[]; emojis: string[] }) {
+  if (!value) return <span className="text-slate-400 text-xs">—</span>;
+  const label = labels[value - 1] ?? String(value);
+  const emoji = emojis[value - 1] ?? "";
+  const isNA  = emoji === "N/A";
+  const isNeg = value <= Math.ceil(labels.length / 2) && !isNA;
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full ${
+      isNA ? "bg-slate-100 text-slate-500" : isNeg ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+    }`}>
+      {isNA ? "N/A" : emoji} {label}
+    </span>
+  );
+}
+
+function TextField({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null;
+  return (
+    <div>
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</p>
+      <p className="text-sm text-slate-700 bg-slate-50 rounded-xl p-3 italic">"{value}"</p>
+    </div>
+  );
+}
+
+function SectionTitle({ num, title }: { num: string; title: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-2">
+      <span className="w-6 h-6 rounded-full bg-[#003c71] text-white text-xs font-bold flex items-center justify-center shrink-0">{num}</span>
+      <p className="text-sm font-bold text-[#003c71]">{title}</p>
+    </div>
+  );
+}
+
 // ── Modal Détail ───────────────────────────────────────────────────────────────
-function DetailModal({
-  id,
-  onClose,
-}: {
-  id: number;
-  onClose: () => void;
-}) {
+function DetailModal({ id, onClose }: { id: number; onClose: () => void }) {
   const [detail, setDetail]   = useState<QuestionnaireSortieDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getQuestionnaireDetail(id)
-      .then(setDetail)
-      .finally(() => setLoading(false));
+    getQuestionnaireDetail(id).then(setDetail).finally(() => setLoading(false));
   }, [id]);
 
-  const raisonLabel =
-    RAISONS_DEPART.find((r) => r.value === detail?.raison_depart)?.label ??
-    detail?.raison_depart ??
-    "—";
+  const isV2 = !!(detail?.motifs_depart && detail.motifs_depart.length > 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
+        onClick={e => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
       >
-        <div className="flex items-center justify-between p-6 border-b border-slate-100 sticky top-0 bg-white z-10">
-          <h2 className="text-lg font-bold text-camublue-900">Détail du questionnaire</h2>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100">
-            <X size={20} className="text-slate-500" />
-          </button>
+        <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white z-10">
+          <h2 className="text-lg font-bold text-[#003c71]">Questionnaire de sortie</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100"><X size={18} className="text-slate-500" /></button>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center p-12">
-            <Loader2 className="animate-spin text-camublue-900" size={32} />
+            <Loader2 className="animate-spin text-[#003c71]" size={32} />
           </div>
         ) : detail ? (
           <div className="p-6 space-y-5">
-            {/* Employé */}
-            <div className="bg-slate-50 rounded-xl p-4 grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Employé</p>
-                <p className="font-semibold text-slate-800">
-                  {detail.employee_prenom} {detail.employee_nom}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Matricule</p>
-                <p className="font-mono text-slate-700">{detail.employee_matricule}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Service</p>
-                <p className="text-slate-700">{detail.employee_service || "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Statut</p>
+
+            {/* ── Section 1 : Identification ── */}
+            <div className="bg-[#003c71]/5 rounded-xl p-4 grid grid-cols-2 gap-3 text-sm border border-[#003c71]/10">
+              {[
+                ["Employé",     `${detail.employee_prenom} ${detail.employee_nom}`],
+                ["Matricule",   detail.employee_matricule],
+                ["Service",     detail.employee_service || "—"],
+                ["Fonction",    detail.employee_fonction || "—"],
+                ["Envoyé par",  detail.envoye_par || "—"],
+                ["Réponse le",  detail.date_reponse ? new Date(detail.date_reponse).toLocaleDateString("fr-FR") : "—"],
+              ].map(([lbl, val]) => (
+                <div key={lbl}>
+                  <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">{lbl}</p>
+                  <p className="font-medium text-slate-800">{val}</p>
+                </div>
+              ))}
+              <div className="col-span-2">
+                <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">Statut</p>
                 <StatutBadge statut={detail.statut} />
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Envoyé par</p>
-                <p className="text-slate-700">{detail.envoye_par || "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Date réponse</p>
-                <p className="text-slate-700">
-                  {detail.date_reponse
-                    ? new Date(detail.date_reponse).toLocaleDateString("fr-FR")
-                    : "—"}
-                </p>
               </div>
             </div>
 
-            {detail.statut === "complete" ? (
-              <>
-                {/* Raison départ */}
+            {detail.statut === "complete" ? (<>
+
+              {isV2 ? (<>
+                {/* ── Section 2 ── */}
+                <SectionTitle num="2" title="Motifs de départ" />
+
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                    Raison du départ
-                  </p>
-                  <p className="text-sm text-slate-800 font-medium">{raisonLabel}</p>
-                  {detail.raison_depart_detail && (
-                    <p className="text-sm text-slate-600 mt-1 italic">
-                      "{detail.raison_depart_detail}"
-                    </p>
-                  )}
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Motifs sélectionnés</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(detail.motifs_depart ?? []).map(m => {
+                      const found = RAISONS_DEPART.find(r => r.value === m);
+                      return (
+                        <span key={m} className="text-xs font-medium px-3 py-1 bg-[#003c71]/10 text-[#003c71] rounded-full">
+                          {found?.label ?? m}
+                        </span>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* Satisfactions */}
+                <TextField label="Commentaires sur les motifs"    value={detail.motifs_commentaires} />
+                <TextField label="2.2 Évènement déclencheur"      value={detail.evenement_declencheur} />
+                <TextField label="2.3 Échange avec le manager"    value={detail.echange_manager_avant} />
+
+                {/* ── Section 3 ── */}
+                <SectionTitle num="3" title="Emploi" />
+
+                <TextField label="3.1 Motivation à rejoindre CAMUSAT" value={detail.motivation_rejoindre} />
+
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-                    Satisfactions
-                  </p>
-                  <div className="space-y-2.5">
-                    {[
-                      { label: "Satisfaction générale",           value: detail.satisfaction_generale },
-                      { label: "Relation avec la hiérarchie",    value: detail.satisfaction_management },
-                      { label: "Environnement de travail",       value: detail.satisfaction_environnement },
-                      { label: "Rémunération & avantages",       value: detail.satisfaction_remuneration },
-                    ].map(({ label, value }) => (
-                      <div key={label} className="flex items-center justify-between">
-                        <span className="text-sm text-slate-600">{label}</span>
-                        <StarDisplay value={value} />
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Satisfactions</p>
+                  <div className="space-y-2">
+                    {([
+                      ["3.2 Missions confiées conformes",            detail.sat_missions,         detail.sat_comments?.missions],
+                      ["3.3 Moyens pour exercer les fonctions",      detail.sat_moyens,           detail.sat_comments?.moyens],
+                      ["3.4 Objectifs précis",                       detail.sat_objectifs,        detail.sat_comments?.objectifs],
+                      ["3.5 Soutien suffisant",                      detail.sat_soutien,          detail.sat_comments?.soutien],
+                      ["3.6 Charge de travail réaliste",             detail.sat_charge_travail,   detail.sat_comments?.charge],
+                      ["3.7 Aide à atteindre le projet de carrière", detail.sat_evolution_carriere, detail.sat_comments?.evolution],
+                    ] as [string, number | null, string | undefined][]).map(([lbl, val, cmt]) => (
+                      <div key={lbl} className="py-1.5 border-b border-slate-50 last:border-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">{lbl}</span>
+                          <RatingBadge value={val} labels={SAT4_LABELS} emojis={SAT4_EMOJIS} />
+                        </div>
+                        {cmt && <p className="text-xs text-slate-400 italic mt-0.5 pl-2">"{cmt}"</p>}
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* Recommandation */}
-                <div className="flex items-center justify-between bg-slate-50 rounded-xl p-4">
-                  <span className="text-sm font-medium text-slate-700">
-                    Recommanderait Camusat ?
-                  </span>
-                  <span
-                    className={`text-sm font-bold ${
-                      detail.recommandation ? "text-green-600" : "text-red-500"
-                    }`}
-                  >
-                    {detail.recommandation === null ? "—" : detail.recommandation ? "Oui" : "Non"}
-                  </span>
+                <TextField label="3.8 Aspect le plus satisfaisant"   value={detail.aspect_satisfaisant} />
+                <TextField label="3.9 Aspect le moins satisfaisant"  value={detail.aspect_insatisfaisant} />
+                <TextField label="3.10 Compétences développées"      value={detail.competences_developpees} />
+
+                {/* ── Section 4 ── */}
+                <SectionTitle num="4" title="Environnement de travail" />
+
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Relations</p>
+                  <div className="space-y-2">
+                    {([
+                      ["4.1.1 Support Groupe",          detail.rel_support_groupe,    detail.rel_comments?.support],
+                      ["4.1.2 Direction de la filiale", detail.rel_direction_filiale, detail.rel_comments?.direction],
+                      ["4.1.3 Manager",                 detail.rel_manager,           detail.rel_comments?.manager],
+                      ["4.1.4 Collègues de l'équipe",   detail.rel_collegues,         detail.rel_comments?.collegues],
+                      ["4.1.5 Autres services",         detail.rel_autres_services,   detail.rel_comments?.autres],
+                      ["4.1.6 Clients",                 detail.rel_clients,           detail.rel_comments?.clients],
+                      ["4.1.7 Fournisseurs",            detail.rel_fournisseurs,      detail.rel_comments?.fournisseurs],
+                      ["4.1.8 Sous-traitants",          detail.rel_sous_traitants,    detail.rel_comments?.sous_traitants],
+                    ] as [string, number | null, string | undefined][]).map(([lbl, val, cmt]) => (
+                      <div key={lbl} className="py-1.5 border-b border-slate-50 last:border-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">{lbl}</span>
+                          <RatingBadge value={val} labels={REL5_LABELS} emojis={REL5_EMOJIS} />
+                        </div>
+                        {cmt && <p className="text-xs text-slate-400 italic mt-0.5 pl-2">"{cmt}"</p>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Texte libre */}
+                <TextField label="Commentaire relations"             value={detail.rel_commentaire} />
+                <TextField label="4.2 Améliorations environnement"  value={detail.amelioration_environnement} />
+
+                {/* ── Section 5 ── */}
+                <SectionTitle num="5" title="Divers" />
+
+                <TextField label="5.1 Profil pour remplacement"      value={detail.profil_remplacement} />
+                <TextField label="5.2 Qualités requises pour le poste" value={detail.qualites_poste} />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <p className="text-xs text-slate-400 mb-1">5.3 Retravaillerait chez CAMUSAT</p>
+                    <p className={`text-sm font-bold ${
+                      detail.retravaillerait_camusat === "oui" ? "text-green-600" :
+                      detail.retravaillerait_camusat === "non" ? "text-red-600" : "text-amber-600"
+                    }`}>
+                      {detail.retravaillerait_camusat ? OUI_NON_LABELS[detail.retravaillerait_camusat] : "—"}
+                    </p>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <p className="text-xs text-slate-400 mb-1">5.4 Recommande CAMUSAT</p>
+                    <p className={`text-sm font-bold ${
+                      detail.recommande_camusat === "oui" ? "text-green-600" :
+                      detail.recommande_camusat === "non" ? "text-red-600" : "text-amber-600"
+                    }`}>
+                      {detail.recommande_camusat ? OUI_NON_LABELS[detail.recommande_camusat] : "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <TextField label="5.5 Nouveau poste / entreprise"    value={detail.nouveau_poste_entreprise} />
+                <TextField label="5.6 Suggestions et commentaires"   value={detail.suggestions_commentaires} />
+
+              </>) : (<>
+                {/* ── Ancien format (rétrocompat) ── */}
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Raison du départ</p>
+                  <p className="text-sm text-slate-800 font-medium">
+                    {RAISONS_DEPART.find(r => r.value === detail.raison_depart)?.label ?? detail.raison_depart ?? "—"}
+                  </p>
+                  {detail.raison_depart_detail && (
+                    <p className="text-sm text-slate-600 mt-1 italic">"{detail.raison_depart_detail}"</p>
+                  )}
+                </div>
+                <div className="space-y-2.5">
+                  {[
+                    { label: "Satisfaction générale",       value: detail.satisfaction_generale },
+                    { label: "Relation avec la hiérarchie", value: detail.satisfaction_management },
+                    { label: "Environnement de travail",    value: detail.satisfaction_environnement },
+                    { label: "Rémunération & avantages",    value: detail.satisfaction_remuneration },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex items-center justify-between">
+                      <span className="text-sm text-slate-600">{label}</span>
+                      <StarDisplay value={value} />
+                    </div>
+                  ))}
+                </div>
                 {[
                   { label: "Points positifs",       value: detail.points_positifs },
                   { label: "Points d'amélioration", value: detail.points_amelioration },
                   { label: "Commentaires",           value: detail.commentaires },
-                ].filter(({ value }) => value).map(({ label, value }) => (
-                  <div key={label}>
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                      {label}
-                    </p>
-                    <p className="text-sm text-slate-700 bg-slate-50 rounded-xl p-3 italic">
-                      "{value}"
-                    </p>
-                  </div>
-                ))}
-              </>
-            ) : (
-              <p className="text-sm text-slate-500 text-center py-4">
+                ].filter(f => f.value).map(f => <TextField key={f.label} label={f.label} value={f.value} />)}
+              </>)}
+
+            </>) : (
+              <p className="text-sm text-slate-500 text-center py-6">
                 L'employé n'a pas encore répondu au questionnaire.
               </p>
             )}
