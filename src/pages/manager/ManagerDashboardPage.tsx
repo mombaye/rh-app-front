@@ -35,10 +35,11 @@ export default function ManagerDashboardPage() {
   const employeeId = user?.employee_id;
 
   const [balances,        setBalances]        = useState<LeaveBalance[]>([]);
-  const [ownRequests,     setOwnRequests]     = useState<LeaveRequest[]>([]);
-  const [pendingSubords,  setPendingSubords]  = useState<LeaveRequest[]>([]);
+  const [ownRequests,      setOwnRequests]      = useState<LeaveRequest[]>([]);
+  const [pendingSubords,   setPendingSubords]   = useState<LeaveRequest[]>([]);
+  const [teamOnLeave,      setTeamOnLeave]      = useState<LeaveRequest[]>([]);
   const [approvedThisMonth, setApprovedThisMonth] = useState(0);
-  const [loading,         setLoading]         = useState(true);
+  const [loading,          setLoading]          = useState(true);
 
   const refresh = useCallback(async () => {
     if (!employeeId) { setLoading(false); return; }
@@ -62,11 +63,17 @@ export default function ManagerDashboardPage() {
       setPendingSubords([...othersP, ...othersP2].slice(0, 5));
 
       // Approuvées ce mois
-      const thisMonth = (approvedAll as LeaveRequest[]).filter(r => {
+      const allApproved = approvedAll as LeaveRequest[];
+      const thisMonth = allApproved.filter(r => {
         const d = new Date(r.reviewed_at || r.updated_at);
         return d.getFullYear() === year && d.getMonth() + 1 === month;
       });
       setApprovedThisMonth(thisMonth.length);
+
+      // Équipe actuellement en congé
+      setTeamOnLeave(
+        allApproved.filter(r => r.employee.id !== employeeId && r.is_in_progress)
+      );
     } catch {
       // silencieux
     } finally {
@@ -106,6 +113,13 @@ export default function ManagerDashboardPage() {
       icon:  <Users size={22} />,
       color: "bg-purple-50 text-purple-700",
     },
+    {
+      label: "Équipe en congé",
+      value: loading ? "…" : teamOnLeave.length,
+      icon:  <TrendingUp size={22} />,
+      color: "bg-teal-50 text-teal-700",
+      link:  "/manager/team-leaves",
+    },
   ];
 
   return (
@@ -123,7 +137,7 @@ export default function ManagerDashboardPage() {
         </motion.div>
 
         {/* ── Stats cards ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           {stats.map((s, i) => (
             <motion.div
               key={s.label}
@@ -232,6 +246,73 @@ export default function ManagerDashboardPage() {
           </motion.div>
 
         </div>
+
+        {/* ── Équipe en congé ── */}
+        {(loading || teamOnLeave.length > 0) && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.32 }}
+            className="mt-6 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+          >
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users size={18} className="text-teal-600" />
+                <span className="font-semibold text-gray-800">Équipe en congé</span>
+                {!loading && teamOnLeave.length > 0 && (
+                  <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-bold">
+                    {teamOnLeave.length}
+                  </span>
+                )}
+              </div>
+              <Link to="/manager/team-leaves" className="text-xs text-[#003c71] hover:underline flex items-center gap-1">
+                Voir tout <ArrowRight size={12} />
+              </Link>
+            </div>
+
+            {loading ? (
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}
+              </div>
+            ) : (
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {teamOnLeave.slice(0, 6).map((req, i) => {
+                  const today   = new Date(); today.setHours(0,0,0,0);
+                  const end     = new Date(req.end_date); end.setHours(0,0,0,0);
+                  const remaining = Math.max(0, Math.ceil((end.getTime() - today.getTime()) / 86_400_000));
+                  const color   = req.leave_type?.color ?? "#0d9488";
+                  const initials = req.employee.full_name.split(" ").map((n: string) => n[0]).join("").slice(0,2).toUpperCase();
+                  return (
+                    <motion.div
+                      key={req.id}
+                      initial={{ opacity: 0, scale: 0.97 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: i * 0.05 }}
+                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100"
+                    >
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0"
+                        style={{ backgroundColor: color }}>
+                        {initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{req.employee.full_name}</p>
+                        <p className="text-xs text-gray-400 truncate">{req.leave_type?.label} · retour dans {remaining}j</p>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+
+            {!loading && teamOnLeave.length > 6 && (
+              <div className="px-5 py-3 border-t border-gray-100 text-center">
+                <Link to="/manager/team-leaves" className="text-xs text-[#003c71] hover:underline">
+                  + {teamOnLeave.length - 6} autres employés en congé
+                </Link>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* ── Soldes ── */}
         {!loading && balances.length > 0 && (

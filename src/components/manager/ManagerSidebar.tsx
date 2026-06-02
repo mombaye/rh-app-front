@@ -27,6 +27,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
   const navItems: NavItem[] = [
     { label: "Tableau de bord",      path: "/manager/dashboard",    icon: <LayoutDashboard size={20} />                                                    },
     { label: "Approbations",         path: "/manager/approvals",    icon: <ClipboardCheck size={20} />, badge: pendingCount > 0 ? pendingCount : undefined },
+    { label: "Équipe en congé",      path: "/manager/team-leaves",  icon: <Users size={20} />                                                                  },
     { label: "Mon Dossier",          path: "/manager/dossier",      icon: <FolderOpen size={20} />                                                         },
     { label: "Mes Bulletins",        path: "/manager/payslips",     icon: <BadgeDollarSign size={20} />                                                    },
     { label: "Mes Pointages",        path: "/manager/attendance",   icon: <Clock size={20} />                                                              },

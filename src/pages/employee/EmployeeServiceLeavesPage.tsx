@@ -46,6 +46,13 @@ function LeaveCard({ req, index }: { req: LeaveRequest; index: number }) {
   const color     = req.leave_type?.color ?? "#003c71";
   const initials  = getInitials(req.employee.full_name);
 
+  const today     = new Date(); today.setHours(0, 0, 0, 0);
+  const startDate = new Date(req.start_date); startDate.setHours(0, 0, 0, 0);
+  const isUpcoming = startDate > today;
+  const daysUntilStart = isUpcoming
+    ? Math.ceil((startDate.getTime() - today.getTime()) / 86_400_000)
+    : 0;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -65,8 +72,19 @@ function LeaveCard({ req, index }: { req: LeaveRequest; index: number }) {
 
           {/* Infos */}
           <div className="flex-1 min-w-0">
-            {/* Nom */}
-            <p className="font-bold text-gray-800 text-sm mb-0.5">{req.employee.full_name}</p>
+            {/* Nom + badge statut */}
+            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+              <p className="font-bold text-gray-800 text-sm">{req.employee.full_name}</p>
+              {isUpcoming ? (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                  Dans {daysUntilStart}j
+                </span>
+              ) : (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                  En cours
+                </span>
+              )}
+            </div>
 
             {/* Matricule · Service · Fonction */}
             <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-2 flex-wrap">
@@ -107,27 +125,29 @@ function LeaveCard({ req, index }: { req: LeaveRequest; index: number }) {
               </span>
             </div>
 
-            {/* Barre de progression */}
-            <div className="mt-3 space-y-1.5">
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.6, delay: index * 0.04 + 0.2 }}
-                  className="h-full rounded-full"
-                  style={{ backgroundColor: color }}
-                />
+            {/* Barre de progression (uniquement si congé en cours) */}
+            {!isUpcoming && (
+              <div className="mt-3 space-y-1.5">
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.6, delay: index * 0.04 + 0.2 }}
+                    className="h-full rounded-full"
+                    style={{ backgroundColor: color }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-400">
+                  <span className="flex items-center gap-1">
+                    <Clock size={9} />
+                    {elapsed}j écoulé{elapsed > 1 ? "s" : ""}
+                  </span>
+                  <span className={remaining <= 2 ? "text-red-500 font-semibold" : ""}>
+                    {remaining}j restant{remaining > 1 ? "s" : ""}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between text-[10px] text-gray-400">
-                <span className="flex items-center gap-1">
-                  <Clock size={9} />
-                  {elapsed}j écoulé{elapsed > 1 ? "s" : ""}
-                </span>
-                <span className={remaining <= 2 ? "text-red-500 font-semibold" : ""}>
-                  {remaining}j restant{remaining > 1 ? "s" : ""}
-                </span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -150,12 +170,13 @@ export default function EmployeeServiceLeavesPage({ layout: Layout = EmployeeLay
     setLoading(true);
     try {
       const data = await leaveRequestService.getAll({
-        department: service,
-        status: "APPROVED",
+        department:        service,
+        status:            "APPROVED",
+        active_or_upcoming: 1,          // congés en cours OU à venir (fin_date >= aujourd'hui)
       } as any);
       // Exclure l'employé lui-même
       const others = data.filter(
-        (r: LeaveRequest) => r.is_in_progress && r.employee.id !== user?.employee_id,
+        (r: LeaveRequest) => r.employee.id !== user?.employee_id,
       );
       setAll(others);
     } catch {
@@ -190,7 +211,7 @@ export default function EmployeeServiceLeavesPage({ layout: Layout = EmployeeLay
             </div>
             <div>
               <h1 className="text-2xl font-bold text-[#003c71]">
-                Service en congé
+                Équipe en congé
                 {!loading && (
                   <span className="ml-2 text-base font-bold text-white bg-[#003c71] rounded-full px-2.5 py-0.5 align-middle">
                     {all.length}

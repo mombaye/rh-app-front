@@ -18,6 +18,8 @@ import {
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
+import { leaveRequestService } from "@/services/leaveService";
+import { LeaveRequest } from "@/types/leave";
 
 const baseNavItems = [
   {
@@ -41,7 +43,7 @@ const baseNavItems = [
     icon: <CalendarDays size={20} />,
   },
   {
-    label: "Mon Service",
+    label: "Équipe en congé",
     path: "/employee/service-leaves",
     icon: <Users size={20} />,
   },
@@ -81,6 +83,22 @@ export default function EmployeeSidebar() {
   const isManager =
     availableRoles.includes("manager1") || availableRoles.includes("manager2");
 
+  // Compteur collègues en congé (badge "Équipe en congé")
+  const [serviceLeaveCount, setServiceLeaveCount] = useState(0);
+
+  useEffect(() => {
+    const service = user?.employee_service;
+    if (!service || !user?.employee_id) return;
+    leaveRequestService.getAll({
+      department:         service,
+      status:             "APPROVED",
+      active_or_upcoming: 1,
+    } as any).then((data: LeaveRequest[]) => {
+      const count = data.filter(r => r.employee.id !== user.employee_id).length;
+      setServiceLeaveCount(count);
+    }).catch(() => {});
+  }, [user?.employee_service, user?.employee_id]);
+
   const navItems: NavItem[] = [
     ...baseNavItems,
     ...(isManager
@@ -105,19 +123,29 @@ export default function EmployeeSidebar() {
   }, []);
 
   const NavLink = ({ item, onClose }: { item: NavItem; onClose?: () => void }) => {
-    const isActive = location.pathname === item.path;
+    const isActive   = location.pathname === item.path;
+    const isService  = item.path === "/employee/service-leaves";
+    const showBadge  = isService && serviceLeaveCount > 0;
+
     return (
       <Link
         to={item.path}
         onClick={onClose}
-        className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-150 ${
+        className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-150 relative ${
           isActive
             ? "bg-camublue-900 text-white shadow-sm"
             : "text-gray-700 hover:bg-camublue-900/10 hover:text-camublue-900"
         }`}
       >
         {item.icon}
-        {item.label}
+        <span className="flex-1">{item.label}</span>
+        {showBadge && (
+          <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold flex items-center justify-center ${
+            isActive ? "bg-white/25 text-white" : "bg-teal-500 text-white"
+          }`}>
+            {serviceLeaveCount > 99 ? "99+" : serviceLeaveCount}
+          </span>
+        )}
       </Link>
     );
   };
