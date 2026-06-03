@@ -21,6 +21,7 @@ import QuestionnaireSortiePage from "@/pages/QuestionnaireSortiePage";
 import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
 import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
 import AttendanceJustificationsPage from "@/pages/AttendanceJustificationsPage";
+import AttendanceFeriesPage from "@/pages/AttendanceFeriesPage";
 import PlanningPage from "@/pages/PlanningPage";
 import EmployeeDashboardPage          from "@/pages/employee/EmployeeDashboardPage";
 import EmployeeLeavesPage             from "@/pages/employee/EmployeeLeavesPage";
@@ -276,6 +277,11 @@ function App() {
         <Route path="/attendance/shifts" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <AttendanceShiftsPage />
+          </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/attendance/feries" element={
+          <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
+            <AttendanceFeriesPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
         <Route path="/attendance/justifications" element={

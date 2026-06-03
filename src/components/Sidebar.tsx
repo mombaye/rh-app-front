@@ -124,6 +124,7 @@ export default function Sidebar() {
         { label: "Normales",       path: "/attendance/normales"       },
         { label: "Shifts",         path: "/attendance/shifts"         },
         { label: "Justifications", path: "/attendance/justifications" },
+        { label: "Jours fériés",   path: "/attendance/feries"         },
       ],
     },
     {

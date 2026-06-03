@@ -85,7 +85,7 @@ function buildPdf(days: DayRecord[], opts: {
   const today = new Date();
   const past = days.filter(d => new Date(d.date+"T12:00:00") <= today);
   const stats = [
-    { label: "Présents",     value: String(past.filter(d=>d.status==="present").length),    color:[21,128,61] as [number,number,number] },
+    { label: "Présents",     value: String(past.filter(d=>d.status==="present"||d.status==="incomplete").length), color:[21,128,61] as [number,number,number] },
     { label: "Absents",      value: String(past.filter(d=>d.status==="absent").length),     color:[220,38,38] as [number,number,number] },
     { label: "Incomplets",   value: String(past.filter(d=>d.status==="incomplete").length), color:[217,119,6] as [number,number,number] },
     { label: "Total heures", value: formatMinutes(days.reduce((s,d)=>s+(d.worked_minutes||0),0)), color:primary },
@@ -947,7 +947,7 @@ function WeeklyView({ weekStart, setWeekStart }: { weekStart: Date; setWeekStart
 
   const today        = new Date();
   const totalWorked  = days.reduce((s,d)=>s+(d.worked_minutes||0),0);
-  const presentCount = days.filter(d=>d.status==="present").length;
+  const presentCount = days.filter(d=>d.status==="present" || d.status==="incomplete").length;
   const absentCount  = days.filter(d=>d.status==="absent" && new Date(d.date+"T12:00:00")<=today).length;
 
   return (
@@ -1095,8 +1095,9 @@ function MonthlyView({ year, month, setMonth }: { year: number; month: number; s
 
   const today         = new Date();
   const past          = days.filter(d=>new Date(d.date+"T12:00:00")<=today);
-  const presentCount  = past.filter(d=>d.status==="present").length;
-  const absentCount   = past.filter(d=>d.status==="absent").length;
+  // Les incomplets sont aussi comptés comme présents (l'employé était au travail)
+  const presentCount    = past.filter(d=>d.status==="present" || d.status==="incomplete").length;
+  const absentCount     = past.filter(d=>d.status==="absent").length;
   const incompleteCount = past.filter(d=>d.status==="incomplete").length;
   const totalMinutes  = days.reduce((s,d)=>s+(d.worked_minutes||0),0);
 
