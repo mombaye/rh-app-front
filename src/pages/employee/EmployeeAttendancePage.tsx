@@ -584,7 +584,142 @@ function JustifyModal({
   );
 }
 
-// ─── Tableau commun ───────────────────────────────────────────────────────────
+// ─── Calendrier mensuel ───────────────────────────────────────────────────────
+const CAL_DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: number; month: number }) {
+  // Indexer les jours par date string
+  const byDate = Object.fromEntries(days.map(d => [d.date, d]));
+
+  // Calcul de la grille (semaines × 7 jours, lundi en 1er)
+  const firstDay    = new Date(year, month, 1);
+  const lastDay     = new Date(year, month + 1, 0);
+  const startOffset = (firstDay.getDay() + 6) % 7;  // lundi=0 … dimanche=6
+  const totalCells  = Math.ceil((startOffset + lastDay.getDate()) / 7) * 7;
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const isFuture  = (d: Date) => { const c = new Date(d); c.setHours(0,0,0,0); return c > today; };
+  const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
+
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < totalCells; i++) {
+    const n = i - startOffset + 1;
+    cells.push(n >= 1 && n <= lastDay.getDate() ? new Date(year, month, n) : null);
+  }
+  const weeks: (Date | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {/* En-têtes */}
+      <div className="grid grid-cols-7 bg-[#003c71]">
+        {CAL_DAYS.map(d => (
+          <div key={d} className="py-2 text-center text-xs font-bold text-white/90">{d}</div>
+        ))}
+      </div>
+
+      {/* Grille */}
+      <div className="divide-y divide-gray-100">
+        {weeks.map((week, wi) => (
+          <div key={wi} className="grid grid-cols-7 divide-x divide-gray-100">
+            {week.map((d, di) => {
+              /* ── Cellule vide (hors mois) ── */
+              if (!d) return <div key={di} className="bg-gray-50/30 min-h-[80px]" />;
+
+              const dateStr = [
+                d.getFullYear(),
+                String(d.getMonth()+1).padStart(2,"0"),
+                String(d.getDate()).padStart(2,"0"),
+              ].join("-");
+
+              const rec     = byDate[dateStr];
+              const future  = isFuture(d);
+              const weekend = isWeekend(d);
+              const isToday = d.toDateString() === today.toDateString();
+
+              /* ── Cellule future : affichage neutre ── */
+              if (future) {
+                return (
+                  <div key={di} className={`min-h-[80px] p-1.5 border border-transparent ${weekend ? "bg-gray-100/40" : "bg-gray-50/30"}`}>
+                    <span className="text-xs font-semibold text-gray-200">{d.getDate()}</span>
+                  </div>
+                );
+              }
+
+              /* ── Cellule passée ── */
+              const bg =
+                !rec            ? (weekend ? "bg-gray-100/70 border-gray-100" : "bg-gray-50 border-gray-100") :
+                rec.status === "present"    ? "bg-emerald-50 border-emerald-200" :
+                rec.status === "absent"     ? "bg-red-50 border-red-200"         :
+                                              "bg-amber-50 border-amber-200";
+
+              return (
+                <div key={di} className={`min-h-[80px] p-1.5 border flex flex-col ${bg}`}>
+                  {/* Numéro du jour */}
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-xs font-bold leading-none ${
+                      isToday
+                        ? "w-5 h-5 bg-[#003c71] text-white rounded-full flex items-center justify-center text-[10px]"
+                        : "text-gray-600"
+                    }`}>
+                      {d.getDate()}
+                    </span>
+                  </div>
+
+                  {/* Contenu */}
+                  {rec ? (
+                    rec.status === "absent" ? (
+                      /* Absent : centré verticalement */
+                      <div className="flex-1 flex items-center justify-center">
+                        <span className="text-[10px] font-bold text-red-500 tracking-wide">Absent</span>
+                      </div>
+                    ) : (
+                      /* Présent / Incomplet : horaires */
+                      <div className="flex-1 flex flex-col justify-center gap-0.5">
+                        <div className="text-[10px] leading-tight text-gray-600">
+                          <span className="text-emerald-600 font-bold">↑</span>{" "}
+                          <span className="font-medium">{rec.in_time ?? <span className="text-gray-300">—</span>}</span>
+                        </div>
+                        <div className="text-[10px] leading-tight text-gray-600">
+                          <span className="text-red-400 font-bold">↓</span>{" "}
+                          <span className="font-medium">{rec.out_time ?? <span className="text-gray-300">—</span>}</span>
+                        </div>
+                        {rec.worked_minutes > 0 && (
+                          <div className="text-[9px] text-gray-400 leading-tight mt-0.5">
+                            {formatMinutes(rec.worked_minutes)}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  ) : (
+                    /* Aucun enregistrement (week-end ou férié) */
+                    <div className="flex-1" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* Légende */}
+      <div className="px-4 py-2.5 border-t border-gray-100 flex items-center gap-4 flex-wrap">
+        {[
+          { dot: "bg-emerald-500", label: "Présent"   },
+          { dot: "bg-red-400",     label: "Absent"    },
+          { dot: "bg-amber-400",   label: "Incomplet" },
+        ].map(l => (
+          <div key={l.label} className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className={`w-2 h-2 rounded-full ${l.dot}`} />
+            {l.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tableau commun (vues journalière et hebdomadaire) ────────────────────────
 function AttendanceTable({ days }: { days: DayRecord[] }) {
   if (days.length === 0) return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
@@ -802,7 +937,7 @@ function MonthlyView({ year, month, setMonth }: { year: number; month: number; s
       </div>
       {loading
         ? <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 flex items-center justify-center"><Loader2 size={28} className="animate-spin text-[#003c71]"/></div>
-        : <AttendanceTable days={days}/>}
+        : <AttendanceCalendar days={days} year={year} month={month} />}
     </div>
   );
 }
