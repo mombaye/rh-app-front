@@ -1,7 +1,7 @@
-// src/services/leaveService.ts
+﻿// src/services/leaveService.ts
 // URLs alignées avec le router DRF + les @action decorators de views.py
 
-import axios from "axios";
+import api from "@/api/axios";
 import {
   LeaveType,
   LeaveBalance,
@@ -32,44 +32,35 @@ import {
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
 const API      = `${BASE_URL}/api/leaves`;
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("access_token");
-  return { Authorization: `Bearer ${token}` };
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // LeaveType  →  /api/leaves/types/
 // ─────────────────────────────────────────────────────────────────────────────
 export const leaveTypeService = {
   /** GET /api/leaves/types/ */
   getAll: async (): Promise<LeaveType[]> => {
-    const res = await axios.get(`${API}/types`, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.get(`${API}/types`, {
+      });
     return res.data;
   },
 
   /** POST /api/leaves/types/ */
   create: async (data: Partial<LeaveType>): Promise<LeaveType> => {
-    const res = await axios.post(`${API}/types/`, data, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.post(`${API}/types/`, data, {
+      });
     return res.data;
   },
 
   /** PATCH /api/leaves/types/<id>/ */
   update: async (id: number, data: Partial<LeaveType>): Promise<LeaveType> => {
-    const res = await axios.patch(`${API}/types/${id}/`, data, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.patch(`${API}/types/${id}/`, data, {
+      });
     return res.data;
   },
 
   /** DELETE /api/leaves/types/<id>/ */
   delete: async (id: number): Promise<void> => {
-    await axios.delete(`${API}/types/${id}/`, {
-      headers: getAuthHeaders(),
-    });
+    await api.delete(`${API}/types/${id}/`, {
+      });
   },
 };
 
@@ -84,8 +75,7 @@ export const leaveBalanceService = {
   getAll: async (year?: number): Promise<LeaveBalance[]> => {
     const params: Record<string, string> = {};
     if (year) params.year = String(year);
-    const res = await axios.get(`${API}/balances/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/balances/`, {
       params,
     });
     return res.data;
@@ -99,8 +89,7 @@ export const leaveBalanceService = {
   getByEmployee: async (employeeId: number, year?: number): Promise<LeaveBalance[]> => {
     const params: Record<string, string> = {};
     if (year) params.year = String(year);
-    const res = await axios.get(`${API}/balances/employee/${employeeId}/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/balances/employee/${employeeId}/`, {
       params,
     });
     return res.data;
@@ -108,9 +97,8 @@ export const leaveBalanceService = {
 
   /** POST /api/leaves/balances/ */
   create: async (data: Partial<LeaveBalance>): Promise<LeaveBalance> => {
-    const res = await axios.post(`${API}/balances/`, data, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.post(`${API}/balances/`, data, {
+      });
     return res.data;
   },
 
@@ -120,9 +108,8 @@ export const leaveBalanceService = {
    * Enregistré par le router via @action(detail=True, url_path="adjust")
    */
   adjust: async (id: number, data: LeaveBalanceAdjust): Promise<LeaveBalance> => {
-    const res = await axios.patch(`${API}/balances/${id}/adjust/`, data, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.patch(`${API}/balances/${id}/adjust/`, data, {
+      });
     return res.data;
   },
 
@@ -135,9 +122,8 @@ export const leaveBalanceService = {
   bulkImport: async (file: File): Promise<{ created: number; updated: number; errors: { row: number; matricule: string; message: string }[] }> => {
     const form = new FormData();
     form.append("file", file);
-    const res = await axios.post(`${API}/balances/bulk_import/`, form, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.post(`${API}/balances/bulk_import/`, form, {
+      });
     return res.data;
   },
 
@@ -155,17 +141,16 @@ export const leaveBalanceService = {
     form.append("dry_run", opts.dry_run ? "true" : "false");
     if (opts.year)            form.append("year",            String(opts.year));
     if (opts.leave_type_code) form.append("leave_type_code", opts.leave_type_code);
-    const res = await axios.post(`${API}/balances/migration_import/`, form, {
-      headers: getAuthHeaders(),   // laisser axios définir Content-Type + boundary automatiquement
+    const res = await api.post(`${API}/balances/migration_import/`, form, {
+      // laisser axios définir Content-Type + boundary automatiquement
     });
     return res.data;
   },
 
   /** GET /api/leaves/balances/<id>/history/ — historique des mouvements de solde */
   getHistory: async (balanceId: number): Promise<LeaveBalanceHistory[]> => {
-    const res = await axios.get(`${API}/balances/${balanceId}/history/`, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.get(`${API}/balances/${balanceId}/history/`, {
+      });
     return res.data;
   },
 
@@ -177,9 +162,8 @@ export const leaveBalanceService = {
   carryover: async (yearFrom: number, yearTo: number, employeeId?: number): Promise<CarryoverResult> => {
     const body: Record<string, number> = { year_from: yearFrom, year_to: yearTo };
     if (employeeId) body.employee_id = employeeId;
-    const res = await axios.post(`${API}/balances/carryover/`, body, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.post(`${API}/balances/carryover/`, body, {
+      });
     return res.data;
   },
 };
@@ -199,23 +183,20 @@ export interface MigrationSessionData {
 
 export const migrationSessionService = {
   get: async (year: number): Promise<MigrationSessionData | null> => {
-    const res = await axios.get(`${API}/migration-session/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/migration-session/`, {
       params: { year },
     });
     return res.data;
   },
 
   save: async (data: { year: number; filename: string; synced: boolean; rows: any[] }): Promise<MigrationSessionData> => {
-    const res = await axios.post(`${API}/migration-session/`, data, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.post(`${API}/migration-session/`, data, {
+      });
     return res.data;
   },
 
   clear: async (year: number): Promise<void> => {
-    await axios.delete(`${API}/migration-session/`, {
-      headers: getAuthHeaders(),
+    await api.delete(`${API}/migration-session/`, {
       params: { year },
     });
   },
@@ -237,8 +218,7 @@ export const leaveRequestService = {
     const { contract_type, ...apiFilters } = filters ?? {};
     void contract_type; // utilisé uniquement pour le routing frontend
 
-    const res = await axios.get(`${API}/requests/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/requests/`, {
       params:  apiFilters,
     });
     return res.data;
@@ -246,9 +226,8 @@ export const leaveRequestService = {
 
   /** GET /api/leaves/requests/<id>/ */
   getById: async (id: number): Promise<LeaveRequest> => {
-    const res = await axios.get(`${API}/requests/${id}/`, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.get(`${API}/requests/${id}/`, {
+      });
     return res.data;
   },
 
@@ -261,8 +240,7 @@ export const leaveRequestService = {
     employeeId: number,
     filters?: Pick<LeaveRequestFilters, "status">
   ): Promise<LeaveRequest[]> => {
-    const res = await axios.get(`${API}/requests/employee/${employeeId}/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/requests/employee/${employeeId}/`, {
       params:  filters,
     });
     return res.data;
@@ -274,9 +252,8 @@ export const leaveRequestService = {
    * (hiérarchie N+1/N+2 ou DG pour les responsables de département).
    */
   getApprovalChain: async (employeeId: number): Promise<ApprovalChainInfo> => {
-    const res = await axios.get(`${API}/requests/approval-chain/${employeeId}/`, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.get(`${API}/requests/approval-chain/${employeeId}/`, {
+      });
     return res.data;
   },
 
@@ -291,9 +268,8 @@ export const leaveRequestService = {
    *   3. Solde suffisant si leave_type.is_paid
    */
   create: async (data: LeaveRequestCreate): Promise<LeaveRequest> => {
-    const res = await axios.post(`${API}/requests/`, data, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.post(`${API}/requests/`, data, {
+      });
     return res.data;
   },
 
@@ -302,17 +278,15 @@ export const leaveRequestService = {
     id: number,
     data: Partial<LeaveRequestCreate>
   ): Promise<LeaveRequest> => {
-    const res = await axios.patch(`${API}/requests/${id}/`, data, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.patch(`${API}/requests/${id}/`, data, {
+      });
     return res.data;
   },
 
   /** DELETE /api/leaves/requests/<id>/ */
   delete: async (id: number): Promise<void> => {
-    await axios.delete(`${API}/requests/${id}/`, {
-      headers: getAuthHeaders(),
-    });
+    await api.delete(`${API}/requests/${id}/`, {
+      });
   },
 
   /**
@@ -322,10 +296,10 @@ export const leaveRequestService = {
    *   - second_approver_id : si présent → passe en PENDING_SECOND
    */
   approve: async (id: number, payload?: ApprovePayload): Promise<LeaveRequest> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/requests/${id}/approve/`,
       payload ?? {},
-      { headers: getAuthHeaders() }
+      {}
     );
     return res.data;
   },
@@ -337,10 +311,10 @@ export const leaveRequestService = {
    * Backend : status → REJECTED, stocke reject_reason
    */
   reject: async (id: number, reject_reason: string): Promise<LeaveRequest> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/requests/${id}/reject/`,
       { reject_reason },
-      { headers: getAuthHeaders() }
+      {}
     );
     return res.data;
   },
@@ -351,10 +325,10 @@ export const leaveRequestService = {
    * Pour les congés APPROVED, seul le RH peut annuler (canceller_id requis).
    */
   cancel: async (id: number, cancellerId?: number): Promise<LeaveRequest> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/requests/${id}/cancel/`,
       cancellerId ? { canceller_id: cancellerId } : {},
-      { headers: getAuthHeaders() }
+      {}
     );
     return res.data;
   },
@@ -365,10 +339,10 @@ export const leaveRequestService = {
    * À appeler après une mise à jour de la hiérarchie (n1_manager ou département).
    */
   recalculateChains: async (): Promise<{ message: string }> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/requests/recalculate-chains/`,
       {},
-      { headers: getAuthHeaders() }
+      {}
     );
     return res.data;
   },
@@ -378,10 +352,10 @@ export const leaveRequestService = {
    * L'employé relance le manager qui n'a pas encore validé.
    */
   sendReminder: async (id: number): Promise<{ message: string }> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/requests/${id}/reminder/`,
       {},
-      { headers: getAuthHeaders() }
+      {}
     );
     return res.data;
   },
@@ -391,10 +365,10 @@ export const leaveRequestService = {
    * Validation finale RH : PENDING_RH → APPROVED (déclenche déduction solde)
    */
   hrValidate: async (id: number, hr_reviewer_id?: number): Promise<LeaveRequest> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/requests/${id}/hr_validate/`,
       hr_reviewer_id ? { hr_reviewer_id } : {},
-      { headers: getAuthHeaders() }
+      {}
     );
     return res.data;
   },
@@ -404,10 +378,10 @@ export const leaveRequestService = {
    * Rejet final RH : PENDING_RH → REJECTED
    */
   hrReject: async (id: number, reject_reason: string, hr_reviewer_id?: number): Promise<LeaveRequest> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/requests/${id}/hr_reject/`,
       { reject_reason, ...(hr_reviewer_id ? { hr_reviewer_id } : {}) },
-      { headers: getAuthHeaders() }
+      {}
     );
     return res.data;
   },
@@ -418,8 +392,7 @@ export const leaveRequestService = {
    * Retourne les absences APPROVED du mois
    */
   getCalendar: async (month: number, year: number): Promise<LeaveCalendarEntry[]> => {
-    const res = await axios.get(`${API}/requests/calendar/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/requests/calendar/`, {
       params:  { month, year },
     });
     return res.data;
@@ -430,9 +403,8 @@ export const leaveRequestService = {
    * Retourne : total, pending, approved, rejected, cancelled, revoked, total_days_approved
    */
   getSummary: async (): Promise<LeaveSummary> => {
-    const res = await axios.get(`${API}/requests/stats/summary/`, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.get(`${API}/requests/stats/summary/`, {
+      });
     return res.data;
   },
 
@@ -440,9 +412,8 @@ export const leaveRequestService = {
    * PATCH /api/leaves/requests/<id>/ — modifie une demande PENDING
    */
   updatePending: async (id: number, data: Partial<LeaveRequestCreate>): Promise<LeaveRequest> => {
-    const res = await axios.patch(`${API}/requests/${id}/`, data, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.patch(`${API}/requests/${id}/`, data, {
+      });
     return res.data;
   },
 
@@ -453,9 +424,8 @@ export const leaveRequestService = {
   uploadDocument: async (id: number, file: File): Promise<LeaveRequest> => {
     const form = new FormData();
     form.append("document", file);
-    const res = await axios.post(`${API}/requests/${id}/upload_document/`, form, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.post(`${API}/requests/${id}/upload_document/`, form, {
+      });
     return res.data;
   },
 
@@ -465,10 +435,10 @@ export const leaveRequestService = {
    * Body optionnel : { validator_id: number }
    */
   validateDocument: async (id: number, validatorId?: number): Promise<LeaveRequest> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/requests/${id}/validate_document/`,
       validatorId ? { validator_id: validatorId } : {},
-      { headers: getAuthHeaders() }
+      {}
     );
     return res.data;
   },
@@ -479,10 +449,10 @@ export const leaveRequestService = {
    * Révoque un congé approuvé (rappel d'urgence) et restitue les jours restants.
    */
   revoke: async (id: number, payload: RevokePayload): Promise<LeaveRequest & { days_restored: string }> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/requests/${id}/revoke/`,
       payload,
-      { headers: getAuthHeaders() }
+      {}
     );
     return res.data;
   },
@@ -496,10 +466,10 @@ export const leaveRequestService = {
     id: number,
     payload?: { marker_id?: number; undo?: boolean }
   ): Promise<LeaveRequest> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/requests/${id}/mark_as_absent/`,
       payload ?? {},
-      { headers: getAuthHeaders() }
+      {}
     );
     return res.data;
   },
@@ -510,8 +480,7 @@ export const leaveRequestService = {
    * la période est terminée, et dont le document n'a pas encore été soumis.
    */
   getPendingJustifications: async (): Promise<LeaveRequest[]> => {
-    const res = await axios.get(`${API}/requests/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/requests/`, {
       params:  { pending_justification: "true" },
     });
     return res.data;
@@ -522,10 +491,10 @@ export const leaveRequestService = {
    * Déclenche le crédit mensuel (+2j) pour tous les employés actifs.
    */
   triggerMonthlyCredit: async (): Promise<{ message: string; employees_credited: number }> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/requests/trigger-monthly-credit/`,
       {},
-      { headers: getAuthHeaders() }
+      {}
     );
     return res.data;
   },
@@ -553,8 +522,7 @@ export const leaveRequestService = {
     if (columns && columns.length > 0) {
       params.columns = columns.join(",");
     }
-    const res = await axios.get(`${API}/requests/export/excel/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/requests/export/excel/`, {
       params,
       responseType: "blob",
     });
@@ -563,8 +531,7 @@ export const leaveRequestService = {
 
   /** GET /api/leaves/requests/stats/absence-rate/?year= */
   getAbsenceRate: async (year?: number): Promise<AbsenceRateRow[]> => {
-    const res = await axios.get(`${API}/requests/stats/absence-rate/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/requests/stats/absence-rate/`, {
       params: year ? { year } : {},
     });
     return res.data;
@@ -572,8 +539,7 @@ export const leaveRequestService = {
 
   /** GET /api/leaves/requests/stats/by-type/?year= */
   statsByType: async (year?: number): Promise<{ leave_type__code: string; leave_type__label: string; leave_type__color: string; total: number; total_days: number }[]> => {
-    const res = await axios.get(`${API}/requests/stats/by-type/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/requests/stats/by-type/`, {
       params: year ? { year } : {},
     });
     return res.data;
@@ -581,8 +547,7 @@ export const leaveRequestService = {
 
   /** GET /api/leaves/requests/stats/by-department/?year= */
   statsByDepartment: async (year?: number): Promise<{ employee__service: string; total: number; total_days: number }[]> => {
-    const res = await axios.get(`${API}/requests/stats/by-department/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/requests/stats/by-department/`, {
       params: year ? { year } : {},
     });
     return res.data;
@@ -593,8 +558,7 @@ export const leaveRequestService = {
    * Planning prévisionnel des congés approuvés sur une plage de dates.
    */
   getPlanning: async (start: string, end: string, department?: string): Promise<LeavePlanningEntry[]> => {
-    const res = await axios.get(`${API}/requests/planning/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/requests/planning/`, {
       params: { start, end, ...(department ? { department } : {}) },
     });
     return res.data;
@@ -609,14 +573,13 @@ export const holidayService = {
   getAll: async (year?: number): Promise<PublicHoliday[]> => {
     const params: Record<string, string> = {};
     if (year) params.year = String(year);
-    const res = await axios.get(`${API}/holidays/`, { headers: getAuthHeaders(), params });
+    const res = await api.get(`${API}/holidays/`, { params });
     return res.data;
   },
 
   /** GET /api/leaves/holidays/for-month/?month=M&year=Y */
   getForMonth: async (month: number, year: number): Promise<PublicHoliday[]> => {
-    const res = await axios.get(`${API}/holidays/for-month/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/holidays/for-month/`, {
       params: { month, year },
     });
     return res.data;
@@ -624,8 +587,7 @@ export const holidayService = {
 
   /** GET /api/leaves/holidays/for-range/?start=&end= */
   getForRange: async (start: string, end: string): Promise<PublicHoliday[]> => {
-    const res = await axios.get(`${API}/holidays/for-range/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/holidays/for-range/`, {
       params: { start, end },
     });
     return res.data;
@@ -635,29 +597,29 @@ export const holidayService = {
   checkDays: async (startDate: string, endDate: string, leaveTypeId?: string | number): Promise<HolidayCheckResult> => {
     const body: Record<string, unknown> = { start_date: startDate, end_date: endDate };
     if (leaveTypeId) body.leave_type_id = leaveTypeId;
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/holidays/check-days/`,
       body,
-      { headers: getAuthHeaders() },
+      {},
     );
     return res.data;
   },
 
   /** POST /api/leaves/holidays/ */
   create: async (data: Omit<PublicHoliday, "id">): Promise<PublicHoliday> => {
-    const res = await axios.post(`${API}/holidays/`, data, { headers: getAuthHeaders() });
+    const res = await api.post(`${API}/holidays/`, data, {});
     return res.data;
   },
 
   /** PATCH /api/leaves/holidays/<id>/ */
   update: async (id: number, data: Partial<PublicHoliday>): Promise<PublicHoliday> => {
-    const res = await axios.patch(`${API}/holidays/${id}/`, data, { headers: getAuthHeaders() });
+    const res = await api.patch(`${API}/holidays/${id}/`, data, {});
     return res.data;
   },
 
   /** DELETE /api/leaves/holidays/<id>/ */
   delete: async (id: number): Promise<void> => {
-    await axios.delete(`${API}/holidays/${id}/`, { headers: getAuthHeaders() });
+    await api.delete(`${API}/holidays/${id}/`, {});
   },
 };
 
@@ -667,8 +629,7 @@ export const holidayService = {
 export const managerDelegationService = {
   /** GET /api/leaves/delegations/ */
   getAll: async (params?: { delegator_id?: number; delegate_id?: number; active_only?: boolean }): Promise<ManagerDelegation[]> => {
-    const res = await axios.get(`${API}/delegations/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/delegations/`, {
       params,
     });
     return res.data;
@@ -676,36 +637,36 @@ export const managerDelegationService = {
 
   /** GET /api/leaves/delegations/<id>/ */
   getById: async (id: number): Promise<ManagerDelegation> => {
-    const res = await axios.get(`${API}/delegations/${id}/`, { headers: getAuthHeaders() });
+    const res = await api.get(`${API}/delegations/${id}/`, {});
     return res.data;
   },
 
   /** POST /api/leaves/delegations/ */
   create: async (data: ManagerDelegationCreate): Promise<ManagerDelegation> => {
-    const res = await axios.post(`${API}/delegations/`, data, { headers: getAuthHeaders() });
+    const res = await api.post(`${API}/delegations/`, data, {});
     return res.data;
   },
 
   /** PATCH /api/leaves/delegations/<id>/ */
   update: async (id: number, data: Partial<ManagerDelegationCreate>): Promise<ManagerDelegation> => {
-    const res = await axios.patch(`${API}/delegations/${id}/`, data, { headers: getAuthHeaders() });
+    const res = await api.patch(`${API}/delegations/${id}/`, data, {});
     return res.data;
   },
 
   /** DELETE /api/leaves/delegations/<id>/ */
   delete: async (id: number): Promise<void> => {
-    await axios.delete(`${API}/delegations/${id}/`, { headers: getAuthHeaders() });
+    await api.delete(`${API}/delegations/${id}/`, {});
   },
 
   /** POST /api/leaves/delegations/<id>/deactivate/ */
   deactivate: async (id: number): Promise<ManagerDelegation> => {
-    const res = await axios.post(`${API}/delegations/${id}/deactivate/`, {}, { headers: getAuthHeaders() });
+    const res = await api.post(`${API}/delegations/${id}/deactivate/`, {}, {});
     return res.data;
   },
 
   /** GET /api/leaves/delegations/active-for/<managerId>/ */
   getActiveFor: async (managerId: number): Promise<{ delegate: { id: number; full_name: string; email: string } | null; delegation: ManagerDelegation | null }> => {
-    const res = await axios.get(`${API}/delegations/active-for/${managerId}/`, { headers: getAuthHeaders() });
+    const res = await api.get(`${API}/delegations/active-for/${managerId}/`, {});
     return res.data;
   },
 };
@@ -716,26 +677,26 @@ export const leaveHolidayService = holidayService;
 // Re-export leaveApprovalRuleService
 export const leaveApprovalRuleService = {
   getAll: async (): Promise<import("../types/leave").ApprovalRule[]> => {
-    const res = await axios.get(`${API}/approval-rules/`, { headers: getAuthHeaders() });
+    const res = await api.get(`${API}/approval-rules/`, {});
     return res.data;
   },
   create: async (data: import("../types/leave").ApprovalRuleCreate): Promise<import("../types/leave").ApprovalRule> => {
-    const res = await axios.post(`${API}/approval-rules/`, data, { headers: getAuthHeaders() });
+    const res = await api.post(`${API}/approval-rules/`, data, {});
     return res.data;
   },
   update: async (id: number, data: Partial<import("../types/leave").ApprovalRuleCreate>): Promise<import("../types/leave").ApprovalRule> => {
-    const res = await axios.patch(`${API}/approval-rules/${id}/`, data, { headers: getAuthHeaders() });
+    const res = await api.patch(`${API}/approval-rules/${id}/`, data, {});
     return res.data;
   },
   delete: async (id: number): Promise<void> => {
-    await axios.delete(`${API}/approval-rules/${id}/`, { headers: getAuthHeaders() });
+    await api.delete(`${API}/approval-rules/${id}/`, {});
   },
   getActive: async (): Promise<import("../types/leave").ApprovalRule[]> => {
-    const res = await axios.get(`${API}/approval-rules/active/`, { headers: getAuthHeaders() });
+    const res = await api.get(`${API}/approval-rules/active/`, {});
     return res.data;
   },
   checkRules: async (employeeId: number, leaveTypeId: number, days: number) => {
-    const res = await axios.post(`${API}/approval-rules/check/`, { employee_id: employeeId, leave_type_id: leaveTypeId, days }, { headers: getAuthHeaders() });
+    const res = await api.post(`${API}/approval-rules/check/`, { employee_id: employeeId, leave_type_id: leaveTypeId, days }, {});
     return res.data;
   },
 };
@@ -745,49 +706,46 @@ export const leaveApprovalRuleService = {
 // ─────────────────────────────────────────────────────────────────────────────
 export const exitAuthorizationService = {
   getAll: async (filters?: ExitAuthorizationFilters): Promise<ExitAuthorization[]> => {
-    const res = await axios.get(`${API}/exit-authorizations/`, {
-      headers: getAuthHeaders(),
+    const res = await api.get(`${API}/exit-authorizations/`, {
       params:  filters,
     });
     return res.data;
   },
 
   getByEmployee: async (employeeId: number): Promise<ExitAuthorization[]> => {
-    const res = await axios.get(`${API}/exit-authorizations/employee/${employeeId}/`, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.get(`${API}/exit-authorizations/employee/${employeeId}/`, {
+      });
     return res.data;
   },
 
   create: async (data: ExitAuthorizationCreate): Promise<ExitAuthorization> => {
-    const res = await axios.post(`${API}/exit-authorizations/`, data, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.post(`${API}/exit-authorizations/`, data, {
+      });
     return res.data;
   },
 
   approve: async (id: number, reviewerId?: number): Promise<ExitAuthorization> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/exit-authorizations/${id}/approve/`,
       reviewerId ? { reviewer_id: reviewerId } : {},
-      { headers: getAuthHeaders() },
+      {},
     );
     return res.data;
   },
 
   reject: async (id: number, rejectReason: string, reviewerId?: number): Promise<ExitAuthorization> => {
-    const res = await axios.post(
+    const res = await api.post(
       `${API}/exit-authorizations/${id}/reject/`,
       { reject_reason: rejectReason, ...(reviewerId ? { reviewer_id: reviewerId } : {}) },
-      { headers: getAuthHeaders() },
+      {},
     );
     return res.data;
   },
 
   cancel: async (id: number): Promise<ExitAuthorization> => {
-    const res = await axios.post(`${API}/exit-authorizations/${id}/cancel/`, {}, {
-      headers: getAuthHeaders(),
-    });
+    const res = await api.post(`${API}/exit-authorizations/${id}/cancel/`, {}, {
+      });
     return res.data;
   },
 };
+

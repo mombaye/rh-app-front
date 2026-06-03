@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
 import { fetchMyAttendance, submitDispute, fetchMyDisputes, AttendanceDispute } from "@/services/employeeService";
+import { holidayService } from "@/services/leaveService";
+import type { PublicHoliday } from "@/types/leave";
 import { useAuth } from "@/contexts/useAuth";
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
@@ -587,11 +589,15 @@ function JustifyModal({
 // ─── Calendrier mensuel ───────────────────────────────────────────────────────
 const CAL_DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
-function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: number; month: number }) {
+function AttendanceCalendar({ days, year, month, holidays = [] }: {
+  days: DayRecord[]; year: number; month: number; holidays?: PublicHoliday[];
+}) {
   const [selected, setSelected] = useState<DayRecord | null>(null);
 
   // Indexer les jours par date string
-  const byDate = Object.fromEntries(days.map(d => [d.date, d]));
+  const byDate      = Object.fromEntries(days.map(d => [d.date, d]));
+  // Indexer les fériés par date string → nom du jour férié
+  const holidayMap  = Object.fromEntries(holidays.map(h => [h.date, h.name]));
 
   // Calcul de la grille (semaines × 7 jours, lundi en 1er)
   const firstDay    = new Date(year, month, 1);
@@ -649,8 +655,13 @@ function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: nu
               }
 
               /* ── Cellule passée ── */
+              const holidayName = holidayMap[dateStr];
+              const isHoliday   = !!holidayName;
+              const noService   = weekend && !isHoliday && (!rec || rec.status === "absent");
               const bg =
-                !rec            ? (weekend ? "bg-gray-100/70 border-gray-100" : "bg-gray-50 border-gray-100") :
+                isHoliday                   ? "bg-purple-50 border-purple-200"  :
+                noService                   ? "bg-gray-100/70 border-gray-100"  :
+                !rec                        ? "bg-gray-50 border-gray-100"      :
                 rec.status === "present"    ? "bg-emerald-50 border-emerald-200" :
                 rec.status === "absent"     ? "bg-red-50 border-red-200"         :
                                               "bg-amber-50 border-amber-200";
@@ -673,7 +684,20 @@ function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: nu
                   </div>
 
                   {/* Contenu */}
-                  {rec ? (
+                  {isHoliday ? (
+                    /* Jour férié */
+                    <div className="flex-1 flex flex-col items-center justify-center gap-0.5">
+                      <span className="text-base font-bold text-purple-600">Férié</span>
+                      <span className="text-[10px] text-purple-400 text-center leading-tight px-0.5">
+                        {holidayName}
+                      </span>
+                    </div>
+                  ) : noService ? (
+                    /* Week-end sans pointage */
+                    <div className="flex-1 flex items-center justify-center">
+                      <span className="text-[10px] font-semibold text-gray-400 text-center leading-tight">Pas de service</span>
+                    </div>
+                  ) : rec ? (
                     rec.status === "absent" ? (
                       /* Absent : centré */
                       <div className="flex-1 flex items-center justify-center">
@@ -705,6 +729,7 @@ function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: nu
           { dot: "bg-emerald-500", label: "Présent"   },
           { dot: "bg-red-400",     label: "Absent"    },
           { dot: "bg-amber-400",   label: "Incomplet" },
+          { dot: "bg-purple-400",  label: "Férié"     },
         ].map(l => (
           <div key={l.label} className="flex items-center gap-1.5 text-xs text-gray-500">
             <span className={`w-2 h-2 rounded-full ${l.dot}`} />
@@ -716,8 +741,11 @@ function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: nu
       {/* ── Modal détail jour ── */}
       <AnimatePresence>
         {selected && (() => {
-          const dt = new Date(selected.date + "T12:00:00");
-          const bd = statusBadge(selected.status);
+          const dt       = new Date(selected.date + "T12:00:00");
+          const bd       = statusBadge(selected.status);
+          const holName  = holidayMap[selected.date];
+          const dowSel   = dt.getDay();
+          const wkndSel  = (dowSel === 0 || dowSel === 6) && selected.status === "absent" && !holName;
           return (
             <div
               className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
@@ -737,9 +765,19 @@ function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: nu
                     <p className="text-white font-bold text-sm">
                       {DAYS_FR[dt.getDay()]} {dt.getDate()} {MONTHS_FR[dt.getMonth()]} {dt.getFullYear()}
                     </p>
-                    <span className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-semibold ${bd.cls}`}>
-                      {bd.icon} {bd.label}
-                    </span>
+                    {holName ? (
+                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
+                        🎌 Férié — {holName}
+                      </span>
+                    ) : wkndSel ? (
+                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                        Pas de service
+                      </span>
+                    ) : (
+                      <span className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-semibold ${bd.cls}`}>
+                        {bd.icon} {bd.label}
+                      </span>
+                    )}
                   </div>
                   <button
                     onClick={() => setSelected(null)}
@@ -964,14 +1002,17 @@ function WeeklyView({ weekStart, setWeekStart }: { weekStart: Date; setWeekStart
                 </thead>
                 <tbody>
                   {weekDays.map((d, i) => {
-                    const dateStr = toDateStr(d);
-                    const rec     = byDate[dateStr];
-                    const future  = new Date(d).setHours(0,0,0,0) > today.getTime();
-                    const isToday = d.toDateString() === today.toDateString();
-                    const bd      = rec ? statusBadge(rec.status) : null;
+                    const dateStr  = toDateStr(d);
+                    const rec      = byDate[dateStr];
+                    const future   = new Date(d).setHours(0,0,0,0) > today.getTime();
+                    const isToday  = d.toDateString() === today.toDateString();
+                    const dow      = d.getDay(); // 0=dim, 6=sam
+                    const weekend  = dow === 0 || dow === 6;
+                    const noService = weekend && !future && (!rec || rec.status === "absent");
+                    const bd       = rec && !noService ? statusBadge(rec.status) : null;
 
                     return (
-                      <tr key={dateStr} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
+                      <tr key={dateStr} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} ${noService ? "opacity-60" : ""}`}>
                         {/* Jour */}
                         <td className={`px-4 py-2.5 font-medium text-xs ${isToday ? "text-[#003c71] font-bold" : future ? "text-gray-300" : "text-gray-700"}`}>
                           {DAYS_FR[d.getDay()]} {d.getDate()} {MONTHS_FR[d.getMonth()]}
@@ -984,6 +1025,15 @@ function WeeklyView({ weekStart, setWeekStart }: { weekStart: Date; setWeekStart
                             <td className="px-4 py-2.5 text-gray-200 text-xs">—</td>
                             <td className="px-4 py-2.5 text-gray-200 text-xs">—</td>
                             <td className="px-4 py-2.5 text-gray-200 text-xs">—</td>
+                          </>
+                        ) : noService ? (
+                          /* Week-end sans pointage : Pas de service */
+                          <>
+                            <td className="px-4 py-2.5" colSpan={4}>
+                              <span className="flex items-center gap-1 w-fit px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-400">
+                                — Pas de service
+                              </span>
+                            </td>
                           </>
                         ) : rec ? (
                           /* Jours passés avec données */
@@ -1021,14 +1071,22 @@ function WeeklyView({ weekStart, setWeekStart }: { weekStart: Date; setWeekStart
 
 // ─── Vue mensuelle ────────────────────────────────────────────────────────────
 function MonthlyView({ year, month, setMonth }: { year: number; month: number; setMonth: (y:number,m:number)=>void }) {
-  const [days, setDays] = useState<DayRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [days,     setDays]     = useState<DayRecord[]>([]);
+  const [holidays, setHolidays] = useState<PublicHoliday[]>([]);
+  const [loading,  setLoading]  = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetchMyAttendance(toDateStr(startOfMonth(year,month)), toDateStr(endOfMonth(year,month)));
+      const [res, hols] = await Promise.all([
+        fetchMyAttendance(toDateStr(startOfMonth(year,month)), toDateStr(endOfMonth(year,month))),
+        holidayService.getForRange(
+          toDateStr(startOfMonth(year,month)),
+          toDateStr(endOfMonth(year,month))
+        ).catch(() => [] as PublicHoliday[]),
+      ]);
       setDays(res.days);
+      setHolidays(hols);
     } catch { toast.error("Erreur lors du chargement."); setDays([]); }
     finally { setLoading(false); }
   }, [year, month]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1069,7 +1127,7 @@ function MonthlyView({ year, month, setMonth }: { year: number; month: number; s
       </div>
       {loading
         ? <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 flex items-center justify-center"><Loader2 size={28} className="animate-spin text-[#003c71]"/></div>
-        : <AttendanceCalendar days={days} year={year} month={month} />}
+        : <AttendanceCalendar days={days} year={year} month={month} holidays={holidays} />}
     </div>
   );
 }

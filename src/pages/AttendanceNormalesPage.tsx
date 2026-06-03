@@ -12,7 +12,8 @@ import {
   sendAttendanceAlert,
 } from "@/services/attendanceService";
 import { getEmployees } from "@/services/employeeService";
-import { exitAuthorizationService } from "@/services/leaveService";
+import { exitAuthorizationService, holidayService } from "@/services/leaveService";
+import type { PublicHoliday } from "@/types/leave";
 import type {
   DailyStatsResponse, WeeklyStatsResponse, MonthlyStatsResponse,
   EmployeePeriodDetailResponse, DayDetail, ShiftTeamKey,
@@ -962,8 +963,9 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
   open: boolean; onClose: () => void; employeeId: number | null; initialWeek: string;
 }) {
   const [pointages, setPointages] = useState<Pointage[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading,   setLoading]   = useState(false);
   const [exitAuths, setExitAuths] = useState<ExitAuthorization[]>([]);
+  const [holidays,  setHolidays]  = useState<PublicHoliday[]>([]);
   const [selWeek, setSelWeek] = useState(initialWeek);
   const [periodType, setPeriodType] = useState<"weekly" | "monthly">("weekly");
   const [selMonth, setSelMonth] = useState(() => {
@@ -993,14 +995,18 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
     setLoading(true);
     try {
       const { start, end } = periodType === "weekly" ? weekBounds(selWeek) : monthBounds(selMonth);
-      const res: EmployeePeriodDetailResponse = await getEmployeePeriodDetail({ employee_id: employeeId, start, end });
+      const [res, hols] = await Promise.all([
+        getEmployeePeriodDetail({ employee_id: employeeId, start, end }),
+        holidayService.getForRange(start, end).catch(() => [] as PublicHoliday[]),
+      ]);
+      setHolidays(hols);
 
       const entries: Pointage[] = [];
       const startDate = new Date(start);
       const endDate   = new Date(end);
       for (let cur = new Date(startDate); cur <= endDate; cur.setDate(cur.getDate() + 1)) {
         const ds  = cur.toISOString().split("T")[0];
-        const dd  = res.days.find((d: DayDetail) => d.date === ds);
+        const dd  = (res as EmployeePeriodDetailResponse).days.find((d: DayDetail) => d.date === ds);
         const day = periodType === "weekly"
           ? ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"][cur.getDay() === 0 ? 6 : cur.getDay() - 1]
           : FR_WEEKDAYS[cur.getDay()];
@@ -1097,15 +1103,38 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
                     <span>Jour</span><span>Date</span><span>Statut</span><span>Entrée</span><span>Sortie</span>
                   </div>
                   {pointages.map((p, i) => {
+                    const holName   = holidays.find(h => h.date === p.date)?.name;
+                    const isHoliday = !!holName && p.status === "absent";
+                    const dow       = new Date(p.date + "T12:00:00").getDay(); // 0=dim, 6=sam
+                    const isWeekend = (dow === 0 || dow === 6) && p.status === "absent" && !isHoliday;
+
                     const rowBg =
-                      p.status === "ok"         ? "bg-white border-slate-100"
-                      : p.status === "on_leave"  ? "bg-sky-50 border-sky-100"
-                      : p.status === "on_mission"? "bg-purple-50 border-purple-100"
-                      :                            "bg-rose-50 border-rose-100";
+                      isHoliday              ? "bg-purple-50 border-purple-100"
+                      : isWeekend            ? "bg-slate-50 border-slate-100"
+                      : p.status === "ok"    ? "bg-white border-slate-100"
+                      : p.status === "on_leave"   ? "bg-sky-50 border-sky-100"
+                      : p.status === "on_mission" ? "bg-purple-50 border-purple-100"
+                      :                             "bg-rose-50 border-rose-100";
+
                     const exitAuth = exitAuths.find(ea =>
                       ea.datetime_exit.startsWith(p.date) &&
                       ea.status !== "CANCELLED" && ea.status !== "REJECTED"
                     );
+
+                    const StatusCell = () => isHoliday ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 bg-purple-50 text-purple-700 ring-purple-200">
+                        <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                        Férié{holName ? ` — ${holName}` : ""}
+                      </span>
+                    ) : isWeekend ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 bg-slate-100 text-slate-500 ring-slate-200">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                        Pas de service
+                      </span>
+                    ) : (
+                      <StatusPill status={p.status} />
+                    );
+
                     return (
                       <div key={i} className={`rounded-xl border p-3 ${rowBg}`}>
                         <div className="hidden sm:grid grid-cols-5 gap-4 items-center">
@@ -1114,7 +1143,7 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
                             {new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}
                           </span>
                           <span className="flex items-center gap-1.5 flex-wrap">
-                            <StatusPill status={p.status} />
+                            <StatusCell />
                             {exitAuth && (
                               <span
                                 title={`Sortie autorisée · ${exitAuth.motif}`}
@@ -1131,7 +1160,7 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
                         <div className="sm:hidden flex items-center justify-between gap-2 flex-wrap">
                           <span className="font-semibold text-sm text-slate-800">{p.day} · {new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"short"})}</span>
                           <div className="flex items-center gap-1">
-                            <StatusPill status={p.status} />
+                            <StatusCell />
                             {exitAuth && (
                               <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-md leading-none">
                                 Sortie
