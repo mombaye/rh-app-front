@@ -25,7 +25,7 @@ function HolidayModal({
 }: {
   initial?: PublicHoliday;
   onClose: () => void;
-  onSaved: (h: PublicHoliday) => void;
+  onSaved: () => void;
 }) {
   const isEdit = !!initial;
   const [date,        setDate]        = useState(initial?.date ?? "");
@@ -38,12 +38,13 @@ function HolidayModal({
     setSaving(true);
     try {
       const payload = { date, name: name.trim(), is_recurring: isRecurring };
-      const result = isEdit
-        ? await holidayService.update(initial!.id, payload)
-        : await holidayService.create(payload);
-      onSaved(result);
+      if (isEdit) {
+        await holidayService.update(initial!.id, payload);
+      } else {
+        await holidayService.create(payload);
+      }
       toast.success(isEdit ? "Jour férié modifié." : "Jour férié ajouté.");
-      onClose();
+      onSaved(); // recharge la liste + ferme le modal via le parent
     } catch {
       toast.error("Erreur lors de l'enregistrement.");
     } finally {
@@ -98,19 +99,42 @@ function HolidayModal({
             />
           </div>
 
-          <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition">
-            <input
-              type="checkbox"
-              checked={isRecurring}
-              onChange={e => setIsRecurring(e.target.checked)}
-              className="w-4 h-4 accent-[#003c71]"
-            />
-            <div>
-              <p className="text-sm font-medium text-gray-700">Récurrent chaque année</p>
-              <p className="text-xs text-gray-400">Se répète automatiquement les années suivantes</p>
+          {/* Explication récurrent */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-600">Type de férié</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsRecurring(true)}
+                className={`p-3 rounded-xl border-2 text-left transition-all ${
+                  isRecurring
+                    ? "border-[#003c71] bg-[#003c71]/5"
+                    : "border-gray-200 bg-white hover:border-gray-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <RotateCcw size={13} className={isRecurring ? "text-[#003c71]" : "text-gray-400"} />
+                  <span className={`text-xs font-bold ${isRecurring ? "text-[#003c71]" : "text-gray-600"}`}>Récurrent</span>
+                </div>
+                <p className="text-[10px] text-gray-400 leading-tight">Apparaît chaque année à la même date (ex : Fête du Travail)</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRecurring(false)}
+                className={`p-3 rounded-xl border-2 text-left transition-all ${
+                  !isRecurring
+                    ? "border-[#003c71] bg-[#003c71]/5"
+                    : "border-gray-200 bg-white hover:border-gray-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <CalendarDays size={13} className={!isRecurring ? "text-[#003c71]" : "text-gray-400"} />
+                  <span className={`text-xs font-bold ${!isRecurring ? "text-[#003c71]" : "text-gray-600"}`}>Ponctuel</span>
+                </div>
+                <p className="text-[10px] text-gray-400 leading-tight">Uniquement pour la date choisie (ex : Tabaski, date variable)</p>
+              </button>
             </div>
-            {isRecurring && <RotateCcw size={14} className="text-[#003c71] ml-auto shrink-0" />}
-          </label>
+          </div>
 
           <div className="flex gap-2 pt-1">
             <button onClick={onClose} className="flex-1 border border-gray-200 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition">
@@ -154,12 +178,8 @@ export default function AttendanceFeriesPage() {
 
   useEffect(() => { load(); }, [year]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSaved = (h: PublicHoliday) => {
-    setHolidays(prev => {
-      const without = prev.filter(x => x.id !== h.id);
-      return [...without, h].sort((a, b) => a.date.localeCompare(b.date));
-    });
-  };
+  // Après create ou update : recharger toute la liste depuis l'API
+  const handleSaved = () => { load(); };
 
   const handleDelete = async (id: number) => {
     setDeleting(true);
@@ -205,6 +225,18 @@ export default function AttendanceFeriesPage() {
             >
               <Plus size={15} /> Ajouter un férié
             </button>
+          </div>
+        </div>
+
+        {/* Bannière explicative */}
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl px-5 py-4 flex items-start gap-3">
+          <CalendarDays size={18} className="text-blue-500 shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-700 space-y-1">
+            <p className="font-semibold">Comment fonctionnent les jours fériés ?</p>
+            <ul className="text-xs text-blue-600 space-y-0.5 list-none">
+              <li>🔄 <strong>Récurrent</strong> : saisi une seule fois, apparaît automatiquement chaque année à la même date (ex : Fête du Travail le 1er mai). Valable en prod dès l'enregistrement.</li>
+              <li>📅 <strong>Ponctuel</strong> : uniquement pour la date exacte choisie (ex : Tabaski, date variable chaque année). À ajouter chaque année.</li>
+            </ul>
           </div>
         </div>
 
@@ -305,7 +337,7 @@ export default function AttendanceFeriesPage() {
           <HolidayModal
             initial={editTarget}
             onClose={() => { setShowModal(false); setEditTarget(undefined); }}
-            onSaved={handleSaved}
+            onSaved={() => { handleSaved(); setShowModal(false); setEditTarget(undefined); }}
           />
         )}
       </AnimatePresence>

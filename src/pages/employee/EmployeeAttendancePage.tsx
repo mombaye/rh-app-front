@@ -84,10 +84,12 @@ function buildPdf(days: DayRecord[], opts: {
   // Stats
   const today = new Date();
   const past = days.filter(d => new Date(d.date+"T12:00:00") <= today);
+  // Exclure week-ends des stats PDF
+  const pastWd = past.filter(d => { const dow = new Date(d.date+"T12:00:00").getDay(); return dow!==0 && dow!==6; });
   const stats = [
-    { label: "Présents",     value: String(past.filter(d=>d.status==="present"||d.status==="incomplete").length), color:[21,128,61] as [number,number,number] },
-    { label: "Absents",      value: String(past.filter(d=>d.status==="absent").length),     color:[220,38,38] as [number,number,number] },
-    { label: "Incomplets",   value: String(past.filter(d=>d.status==="incomplete").length), color:[217,119,6] as [number,number,number] },
+    { label: "Présents",     value: String(pastWd.filter(d=>d.status==="present"||d.status==="incomplete").length), color:[21,128,61] as [number,number,number] },
+    { label: "Absents",      value: String(pastWd.filter(d=>d.status==="absent").length),     color:[220,38,38] as [number,number,number] },
+    { label: "Incomplets",   value: String(pastWd.filter(d=>d.status==="incomplete").length), color:[217,119,6] as [number,number,number] },
     { label: "Total heures", value: formatMinutes(days.reduce((s,d)=>s+(d.worked_minutes||0),0)), color:primary },
   ];
   const bw = 182/4 - 2;
@@ -945,10 +947,12 @@ function WeeklyView({ weekStart, setWeekStart }: { weekStart: Date; setWeekStart
 
   useEffect(() => { load(); }, [load]);
 
-  const today        = new Date();
+  const today = new Date();
   const totalWorked  = days.reduce((s,d)=>s+(d.worked_minutes||0),0);
-  const presentCount = days.filter(d=>d.status==="present" || d.status==="incomplete").length;
-  const absentCount  = days.filter(d=>d.status==="absent" && new Date(d.date+"T12:00:00")<=today).length;
+  // Exclure les week-ends des stats
+  const workdays     = days.filter(d => { const dow = new Date(d.date+"T12:00:00").getDay(); return dow!==0 && dow!==6; });
+  const presentCount = workdays.filter(d=>d.status==="present" || d.status==="incomplete").length;
+  const absentCount  = workdays.filter(d=>d.status==="absent" && new Date(d.date+"T12:00:00")<=today).length;
 
   return (
     <div className="space-y-4">
@@ -1093,13 +1097,25 @@ function MonthlyView({ year, month, setMonth }: { year: number; month: number; s
 
   useEffect(() => { load(); }, [load]);
 
-  const today         = new Date();
-  const past          = days.filter(d=>new Date(d.date+"T12:00:00")<=today);
-  // Les incomplets sont aussi comptés comme présents (l'employé était au travail)
-  const presentCount    = past.filter(d=>d.status==="present" || d.status==="incomplete").length;
-  const absentCount     = past.filter(d=>d.status==="absent").length;
-  const incompleteCount = past.filter(d=>d.status==="incomplete").length;
-  const totalMinutes  = days.reduce((s,d)=>s+(d.worked_minutes||0),0);
+  const today = new Date();
+
+  // Jours passés, hors week-ends et hors jours fériés (pas de service)
+  const holDates = new Set(holidays.map(h => h.date));
+  const isWorkday = (dateStr: string) => {
+    const dt = new Date(dateStr + "T12:00:00");
+    const dow = dt.getDay();
+    return dow !== 0 && dow !== 6 && !holDates.has(dateStr);
+  };
+
+  const past = days.filter(d => new Date(d.date+"T12:00:00") <= today);
+  // Uniquement les jours ouvrés passés pour les stats
+  const pastWorkdays = past.filter(d => isWorkday(d.date));
+
+  // Incomplets = présents (l'employé était au travail)
+  const presentCount    = pastWorkdays.filter(d => d.status==="present" || d.status==="incomplete").length;
+  const absentCount     = pastWorkdays.filter(d => d.status==="absent").length;
+  const incompleteCount = pastWorkdays.filter(d => d.status==="incomplete").length;
+  const totalMinutes    = days.reduce((s,d) => s+(d.worked_minutes||0), 0);
 
   const prevMonth = () => month===0 ? setMonth(year-1,11) : setMonth(year,month-1);
   const nextMonth = () => { const n=new Date(); if(year>n.getFullYear()||(year===n.getFullYear()&&month>=n.getMonth())) return; month===11?setMonth(year+1,0):setMonth(year,month+1); };
