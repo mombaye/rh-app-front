@@ -588,6 +588,8 @@ function JustifyModal({
 const CAL_DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
 function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: number; month: number }) {
+  const [selected, setSelected] = useState<DayRecord | null>(null);
+
   // Indexer les jours par date string
   const byDate = Object.fromEntries(days.map(d => [d.date, d]));
 
@@ -640,7 +642,7 @@ function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: nu
               /* ── Cellule future : affichage neutre ── */
               if (future) {
                 return (
-                  <div key={di} className={`min-h-[80px] p-1.5 border border-transparent ${weekend ? "bg-gray-100/40" : "bg-gray-50/30"}`}>
+                  <div key={di} className={`min-h-[90px] p-1.5 border border-transparent ${weekend ? "bg-gray-100/40" : "bg-gray-50/30"}`}>
                     <span className="text-xs font-semibold text-gray-200">{d.getDate()}</span>
                   </div>
                 );
@@ -654,7 +656,11 @@ function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: nu
                                               "bg-amber-50 border-amber-200";
 
               return (
-                <div key={di} className={`min-h-[80px] p-1.5 border flex flex-col ${bg}`}>
+                <div
+                  key={di}
+                  onClick={() => rec && setSelected(rec)}
+                  className={`min-h-[90px] p-1.5 border flex flex-col ${bg} ${rec ? "cursor-pointer hover:brightness-95 transition-all" : ""}`}
+                >
                   {/* Numéro du jour */}
                   <div className="flex items-center justify-between mb-1">
                     <span className={`text-xs font-bold leading-none ${
@@ -669,30 +675,21 @@ function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: nu
                   {/* Contenu */}
                   {rec ? (
                     rec.status === "absent" ? (
-                      /* Absent : centré verticalement */
+                      /* Absent : centré */
                       <div className="flex-1 flex items-center justify-center">
-                        <span className="text-[10px] font-bold text-red-500 tracking-wide">Absent</span>
+                        <span className="text-base font-bold text-red-500 tracking-wide">Absent</span>
                       </div>
                     ) : (
-                      /* Présent / Incomplet : horaires */
-                      <div className="flex-1 flex flex-col justify-center gap-0.5">
-                        <div className="text-[10px] leading-tight text-gray-600">
-                          <span className="text-emerald-600 font-bold">↑</span>{" "}
-                          <span className="font-medium">{rec.in_time ?? <span className="text-gray-300">—</span>}</span>
-                        </div>
-                        <div className="text-[10px] leading-tight text-gray-600">
-                          <span className="text-red-400 font-bold">↓</span>{" "}
-                          <span className="font-medium">{rec.out_time ?? <span className="text-gray-300">—</span>}</span>
-                        </div>
-                        {rec.worked_minutes > 0 && (
-                          <div className="text-[9px] text-gray-400 leading-tight mt-0.5">
-                            {formatMinutes(rec.worked_minutes)}
-                          </div>
-                        )}
+                      /* Présent / Incomplet : 07:30 — 17:30 pleine largeur */
+                      <div className="flex-1 flex items-center justify-center">
+                        <span className="text-sm font-bold text-gray-700 text-center leading-snug whitespace-nowrap">
+                          {rec.in_time ?? "—"}
+                          <span className="text-gray-400 mx-1">–</span>
+                          {rec.out_time ?? "—"}
+                        </span>
                       </div>
                     )
                   ) : (
-                    /* Aucun enregistrement (week-end ou férié) */
                     <div className="flex-1" />
                   )}
                 </div>
@@ -715,6 +712,69 @@ function AttendanceCalendar({ days, year, month }: { days: DayRecord[]; year: nu
           </div>
         ))}
       </div>
+
+      {/* ── Modal détail jour ── */}
+      <AnimatePresence>
+        {selected && (() => {
+          const dt = new Date(selected.date + "T12:00:00");
+          const bd = statusBadge(selected.status);
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+              onClick={() => setSelected(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.92, y: 8 }}
+                transition={{ duration: 0.15 }}
+                onClick={e => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+              >
+                {/* Header */}
+                <div className="bg-[#003c71] px-5 py-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-white font-bold text-sm">
+                      {DAYS_FR[dt.getDay()]} {dt.getDate()} {MONTHS_FR[dt.getMonth()]} {dt.getFullYear()}
+                    </p>
+                    <span className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-semibold ${bd.cls}`}>
+                      {bd.icon} {bd.label}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSelected(null)}
+                    className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
+                  >
+                    <X size={14} className="text-white" />
+                  </button>
+                </div>
+
+                {/* Corps : tableau Arrivée / Départ / Durée */}
+                <div className="p-5">
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "Arrivée", value: selected.in_time        ?? "—", color: "text-emerald-600" },
+                      { label: "Départ",  value: selected.out_time       ?? "—", color: "text-red-500"     },
+                      { label: "Durée",   value: formatMinutes(selected.worked_minutes), color: "text-[#003c71]" },
+                    ].map(item => (
+                      <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+                        <p className="text-xs text-gray-400 mb-1">{item.label}</p>
+                        <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setSelected(null)}
+                    className="mt-4 w-full border border-gray-200 rounded-xl py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
     </div>
   );
 }
