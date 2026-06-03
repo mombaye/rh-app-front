@@ -880,9 +880,81 @@ function WeeklyView({ weekStart, setWeekStart }: { weekStart: Date; setWeekStart
           </div>
         ))}
       </div>
-      {loading
-        ? <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 flex items-center justify-center"><Loader2 size={28} className="animate-spin text-[#003c71]"/></div>
-        : <AttendanceTable days={days}/>}
+      {loading ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 flex items-center justify-center">
+          <Loader2 size={28} className="animate-spin text-[#003c71]"/>
+        </div>
+      ) : (
+        /* ── Tableau hebdo avec — pour les jours futurs ── */
+        (() => {
+          const today   = new Date(); today.setHours(0,0,0,0);
+          const byDate  = Object.fromEntries(days.map(d => [d.date, d]));
+          // Générer les 7 jours de la semaine
+          const weekDays = Array.from({length: 7}, (_, i) => addDays(weekStart, i));
+
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-[#003c71] text-white text-xs">
+                    {["Jour","Statut","Arrivée","Départ","Durée"].map(h => (
+                      <th key={h} className="px-4 py-3 text-left font-semibold">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {weekDays.map((d, i) => {
+                    const dateStr = toDateStr(d);
+                    const rec     = byDate[dateStr];
+                    const future  = new Date(d).setHours(0,0,0,0) > today.getTime();
+                    const isToday = d.toDateString() === today.toDateString();
+                    const bd      = rec ? statusBadge(rec.status) : null;
+
+                    return (
+                      <tr key={dateStr} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
+                        {/* Jour */}
+                        <td className={`px-4 py-2.5 font-medium text-xs ${isToday ? "text-[#003c71] font-bold" : future ? "text-gray-300" : "text-gray-700"}`}>
+                          {DAYS_FR[d.getDay()]} {d.getDate()} {MONTHS_FR[d.getMonth()]}
+                          {isToday && <span className="ml-1.5 text-[9px] bg-[#003c71] text-white px-1.5 py-0.5 rounded-full">Aujourd'hui</span>}
+                        </td>
+                        {future ? (
+                          /* Jours futurs : tirets */
+                          <>
+                            <td className="px-4 py-2.5 text-gray-200 text-xs">—</td>
+                            <td className="px-4 py-2.5 text-gray-200 text-xs">—</td>
+                            <td className="px-4 py-2.5 text-gray-200 text-xs">—</td>
+                            <td className="px-4 py-2.5 text-gray-200 text-xs">—</td>
+                          </>
+                        ) : rec ? (
+                          /* Jours passés avec données */
+                          <>
+                            <td className="px-4 py-2.5">
+                              <span className={`flex items-center gap-1 w-fit px-2 py-0.5 rounded-full text-xs font-semibold ${bd!.cls}`}>
+                                {bd!.icon} {bd!.label}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-gray-600 text-xs">{rec.in_time  ?? <span className="text-gray-300">—</span>}</td>
+                            <td className="px-4 py-2.5 text-gray-600 text-xs">{rec.out_time ?? <span className="text-gray-300">—</span>}</td>
+                            <td className="px-4 py-2.5 font-medium text-gray-700 text-xs">{formatMinutes(rec.worked_minutes)}</td>
+                          </>
+                        ) : (
+                          /* Jours passés sans données */
+                          <>
+                            <td className="px-4 py-2.5 text-gray-300 text-xs">—</td>
+                            <td className="px-4 py-2.5 text-gray-300 text-xs">—</td>
+                            <td className="px-4 py-2.5 text-gray-300 text-xs">—</td>
+                            <td className="px-4 py-2.5 text-gray-300 text-xs">—</td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()
+      )}
     </div>
   );
 }
