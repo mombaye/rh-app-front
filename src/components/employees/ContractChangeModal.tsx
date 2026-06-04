@@ -34,7 +34,7 @@ const FIELDS_BY_EVENT: Record<CareerEventType, string[]> = {
   TITULARISATION:      ["type_contrat", "date_embauche", "date_fin_periode_essai", "fonction", "categorie"],
   RENOUVELLEMENT_CDD:  ["date_fin_cdd", "date_embauche"],
   RENOUVELLEMENT_STAGE:["date_fin_cdd", "date_embauche"],
-  STAGE_VERS_INTERIM:  ["type_contrat", "date_embauche", "date_fin_cdd"],
+  STAGE_VERS_INTERIM:  ["matricule", "type_contrat", "date_embauche", "date_fin_cdd"],
   CHANGEMENT_CONTRAT:  ["type_contrat", "date_embauche", "date_fin_cdd", "date_fin_periode_essai"],
   PROMOTION:           ["fonction", "categorie", "service", "manager", "business_line"],
   CHANGEMENT_SERVICE:  ["service", "manager", "projet", "business_line", "localisation"],
@@ -45,6 +45,7 @@ const FIELDS_BY_EVENT: Record<CareerEventType, string[]> = {
 };
 
 const FIELD_LABELS: Record<string, string> = {
+  matricule:              "Nouveau matricule",
   type_contrat:           "Type de contrat",
   date_embauche:          "Date d'embauche",
   date_fin_cdd:           "Date de fin CDD",
