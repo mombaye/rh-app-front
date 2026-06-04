@@ -18,6 +18,7 @@ import {
   bulkUpdateMatricules,
   previewMatriculeChanges,
   bulkSwitchToInternal,
+  bulkInterimToInterim,
   BulkSwitchPayload,
   MatriculeUpdate,
   MatriculeChange,
@@ -514,6 +515,286 @@ function ContractConfigModal({
 }
 
 // ─── BulkSwitchModal ──────────────────────────────────────────────────────────
+// ─── Modal de choix du type de basculement massif ────────────────────────────
+function BulkBasculementChoiceModal({
+  onClose,
+  onChooseInterim,
+  onChooseInterne,
+}: {
+  onClose: () => void;
+  onChooseInterim: () => void;
+  onChooseInterne: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 10 }}
+        transition={{ duration: 0.18 }}
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+              <FaExchangeAlt className="text-indigo-600" size={17} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Basculements Massifs</h2>
+              <p className="text-sm text-gray-400 mt-0.5">Choisissez le type de basculement</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition p-1.5 rounded-lg hover:bg-gray-100">
+            <FiX size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 grid grid-cols-1 gap-3">
+          <button
+            onClick={() => { onClose(); onChooseInterim(); }}
+            className="flex items-start gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-orange-400 hover:bg-orange-50/50 transition-all text-left group"
+          >
+            <div className="p-2.5 rounded-xl bg-orange-100 group-hover:bg-orange-200 transition-colors shrink-0">
+              <FaExchangeAlt className="text-orange-600" size={16} />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-800">Intérimaire → Intérimaire</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Changement de matricule uniquement. Le contrat reste <strong>INTERIM</strong>. Parcours enregistré.
+              </p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => { onClose(); onChooseInterne(); }}
+            className="flex items-start gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50/50 transition-all text-left group"
+          >
+            <div className="p-2.5 rounded-xl bg-indigo-100 group-hover:bg-indigo-200 transition-colors shrink-0">
+              <FaExchangeAlt className="text-indigo-600" size={16} />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-800">Intérimaire → Interne</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Passage en liste interne avec nouveau matricule numérique et contrat CDI / CDD / Stage.
+              </p>
+            </div>
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Modal basculement massif Intérimaire → Intérimaire ───────────────────────
+function BulkInterimToInterimModal({
+  employees,
+  onClose,
+  onSuccess,
+}: {
+  employees: Employee[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  type I2IRow = {
+    id: number; nom: string; prenom: string;
+    oldMatricule: string; newMatricule: string;
+    dateDebut: string; dateFin: string;
+    success?: boolean; error?: string;
+  };
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [rows, setRows] = useState<I2IRow[]>(
+    employees
+      .filter(e => e.type_contrat === "INTERIM" && e.status !== "EXITED")
+      .map(e => ({
+        id: e.id, nom: e.nom, prenom: e.prenom,
+        oldMatricule: e.matricule, newMatricule: "",
+        dateDebut: today, dateFin: "",
+      }))
+  );
+  const [search,       setSearch]       = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDone,       setIsDone]       = useState(false);
+  const [summary,      setSummary]      = useState<{ switched: number; errors: number } | null>(null);
+
+  const updateRow = (id: number, patch: Partial<I2IRow>) =>
+    setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch, error: undefined } : r));
+
+  const setNewMat = (id: number, v: string) => updateRow(id, { newMatricule: v });
+
+  const readyRows  = rows.filter(r => !r.success && r.newMatricule.trim() !== "" && r.dateDebut && r.dateFin);
+  const readyCount = readyRows.length;
+
+  const filteredRows = rows.filter(r => {
+    const q = search.toLowerCase();
+    return r.nom.toLowerCase().includes(q) || r.prenom.toLowerCase().includes(q) || r.oldMatricule.toLowerCase().includes(q);
+  });
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const result = await bulkInterimToInterim(
+        readyRows.map(r => ({
+          id:         r.id,
+          matricule:  r.newMatricule.trim(),
+          date_debut: r.dateDebut,
+          date_fin:   r.dateFin,
+        }))
+      );
+      const errorMap = new Map(result.errors.map((e: any) => [e.id, e.error]));
+      setRows(prev => prev.map(r => {
+        if (!readyRows.find(rr => rr.id === r.id)) return r;
+        const err = errorMap.get(r.id);
+        return err ? { ...r, error: err } : { ...r, success: true };
+      }));
+      setSummary({ switched: result.switched, errors: result.errors.length });
+      setIsDone(true);
+      if (result.errors.length === 0) {
+        toast.success(`${result.switched} matricule(s) mis à jour`);
+        onSuccess();
+      } else {
+        toast.error(`${result.errors.length} erreur(s) — ${result.switched} succès`);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors du basculement");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 10 }}
+        transition={{ duration: 0.2 }}
+        className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[92vh]"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+              <FaExchangeAlt className="text-orange-500" size={17} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Basculement massif Intérimaire → Intérimaire</h2>
+              <p className="text-sm text-gray-400 mt-0.5">Saisissez le nouveau matricule pour chaque employé. Le contrat reste INTERIM.</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition p-1.5 rounded-lg hover:bg-gray-100"><FiX size={18} /></button>
+        </div>
+
+        {/* Info */}
+        <div className="mx-6 mt-4 shrink-0 flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-xs text-orange-700">
+          <FiInfo className="shrink-0 mt-0.5 text-orange-400" size={13} />
+          <span>Toutes les informations de l'employé sont conservées. Seul le <strong>matricule</strong> change. Un événement de parcours est enregistré pour chaque employé.</span>
+        </div>
+
+        {/* Résumé */}
+        {summary && (
+          <div className={`mx-6 mt-3 shrink-0 rounded-xl px-4 py-3 flex items-center gap-3 text-sm ${summary.errors === 0 ? "bg-emerald-50 border border-emerald-200" : "bg-amber-50 border border-amber-200"}`}>
+            {summary.errors === 0
+              ? <FiCheckCircle className="text-emerald-500 shrink-0" size={16} />
+              : <FiAlertTriangle className="text-amber-500 shrink-0" size={16} />}
+            <p className="font-semibold text-gray-800">
+              {summary.switched} matricule(s) mis à jour.{summary.errors > 0 && ` ${summary.errors} erreur(s).`}
+            </p>
+          </div>
+        )}
+
+        {/* Recherche */}
+        <div className="px-6 pt-4 pb-2 shrink-0">
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Rechercher par nom, prénom ou matricule…"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-y-auto px-6 pb-2 min-h-0">
+          <table className="w-full text-sm min-w-[700px]">
+            <thead className="sticky top-0 bg-white z-10">
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-3 pr-3 font-semibold text-gray-600">Employé</th>
+                <th className="text-left py-3 pr-3 font-semibold text-gray-600 w-32">Matricule actuel</th>
+                <th className="text-left py-3 pr-3 font-semibold text-gray-600 w-40">Nouveau matricule</th>
+                <th className="text-left py-3 pr-3 font-semibold text-gray-600 w-36">Date début</th>
+                <th className="text-left py-3 font-semibold text-gray-600 w-36">Date fin</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredRows.map(row => {
+                const isReady = row.newMatricule.trim() && row.dateDebut && row.dateFin;
+                return (
+                  <tr key={row.id} className={row.success ? "bg-emerald-50" : row.error ? "bg-red-50" : isReady ? "bg-orange-50/40" : ""}>
+                    <td className="py-2.5 pr-3 font-medium text-gray-800">{row.prenom} {row.nom}</td>
+                    <td className="py-2.5 pr-3">
+                      <span className="font-mono text-gray-500 text-xs bg-gray-100 px-2 py-0.5 rounded">{row.oldMatricule}</span>
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      {row.success ? (
+                        <span className="font-mono text-emerald-700 text-xs bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1 w-fit">
+                          <FiCheckCircle size={11} /> {row.newMatricule}
+                        </span>
+                      ) : (
+                        <div className="flex flex-col gap-0.5">
+                          <input type="text" value={row.newMatricule} onChange={e => setNewMat(row.id, e.target.value)}
+                            disabled={isSubmitting} placeholder="ex. UMO-2026-001"
+                            className={`w-full border rounded-lg px-2.5 py-1.5 font-mono text-sm focus:outline-none focus:ring-2 transition ${row.error ? "border-red-300 bg-red-50 focus:ring-red-300" : row.newMatricule.trim() ? "border-orange-400 focus:ring-orange-400" : "border-gray-300 focus:ring-orange-400"}`} />
+                          {row.error && <p className="text-xs text-red-600">{row.error}</p>}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <input type="date" value={row.dateDebut} disabled={isSubmitting || !!row.success}
+                        onChange={e => updateRow(row.id, { dateDebut: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                    </td>
+                    <td className="py-2.5">
+                      <input type="date" value={row.dateFin} disabled={isSubmitting || !!row.success}
+                        min={row.dateDebut || undefined}
+                        onChange={e => updateRow(row.id, { dateFin: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                    </td>
+                  </tr>
+                );
+              })}
+              {filteredRows.length === 0 && (
+                <tr><td colSpan={5} className="text-center py-10 text-gray-400 text-sm">Aucun intérimaire actif trouvé.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 shrink-0 flex items-center justify-between gap-3">
+          <p className="text-xs text-gray-400">
+            {rows.filter(r => !r.success).length} intérimaire(s) actif(s)
+            {readyCount > 0 && <span className="ml-2 font-semibold text-orange-600">· {readyCount} prêt(s)</span>}
+          </p>
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition">
+              {isDone && summary?.errors === 0 ? "Fermer" : "Annuler"}
+            </button>
+            {(!isDone || (summary && summary.errors > 0)) && (
+              <button onClick={handleSubmit} disabled={isSubmitting || readyCount === 0}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed">
+                {isSubmitting
+                  ? <><ImSpinner2 className="animate-spin" size={14} />Basculement…</>
+                  : <><FaExchangeAlt size={12} />Basculer {readyCount > 0 ? `(${readyCount})` : ""}</>}
+              </button>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── BulkSwitchModal ──────────────────────────────────────────────────────────
 function BulkSwitchModal({
   employees,
   onClose,
@@ -855,9 +1136,11 @@ export default function InterimEmployeesPage() {
   const [missionOpen, setMissionOpen] = useState(false);
   const [missionTarget, setMissionTarget] = useState<Employee | null>(null);
   const [isSendingCodes, setIsSendingCodes] = useState(false);
-  const [bulkMatOpen, setBulkMatOpen]           = useState(false);
-  const [bulkAccountsOpen, setBulkAccountsOpen] = useState(false);
-  const [bulkSwitchOpen, setBulkSwitchOpen]   = useState(false);
+  const [bulkMatOpen, setBulkMatOpen]               = useState(false);
+  const [bulkAccountsOpen, setBulkAccountsOpen]     = useState(false);
+  const [bulkSwitchOpen, setBulkSwitchOpen]         = useState(false);
+  const [bulkChoiceOpen, setBulkChoiceOpen]         = useState(false);
+  const [bulkI2IOpen, setBulkI2IOpen]               = useState(false);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -1053,12 +1336,12 @@ export default function InterimEmployeesPage() {
             </button>
 
             <button
-              onClick={() => setBulkSwitchOpen(true)}
+              onClick={() => setBulkChoiceOpen(true)}
               disabled={isLoading || allEmployees.filter((e) => e.type_contrat === "INTERIM" && e.status !== "EXITED").length === 0}
               className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FaExchangeAlt size={13} />
-              Basculer vers interne
+              Basculements Massifs
             </button>
 
             <button
@@ -1135,6 +1418,29 @@ export default function InterimEmployeesPage() {
           )}
         </AnimatePresence>
 
+        {/* Modal de choix du type de basculement massif */}
+        <AnimatePresence>
+          {bulkChoiceOpen && (
+            <BulkBasculementChoiceModal
+              onClose={() => setBulkChoiceOpen(false)}
+              onChooseInterim={() => setBulkI2IOpen(true)}
+              onChooseInterne={() => setBulkSwitchOpen(true)}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Basculement massif → Intérimaire */}
+        <AnimatePresence>
+          {bulkI2IOpen && (
+            <BulkInterimToInterimModal
+              employees={allEmployees}
+              onClose={() => setBulkI2IOpen(false)}
+              onSuccess={() => { fetchInterimEmployees(); setBulkI2IOpen(false); }}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Basculement massif → Interne (existant) */}
         <AnimatePresence>
           {bulkSwitchOpen && (
             <BulkSwitchModal

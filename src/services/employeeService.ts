@@ -187,6 +187,20 @@ export const convertInterim = async (
 ): Promise<ConvertInterimResult> =>
   (await api.post(`/api/employees/${employeeId}/convert-interim/`, payload)).data;
 
+// ── Basculement Intérimaire → Intérimaire ────────────────────────────────────
+export type InterimToInterimPayload = {
+  new_matricule:  string;
+  new_date_debut: string;  // obligatoire — début du renouvellement
+  new_date_fin:   string;  // obligatoire — fin du renouvellement
+  description?:   string;
+};
+
+export const interimToInterim = async (
+  employeeId: number,
+  payload: InterimToInterimPayload
+): Promise<ConvertInterimResult> =>
+  (await api.post(`/api/employees/${employeeId}/interim-to-interim/`, payload)).data;
+
 export const exportEmployeesExcel = async (opts?: {
   status?: "ALL" | "ACTIVE" | "EXITED";
   type_contrat?: ContractType;
@@ -287,6 +301,19 @@ export const bulkSwitchToInternal = async (
   payload: BulkSwitchPayload
 ): Promise<BulkSwitchResult> => {
   const res = await api.post("/api/employees/bulk-switch-to-internal/", payload);
+  return res.data;
+};
+
+// ── Basculement massif Intérimaire → Intérimaire ─────────────────────────────
+export type BulkInterimToInterimItem = {
+  id:         number;
+  matricule:  string;
+  date_debut: string;  // obligatoire — renouvellement
+  date_fin:   string;  // obligatoire — renouvellement
+};
+
+export const bulkInterimToInterim = async (items: BulkInterimToInterimItem[]): Promise<BulkSwitchResult> => {
+  const res = await api.post("/api/employees/bulk-interim-to-interim/", { items });
   return res.data;
 };
 
