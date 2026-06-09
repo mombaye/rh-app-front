@@ -139,8 +139,9 @@ export interface Employee {
   n1_manager_name?:  string | null;
   n2_manager_name?:  string | null;
   user_id?:          number | null;
-  manages_n1_count?: number;
-  manages_n2_count?: number;
+  manages_n1_count?:   number;
+  manages_n2_count?:   number;
+  previous_matricule?: string | null;
 
   // ── Directeur Général (fixe) ─────────────────────────────
   // Un seul employé peut avoir is_dg=True — c'est Edouard MAIRET.

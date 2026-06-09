@@ -8,14 +8,16 @@ import { Employee, ContractType, EmployeeHistoryEntry } from "@/types/employee";
 export type GetEmployeesOptions = {
   status?: "ALL" | "ACTIVE" | "EXITED";
   type_contrat?: ContractType;
+  has_matricule_change?: boolean;
 };
 
 export const getEmployees = async (
   opts?: GetEmployeesOptions
 ): Promise<Employee[]> => {
   const params: Record<string, string> = {};
-  if (opts?.status)       params.status       = opts.status;
-  if (opts?.type_contrat) params.type_contrat = opts.type_contrat;
+  if (opts?.status)                params.status                = opts.status;
+  if (opts?.type_contrat)          params.type_contrat          = opts.type_contrat;
+  if (opts?.has_matricule_change)  params.has_matricule_change  = "true";
   const res = await api.get("/api/employees/", { params });
   return Array.isArray(res.data) ? res.data : [];
 };
@@ -265,6 +267,17 @@ export const bulkUpdateMatricules = async (
   updates: MatriculeUpdate[]
 ): Promise<BulkUpdateMatriculesResult> => {
   const res = await api.post("/api/employees/bulk-update-matricules/", { updates });
+  return res.data;
+};
+
+// ══════════════════════════════════════════════════════
+//  PARTAGE CHANGEMENTS MATRICULE PAR EMAIL
+// ══════════════════════════════════════════════════════
+export const shareMatriculeChanges = async (payload: {
+  emails: string[];
+  type_contrat?: string;
+}): Promise<{ sent: string[]; errors: { email: string; error: string }[]; total_employees: number }> => {
+  const res = await api.post("/api/employees/share-matricule-changes/", payload);
   return res.data;
 };
 

@@ -19,6 +19,7 @@ import {
   previewMatriculeChanges,
   bulkSwitchToInternal,
   bulkInterimToInterim,
+  shareMatriculeChanges,
   BulkSwitchPayload,
   MatriculeUpdate,
   MatriculeChange,
@@ -34,6 +35,13 @@ import {
   FiChevronDown,
   FiChevronRight,
   FiInfo,
+  FiGitCommit,
+  FiEye,
+  FiShare2,
+  FiMail,
+  FiPlusCircle,
+  FiTrash2,
+  FiSend,
 } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
@@ -1106,6 +1114,185 @@ function BulkSwitchModal({
   );
 }
 
+// ─── Modal Matricule Modifié ──────────────────────────────────────────────────
+function MatriculeChangedModal({
+  onClose,
+  onShowInfo,
+  onShare,
+}: {
+  onClose: () => void;
+  onShowInfo: () => void;
+  onShare: (emails: string[]) => Promise<void>;
+}) {
+  const [view, setView]           = useState<"choice" | "share">("choice");
+  const [emails, setEmails]       = useState<string[]>([""]);
+  const [isSending, setIsSending] = useState(false);
+  const [result, setResult]       = useState<{ sent: string[]; errors: { email: string; error: string }[]; total_employees: number } | null>(null);
+
+  const addEmail    = () => setEmails(p => [...p, ""]);
+  const removeEmail = (i: number) => setEmails(p => p.filter((_, idx) => idx !== i));
+  const updateEmail = (i: number, v: string) => setEmails(p => p.map((e, idx) => idx === i ? v : e));
+
+  const validEmails = emails.map(e => e.trim()).filter(e => e.includes("@"));
+
+  const handleSend = async () => {
+    if (validEmails.length === 0) return;
+    setIsSending(true);
+    try {
+      const res = await onShare(validEmails);
+      setResult(res as any);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 10 }}
+        transition={{ duration: 0.18 }}
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
+              <FiGitCommit className="text-violet-600" size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Matricule modifié</h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {view === "choice" ? "Que souhaitez-vous faire ?" : "Partager par email"}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition">
+            <FiX size={18} />
+          </button>
+        </div>
+
+        {/* Choix initial */}
+        {view === "choice" && (
+          <div className="p-6 grid grid-cols-1 gap-3">
+            <button
+              onClick={() => { onShowInfo(); onClose(); }}
+              className="flex items-start gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-violet-400 hover:bg-violet-50/50 transition-all text-left group"
+            >
+              <div className="p-2.5 rounded-xl bg-violet-100 group-hover:bg-violet-200 transition-colors shrink-0">
+                <FiEye className="text-violet-600" size={16} />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-800">Afficher les informations</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Filtrer le tableau et afficher les colonnes Ancien / Nouveau matricule.
+                </p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setView("share")}
+              className="flex items-start gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-left group"
+            >
+              <div className="p-2.5 rounded-xl bg-emerald-100 group-hover:bg-emerald-200 transition-colors shrink-0">
+                <FiShare2 className="text-emerald-600" size={16} />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-800">Partager les informations</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Envoyer un fichier Excel (Nom, Prénom, Service, Fonction, Ancien/Nouveau matricule) par email.
+                </p>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Vue partage */}
+        {view === "share" && !result && (
+          <div className="px-6 py-5 space-y-4">
+            <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+              <FiInfo className="shrink-0 mt-0.5" size={13} />
+              <span>Un fichier Excel sera envoyé à chaque adresse email. Il contiendra : Nom, Prénom, Service, Fonction, Ancien matricule, Nouveau matricule.</span>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-1">
+                <FiMail size={12} /> Adresses email
+              </label>
+              {emails.map((email, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => updateEmail(i, e.target.value)}
+                    placeholder="exemple@camusat.com"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addEmail(); } }}
+                  />
+                  {emails.length > 1 && (
+                    <button onClick={() => removeEmail(i)} className="p-1.5 text-gray-400 hover:text-red-500 transition rounded-lg hover:bg-red-50">
+                      <FiTrash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button onClick={addEmail} className="flex items-center gap-1.5 text-xs text-violet-600 hover:text-violet-800 font-medium transition mt-1">
+                <FiPlusCircle size={13} /> Ajouter une adresse
+              </button>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setView("choice")} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition">
+                Retour
+              </button>
+              <button
+                onClick={handleSend}
+                disabled={isSending || validEmails.length === 0}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSending
+                  ? <><span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />Envoi…</>
+                  : <><FiSend size={14} />Envoyer ({validEmails.length})</>
+                }
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Résultat */}
+        {view === "share" && result && (
+          <div className="px-6 py-5 space-y-4">
+            <div className={`rounded-xl px-4 py-3 flex items-center gap-3 ${result.errors.length === 0 ? "bg-emerald-50 border border-emerald-200" : "bg-amber-50 border border-amber-200"}`}>
+              {result.errors.length === 0
+                ? <FiCheckCircle className="text-emerald-500 shrink-0" size={18} />
+                : <FiAlertTriangle className="text-amber-500 shrink-0" size={18} />
+              }
+              <div>
+                <p className="font-semibold text-sm text-gray-800">
+                  {result.sent.length} email(s) envoyé(s) · {result.total_employees} employé(s) dans le fichier
+                </p>
+                {result.errors.length > 0 && (
+                  <p className="text-xs text-amber-700 mt-0.5">{result.errors.length} erreur(s) d'envoi</p>
+                )}
+              </div>
+            </div>
+            {result.sent.length > 0 && (
+              <ul className="text-xs text-gray-500 space-y-0.5">
+                {result.sent.map(e => <li key={e} className="flex items-center gap-1.5"><FiCheckCircle size={11} className="text-emerald-500" />{e}</li>)}
+              </ul>
+            )}
+            <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition">
+              Fermer
+            </button>
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function InterimEmployeesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1119,6 +1306,10 @@ export default function InterimEmployeesPage() {
   // ── Filtre profil : ALL / ACTIVE / EXITED ──
   const [profileFilter, setProfileFilter] = useState<ProfileFilter>("ALL");
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+
+  // ── Filtre "matricule modifié" ──
+  const [matriculeChangedOnly, setMatriculeChangedOnly]     = useState(false);
+  const [matriculeModalOpen,   setMatriculeModalOpen]       = useState(false);
 
   // Employés affichés dans le tableau selon le filtre profil actif
   const employees = allEmployees.filter((e) => {
@@ -1153,10 +1344,14 @@ export default function InterimEmployeesPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const fetchInterimEmployees = async () => {
+  const fetchInterimEmployees = async (matChanged = matriculeChangedOnly) => {
     setIsLoading(true);
     try {
-      const data = await getEmployees({ type_contrat: "INTERIM", status: "ALL" });
+      const data = await getEmployees({
+        type_contrat: "INTERIM",
+        status: "ALL",
+        ...(matChanged ? { has_matricule_change: true } : {}),
+      });
       setAllEmployees(data);
     } catch (error) {
       console.error("Erreur lors du chargement des employés intérimaires :", error);
@@ -1166,7 +1361,8 @@ export default function InterimEmployeesPage() {
     }
   };
 
-  useEffect(() => { fetchInterimEmployees(); }, []);
+  // Recharger quand le filtre "matricule modifié" change
+  useEffect(() => { fetchInterimEmployees(matriculeChangedOnly); }, [matriculeChangedOnly]);
 
   const handleEdit = (employee: Employee) => { setSelected(employee); setShowModal(true); };
   const handleCreate = () => { setSelected(null); setShowModal(true); };
@@ -1260,23 +1456,37 @@ export default function InterimEmployeesPage() {
         <div className="flex flex-col md:flex-row justify-between gap-3 md:items-center shrink-0">
           <div>
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-camublue-900">Gestion des employés intérimaires</h1>
-            {profileFilter !== "ALL" && (
-              <p className="text-sm mt-1 flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                  profileFilter === "ACTIVE"
-                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                    : "bg-red-50 text-red-700 border border-red-200"
-                }`}>
-                  {profileFilter === "ACTIVE" ? "Actifs uniquement" : "Sortis uniquement"}
-                </span>
-                <button onClick={() => setProfileFilter("ALL")} className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2 transition">
-                  Réinitialiser
+            {(profileFilter !== "ALL" || matriculeChangedOnly) && (
+              <p className="text-sm mt-1 flex flex-wrap items-center gap-2">
+                {profileFilter !== "ALL" && (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                    profileFilter === "ACTIVE"
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "bg-red-50 text-red-700 border border-red-200"
+                  }`}>
+                    {profileFilter === "ACTIVE" ? "Actifs uniquement" : "Sortis uniquement"}
+                  </span>
+                )}
+                {matriculeChangedOnly && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200">
+                    <FiGitCommit size={11} /> Matricule modifié
+                    <button onClick={() => setMatriculeChangedOnly(false)} className="ml-0.5 hover:text-violet-900 transition">
+                      <FiX size={11} />
+                    </button>
+                  </span>
+                )}
+                <button
+                  onClick={() => { setProfileFilter("ALL"); setMatriculeChangedOnly(false); }}
+                  className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2 transition"
+                >
+                  Réinitialiser les filtres
                 </button>
               </p>
             )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+
             {/* ── Filtre profil dropdown ── */}
             <div className="relative" ref={profileDropdownRef}>
               <button
@@ -1385,6 +1595,8 @@ export default function InterimEmployeesPage() {
             onImport={handleImport}
             onEmployeeUpdated={fetchInterimEmployees}
             showContractType={false}
+            matriculeChangedOnly={matriculeChangedOnly}
+            onMatriculeChangedToggle={() => setMatriculeModalOpen(true)}
           />
         </div>
 
@@ -1453,6 +1665,23 @@ export default function InterimEmployeesPage() {
 
         <AnimatePresence>
           {importResult && <ImportResultModal result={importResult} onClose={() => setImportResult(null)} />}
+        </AnimatePresence>
+
+        {/* Modal Matricule Modifié */}
+        <AnimatePresence>
+          {matriculeModalOpen && (
+            <MatriculeChangedModal
+              onClose={() => setMatriculeModalOpen(false)}
+              onShowInfo={() => {
+                setMatriculeChangedOnly(true);
+                setMatriculeModalOpen(false);
+              }}
+              onShare={async (emails) => {
+                const res = await shareMatriculeChanges({ emails, type_contrat: "INTERIM" });
+                return res as any;
+              }}
+            />
+          )}
         </AnimatePresence>
       </motion.div>
     </AppLayout>

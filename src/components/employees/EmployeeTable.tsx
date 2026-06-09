@@ -5,6 +5,7 @@ import {
   FaSearch, FaTimes, FaChevronRight, FaArrowLeft, FaCheck,
   FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight, FaUsers, FaUserTimes, FaTrash,
 } from "react-icons/fa";
+import { FiGitCommit } from "react-icons/fi";
 import { TbLogout, TbPlane } from "react-icons/tb";
 import { AiOutlineRollback } from "react-icons/ai";
 import { motion, AnimatePresence } from "framer-motion";
@@ -31,6 +32,9 @@ interface Props {
   onImport: (file: File) => void;
   onEmployeeUpdated?: (employee: Employee) => void;
   showContractType?: boolean;
+  // Filtre "matricule modifié" — géré depuis la page parente
+  matriculeChangedOnly?: boolean;
+  onMatriculeChangedToggle?: () => void;
 }
 
 type SortKey = "matricule" | "nom" | "prenom" | "fonction" | "service";
@@ -158,6 +162,8 @@ export default function EmployeesTable({
   onImport,
   onEmployeeUpdated,
   showContractType = true,
+  matriculeChangedOnly = false,
+  onMatriculeChangedToggle,
 }: Props) {
   const [search, setSearch] = useState("");
   const [filtered, setFiltered] = useState<Employee[]>([]);
@@ -560,7 +566,7 @@ export default function EmployeesTable({
     );
   };
 
-  const colCount = 13 + (showContractType ? 1 : 0);
+  const colCount = 13 + (showContractType ? 1 : 0) + (matriculeChangedOnly ? 2 : 0);
 
   return (
     <div className="flex flex-col h-full gap-3">
@@ -588,6 +594,28 @@ export default function EmployeesTable({
           <option value="with">Avec accès eRH</option>
           <option value="without">Sans accès eRH</option>
         </select>
+
+        {/* ── Filtre "Matricule modifié" — affiché uniquement si la page parente le supporte ── */}
+        {onMatriculeChangedToggle && (
+          <>
+            <div className="h-6 w-px bg-slate-200 shrink-0" />
+            <button
+              onClick={onMatriculeChangedToggle}
+              title="Afficher uniquement les employés dont le matricule a été modifié (basculement, changement de contrat, renouvellement)"
+              className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg border shadow-sm transition font-medium whitespace-nowrap
+                ${matriculeChangedOnly
+                  ? "bg-violet-600 border-violet-600 text-white hover:bg-violet-700"
+                  : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                }`}
+            >
+              <FiGitCommit size={14} className={matriculeChangedOnly ? "text-white" : "text-violet-500"} />
+              Matricule modifié
+              {matriculeChangedOnly && (
+                <span className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center text-[10px] font-bold">✓</span>
+              )}
+            </button>
+          </>
+        )}
 
         <div className="h-6 w-px bg-slate-200 shrink-0" />
 
@@ -673,6 +701,7 @@ export default function EmployeesTable({
                 </th>
               ))}
 
+
               {/* Type contrat — optionnel */}
               {showContractType && (
                 <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
@@ -708,6 +737,17 @@ export default function EmployeesTable({
               <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                 Téléphone
               </th>
+              {/* 2 colonnes supplémentaires — uniquement quand filtre "matricule modifié" actif */}
+              {matriculeChangedOnly && (
+                <>
+                  <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap bg-slate-700/30">
+                    Ancien matricule
+                  </th>
+                  <th className="px-4 py-3 text-left border-b border-camublue-800 text-sm font-semibold whitespace-nowrap bg-emerald-800/30">
+                    Nouveau matricule
+                  </th>
+                </>
+              )}
               <th className="px-4 py-3 text-center border-b border-camublue-800 text-sm font-semibold whitespace-nowrap">
                 Actions
               </th>
@@ -741,7 +781,9 @@ export default function EmployeesTable({
                   )}
                 </td>
 
+                {/* Colonne Matricule — affichage identique filtre actif ou non */}
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.matricule}</td>
+
                 <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">
                   <div className="flex items-center gap-1.5">
                     {emp.nom}
@@ -798,6 +840,26 @@ export default function EmployeesTable({
                 </td>
                 <td className="px-4 py-3 text-sm">{emp.email || <span className="text-slate-300">—</span>}</td>
                 <td className="px-4 py-3 text-sm whitespace-nowrap">{emp.telephone || <span className="text-slate-300">—</span>}</td>
+
+                {/* 2 cellules supplémentaires — uniquement quand filtre "matricule modifié" actif */}
+                {matriculeChangedOnly && (
+                  <>
+                    <td className="px-4 py-3 text-sm whitespace-nowrap">
+                      {emp.previous_matricule ? (
+                        <span className="font-mono text-slate-600 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded text-xs">
+                          {emp.previous_matricule}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm whitespace-nowrap">
+                      <span className="font-mono font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-xs">
+                        {emp.matricule}
+                      </span>
+                    </td>
+                  </>
+                )}
 
                 <td className="px-4 py-3 text-center">
                   <button
