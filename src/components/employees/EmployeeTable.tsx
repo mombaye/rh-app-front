@@ -32,6 +32,7 @@ interface Props {
   onImport: (file: File) => void;
   onEmployeeUpdated?: (employee: Employee) => void;
   showContractType?: boolean;
+  showSendCodes?: boolean;
   // Filtre "matricule modifié" — géré depuis la page parente
   matriculeChangedOnly?: boolean;
   onMatriculeChangedToggle?: () => void;
@@ -162,6 +163,7 @@ export default function EmployeesTable({
   onImport,
   onEmployeeUpdated,
   showContractType = true,
+  showSendCodes = true,
   matriculeChangedOnly = false,
   onMatriculeChangedToggle,
 }: Props) {
@@ -595,7 +597,7 @@ export default function EmployeesTable({
           <option value="without">Sans accès eRH</option>
         </select>
 
-        {/* ── Filtre "Matricule modifié" — affiché uniquement si la page parente le supporte ── */}
+        {/* ── Filtre "Historique des matricules" — affiché uniquement si la page parente le supporte ── */}
         {onMatriculeChangedToggle && (
           <>
             <div className="h-6 w-px bg-slate-200 shrink-0" />
@@ -609,7 +611,7 @@ export default function EmployeesTable({
                 }`}
             >
               <FiGitCommit size={14} className={matriculeChangedOnly ? "text-white" : "text-violet-500"} />
-              Matricule modifié
+              Historique des matricules
               {matriculeChangedOnly && (
                 <span className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center text-[10px] font-bold">✓</span>
               )}
@@ -617,6 +619,8 @@ export default function EmployeesTable({
           </>
         )}
 
+        {showSendCodes && (
+        <>
         <div className="h-6 w-px bg-slate-200 shrink-0" />
 
         <Menu as="div" className="relative inline-block text-left">
@@ -651,6 +655,8 @@ export default function EmployeesTable({
             </Menu.Items>
           </Transition>
         </Menu>
+        </>
+        )}
 
         <div className="h-6 w-px bg-slate-200 shrink-0" />
 

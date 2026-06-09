@@ -16,11 +16,11 @@ export type BulkMode = "all" | "selection";
 type Step = "choice" | "confirm" | "select" | "loading" | "result";
 
 interface Props {
-  open:         boolean;
-  contractType: "INTERNE" | "INTERIM";
-  employees:    Employee[];
-  onClose:      () => void;
-  onSuccess?:   () => void;
+  open:          boolean;
+  contractType?: "INTERNE" | "INTERIM";   // undefined = tous les employés
+  employees:     Employee[];
+  onClose:       () => void;
+  onSuccess?:    () => void;
 }
 
 // ─── Composant ───────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ export default function BulkCreateAccountsModal({
   const [search,   setSearch]   = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
-  const label = contractType === "INTERNE" ? "internes" : "intérimaires";
+  const label = contractType === "INTERNE" ? "internes" : contractType === "INTERIM" ? "intérimaires" : "tous les employés";
 
   // ── Sélection — seulement les employés sans compte ──────────────────────────
   const withoutAccount = useMemo(

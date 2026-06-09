@@ -276,6 +276,7 @@ export const bulkUpdateMatricules = async (
 export const shareMatriculeChanges = async (payload: {
   emails: string[];
   type_contrat?: string;
+  columns?: string[];   // colonnes à inclure dans le fichier Excel
 }): Promise<{ sent: string[]; errors: { email: string; error: string }[]; total_employees: number }> => {
   const res = await api.post("/api/employees/share-matricule-changes/", payload);
   return res.data;

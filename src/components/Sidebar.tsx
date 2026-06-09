@@ -97,6 +97,7 @@ export default function Sidebar() {
       path: "/employees",
       icon: <Users2 size={20} />,
       subItems: [
+        { label: "Vue Globale",            path: "/employees/global"         },
         { label: "Internes",              path: "/employees/internes"       },
         { label: "Intérimaires",          path: "/employees/interims"       },
         { label: "Alertes",               path: "/employees/alertes",  badge: totalCount },

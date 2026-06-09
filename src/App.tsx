@@ -15,6 +15,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import FirstLoginGuard from "@/components/FirstLoginGuard";
 import InterimEmployeesPage from "@/pages/InterimEmployeesPage";
 import InterneEmployeesPage from "./pages/InterneEmployeesPage";
+import GlobalEmployeesPage from "@/pages/GlobalEmployeesPage";
 import AlertesEmployesPage from "@/pages/AlertesEmployesPage";
 import GestionQuestionnairesPage from "@/pages/GestionQuestionnairesPage";
 import QuestionnaireSortiePage from "@/pages/QuestionnaireSortiePage";
@@ -238,6 +239,11 @@ function App() {
         <Route path="/dashboard" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <DashboardPage />
+          </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/employees/global" element={
+          <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
+            <GlobalEmployeesPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
         <Route path="/employees/internes" element={
