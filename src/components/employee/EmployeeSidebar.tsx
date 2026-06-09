@@ -67,11 +67,12 @@ const baseNavItems = [
     path: "/employee/documents",
     icon: <FileStack size={20} />,
   },
-  {
-    label: "Questionnaire de sortie",
-    path: "/employee/questionnaire",
-    icon: <ClipboardList size={20} />,
-  },
+  // TODO: Questionnaire de sortie — à activer quand disponible
+  // {
+  //   label: "Questionnaire de sortie",
+  //   path: "/employee/questionnaire",
+  //   icon: <ClipboardList size={20} />,
+  // },
 ];
 
 type NavItem = (typeof baseNavItems)[0];

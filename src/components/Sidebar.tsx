@@ -100,7 +100,8 @@ export default function Sidebar() {
         { label: "Internes",              path: "/employees/internes"       },
         { label: "Intérimaires",          path: "/employees/interims"       },
         { label: "Alertes",               path: "/employees/alertes",  badge: totalCount },
-        { label: "Questionnaires sortie", path: "/employees/questionnaires", badge: questionnaireDoneCount || undefined, badgeRed: true },
+        // TODO: Questionnaires sortie — à activer quand disponible
+        // { label: "Questionnaires sortie", path: "/employees/questionnaires", badge: questionnaireDoneCount || undefined, badgeRed: true },
       ],
     },
     {
@@ -152,7 +153,8 @@ export default function Sidebar() {
         { label: "Mon Dossier",   path: "/rh/my-dossier"   },
         { label: "Équipe en congé",      path: "/rh/my-service-leaves" },
         { label: "Mes Sorties",          path: "/rh/my-exits"          },
-        { label: "Questionnaire sortie", path: "/rh/my-questionnaire"  },
+        // TODO: Questionnaire sortie — à activer quand disponible
+        // { label: "Questionnaire sortie", path: "/rh/my-questionnaire"  },
         ...(isRhManager
           ? [
               { label: "Mes Pointages", path: "/rh/my-attendance" },
