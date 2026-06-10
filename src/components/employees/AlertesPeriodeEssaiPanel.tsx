@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Search, ChevronLeft, ChevronRight, SlidersHorizontal, X } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import { FaBell } from "react-icons/fa";
 import type { AlertePeriodeEssai } from "@/services/employeeService";
@@ -21,13 +22,20 @@ function urgencyBadge(j: number): string {
 export default function AlertesPeriodeEssaiPanel({
   alertes,
   loading,
+  services = [],
+  serviceFiltre = "TOUS",
+  onServiceFiltreChange,
 }: {
   alertes: AlertePeriodeEssai[];
   loading: boolean;
+  services?: string[];
+  serviceFiltre?: string;
+  onServiceFiltreChange?: (service: string) => void;
 }) {
   const [search,   setSearch]   = useState("");
   const [selected, setSelected] = useState<AlertePeriodeEssai | null>(null);
   const [page,     setPage]     = useState(1);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // Réinitialiser la page quand la liste ou la recherche change
   useEffect(() => { setPage(1); }, [alertes, search]);
@@ -75,7 +83,91 @@ export default function AlertesPeriodeEssaiPanel({
               {rows.length} employé{rows.length > 1 ? "s" : ""}
             </span>
           )}
+
+          {/* ── Bouton Filtre (par service) ── */}
+          <button
+            onClick={() => setFilterOpen(true)}
+            className="relative shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-camublue-900 text-white text-xs font-semibold shadow-sm hover:bg-camublue-800 transition"
+          >
+            <SlidersHorizontal size={14} />
+            Filtre
+            {serviceFiltre !== "TOUS" && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-white" />
+            )}
+          </button>
         </div>
+
+        {/* ── Modal Filtre ── */}
+        <AnimatePresence>
+          {filterOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+              onClick={() => setFilterOpen(false)}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 20, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.97 }}
+                transition={{ duration: 0.2 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden"
+              >
+                {/* En-tête */}
+                <div className="flex items-center justify-between px-5 py-4 bg-camublue-900">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <SlidersHorizontal size={16} />
+                    Filtrer les alertes
+                  </h3>
+                  <button
+                    onClick={() => setFilterOpen(false)}
+                    className="text-white/80 hover:text-white transition"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Contenu */}
+                <div className="p-5 space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                      Service
+                    </label>
+                    <select
+                      value={serviceFiltre}
+                      onChange={(e) => onServiceFiltreChange?.(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-camublue-900/30 focus:border-camublue-900"
+                    >
+                      <option value="TOUS">Tous les services</option>
+                      {services.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Pied */}
+                <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50">
+                  <button
+                    onClick={() => onServiceFiltreChange?.("TOUS")}
+                    disabled={serviceFiltre === "TOUS"}
+                    className="text-xs font-medium text-slate-500 hover:text-camublue-900 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Réinitialiser
+                  </button>
+                  <button
+                    onClick={() => setFilterOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-camublue-900 text-white text-xs font-semibold shadow-sm hover:bg-camublue-800 transition"
+                  >
+                    Appliquer
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Table / Empty ── */}
         {rows.length === 0 ? (
