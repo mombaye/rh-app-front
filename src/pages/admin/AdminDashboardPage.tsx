@@ -24,6 +24,7 @@ import toast, { Toaster } from "react-hot-toast";
 import { AnimatePresence, motion } from "framer-motion";
 import * as XLSX from "xlsx";
 import SharedConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
+import DownloadAppButton from "@/components/common/DownloadAppButton";
 import {
   Users,
   UserCheck,
@@ -1353,6 +1354,9 @@ export default function AdminDashboardPage() {
       <Toaster position="top-right" />
 
       <div className="space-y-6">
+        <div className="flex justify-end">
+          <DownloadAppButton />
+        </div>
         {activeTab === "overview" ? (
           <OverviewTab stats={stats} onExport={() => setShowExport(true)} />
         ) : (

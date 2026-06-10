@@ -26,6 +26,7 @@ import {
   getEmployees, getEmployeesByContractType, fetchBulletinsSummary,
 } from "@/services/employeeService";
 import DashboardAlertesBar from "@/components/dashboard/DashboardAlertesBar";
+import DownloadAppButton from "@/components/common/DownloadAppButton";
 import {
   getDailyStats, getWeeklyStats, getMonthlyStats, getShiftDailyStats,
 } from "@/services/attendanceService";
@@ -1335,6 +1336,7 @@ export default function DashboardPage() {
                 <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
                 <span className="hidden sm:inline">Actualiser</span>
               </button>
+              <DownloadAppButton />
             </div>
           </div>
           {/* Navigation par onglets */}

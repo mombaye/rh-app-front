@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
 import { leaveBalanceService, leaveRequestService } from "@/services/leaveService";
 import { LeaveBalance, LeaveRequest } from "@/types/leave";
+import DownloadAppButton from "@/components/common/DownloadAppButton";
 
 const fmt = (d: string) =>
   new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
@@ -127,13 +128,16 @@ export default function ManagerDashboardPage() {
       <div className="px-4 md:px-6 pb-10">
 
         {/* ── Header ── */}
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-          <h1 className="text-2xl font-bold text-[#003c71]">
-            Bonjour, {user?.employee_name?.split(" ")[0] ?? user?.username} 👋
-          </h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Tableau de bord Manager · Niveau {user?.manager_level ?? "—"}
-          </p>
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-[#003c71]">
+              Bonjour, {user?.employee_name?.split(" ")[0] ?? user?.username} 👋
+            </h1>
+            <p className="text-gray-500 text-sm mt-1">
+              Tableau de bord Manager · Niveau {user?.manager_level ?? "—"}
+            </p>
+          </div>
+          <DownloadAppButton />
         </motion.div>
 
         {/* ── Stats cards ── */}

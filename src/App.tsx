@@ -1,73 +1,87 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import WelcomePage from "@/pages/WelcomePage";
-import LoginPage from "@/pages/LoginPage";
-import AdminLoginPage from "@/pages/admin/AdminLoginPage";
-import AdminDashboardPage from "@/pages/admin/AdminDashboardPage";
-import AdminProtectedRoute from "@/components/admin/AdminProtectedRoute";
-import DashboardPage from "@/pages/DashboardPage";
-import PayslipPage from "@/pages/PayslipPage";
-import LeavePage from "@/pages/LeavePage";
-import LeavesHierarchiePage from "@/pages/LeavesHierarchiePage";
-import LeavesMigrationPage  from "@/pages/LeavesMigrationPage";
 import ChangePasswordPage from "@/components/users/ChangePasswordPage";
 import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import FirstLoginGuard from "@/components/FirstLoginGuard";
-import InterimEmployeesPage from "@/pages/InterimEmployeesPage";
-import InterneEmployeesPage from "./pages/InterneEmployeesPage";
-import GlobalEmployeesPage from "@/pages/GlobalEmployeesPage";
-import AlertesEmployesPage from "@/pages/AlertesEmployesPage";
-import GestionQuestionnairesPage from "@/pages/GestionQuestionnairesPage";
-import QuestionnaireSortiePage from "@/pages/QuestionnaireSortiePage";
-import AttendanceNormalesPage from "@/pages/AttendanceNormalesPage";
-import AttendanceShiftsPage from "@/pages/Attendanceshiftspage";
-import AttendanceJustificationsPage from "@/pages/AttendanceJustificationsPage";
-import AttendanceFeriesPage from "@/pages/AttendanceFeriesPage";
-import PlanningPage from "@/pages/PlanningPage";
-import EmployeeDashboardPage          from "@/pages/employee/EmployeeDashboardPage";
-import EmployeeLeavesPage             from "@/pages/employee/EmployeeLeavesPage";
-import EmployeePayslipPage            from "@/pages/employee/EmployeePayslipPage";
-import EmployeeDossierPage            from "@/pages/employee/EmployeeDossierPage";
-import EmployeeAttendancePage         from "@/pages/employee/EmployeeAttendancePage";
-import EmployeeDocumentsPage          from "@/pages/employee/EmployeeDocumentsPage";
-import EmployeeExitAuthorizationPage  from "@/pages/employee/EmployeeExitAuthorizationPage";
-import EmployeeServiceLeavesPage      from "@/pages/employee/EmployeeServiceLeavesPage";
-import EmployeeQuestionnairePage      from "@/pages/employee/EmployeeQuestionnairePage";
-// Manager pages
-import ManagerDashboardPage       from "@/pages/manager/ManagerDashboardPage";
-import ManagerLeavesPage          from "@/pages/manager/ManagerLeavesPage";
-import ManagerExitAuthorizationPage from "@/pages/manager/ManagerExitAuthorizationPage";
-import ManagerPayslipPage    from "@/pages/manager/ManagerPayslipPage";
-import ManagerDossierPage    from "@/pages/manager/ManagerDossierPage";
-import ManagerApprovalsPage  from "@/pages/manager/ManagerApprovalsPage";
-import ManagerDocumentsPage   from "@/pages/manager/ManagerDocumentsPage";
-import ManagerTeamLeavesPage  from "@/pages/manager/ManagerTeamLeavesPage";
+import AdminProtectedRoute from "@/components/admin/AdminProtectedRoute";
 import { useAuth } from "@/contexts/useAuth";
-// RH espace employé
-import RhLeavesPage               from "@/pages/rh/RhLeavesPage";
-import RhPayslipPage              from "@/pages/rh/RhPayslipPage";
-import RhDossierPage              from "@/pages/rh/RhDossierPage";
-import RhAttendancePage           from "@/pages/rh/RhAttendancePage";
-import RhApprovalsPage            from "@/pages/rh/RhApprovalsPage";
-import RhDocumentsPage            from "@/pages/rh/RhDocumentsPage";
-import RhExitAuthorizationPage    from "@/pages/rh/RhExitAuthorizationPage";
-import RhMyExitAuthorizationPage  from "@/pages/rh/RhMyExitAuthorizationPage";
-import RhQuestionnairePage         from "@/pages/rh/RhQuestionnairePage";
-import RhServiceLeavesPage         from "@/pages/rh/RhServiceLeavesPage";
-import RhAnticipationPage         from "@/pages/rh/RhAnticipationPage";
-import RhAttestationsPage         from "@/pages/rh/RhAttestationsPage";
-import EmployeeAttestationsPage   from "@/pages/employee/EmployeeAttestationsPage";
-import ManagerAttestationsPage    from "@/pages/manager/ManagerAttestationsPage";
-import ManagerAttendancePage      from "@/pages/manager/ManagerAttendancePage";
-import ForgotPasswordPage         from "@/pages/ForgotPasswordPage";
+
+// ── Pages chargées à la demande (code-splitting) ─────────────────────────────
+// Chaque page est découpée dans son propre chunk JS, chargé uniquement
+// lorsque l'utilisateur navigue vers la route correspondante.
+// Cela réduit considérablement la taille du bundle initial et accélère
+// le premier affichage de l'application.
+const WelcomePage              = lazy(() => import("@/pages/WelcomePage"));
+const LoginPage                = lazy(() => import("@/pages/LoginPage"));
+const ForgotPasswordPage       = lazy(() => import("@/pages/ForgotPasswordPage"));
+const AdminLoginPage           = lazy(() => import("@/pages/admin/AdminLoginPage"));
+const AdminDashboardPage       = lazy(() => import("@/pages/admin/AdminDashboardPage"));
+const DashboardPage            = lazy(() => import("@/pages/DashboardPage"));
+const PayslipPage              = lazy(() => import("@/pages/PayslipPage"));
+const LeavePage                = lazy(() => import("@/pages/LeavePage"));
+const LeavesHierarchiePage     = lazy(() => import("@/pages/LeavesHierarchiePage"));
+const LeavesMigrationPage      = lazy(() => import("@/pages/LeavesMigrationPage"));
+const InterimEmployeesPage     = lazy(() => import("@/pages/InterimEmployeesPage"));
+const InterneEmployeesPage     = lazy(() => import("@/pages/InterneEmployeesPage"));
+const GlobalEmployeesPage      = lazy(() => import("@/pages/GlobalEmployeesPage"));
+const AlertesEmployesPage      = lazy(() => import("@/pages/AlertesEmployesPage"));
+const GestionQuestionnairesPage = lazy(() => import("@/pages/GestionQuestionnairesPage"));
+const QuestionnaireSortiePage  = lazy(() => import("@/pages/QuestionnaireSortiePage"));
+const AttendanceNormalesPage   = lazy(() => import("@/pages/AttendanceNormalesPage"));
+const AttendanceShiftsPage     = lazy(() => import("@/pages/Attendanceshiftspage"));
+const AttendanceJustificationsPage = lazy(() => import("@/pages/AttendanceJustificationsPage"));
+const AttendanceFeriesPage     = lazy(() => import("@/pages/AttendanceFeriesPage"));
+const PlanningPage             = lazy(() => import("@/pages/PlanningPage"));
+
+// Espace Employé
+const EmployeeDashboardPage         = lazy(() => import("@/pages/employee/EmployeeDashboardPage"));
+const EmployeeLeavesPage            = lazy(() => import("@/pages/employee/EmployeeLeavesPage"));
+const EmployeePayslipPage           = lazy(() => import("@/pages/employee/EmployeePayslipPage"));
+const EmployeeDossierPage           = lazy(() => import("@/pages/employee/EmployeeDossierPage"));
+const EmployeeAttendancePage        = lazy(() => import("@/pages/employee/EmployeeAttendancePage"));
+const EmployeeDocumentsPage         = lazy(() => import("@/pages/employee/EmployeeDocumentsPage"));
+const EmployeeExitAuthorizationPage = lazy(() => import("@/pages/employee/EmployeeExitAuthorizationPage"));
+const EmployeeServiceLeavesPage     = lazy(() => import("@/pages/employee/EmployeeServiceLeavesPage"));
+const EmployeeQuestionnairePage     = lazy(() => import("@/pages/employee/EmployeeQuestionnairePage"));
+const EmployeeAttestationsPage      = lazy(() => import("@/pages/employee/EmployeeAttestationsPage"));
+
+// Espace Manager
+const ManagerDashboardPage          = lazy(() => import("@/pages/manager/ManagerDashboardPage"));
+const ManagerLeavesPage              = lazy(() => import("@/pages/manager/ManagerLeavesPage"));
+const ManagerExitAuthorizationPage  = lazy(() => import("@/pages/manager/ManagerExitAuthorizationPage"));
+const ManagerPayslipPage      = lazy(() => import("@/pages/manager/ManagerPayslipPage"));
+const ManagerDossierPage      = lazy(() => import("@/pages/manager/ManagerDossierPage"));
+const ManagerApprovalsPage    = lazy(() => import("@/pages/manager/ManagerApprovalsPage"));
+const ManagerDocumentsPage    = lazy(() => import("@/pages/manager/ManagerDocumentsPage"));
+const ManagerTeamLeavesPage   = lazy(() => import("@/pages/manager/ManagerTeamLeavesPage"));
+const ManagerAttestationsPage = lazy(() => import("@/pages/manager/ManagerAttestationsPage"));
+const ManagerAttendancePage   = lazy(() => import("@/pages/manager/ManagerAttendancePage"));
+
+// Espace RH — espace employé
+const RhLeavesPage              = lazy(() => import("@/pages/rh/RhLeavesPage"));
+const RhPayslipPage             = lazy(() => import("@/pages/rh/RhPayslipPage"));
+const RhDossierPage             = lazy(() => import("@/pages/rh/RhDossierPage"));
+const RhAttendancePage          = lazy(() => import("@/pages/rh/RhAttendancePage"));
+const RhApprovalsPage           = lazy(() => import("@/pages/rh/RhApprovalsPage"));
+const RhDocumentsPage           = lazy(() => import("@/pages/rh/RhDocumentsPage"));
+const RhExitAuthorizationPage   = lazy(() => import("@/pages/rh/RhExitAuthorizationPage"));
+const RhMyExitAuthorizationPage = lazy(() => import("@/pages/rh/RhMyExitAuthorizationPage"));
+const RhQuestionnairePage       = lazy(() => import("@/pages/rh/RhQuestionnairePage"));
+const RhServiceLeavesPage       = lazy(() => import("@/pages/rh/RhServiceLeavesPage"));
+const RhAnticipationPage        = lazy(() => import("@/pages/rh/RhAnticipationPage"));
+const RhAttestationsPage        = lazy(() => import("@/pages/rh/RhAttestationsPage"));
+
+// ── Fallback de chargement ────────────────────────────────────────────────────
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="h-10 w-10 border-4 border-camublue-900/20 border-t-camublue-900 rounded-full animate-spin" />
+    </div>
+  );
+}
 
 // ── Helpers de rôles basés sur activeRole ────────────────────────────────────
-
-function PlanningManagerRedirect({ children }: { children: React.ReactNode }) {
-  const { activeRole } = useAuth();
-  if (activeRole === "planning") return <Navigate to="/planning" replace />;
-  return <>{children}</>;
-}
 
 function NonPlanningRoute({ children }: { children: React.ReactNode }) {
   const { activeRole } = useAuth();
@@ -125,6 +139,7 @@ function App() {
   return (
     <>
       <Toaster position="top-right" reverseOrder={false} />
+      <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* ── Admin Portal ─────────────────────────────────────── */}
         <Route path="/admin" element={<AdminLoginPage />} />
@@ -332,6 +347,7 @@ function App() {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </>
   );
 }

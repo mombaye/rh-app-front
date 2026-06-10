@@ -22,6 +22,7 @@ import { fetchAvailableBulletins } from "@/services/employeeService";
 import { getEmployeeDocuments } from "@/services/employeeService";
 import { LeaveBalance, LeaveRequest } from "@/types/leave";
 import { Link } from "react-router-dom";
+import DownloadAppButton from "@/components/common/DownloadAppButton";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
   PENDING:        { label: "En attente",       color: "text-amber-700",  bg: "bg-amber-50 border-amber-200",  Icon: Clock          },
@@ -120,14 +121,17 @@ export default function EmployeeDashboardPage() {
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
         >
-          <h1 className="text-2xl font-bold text-camublue-900">
-            Bonjour, {user?.employee_name?.split(" ")[0] || user?.username} 👋
-          </h1>
-          <p className="text-gray-500 mt-1">
-            Voici un résumé de votre situation RH.
-          </p>
+          <div>
+            <h1 className="text-2xl font-bold text-camublue-900">
+              Bonjour, {user?.employee_name?.split(" ")[0] || user?.username} 👋
+            </h1>
+            <p className="text-gray-500 mt-1">
+              Voici un résumé de votre situation RH.
+            </p>
+          </div>
+          <DownloadAppButton />
         </motion.div>
 
         {/* Stat cards */}
