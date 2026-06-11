@@ -1,16 +1,16 @@
 // src/pages/rh/RhAttestationsPage.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileText, Download, RefreshCw, Search, X,
   RotateCcw, LayoutTemplate, Settings2,
   User, Calendar, Briefcase, Building2, FileCheck, Clock,
-  CheckCircle2, Ban, History, PlusCircle, Send, XCircle,
+  CheckCircle2, Ban, History, PlusCircle, Send, XCircle, Move, Trash2, Minus, Plus,
 } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
 import AppLayout from "@/layouts/AppLayout";
-import { attestationService } from "@/services/attestationService";
+import { attestationService, attestationSignatureService } from "@/services/attestationService";
 import { AttestationRequest, AttestationStatus, AttestationHistory } from "@/types/attestation";
 import AttestationTemplatesPanel from "@/components/attestations/AttestationTemplatesPanel";
 
@@ -63,6 +63,417 @@ function Divider({ label }: { label: string }) {
   );
 }
 
+// ── Aperçu du document généré + glisser-déposer de la signature ─────────────
+interface SignaturePlacerProps {
+  attestationId: number;
+  onApplied: (updated: AttestationRequest) => void;
+  onRegenerate: () => Promise<void>;
+  regenerating: boolean;
+}
+
+/** Logique partagée de positionnement / application de la signature. */
+function useSignaturePlacement({ attestationId, onApplied, onRegenerate, regenerating }: SignaturePlacerProps) {
+  const [preview, setPreview] = useState<{
+    image: string; page_width: number; page_height: number; page_index: number; page_count: number;
+  } | null>(null);
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [applying, setApplying] = useState(false);
+  const [applied,  setApplied]  = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [pos, setPos] = useState({ x: 0.65, y: 0.8 }); // fractions, coin haut-gauche
+  const [placed, setPlaced] = useState(true); // signature visible/positionnée sur l'aperçu
+  const [dragging, setDragging] = useState(false);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const SIG_WIDTH_MIN = 0.08;
+  const SIG_WIDTH_MAX = 0.5;
+  const [sigWidth, setSigWidth] = useState(0.22); // largeur de la signature, fraction de la largeur de page
+
+  const loadPreview = async () => {
+    setLoading(true);
+    try {
+      const data = await attestationService.getPreviewImage(attestationId);
+      setPreview(data);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors du chargement de l'aperçu");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPreview();
+    attestationSignatureService.get()
+      .then(sig => setSignatureUrl(sig?.image_url || null))
+      .catch(() => setSignatureUrl(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attestationId]);
+
+  const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+
+  const updatePosFromClient = (clientX: number, clientY: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const sigWFrac = sigWidth;
+    const sigHFrac = sigWFrac; // approximation pour le clamp ; le ratio réel est géré côté backend
+    let x = (clientX - rect.left) / rect.width;
+    let y = (clientY - rect.top) / rect.height;
+    x = clamp(x, 0, 1 - sigWFrac);
+    y = clamp(y, 0, 1 - sigHFrac);
+    setPos({ x, y });
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!signatureUrl || !placed) return;
+    e.preventDefault();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    setDragging(true);
+    updatePosFromClient(e.clientX, e.clientY);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragging) return;
+    updatePosFromClient(e.clientX, e.clientY);
+  };
+
+  const handlePointerUp = () => setDragging(false);
+
+  const handleApply = async () => {
+    setApplying(true);
+    try {
+      // Si une signature a déjà été appliquée, on re-génère d'abord le document
+      // (ce qui retire l'ancienne signature) afin de pouvoir la replacer ailleurs.
+      if (applied) {
+        await onRegenerate();
+      }
+      const updated = await attestationService.applySignature(attestationId, {
+        x: pos.x,
+        y: pos.y,
+        width: sigWidth,
+        page: preview?.page_index,
+      });
+      onApplied(updated);
+      setApplied(true);
+      toast.success(applied ? "Signature repositionnée sur le document !" : "Signature apposée sur le document !");
+      await loadPreview();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors de l'apposition de la signature");
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  /** Retire la signature précédemment apposée en re-générant le document à partir des données actuelles. */
+  const handleRemoveApplied = async () => {
+    setRemoving(true);
+    try {
+      await onRegenerate();
+      setApplied(false);
+      setPlaced(true);
+      await loadPreview();
+      toast.success("Signature retirée du document.");
+    } catch (e: any) {
+      toast.error("Erreur lors du retrait de la signature");
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  /** Applique une nouvelle taille de signature (bornée), en ré-ajustant sa position si besoin. */
+  const applySigWidth = (next: number) => {
+    const clamped = clamp(next, SIG_WIDTH_MIN, SIG_WIDTH_MAX);
+    setSigWidth(clamped);
+    setPos(p => ({ x: clamp(p.x, 0, 1 - clamped), y: clamp(p.y, 0, 1 - clamped) }));
+  };
+
+  /** Modifie la taille de la signature d'un incrément donné (boutons +/-). */
+  const changeSigWidth = (delta: number) => {
+    setSigWidth(w => {
+      const next = clamp(w + delta, SIG_WIDTH_MIN, SIG_WIDTH_MAX);
+      setPos(p => ({ x: clamp(p.x, 0, 1 - next), y: clamp(p.y, 0, 1 - next) }));
+      return next;
+    });
+  };
+
+  return {
+    preview, signatureUrl, loading, applying, applied, removing, regenerating,
+    pos, placed, dragging,
+    containerRef, sigWidth, SIG_WIDTH_MIN, SIG_WIDTH_MAX, changeSigWidth, applySigWidth,
+    handlePointerDown, handlePointerMove, handlePointerUp,
+    handleApply, handleRemoveApplied, setPlaced,
+  };
+}
+
+type SignaturePlacement = ReturnType<typeof useSignaturePlacement>;
+
+// ── Bloc complet pour l'état GENERATED : aperçu à gauche, actions à droite ──
+interface GeneratedPanelProps {
+  manageTarget: AttestationRequest;
+  onApplied: (updated: AttestationRequest) => void;
+  onRegenerate: () => Promise<void>;
+  regenerating: boolean;
+  onValidate: () => void;
+  validating: boolean;
+  rejecting: boolean;
+}
+
+function GeneratedPanel({
+  manageTarget, onApplied, onRegenerate, regenerating, onValidate, validating, rejecting,
+}: GeneratedPanelProps) {
+  const sig = useSignaturePlacement({
+    attestationId: manageTarget.id, onApplied, onRegenerate, regenerating,
+  });
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* ── Aperçu du document (gauche) ── */}
+      <div className="space-y-2">
+        <SignaturePreview sig={sig} />
+        <SignatureControls sig={sig} />
+      </div>
+
+      {/* ── Actions (droite) ── */}
+      <div className="space-y-3 flex flex-col">
+        {/* Taille de la signature */}
+        {sig.signatureUrl && (
+          <SignatureSizeControl sig={sig} />
+        )}
+
+        {/* Visualiser le PDF généré */}
+        {manageTarget.pdf_url && (
+          <a
+            href={manageTarget.pdf_url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-3 px-4 py-3.5 bg-[#003c71]/5 hover:bg-[#003c71]/10 border border-[#003c71]/20 rounded-xl transition group"
+          >
+            <div className="w-9 h-9 rounded-lg bg-[#003c71] flex items-center justify-center shrink-0">
+              <FileText size={16} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[#003c71]">Visualiser le document généré</p>
+              <p className="text-xs text-gray-400">Ouvrir le PDF complet dans un nouvel onglet</p>
+            </div>
+          </a>
+        )}
+
+        {/* Re-générer (avant validation) */}
+        <button
+          onClick={onRegenerate}
+          disabled={regenerating || validating || rejecting}
+          className="flex items-center gap-3 w-full px-4 py-3.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition disabled:opacity-60 text-left"
+        >
+          <div className="w-9 h-9 rounded-lg bg-gray-200 flex items-center justify-center shrink-0">
+            {regenerating
+              ? <ImSpinner2 className="animate-spin text-gray-500" size={16} />
+              : <RotateCcw size={16} className="text-gray-500" />
+            }
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-gray-700">
+              {regenerating ? "Re-génération en cours…" : "Re-générer l'aperçu"}
+            </p>
+            <p className="text-xs text-gray-400">Recréer le document avec les données actuelles</p>
+          </div>
+        </button>
+
+        <div className="flex-1" />
+
+        {/* Valider & envoyer */}
+        <button
+          onClick={onValidate}
+          disabled={validating || regenerating || rejecting}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition"
+        >
+          {validating
+            ? <><ImSpinner2 className="animate-spin" size={15} /> Envoi en cours…</>
+            : <><Send size={15} /> Valider &amp; envoyer à l'employé</>
+          }
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Aperçu image du document, avec la signature déplaçable par glisser-déposer. */
+function SignaturePreview({ sig }: { sig: SignaturePlacement }) {
+  const {
+    preview, signatureUrl, loading, pos, placed, dragging,
+    containerRef, sigWidth,
+    handlePointerDown, handlePointerMove, handlePointerUp, setPlaced,
+  } = sig;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-10 bg-gray-50 border border-gray-200 rounded-xl">
+        <ImSpinner2 className="animate-spin text-[#003c71]" size={22} />
+      </div>
+    );
+  }
+
+  if (!preview) return null;
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-50 select-none"
+      style={{ aspectRatio: `${preview.page_width} / ${preview.page_height}`, touchAction: "none" }}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+    >
+      <img
+        src={preview.image}
+        alt="Aperçu du document"
+        className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+        draggable={false}
+      />
+      {signatureUrl && placed && (
+        <div
+          className="absolute group"
+          style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%`, width: `${sigWidth * 100}%` }}
+        >
+          <img
+            src={signatureUrl}
+            alt="Signature"
+            draggable={false}
+            onPointerDown={handlePointerDown}
+            className={`block w-full object-contain ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+            style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }}
+          />
+          {/* Bouton pour retirer la signature de l'aperçu (avant application) */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setPlaced(false); }}
+            title="Retirer la signature de l'aperçu"
+            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition"
+          >
+            <X size={11} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Contrôle de la taille de la signature (curseur + boutons +/-). */
+function SignatureSizeControl({ sig }: { sig: SignaturePlacement }) {
+  const { sigWidth, SIG_WIDTH_MIN, SIG_WIDTH_MAX, changeSigWidth, applySigWidth, placed } = sig;
+  const STEP = 0.02;
+
+  return (
+    <div className="px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold text-gray-700">Taille de la signature</p>
+        <span className="text-xs text-gray-400">{Math.round((sigWidth / SIG_WIDTH_MAX) * 100)}%</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => changeSigWidth(-STEP)}
+          disabled={!placed || sigWidth <= SIG_WIDTH_MIN}
+          title="Réduire la signature"
+          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition"
+        >
+          <Minus size={14} />
+        </button>
+        <input
+          type="range"
+          min={SIG_WIDTH_MIN}
+          max={SIG_WIDTH_MAX}
+          step={STEP}
+          value={sigWidth}
+          disabled={!placed}
+          onChange={(e) => applySigWidth(parseFloat(e.target.value))}
+          className="flex-1 accent-[#003c71] disabled:opacity-40"
+        />
+        <button
+          type="button"
+          onClick={() => changeSigWidth(STEP)}
+          disabled={!placed || sigWidth >= SIG_WIDTH_MAX}
+          title="Agrandir la signature"
+          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition"
+        >
+          <Plus size={14} />
+        </button>
+      </div>
+      {!placed && (
+        <p className="text-xs text-gray-400 mt-1.5">Replacez la signature sur l'aperçu pour ajuster sa taille.</p>
+      )}
+    </div>
+  );
+}
+
+/** Boutons d'action liés au positionnement de la signature. */
+function SignatureControls({ sig }: { sig: SignaturePlacement }) {
+  const {
+    preview, signatureUrl, loading, applying, applied, removing, regenerating,
+    placed, handleApply, handleRemoveApplied, setPlaced,
+  } = sig;
+
+  if (loading || !preview) return null;
+
+  if (!signatureUrl) {
+    return (
+      <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+        Aucune signature enregistrée. Dessinez votre signature dans l'onglet « Modèles ».
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {placed ? (
+        <>
+          <p className="text-xs text-gray-400 flex items-center gap-1.5">
+            <Move size={12} className="shrink-0" />
+            {applied
+              ? "Glissez la signature vers le bon endroit, puis appliquez à nouveau pour la repositionner."
+              : "Glissez-déposez votre signature sur le document, puis appliquez-la."}
+          </p>
+          <button
+            onClick={handleApply}
+            disabled={applying || removing || regenerating}
+            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 bg-[#003c71] hover:bg-[#003c71]/90 disabled:opacity-60 text-white rounded-lg text-xs font-semibold transition"
+          >
+            {applying
+              ? <><ImSpinner2 className="animate-spin" size={13} /> {applied ? "Repositionnement…" : "Application…"}</>
+              : applied
+                ? <><Move size={13} /> Repositionner la signature</>
+                : <>✍️ Appliquer la signature</>
+            }
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="text-xs text-gray-400">Signature retirée de l'aperçu.</p>
+          <button
+            onClick={() => setPlaced(true)}
+            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold transition"
+          >
+            <RotateCcw size={12} /> Replacer la signature
+          </button>
+        </>
+      )}
+
+      {applied && (
+        <button
+          onClick={handleRemoveApplied}
+          disabled={removing || regenerating}
+          className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 bg-red-50 hover:bg-red-100 border border-red-200 disabled:opacity-60 text-red-600 rounded-lg text-xs font-semibold transition"
+        >
+          {removing || regenerating
+            ? <><ImSpinner2 className="animate-spin" size={13} /> Retrait…</>
+            : <><Trash2 size={12} /> Retirer la signature du document</>
+          }
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function RhAttestationsPage() {
   const [activeTab,    setActiveTab]    = useState<Tab>("requests");
   const [requests,     setRequests]     = useState<AttestationRequest[]>([]);
@@ -79,10 +490,20 @@ export default function RhAttestationsPage() {
   const [manageTarget,  setManageTarget]  = useState<AttestationRequest | null>(null);
   const [processNotes,  setProcessNotes]  = useState("");
   const [rejectNotes,   setRejectNotes]   = useState("");
+  const [showRejectForm, setShowRejectForm] = useState(false);
   const [generating,    setGenerating]    = useState(false);
   const [validating,    setValidating]    = useState(false);
   const [rejecting,     setRejecting]     = useState(false);
   const [regenerating,  setRegenerating]  = useState(false);
+  const [justValidated, setJustValidated] = useState(false);
+  const validatedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Nettoyage du timer de fermeture automatique au démontage
+  useEffect(() => {
+    return () => {
+      if (validatedTimerRef.current) clearTimeout(validatedTimerRef.current);
+    };
+  }, []);
 
   const openDetail = async (r: AttestationRequest) => {
     setDetailTarget(r);
@@ -151,9 +572,27 @@ export default function RhAttestationsPage() {
       if (detailTarget?.id === updated.id) await openDetail(updated);
       toast.success("Document validé — PDF envoyé à l'employé !");
       setProcessNotes("");
+      setJustValidated(true);
+      if (validatedTimerRef.current) clearTimeout(validatedTimerRef.current);
+      validatedTimerRef.current = setTimeout(() => {
+        setManageTarget(null);
+        setJustValidated(false);
+        validatedTimerRef.current = null;
+      }, 3000);
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors de la validation");
     } finally { setValidating(false); }
+  };
+
+  /** Ferme la modale "Gérer" et nettoie l'état lié au message de succès. */
+  const closeManageModal = () => {
+    if (validatedTimerRef.current) {
+      clearTimeout(validatedTimerRef.current);
+      validatedTimerRef.current = null;
+    }
+    setJustValidated(false);
+    setShowRejectForm(false);
+    setManageTarget(null);
   };
 
   // ── Refuser ────────────────────────────────────────────────────────────────
@@ -322,7 +761,7 @@ export default function RhAttestationsPage() {
                         </td>
                         <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <button
-                            onClick={() => { setManageTarget(r); setProcessNotes(""); setRejectNotes(""); }}
+                            onClick={() => { setManageTarget(r); setProcessNotes(""); setRejectNotes(""); setShowRejectForm(false); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003c71] hover:bg-[#003c71]/90 text-white rounded-lg text-xs font-semibold transition ml-auto"
                           >
                             <Settings2 size={13} />
@@ -518,7 +957,7 @@ export default function RhAttestationsPage() {
         {manageTarget && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-            onClick={() => !generating && !validating && !rejecting && !regenerating && setManageTarget(null)}
+            onClick={() => !generating && !validating && !rejecting && !regenerating && closeManageModal()}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 8 }}
@@ -526,8 +965,12 @@ export default function RhAttestationsPage() {
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.15 }}
               onClick={e => e.stopPropagation()}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+              className={`bg-white rounded-2xl shadow-2xl w-full overflow-hidden ${
+                !justValidated && manageTarget.status === "GENERATED" ? "max-w-3xl" : "max-w-md"
+              }`}
             >
+              {!justValidated && (
+              <>
               {/* Header */}
               <div className="bg-[#003c71] px-6 py-4 flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
@@ -538,131 +981,104 @@ export default function RhAttestationsPage() {
                   <p className="text-white/70 text-xs truncate">{manageTarget.employee_nom_complet} — {manageTarget.document_type_display}</p>
                 </div>
                 <button
-                  onClick={() => !generating && !validating && !rejecting && !regenerating && setManageTarget(null)}
+                  onClick={() => !generating && !validating && !rejecting && !regenerating && closeManageModal()}
                   className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
                 >
                   <X size={14} className="text-white" />
                 </button>
               </div>
+              </>
+              )}
 
+              {justValidated ? (
+                <div className="p-10 flex flex-col items-center justify-center text-center gap-3">
+                  <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <CheckCircle2 size={28} className="text-emerald-600" />
+                  </div>
+                  <p className="text-base font-semibold text-gray-800">Document validé et envoyé à l'employé !</p>
+                  <p className="text-xs text-gray-400">Cette fenêtre va se fermer automatiquement…</p>
+                </div>
+              ) : (
               <div className="p-6 space-y-3">
 
                 {/* ── PENDING ── */}
                 {manageTarget.status === "PENDING" && (
                   <>
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
-                      Cette demande est en attente. Générez un aperçu du document pour le
-                      vérifier avant de l'envoyer à l'employé, ou refusez la demande.
-                    </div>
+                    {!showRejectForm ? (
+                      <>
+                        {/* Générer l'aperçu */}
+                        <button
+                          onClick={handleGenerate}
+                          disabled={generating || rejecting}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#003c71] hover:bg-[#003c71]/90 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition"
+                        >
+                          {generating
+                            ? <><ImSpinner2 className="animate-spin" size={15} /> Génération du PDF en cours…</>
+                            : <><FileCheck size={15} /> Générer l'aperçu du document</>
+                          }
+                        </button>
 
-                    {/* Notes */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">Notes (optionnel)</label>
-                      <textarea
-                        value={processNotes}
-                        onChange={e => setProcessNotes(e.target.value)}
-                        rows={2}
-                        placeholder="Remarques pour l'employé…"
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 resize-none transition"
-                      />
-                    </div>
-
-                    {/* Générer l'aperçu */}
-                    <button
-                      onClick={handleGenerate}
-                      disabled={generating || rejecting}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#003c71] hover:bg-[#003c71]/90 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition"
-                    >
-                      {generating
-                        ? <><ImSpinner2 className="animate-spin" size={15} /> Génération du PDF en cours…</>
-                        : <><FileCheck size={15} /> Générer l'aperçu du document</>
-                      }
-                    </button>
-
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center"><div className="w-full h-px bg-gray-100" /></div>
-                      <div className="relative flex justify-center"><span className="bg-white px-2 text-xs text-gray-400">ou</span></div>
-                    </div>
-
-                    {/* Refuser */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                        Motif de refus <span className="text-red-400">*</span>
-                      </label>
-                      <textarea
-                        value={rejectNotes}
-                        onChange={e => setRejectNotes(e.target.value)}
-                        rows={2}
-                        placeholder="Ex : Informations manquantes dans votre dossier…"
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-400/20 resize-none transition"
-                      />
-                    </div>
-                    <button
-                      onClick={handleReject}
-                      disabled={rejecting || generating || !rejectNotes.trim()}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-600 border border-red-200 rounded-xl text-sm font-semibold transition"
-                    >
-                      {rejecting
-                        ? <><ImSpinner2 className="animate-spin" size={15} /> En cours…</>
-                        : <><Ban size={15} /> Refuser la demande</>
-                      }
-                    </button>
+                        {/* Refuser */}
+                        <button
+                          onClick={() => setShowRejectForm(true)}
+                          disabled={generating}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-600 border border-red-200 rounded-xl text-sm font-semibold transition"
+                        >
+                          <Ban size={15} /> Refuser la demande
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {/* Motif de refus */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                            Motif de refus <span className="text-red-400">*</span>
+                          </label>
+                          <textarea
+                            value={rejectNotes}
+                            onChange={e => setRejectNotes(e.target.value)}
+                            rows={3}
+                            autoFocus
+                            placeholder="Ex : Informations manquantes dans votre dossier…"
+                            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-400/20 resize-none transition"
+                          />
+                        </div>
+                        <button
+                          onClick={handleReject}
+                          disabled={rejecting || !rejectNotes.trim()}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-600 border border-red-200 rounded-xl text-sm font-semibold transition"
+                        >
+                          {rejecting
+                            ? <><ImSpinner2 className="animate-spin" size={15} /> En cours…</>
+                            : <><Ban size={15} /> Confirmer le refus</>
+                          }
+                        </button>
+                        <button
+                          onClick={() => setShowRejectForm(false)}
+                          disabled={rejecting}
+                          className="w-full border border-gray-200 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-60 transition"
+                        >
+                          Retour
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
 
                 {/* ── GENERATED (aperçu en attente de validation) ── */}
                 {manageTarget.status === "GENERATED" && (
-                  <>
-                    {/* Visualiser le PDF généré */}
-                    {manageTarget.pdf_url && (
-                      <a
-                        href={manageTarget.pdf_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-3 px-4 py-3.5 bg-[#003c71]/5 hover:bg-[#003c71]/10 border border-[#003c71]/20 rounded-xl transition group"
-                      >
-                        <div className="w-9 h-9 rounded-lg bg-[#003c71] flex items-center justify-center shrink-0">
-                          <FileText size={16} className="text-white" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-[#003c71]">Visualiser le document généré</p>
-                          <p className="text-xs text-gray-400">Ouvrir l'aperçu PDF dans un nouvel onglet</p>
-                        </div>
-                      </a>
-                    )}
-
-                    {/* Re-générer (avant validation) */}
-                    <button
-                      onClick={handleRegenerate}
-                      disabled={regenerating || validating || rejecting}
-                      className="flex items-center gap-3 w-full px-4 py-3.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition disabled:opacity-60 text-left"
-                    >
-                      <div className="w-9 h-9 rounded-lg bg-gray-200 flex items-center justify-center shrink-0">
-                        {regenerating
-                          ? <ImSpinner2 className="animate-spin text-gray-500" size={16} />
-                          : <RotateCcw size={16} className="text-gray-500" />
-                        }
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-gray-700">
-                          {regenerating ? "Re-génération en cours…" : "Re-générer l'aperçu"}
-                        </p>
-                        <p className="text-xs text-gray-400">Recréer le document avec les données actuelles</p>
-                      </div>
-                    </button>
-
-                    {/* Valider & envoyer */}
-                    <button
-                      onClick={handleValidate}
-                      disabled={validating || regenerating || rejecting}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition"
-                    >
-                      {validating
-                        ? <><ImSpinner2 className="animate-spin" size={15} /> Envoi en cours…</>
-                        : <><Send size={15} /> Valider &amp; envoyer à l'employé</>
-                      }
-                    </button>
-                  </>
+                  <GeneratedPanel
+                    manageTarget={manageTarget}
+                    onApplied={(updated) => {
+                      setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
+                      setManageTarget(updated);
+                    }}
+                    onRegenerate={handleRegenerate}
+                    regenerating={regenerating}
+                    onValidate={handleValidate}
+                    validating={validating}
+                    rejecting={rejecting}
+                  />
                 )}
 
                 {/* ── PROCESSED ── */}
@@ -728,12 +1144,13 @@ export default function RhAttestationsPage() {
                 )}
 
                 <button
-                  onClick={() => !generating && !validating && !rejecting && !regenerating && setManageTarget(null)}
+                  onClick={() => !generating && !validating && !rejecting && !regenerating && closeManageModal()}
                   className="w-full border border-gray-200 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition"
                 >
                   Fermer
                 </button>
               </div>
+              )}
             </motion.div>
           </div>
         )}

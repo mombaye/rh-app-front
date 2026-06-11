@@ -77,6 +77,27 @@ export const attestationService = {
     return res.data;
   },
 
+  /** Aperçu PNG (base64) de la dernière page du PDF généré, pour positionner la signature. */
+  getPreviewImage: async (id: number): Promise<{
+    image: string; page_width: number; page_height: number; page_index: number; page_count: number;
+  }> => {
+    const res = await axios.get(`${API}/${id}/preview-image/`, { headers: authHeaders() });
+    return res.data;
+  },
+
+  /** Appose la signature de l'utilisateur connecté sur le PDF généré (glisser-déposer). */
+  applySignature: async (
+    id: number,
+    pos: { x: number; y: number; width: number; page?: number },
+  ): Promise<AttestationRequest> => {
+    const res = await axios.post<AttestationRequest>(
+      `${API}/${id}/apply-signature/`,
+      pos,
+      { headers: authHeaders() },
+    );
+    return res.data;
+  },
+
   delete: async (id: number): Promise<void> => {
     await axios.delete(`${API}/${id}/`, { headers: authHeaders() });
   },
@@ -121,6 +142,36 @@ export const templateService = {
       { headers: authHeaders() },
     );
     return res.data;
+  },
+};
+
+// ── Signature RH (glisser-déposer sur les attestations) ──────────────────────
+
+export interface AttestationSignature {
+  id:          number;
+  image_url:   string | null;
+  uploaded_at: string;
+}
+
+const SIGNATURE_API = `${BASE_URL}/api/employees/attestation-signature`;
+
+export const attestationSignatureService = {
+  get: async (): Promise<AttestationSignature | null> => {
+    const res = await axios.get(`${SIGNATURE_API}/`, { headers: authHeaders() });
+    return res.data;
+  },
+
+  upload: async (file: File): Promise<AttestationSignature> => {
+    const formData = new FormData();
+    formData.append("image", file);
+    const res = await axios.post<AttestationSignature>(`${SIGNATURE_API}/`, formData, {
+      headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
+  delete: async (): Promise<void> => {
+    await axios.delete(`${SIGNATURE_API}/`, { headers: authHeaders() });
   },
 };
 
