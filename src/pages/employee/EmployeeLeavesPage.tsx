@@ -262,7 +262,7 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
     if (form.start_date && form.end_date && form.end_date >= form.start_date) {
       setCheckingDays(true);
       setHolidayCheck(null);
-      holidayService.checkDays(form.start_date, form.end_date)
+      holidayService.checkDays(form.start_date, form.end_date, form.leave_type_id || undefined)
         .then(result => {
           setHolidayCheck(result);
           // Pour les types à durée fixe ne pas écraser la durée légale
@@ -276,15 +276,10 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
           });
         })
         .catch(() => {
-          // Fallback : calcul local (dimanches exclus) si l'API est indisponible
+          // Fallback : calcul local (jours calendaires inclusifs début + fin) si l'API est indisponible
           const s = new Date(form.start_date + "T12:00:00");
           const e = new Date(form.end_date   + "T12:00:00");
-          let count = 0;
-          const cur = new Date(s);
-          while (cur <= e) {
-            if (cur.getDay() !== 0) count++;
-            cur.setDate(cur.getDate() + 1);
-          }
+          let count = Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
           if (form.half_day_start) count -= 0.5;
           if (form.half_day_end)   count -= 0.5;
           setForm(p => ({ ...p, days: Math.max(0.5, count) }));
@@ -294,7 +289,7 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
       setHolidayCheck(null);
     }
     setFormError(null);
-  }, [form.start_date, form.end_date, form.half_day_start, form.half_day_end]);
+  }, [form.start_date, form.end_date, form.half_day_start, form.half_day_end, form.leave_type_id]);
 
   const handleSave = async () => {
     setFormError(null);

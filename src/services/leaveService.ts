@@ -147,6 +147,30 @@ export const leaveBalanceService = {
     return res.data;
   },
 
+  /**
+   * POST /api/leaves/balances/migration_apply/
+   * Applique directement (sans fichier) des changements de soldes édités sur la
+   * page Migration — utilisé par le bouton "Synchroniser" après modification
+   * manuelle des valeurs dans le tableau.
+   */
+  migrationApply: async (
+    rows: {
+      matricule: string;
+      poste?: string;
+      date_embauche?: string;
+      acquired?: number;
+      taken?: number;
+      solde_restant: number;
+    }[],
+    opts: { year?: number; leave_type_code?: string }
+  ): Promise<{ processed: number; errors_count: number; results: any[] }> => {
+    const body: Record<string, any> = { rows };
+    if (opts.year)            body.year            = opts.year;
+    if (opts.leave_type_code) body.leave_type_code = opts.leave_type_code;
+    const res = await api.post(`${API}/balances/migration_apply/`, body);
+    return res.data;
+  },
+
   /** GET /api/leaves/balances/<id>/history/ — historique des mouvements de solde */
   getHistory: async (balanceId: number): Promise<LeaveBalanceHistory[]> => {
     const res = await api.get(`${API}/balances/${balanceId}/history/`, {

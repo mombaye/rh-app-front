@@ -185,10 +185,18 @@ export interface MigrationImportRow {
   status:            "ok" | "not_found" | "ambiguous" | "error";
   employee:          string;
   matricule?:        string;
+  nom?:              string;
+  prenom?:           string;
+  poste?:            string;
+  service?:          string;
+  date_embauche?:    string;
   match_type?:       "matricule" | "name_exact" | "name_fuzzy" | "not_found" | "ambiguous";
   current_remaining: number | null;
   new_remaining:     number | null;
   delta?:            number;
+  solde_anterieur?:  number;
+  acquired?:         number;
+  taken?:            number;
   message?:          string;
 }
 export interface MigrationImportResult {

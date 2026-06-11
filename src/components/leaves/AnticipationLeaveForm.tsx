@@ -93,11 +93,11 @@ export default function AnticipationLeaveForm({ onClose, onSuccess }: Props) {
     const [ey, em, ed] = form.end_date.split("-").map(Number);
     if (new Date(ey, em - 1, ed) < new Date(sy, sm - 1, sd)) { setHolidayCheck(null); return; }
     setCheckingDays(true);
-    holidayService.checkDays(form.start_date, form.end_date)
+    holidayService.checkDays(form.start_date, form.end_date, form.leave_type_id || undefined)
       .then(r => setHolidayCheck(r))
       .catch(() => setHolidayCheck(null))
       .finally(() => setCheckingDays(false));
-  }, [form.start_date, form.end_date]);
+  }, [form.start_date, form.end_date, form.leave_type_id]);
 
   const selectedType     = leaveTypes.find(t => String(t.id) === form.leave_type_id);
   const maxDays          = selectedType?.max_days_per_request ?? 0;

@@ -4,29 +4,80 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload, Download, FileSpreadsheet, X,
   CheckCircle, AlertTriangle, Search, AlertCircle,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, SlidersHorizontal,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import * as XLSXStyle from "xlsx-js-style";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import AppLayout from "@/layouts/AppLayout";
 import { leaveBalanceService, migrationSessionService } from "@/services/leaveService";
 import { MigrationImportResult, MigrationImportRow } from "@/types/leave";
 
-// ─── Badge de détection ───────────────────────────────────────────────────────
-function MatchBadge({ row }: { row: MigrationImportRow }) {
-  if (row.status === "not_found") return <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-red-100 text-red-600">Introuvable</span>;
-  if (row.status === "ambiguous") return <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-orange-100 text-orange-600">Ambigu</span>;
-  if (row.status === "error")     return <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-red-100 text-red-600">Erreur</span>;
-  if (row.match_type === "matricule")  return <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-100 text-emerald-700">Matricule</span>;
-  if (row.match_type === "name_exact") return <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-sky-100 text-sky-700">Nom exact</span>;
-  if (row.match_type === "name_fuzzy") return <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-700">Nom approx.</span>;
-  return null;
-}
-
 // ─── Types locaux ─────────────────────────────────────────────────────────────
 interface EditableRow extends MigrationImportRow {
   edited: number;
+}
+
+// ─── Export Excel ─────────────────────────────────────────────────────────────
+function isoToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+const MIGRATION_EXPORT_COLS = [
+  "Matricule", "Nom", "Prénom", "Poste", "Date embauche",
+  "Solde antérieur", "Congés acquis", "Solde congé actuel", "Congé pris", "Congé restant",
+] as const;
+type MigrationExportCol = typeof MIGRATION_EXPORT_COLS[number];
+
+function exportMigrationXLSX(filename: string, rows: Record<string, any>[]) {
+  if (!rows.length) return;
+  const ws = XLSXStyle.utils.json_to_sheet(rows);
+  const wb = XLSXStyle.utils.book_new();
+  const keys = Object.keys(rows[0]);
+  ws["!cols"] = keys.map((k) => ({
+    wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 3,
+  }));
+  (ws as any)["!freeze"] = { xSplit: 0, ySplit: 1 };
+
+  // En-têtes en bleu (#003c71) avec texte blanc en gras
+  keys.forEach((_, idx) => {
+    const cellRef = XLSXStyle.utils.encode_cell({ r: 0, c: idx });
+    const cell = ws[cellRef];
+    if (cell) {
+      cell.s = {
+        fill: { fgColor: { rgb: "003C71" } },
+        font: { color: { rgb: "FFFFFF" }, bold: true },
+        alignment: { vertical: "center", horizontal: "left" },
+      };
+    }
+  });
+
+  XLSXStyle.utils.book_append_sheet(wb, ws, "Migration");
+  XLSXStyle.writeFile(wb, `${filename}_${isoToday()}.xlsx`);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+/** Parse une date d'embauche (formats ISO "YYYY-MM-DD" ou "DD/MM/YYYY") en Date. */
+function parseDateEmbauche(raw?: string): Date | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  if (!s) return null;
+  // ISO : YYYY-MM-DD
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  // DD/MM/YYYY
+  m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return null;
+}
+
+/** Formate une date d'embauche brute en JJ/MM/AAAA pour l'affichage. */
+function formatDateEmbauche(raw?: string): string {
+  const d = parseDateEmbauche(raw);
+  if (!d) return raw || "—";
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
 // ─── Modal de confirmation remplacement ──────────────────────────────────────
@@ -109,6 +160,17 @@ export default function LeavesMigrationPage() {
   // ── Pagination ──────────────────────────────────────────────────────────────
   const [page,     setPage]     = useState(1);
   const [pageSize, setPageSize] = useState(25);
+
+  // ── Filtres personnalisés ────────────────────────────────────────────────────
+  const [filterOpen,   setFilterOpen]   = useState(false);
+  const [posteFiltre,  setPosteFiltre]  = useState("TOUS");
+  const [serviceFiltre,setServiceFiltre]= useState("TOUS");
+  const [dateFrom,     setDateFrom]     = useState("");
+  const [dateTo,       setDateTo]       = useState("");
+
+  // ── Export ────────────────────────────────────────────────────────────────────
+  const [showExportDlg, setShowExportDlg] = useState(false);
+  const [exportCols,    setExportCols]    = useState<MigrationExportCol[]>([...MIGRATION_EXPORT_COLS]);
 
   // ── Chargement de la session au montage (serveur en priorité, localStorage en fallback) ──
   useEffect(() => {
@@ -220,39 +282,94 @@ export default function LeavesMigrationPage() {
     setPendingFile(null);
   };
 
-  // ── Modifier une ligne ──────────────────────────────────────────────────────
+  // ── Modifier une ligne (avec recalcul de cohérence) ─────────────────────────
+  // Règles :
+  //   Solde congé actuel = Solde antérieur + Congés acquis
+  //   Congé restant      = Solde congé actuel - Congé pris
+  // → Toute saisie sur un champ recalcule automatiquement les champs dépendants
+  //   pour garantir SOLDE_CONGE_ACTUEL = SOLDE_ANTERIEUR + CONGES_ACQUIS
+  //   et CONGE_RESTANT = SOLDE_CONGE_ACTUEL - CONGE_PRIS.
+  const recomputeRow = (
+    r: EditableRow,
+    field: "solde_anterieur" | "acquired" | "taken" | "edited",
+    value: number,
+  ): EditableRow => {
+    let soldeAnterieur = r.solde_anterieur ?? ((r.acquired ?? 0) - (r.taken ?? 0));
+    let acquired       = r.acquired ?? 0;
+    let taken          = r.taken ?? 0;
+    let edited         = r.edited;
+
+    switch (field) {
+      case "solde_anterieur": soldeAnterieur = value; break;
+      case "acquired":        acquired       = value; break;
+      case "taken":           taken          = value; break;
+      case "edited":          edited         = value; break;
+    }
+
+    const soldeActuel = soldeAnterieur + acquired;
+
+    if (field === "edited") {
+      // L'utilisateur fixe directement le congé restant → on en déduit le congé pris.
+      taken = Math.max(0, soldeActuel - edited);
+    } else {
+      // Toute autre modification recalcule le congé restant.
+      edited = soldeActuel - taken;
+    }
+
+    return {
+      ...r,
+      solde_anterieur:   soldeAnterieur,
+      acquired,
+      taken,
+      current_remaining: soldeActuel,
+      edited,
+    };
+  };
+
   const updateEdited = (rowIndex: number, value: string) => {
     const num = parseFloat(value);
     setRows(prev => prev.map((r, i) =>
-      i === rowIndex ? { ...r, edited: isNaN(num) ? 0 : num } : r
+      i === rowIndex ? recomputeRow(r, "edited", isNaN(num) ? 0 : num) : r
+    ));
+    if (synced) setSynced(false);
+  };
+
+  /** Met à jour un champ numérique éditable (solde antérieur, congés acquis, congé pris). */
+  const updateField = (
+    rowIndex: number,
+    field: "solde_anterieur" | "acquired" | "taken",
+    value: string,
+  ) => {
+    const num = parseFloat(value);
+    setRows(prev => prev.map((r, i) =>
+      i === rowIndex ? recomputeRow(r, field, isNaN(num) ? 0 : num) : r
     ));
     if (synced) setSynced(false);
   };
 
   // ── Synchroniser ────────────────────────────────────────────────────────────
+  // Applique directement les valeurs (édités ou non) du tableau aux soldes des
+  // employés concernés, sans avoir besoin de re-soumettre un fichier.
   const handleSync = async () => {
-    if (!fileName) return;
-    // NOTE : on ne peut pas re-soumettre le fichier original après un reload
-    // On utilise les soldes édités stockés en localStorage
     setLoadingSync(true);
     try {
-      // Reconstruction du fichier virtuel à partir des rows édités
-      const ws = XLSX.utils.aoa_to_sheet([
-        ["NOM_PRENOM", "MATRICULE", "SOLDE_RESTANT"],
-        ...rows
-          .filter(r => r.status === "ok")
-          .map(r => [r.employee, r.matricule ?? "", r.edited]),
-      ]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Migration");
-      const buf  = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-      const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const virtualFile = new File([blob], fileName, { type: blob.type });
+      const okRows = rows.filter(r => r.status === "ok" && r.matricule);
+      if (okRows.length === 0) {
+        toast.error("Aucun employé à synchroniser.");
+        return;
+      }
 
-      await leaveBalanceService.migrationImport(virtualFile, {
-        dry_run: false,
-        year: currentYear,
-      });
+      await leaveBalanceService.migrationApply(
+        okRows.map(r => ({
+          matricule:     r.matricule!,
+          poste:         r.poste,
+          date_embauche: r.date_embauche,
+          acquired:      r.acquired,
+          taken:         r.taken,
+          solde_restant: r.edited,
+        })),
+        { year: currentYear }
+      );
       setSynced(true);
       setShowSyncBanner(true);
       setTimeout(() => setShowSyncBanner(false), 3000);
@@ -282,34 +399,102 @@ export default function LeavesMigrationPage() {
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.aoa_to_sheet([
-      ["NOM_PRENOM",   "MATRICULE", "SOLDE_RESTANT"],
-      ["Jean Dupont",  "EMP001",    15.5],
-      ["Marie Martin", "EMP002",    8],
-      ["Ahmed Diallo", "EMP003",    22],
+    const headers = [
+      "NOM_PRENOM", "MATRICULE", "POSTE", "DATE_EMBAUCHE", "SOLDE_ANTERIEUR",
+      "CONGES_ACQUIS", "SOLDE_CONGE_ACTUEL", "CONGE_PRIS", "CONGE_RESTANT",
+    ];
+    const ws = XLSXStyle.utils.aoa_to_sheet([
+      headers,
+      ["Jean Dupont",  "EMP001",    "Technicien",     "15/03/2020",    10,                25,              16.5,                 18.5,         15.5],
+      ["Marie Martin", "EMP002",    "Comptable",      "01/09/2019",    5,                 24,              13,                   10,           8],
+      ["Ahmed Diallo", "EMP003",    "Chef de service","10/01/2018",    12,                26,              25,                   3,            22],
     ]);
-    ws["!cols"] = [{ wch: 28 }, { wch: 14 }, { wch: 16 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Migration ${currentYear}`);
-    XLSX.writeFile(wb, `template_migration_soldes_${currentYear}.xlsx`);
+    ws["!cols"] = [
+      { wch: 28 }, { wch: 14 }, { wch: 20 }, { wch: 16 },
+      { wch: 16 }, { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 16 },
+    ];
+    // En-têtes en bleu (#003c71) avec texte blanc en gras, comme le reste de la plateforme
+    headers.forEach((_, idx) => {
+      const cellRef = XLSXStyle.utils.encode_cell({ r: 0, c: idx });
+      const cell = ws[cellRef];
+      if (cell) {
+        cell.s = {
+          fill: { fgColor: { rgb: "003C71" } },
+          font: { color: { rgb: "FFFFFF" }, bold: true },
+          alignment: { vertical: "center", horizontal: "left" },
+        };
+      }
+    });
+    const wb = XLSXStyle.utils.book_new();
+    XLSXStyle.utils.book_append_sheet(wb, ws, `Migration ${currentYear}`);
+    XLSXStyle.writeFile(wb, `template_migration_soldes_${currentYear}.xlsx`);
   };
 
+  // Listes des postes / services disponibles (pour les menus du filtre)
+  const postes = Array.from(
+    new Set(rows.map(r => (r.poste ?? "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+  const services = Array.from(
+    new Set(rows.map(r => (r.service ?? "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const dateFromObj = dateFrom ? new Date(dateFrom) : null;
+  const dateToObj   = dateTo   ? new Date(dateTo)   : null;
+
+  const filtersActive = posteFiltre !== "TOUS" || serviceFiltre !== "TOUS" || !!dateFrom || !!dateTo;
+
   const q        = search.trim().toLowerCase();
-  const filtered = rows.filter(r =>
-    !q || r.employee.toLowerCase().includes(q) || (r.matricule ?? "").toLowerCase().includes(q)
-  );
+  const filtered = rows.filter(r => {
+    if (q && !(r.employee.toLowerCase().includes(q) || (r.matricule ?? "").toLowerCase().includes(q))) {
+      return false;
+    }
+    if (posteFiltre !== "TOUS" && (r.poste ?? "").trim() !== posteFiltre) return false;
+    if (serviceFiltre !== "TOUS" && (r.service ?? "").trim() !== serviceFiltre) return false;
+    if (dateFromObj || dateToObj) {
+      const d = parseDateEmbauche(r.date_embauche);
+      if (!d) return false;
+      if (dateFromObj && d < dateFromObj) return false;
+      if (dateToObj && d > dateToObj) return false;
+    }
+    return true;
+  });
   const okCount  = rows.filter(r => r.status === "ok").length;
   const errCount = rows.filter(r => r.status !== "ok").length;
   const hasData  = rows.length > 0 || !!fileName;
+
+  // Export Excel
+  const doExport = () => {
+    const okRows = filtered.filter(r => r.status === "ok");
+    const ALL: Record<MigrationExportCol, (r: EditableRow) => any> = {
+      "Matricule":           (r) => r.matricule || "",
+      "Nom":                 (r) => r.nom ?? r.employee.split(" ")[0] ?? "",
+      "Prénom":              (r) => r.prenom ?? r.employee.split(" ").slice(1).join(" "),
+      "Poste":               (r) => r.poste || "",
+      "Date embauche":       (r) => formatDateEmbauche(r.date_embauche),
+      "Solde antérieur":     (r) => r.solde_anterieur ?? ((r.acquired ?? 0) - (r.taken ?? 0)),
+      "Congés acquis":       (r) => r.acquired ?? 0,
+      "Solde congé actuel":  (r) => r.current_remaining ?? 0,
+      "Congé pris":          (r) => r.taken ?? 0,
+      "Congé restant":       (r) => r.edited,
+    };
+    exportMigrationXLSX("migration_soldes",
+      okRows.map((r) => Object.fromEntries(exportCols.map((k) => [k, ALL[k](r)])))
+    );
+    setShowExportDlg(false);
+  };
 
   // Pagination dérivée
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage   = Math.min(page, totalPages);
   const paginated  = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
-  // Reset page si la recherche change
+  // Reset page si la recherche ou les filtres changent
   const prevSearch = useRef(search);
   if (prevSearch.current !== search) { prevSearch.current = search; if (page !== 1) setPage(1); }
+
+  const filterKey = `${posteFiltre}|${serviceFiltre}|${dateFrom}|${dateTo}`;
+  const prevFilterKey = useRef(filterKey);
+  if (prevFilterKey.current !== filterKey) { prevFilterKey.current = filterKey; if (page !== 1) setPage(1); }
 
   // Génère la liste de numéros de pages avec ellipsis
   const pageNumbers = (() => {
@@ -354,6 +539,16 @@ export default function LeavesMigrationPage() {
             >
               <Download size={15} /> Modèle
             </button>
+
+            {/* Exporter */}
+            {okCount > 0 && (
+              <button
+                onClick={() => setShowExportDlg(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#003c71] hover:bg-[#003c71]/90 text-white text-sm font-bold transition shadow-sm"
+              >
+                <FileSpreadsheet size={15} /> Exporter
+              </button>
+            )}
 
             {/* Synchroniser */}
             {rows.length > 0 && !loadingPrev && (
@@ -508,21 +703,55 @@ export default function LeavesMigrationPage() {
                 </div>
               )}
 
-              {/* Recherche */}
-              <div className="relative w-full max-w-2xl mx-auto">
-                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Rechercher un employé…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-11 pr-10 py-3 border border-gray-200 rounded-2xl text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition bg-white shadow-sm"
-                />
-                {search && (
-                  <button onClick={() => setSearch("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                    <X size={14} />
+              {/* Modifications non synchronisées → CTA Synchroniser */}
+              {!synced && okCount > 0 && (
+                <div className="flex items-center gap-2.5 bg-sky-50 border border-sky-200 rounded-xl px-4 py-3 flex-wrap">
+                  <AlertCircle size={16} className="text-sky-600 shrink-0" />
+                  <p className="text-sm text-sky-800 flex-1 min-w-[200px]">
+                    Des valeurs ont été modifiées. Cliquez sur <strong>Synchroniser</strong> pour
+                    appliquer les changements aux soldes des {okCount} employé{okCount > 1 ? "s" : ""} concerné{okCount > 1 ? "s" : ""}.
+                  </p>
+                  <button
+                    onClick={handleSync}
+                    disabled={loadingSync}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition shadow-sm disabled:opacity-50 shrink-0"
+                  >
+                    {loadingSync
+                      ? <ImSpinner2 className="animate-spin" size={14} />
+                      : <CheckCircle size={15} />}
+                    {loadingSync ? "Synchronisation…" : `Synchroniser (${okCount})`}
                   </button>
-                )}
+                </div>
+              )}
+
+              {/* Recherche + Filtre */}
+              <div className="flex items-center gap-2 w-full max-w-2xl mx-auto">
+                <div className="relative flex-1">
+                  <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher un employé…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full pl-11 pr-10 py-3 border border-gray-200 rounded-2xl text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition bg-white shadow-sm"
+                  />
+                  {search && (
+                    <button onClick={() => setSearch("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => setFilterOpen(true)}
+                  className="relative shrink-0 flex items-center gap-1.5 px-4 py-3 rounded-2xl bg-[#003c71] text-white text-sm font-semibold shadow-sm hover:bg-[#003c71]/90 transition"
+                >
+                  <SlidersHorizontal size={15} />
+                  Filtre
+                  {filtersActive && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-white" />
+                  )}
+                </button>
               </div>
 
               {/* Tableau */}
@@ -530,27 +759,35 @@ export default function LeavesMigrationPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
-                      <tr className="bg-gray-50 border-b border-gray-100">
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">#</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Employé</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Détection</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Solde actuel</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Nouveau solde</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Différence</th>
+                      <tr className="bg-[#003c71]">
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide">Matricule</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide">Nom</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide">Prénom</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide">Poste</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide">Date embauche</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wide">Solde antérieur</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wide">Congés acquis</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wide">Solde congé actuel</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wide">Congé pris</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wide">Congé restant</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {paginated.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
+                          <td colSpan={10} className="px-4 py-12 text-center text-sm text-gray-400">
                             Aucun résultat pour cette recherche.
                           </td>
                         </tr>
                       )}
                       {paginated.map((row, idx) => {
                         const globalIdx = rows.indexOf(row);
-                        const delta     = row.edited - (row.current_remaining ?? 0);
                         const isOk      = row.status === "ok";
+                        const acquired  = row.acquired ?? 0;
+                        const taken     = row.taken ?? 0;
+                        const soldeAnterieur = row.solde_anterieur ?? (acquired - taken);
+                        const nom    = row.nom    ?? row.employee.split(" ")[0] ?? "";
+                        const prenom = row.prenom ?? row.employee.split(" ").slice(1).join(" ");
                         return (
                           <motion.tr
                             key={row.row}
@@ -559,15 +796,55 @@ export default function LeavesMigrationPage() {
                             transition={{ delay: idx * 0.008 }}
                             className={`transition ${isOk ? "hover:bg-gray-50/50" : "bg-red-50/60"}`}
                           >
-                            <td className="px-4 py-3 text-xs text-gray-400 font-mono">{row.row}</td>
+                            <td className="px-4 py-3 text-xs text-gray-500 font-mono">{row.matricule || "—"}</td>
                             <td className="px-4 py-3">
-                              <p className="font-semibold text-gray-800">{row.employee}</p>
-                              {row.matricule && <p className="text-[11px] text-gray-400 font-mono mt-0.5">{row.matricule}</p>}
-                              {row.message   && <p className="text-[11px] text-red-500 mt-0.5">{row.message}</p>}
+                              <p className="font-semibold text-gray-800">{nom || "—"}</p>
+                              {row.message && <p className="text-[11px] text-red-500 mt-0.5">{row.message}</p>}
                             </td>
-                            <td className="px-4 py-3 text-center"><MatchBadge row={row} /></td>
-                            <td className="px-4 py-3 text-center font-mono text-gray-500 text-sm">
-                              {row.current_remaining !== null ? row.current_remaining.toFixed(2) : "—"}
+                            <td className="px-4 py-3 text-gray-700">{prenom || "—"}</td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">{row.poste || "—"}</td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">{formatDateEmbauche(row.date_embauche)}</td>
+                            <td className="px-4 py-3 text-center">
+                              {isOk ? (
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={soldeAnterieur}
+                                  onChange={(e) => updateField(globalIdx, "solde_anterieur", e.target.value)}
+                                  className="w-20 text-center font-mono text-gray-600 border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
+                                />
+                              ) : (
+                                <span className="text-gray-300 text-sm">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {isOk ? (
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={acquired}
+                                  onChange={(e) => updateField(globalIdx, "acquired", e.target.value)}
+                                  className="w-20 text-center font-mono text-gray-600 border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
+                                />
+                              ) : (
+                                <span className="text-gray-300 text-sm">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center font-mono font-semibold text-gray-700 text-sm" title="Calculé automatiquement : Solde antérieur + Congés acquis">
+                              {isOk && row.current_remaining !== null ? row.current_remaining.toFixed(2) : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {isOk ? (
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={taken}
+                                  onChange={(e) => updateField(globalIdx, "taken", e.target.value)}
+                                  className="w-20 text-center font-mono text-gray-600 border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
+                                />
+                              ) : (
+                                <span className="text-gray-300 text-sm">—</span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-center">
                               {isOk ? (
@@ -579,17 +856,6 @@ export default function LeavesMigrationPage() {
                                   onChange={(e) => updateEdited(globalIdx, e.target.value)}
                                   className="w-24 text-center font-mono font-bold text-[#003c71] border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
                                 />
-                              ) : (
-                                <span className="text-gray-300 text-sm">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              {isOk ? (
-                                <span className={`font-mono font-bold text-sm ${
-                                  delta > 0 ? "text-emerald-600" : delta < 0 ? "text-red-600" : "text-gray-400"
-                                }`}>
-                                  {delta > 0 ? "+" : ""}{delta.toFixed(2)}
-                                </span>
                               ) : (
                                 <span className="text-gray-300 text-sm">—</span>
                               )}
@@ -691,6 +957,176 @@ export default function LeavesMigrationPage() {
             onConfirm={handleOverwriteConfirm}
             onCancel={handleOverwriteCancel}
           />
+        )}
+      </AnimatePresence>
+
+      {/* ── Modal Filtre personnalisé ─────────────────────────────────────── */}
+      <AnimatePresence>
+        {filterOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+            onClick={() => setFilterOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.97 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              {/* En-tête */}
+              <div className="flex items-center justify-between px-5 py-4 bg-[#003c71]">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <SlidersHorizontal size={16} />
+                  Filtrer la liste
+                </h3>
+                <button onClick={() => setFilterOpen(false)} className="text-white/80 hover:text-white transition">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Contenu */}
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">Poste</label>
+                  <select
+                    value={posteFiltre}
+                    onChange={(e) => setPosteFiltre(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]"
+                  >
+                    <option value="TOUS">Tous les postes</option>
+                    {postes.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">Service</label>
+                  <select
+                    value={serviceFiltre}
+                    onChange={(e) => setServiceFiltre(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]"
+                  >
+                    <option value="TOUS">Tous les services</option>
+                    {services.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                    Date d'embauche — période
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]"
+                    />
+                    <span className="text-slate-400 text-xs">à</span>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Pied */}
+              <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50">
+                <button
+                  onClick={() => { setPosteFiltre("TOUS"); setServiceFiltre("TOUS"); setDateFrom(""); setDateTo(""); }}
+                  disabled={!filtersActive}
+                  className="text-xs font-medium text-slate-500 hover:text-[#003c71] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Réinitialiser
+                </button>
+                <button
+                  onClick={() => setFilterOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-[#003c71] text-white text-xs font-semibold shadow-sm hover:bg-[#003c71]/90 transition"
+                >
+                  Appliquer
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Export Dialog ── */}
+      <AnimatePresence>
+        {showExportDlg && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4"
+            onClick={() => setShowExportDlg(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-5 py-4 bg-[#003c71]">
+                <div>
+                  <h2 className="font-black text-white text-base">Export personnalisé</h2>
+                  <p className="text-xs text-white/70 mt-0.5">
+                    {okCount} employé{okCount > 1 ? "s" : ""} · Sélectionnez les colonnes à inclure
+                  </p>
+                </div>
+                <button onClick={() => setShowExportDlg(false)}
+                  className="p-1.5 rounded-lg hover:bg-white/10 transition text-white/80">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="px-5 py-4">
+                <div className="flex justify-between items-center mb-3">
+                  <p className="text-xs font-semibold text-slate-500">
+                    {exportCols.length}/{MIGRATION_EXPORT_COLS.length} colonnes sélectionnées
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setExportCols([...MIGRATION_EXPORT_COLS])}
+                      className="text-xs text-[#003c71] hover:underline font-medium">Tout</button>
+                    <span className="text-slate-300">|</span>
+                    <button onClick={() => setExportCols([])}
+                      className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                  {MIGRATION_EXPORT_COLS.map((col) => {
+                    const checked = exportCols.includes(col);
+                    return (
+                      <label key={col}
+                        className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer border transition text-sm ${
+                          checked ? "bg-[#003c71]/5 border-[#003c71]/30 text-[#003c71]" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        <input type="checkbox" checked={checked} onChange={() => {
+                          setExportCols((prev) =>
+                            checked ? prev.filter((k) => k !== col) : [...prev, col]
+                          );
+                        }} className="accent-[#003c71] w-3.5 h-3.5" />
+                        <span className="font-medium">{col}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                <button onClick={() => setShowExportDlg(false)}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
+                  Annuler
+                </button>
+                <button onClick={doExport} disabled={exportCols.length === 0}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#003c71] text-white text-sm font-bold hover:bg-[#003c71]/90 disabled:opacity-50 transition">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Télécharger
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </AppLayout>
