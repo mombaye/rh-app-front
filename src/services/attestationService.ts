@@ -39,9 +39,20 @@ export const attestationService = {
   },
 
   // ── Actions RH ───────────────────────────────────────────────────────────────
-  process: async (id: number, notes?: string): Promise<AttestationRequest> => {
+  /** Génère un aperçu du PDF (sans envoi email, sans clore la demande). */
+  generate: async (id: number, notes?: string): Promise<AttestationRequest> => {
     const res = await axios.post<AttestationRequest>(
-      `${API}/${id}/process/`,
+      `${API}/${id}/generate/`,
+      { notes: notes || "" },
+      { headers: authHeaders() },
+    );
+    return res.data;
+  },
+
+  /** Valide l'aperçu généré et l'envoie par email à l'employé. */
+  validate: async (id: number, notes?: string): Promise<AttestationRequest> => {
+    const res = await axios.post<AttestationRequest>(
+      `${API}/${id}/validate/`,
       { notes: notes || "" },
       { headers: authHeaders() },
     );

@@ -7,7 +7,7 @@ export type AttestationDocumentType =
   | "DOMICILIATION_CDI"
   | "DOMICILIATION_CDD";
 
-export type AttestationStatus = "PENDING" | "PROCESSED" | "REJECTED";
+export type AttestationStatus = "PENDING" | "GENERATED" | "PROCESSED" | "REJECTED";
 
 export interface AttestationRequest {
   id:                    number;
@@ -24,13 +24,15 @@ export interface AttestationRequest {
   employee_fonction:     string;
   pdf_url:               string | null;
   created_at:            string;
+  generated_at:          string | null;
+  generated_by:          string | null;
   processed_at:          string | null;
   processed_by:          string | null;
 }
 
 export interface AttestationHistory {
   id:             number;
-  action:         "CREATED" | "PROCESSED" | "REGENERATED" | "REJECTED";
+  action:         "CREATED" | "GENERATED" | "PROCESSED" | "VALIDATED" | "REGENERATED" | "REJECTED";
   action_display: string;
   performed_by:   string;
   performed_at:   string;

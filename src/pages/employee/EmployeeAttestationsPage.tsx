@@ -23,6 +23,7 @@ const STATUS_CONFIG: Record<string, {
   textColor: string; bg: string; borderColor: string; dot: string;
 }> = {
   PENDING:   { label: "En attente",  Icon: Clock,         textColor: "text-amber-700",   bg: "bg-amber-50",   borderColor: "border-amber-200",   dot: "bg-amber-400"   },
+  GENERATED: { label: "En attente",  Icon: Clock,         textColor: "text-amber-700",   bg: "bg-amber-50",   borderColor: "border-amber-200",   dot: "bg-amber-400"   },
   PROCESSED: { label: "Traité",      Icon: CheckCircle2,  textColor: "text-emerald-700", bg: "bg-emerald-50", borderColor: "border-emerald-200", dot: "bg-emerald-500" },
   REJECTED:  { label: "Refusé",      Icon: XCircle,       textColor: "text-red-600",     bg: "bg-red-50",     borderColor: "border-red-200",     dot: "bg-red-400"     },
 };
@@ -89,7 +90,7 @@ export default function EmployeeAttestationsPage({ layout: Layout = EmployeeLayo
     } finally { setSubmitting(false); }
   };
 
-  const pending   = requests.filter(r => r.status === "PENDING").length;
+  const pending   = requests.filter(r => r.status === "PENDING" || r.status === "GENERATED").length;
   const processed = requests.filter(r => r.status === "PROCESSED").length;
   const rejected  = requests.filter(r => r.status === "REJECTED").length;
 

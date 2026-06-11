@@ -17,9 +17,10 @@ import AttestationTemplatesPanel from "@/components/attestations/AttestationTemp
 type Tab = "requests" | "templates";
 
 const STATUS_CONFIG: Record<AttestationStatus, { label: string; cls: string; dotCls: string }> = {
-  PENDING:   { label: "En attente", cls: "bg-amber-50 text-amber-700 border-amber-200",       dotCls: "bg-amber-400"   },
-  PROCESSED: { label: "Traité",     cls: "bg-emerald-50 text-emerald-700 border-emerald-200", dotCls: "bg-emerald-500" },
-  REJECTED:  { label: "Refusé",     cls: "bg-red-50 text-red-600 border-red-200",             dotCls: "bg-red-400"     },
+  PENDING:   { label: "En attente",      cls: "bg-amber-50 text-amber-700 border-amber-200",   dotCls: "bg-amber-400"   },
+  GENERATED: { label: "À valider",       cls: "bg-sky-50 text-sky-700 border-sky-200",         dotCls: "bg-sky-400"     },
+  PROCESSED: { label: "Traité",          cls: "bg-emerald-50 text-emerald-700 border-emerald-200", dotCls: "bg-emerald-500" },
+  REJECTED:  { label: "Refusé",          cls: "bg-red-50 text-red-600 border-red-200",         dotCls: "bg-red-400"     },
 };
 
 const fmtDate = (d: string | null) =>
@@ -44,7 +45,9 @@ const EXTRA_LABELS: Record<string, string> = {
 
 const HISTORY_CONFIG: Record<string, { icon: React.ReactNode; color: string; dot: string }> = {
   CREATED:     { icon: <PlusCircle  size={13} />, color: "text-blue-600",    dot: "bg-blue-400"    },
+  GENERATED:   { icon: <FileCheck   size={13} />, color: "text-sky-600",     dot: "bg-sky-400"     },
   PROCESSED:   { icon: <Send        size={13} />, color: "text-emerald-600", dot: "bg-emerald-500" },
+  VALIDATED:   { icon: <Send        size={13} />, color: "text-emerald-600", dot: "bg-emerald-500" },
   REGENERATED: { icon: <RotateCcw   size={13} />, color: "text-violet-600",  dot: "bg-violet-400"  },
   REJECTED:    { icon: <XCircle     size={13} />, color: "text-red-600",     dot: "bg-red-400"     },
 };
@@ -76,7 +79,8 @@ export default function RhAttestationsPage() {
   const [manageTarget,  setManageTarget]  = useState<AttestationRequest | null>(null);
   const [processNotes,  setProcessNotes]  = useState("");
   const [rejectNotes,   setRejectNotes]   = useState("");
-  const [processing,    setProcessing]    = useState(false);
+  const [generating,    setGenerating]    = useState(false);
+  const [validating,    setValidating]    = useState(false);
   const [rejecting,     setRejecting]     = useState(false);
   const [regenerating,  setRegenerating]  = useState(false);
 
@@ -115,24 +119,41 @@ export default function RhAttestationsPage() {
   const counts = {
     ALL:       requests.length,
     PENDING:   requests.filter(r => r.status === "PENDING").length,
+    GENERATED: requests.filter(r => r.status === "GENERATED").length,
     PROCESSED: requests.filter(r => r.status === "PROCESSED").length,
     REJECTED:  requests.filter(r => r.status === "REJECTED").length,
   };
 
-  // ── Traiter ────────────────────────────────────────────────────────────────
-  const handleProcess = async () => {
+  // ── Générer l'aperçu ─────────────────────────────────────────────────────────
+  const handleGenerate = async () => {
     if (!manageTarget) return;
-    setProcessing(true);
+    setGenerating(true);
     try {
-      const updated = await attestationService.process(manageTarget.id, processNotes);
+      const updated = await attestationService.generate(manageTarget.id, processNotes);
       setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
       setManageTarget(updated);
       if (detailTarget?.id === updated.id) await openDetail(updated);
-      toast.success("Demande traitée — PDF envoyé à l'employé !");
+      toast.success("Aperçu généré — vérifiez le document avant de valider.");
       setProcessNotes("");
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || "Erreur lors du traitement");
-    } finally { setProcessing(false); }
+      toast.error(e?.response?.data?.error || "Erreur lors de la génération");
+    } finally { setGenerating(false); }
+  };
+
+  // ── Valider & envoyer ────────────────────────────────────────────────────────
+  const handleValidate = async () => {
+    if (!manageTarget) return;
+    setValidating(true);
+    try {
+      const updated = await attestationService.validate(manageTarget.id, processNotes);
+      setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
+      setManageTarget(updated);
+      if (detailTarget?.id === updated.id) await openDetail(updated);
+      toast.success("Document validé — PDF envoyé à l'employé !");
+      setProcessNotes("");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors de la validation");
+    } finally { setValidating(false); }
   };
 
   // ── Refuser ────────────────────────────────────────────────────────────────
@@ -192,10 +213,10 @@ export default function RhAttestationsPage() {
             >
               <FileText size={15} />
               Demandes
-              {counts.PENDING > 0 && (
+              {(counts.PENDING + counts.GENERATED) > 0 && (
                 <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full leading-none ${
                   activeTab === "requests" ? "bg-white/25 text-white" : "bg-amber-400 text-white"
-                }`}>{counts.PENDING}</span>
+                }`}>{counts.PENDING + counts.GENERATED}</span>
               )}
             </button>
             <button
@@ -235,7 +256,7 @@ export default function RhAttestationsPage() {
               )}
             </div>
             <div className="flex gap-2 flex-wrap">
-              {(["ALL", "PENDING", "PROCESSED", "REJECTED"] as const).map(s => {
+              {(["ALL", "PENDING", "GENERATED", "PROCESSED", "REJECTED"] as const).map(s => {
                 const label = s === "ALL" ? "Toutes" : STATUS_CONFIG[s].label;
                 const active = filterStatus === s;
                 return (
@@ -497,7 +518,7 @@ export default function RhAttestationsPage() {
         {manageTarget && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-            onClick={() => !processing && !rejecting && !regenerating && setManageTarget(null)}
+            onClick={() => !generating && !validating && !rejecting && !regenerating && setManageTarget(null)}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 8 }}
@@ -517,7 +538,7 @@ export default function RhAttestationsPage() {
                   <p className="text-white/70 text-xs truncate">{manageTarget.employee_nom_complet} — {manageTarget.document_type_display}</p>
                 </div>
                 <button
-                  onClick={() => !processing && !rejecting && !regenerating && setManageTarget(null)}
+                  onClick={() => !generating && !validating && !rejecting && !regenerating && setManageTarget(null)}
                   className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
                 >
                   <X size={14} className="text-white" />
@@ -530,7 +551,8 @@ export default function RhAttestationsPage() {
                 {manageTarget.status === "PENDING" && (
                   <>
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
-                      Cette demande est en attente de traitement. Générez le PDF ou refusez-la.
+                      Cette demande est en attente. Générez un aperçu du document pour le
+                      vérifier avant de l'envoyer à l'employé, ou refusez la demande.
                     </div>
 
                     {/* Notes */}
@@ -545,15 +567,15 @@ export default function RhAttestationsPage() {
                       />
                     </div>
 
-                    {/* Traiter */}
+                    {/* Générer l'aperçu */}
                     <button
-                      onClick={handleProcess}
-                      disabled={processing || rejecting}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition"
+                      onClick={handleGenerate}
+                      disabled={generating || rejecting}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#003c71] hover:bg-[#003c71]/90 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition"
                     >
-                      {processing
-                        ? <><ImSpinner2 className="animate-spin" size={15} /> Génération PDF en cours…</>
-                        : <><FileCheck size={15} /> Générer &amp; Envoyer le PDF</>
+                      {generating
+                        ? <><ImSpinner2 className="animate-spin" size={15} /> Génération du PDF en cours…</>
+                        : <><FileCheck size={15} /> Générer l'aperçu du document</>
                       }
                     </button>
 
@@ -577,12 +599,67 @@ export default function RhAttestationsPage() {
                     </div>
                     <button
                       onClick={handleReject}
-                      disabled={rejecting || processing || !rejectNotes.trim()}
+                      disabled={rejecting || generating || !rejectNotes.trim()}
                       className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-600 border border-red-200 rounded-xl text-sm font-semibold transition"
                     >
                       {rejecting
                         ? <><ImSpinner2 className="animate-spin" size={15} /> En cours…</>
                         : <><Ban size={15} /> Refuser la demande</>
+                      }
+                    </button>
+                  </>
+                )}
+
+                {/* ── GENERATED (aperçu en attente de validation) ── */}
+                {manageTarget.status === "GENERATED" && (
+                  <>
+                    {/* Visualiser le PDF généré */}
+                    {manageTarget.pdf_url && (
+                      <a
+                        href={manageTarget.pdf_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-3 px-4 py-3.5 bg-[#003c71]/5 hover:bg-[#003c71]/10 border border-[#003c71]/20 rounded-xl transition group"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-[#003c71] flex items-center justify-center shrink-0">
+                          <FileText size={16} className="text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-[#003c71]">Visualiser le document généré</p>
+                          <p className="text-xs text-gray-400">Ouvrir l'aperçu PDF dans un nouvel onglet</p>
+                        </div>
+                      </a>
+                    )}
+
+                    {/* Re-générer (avant validation) */}
+                    <button
+                      onClick={handleRegenerate}
+                      disabled={regenerating || validating || rejecting}
+                      className="flex items-center gap-3 w-full px-4 py-3.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition disabled:opacity-60 text-left"
+                    >
+                      <div className="w-9 h-9 rounded-lg bg-gray-200 flex items-center justify-center shrink-0">
+                        {regenerating
+                          ? <ImSpinner2 className="animate-spin text-gray-500" size={16} />
+                          : <RotateCcw size={16} className="text-gray-500" />
+                        }
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-700">
+                          {regenerating ? "Re-génération en cours…" : "Re-générer l'aperçu"}
+                        </p>
+                        <p className="text-xs text-gray-400">Recréer le document avec les données actuelles</p>
+                      </div>
+                    </button>
+
+                    {/* Valider & envoyer */}
+                    <button
+                      onClick={handleValidate}
+                      disabled={validating || regenerating || rejecting}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition"
+                    >
+                      {validating
+                        ? <><ImSpinner2 className="animate-spin" size={15} /> Envoi en cours…</>
+                        : <><Send size={15} /> Valider &amp; envoyer à l'employé</>
                       }
                     </button>
                   </>
@@ -651,7 +728,7 @@ export default function RhAttestationsPage() {
                 )}
 
                 <button
-                  onClick={() => !processing && !rejecting && !regenerating && setManageTarget(null)}
+                  onClick={() => !generating && !validating && !rejecting && !regenerating && setManageTarget(null)}
                   className="w-full border border-gray-200 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition"
                 >
                   Fermer
