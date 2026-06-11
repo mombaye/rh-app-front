@@ -7,7 +7,10 @@ import {
 } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
-import { templateService, attestationSignatureService, AttestationSignature } from "@/services/attestationService";
+import {
+  templateService, attestationSignatureService, AttestationSignature,
+  attestationStampService, AttestationStamp,
+} from "@/services/attestationService";
 import { AttestationTemplate, AttestationDocumentType, TemplatePlaceholder, DOC_TYPE_LABELS } from "@/types/attestation";
 
 const DOC_TYPES: AttestationDocumentType[] = [
@@ -319,9 +322,7 @@ function SignatureCard() {
   };
 
   return (
-    <div className={`rounded-2xl border transition ${
-      signature && !editing ? "border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"
-    }`}>
+    <div className={`transition ${signature && !editing ? "bg-emerald-50/40" : "bg-white"}`}>
       <div className="flex items-center gap-3 px-5 py-4">
         <span className="text-2xl select-none">✍️</span>
         <div className="flex-1 min-w-0">
@@ -418,6 +419,125 @@ function SignatureCard() {
           />
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Cachet de l'entreprise (PDF, apposé automatiquement sur les documents) ──
+
+function StampCard() {
+  const [stamp,    setStamp]    = useState<AttestationStamp | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    attestationStampService.get()
+      .then(setStamp)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("Le cachet doit être un fichier PDF.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await attestationStampService.upload(file);
+      setStamp(updated);
+      toast.success("Cachet enregistré ! Il sera apposé automatiquement sur les prochains documents générés.");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Erreur lors de l'enregistrement du cachet");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await attestationStampService.delete();
+      setStamp(null);
+      toast.success("Cachet supprimé.");
+    } catch {
+      toast.error("Erreur lors de la suppression.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className={`transition ${stamp ? "bg-emerald-50/40" : "bg-white"}`}>
+      <div className="flex items-center gap-3 px-5 py-4">
+        <span className="text-2xl select-none">🟦</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-800 truncate">Cachet de l'entreprise</p>
+          {loading ? (
+            <p className="text-xs text-gray-400 mt-0.5">Chargement…</p>
+          ) : stamp ? (
+            <p className="text-xs text-emerald-700 mt-0.5 flex items-center gap-1">
+              <CheckCircle size={11} className="shrink-0" />
+              Enregistré le {fmtDate(stamp.uploaded_at)} — apposé automatiquement sur tous
+              les documents générés
+            </p>
+          ) : (
+            <p className="text-xs text-gray-400 mt-0.5">
+              Téléversez le cachet de l'entreprise au format PDF : il sera apposé
+              automatiquement sur tous les documents d'attestation générés.
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {stamp && (
+            <a
+              href={stamp.file_url ?? "#"}
+              target="_blank"
+              rel="noreferrer"
+              title="Voir le cachet"
+              className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition"
+            >
+              <Download size={14} />
+            </a>
+          )}
+          {stamp && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              title="Supprimer le cachet"
+              className="p-2 rounded-lg bg-white border border-red-100 hover:bg-red-50 text-red-400 hover:text-red-600 transition disabled:opacity-60"
+            >
+              {deleting ? <ImSpinner2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+            </button>
+          )}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={saving}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition disabled:opacity-60 ${
+              stamp
+                ? "bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                : "bg-[#003c71] text-white hover:bg-[#003c71]/90"
+            }`}
+          >
+            {saving ? <ImSpinner2 className="animate-spin" size={12} /> : <Upload size={12} />}
+            {stamp ? "Remplacer" : "Téléverser"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -531,14 +651,18 @@ export default function AttestationTemplatesPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Signature RH */}
-      <SignatureCard />
+      {/* Signature & cachet RH */}
+      <div className="rounded-2xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
+        <SignatureCard />
+        <StampCard />
+      </div>
 
       {/* Guide variables */}
       <PlaceholdersGuide placeholders={placeholders} />
 
-      {/* Cartes par type de document */}
+      {/* Modèles de documents */}
       <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-gray-700 px-1">Modèles de documents</h3>
         {DOC_TYPES.map(dt => (
           <TemplateCard
             key={dt}

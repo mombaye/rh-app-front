@@ -175,6 +175,40 @@ export const attestationSignatureService = {
   },
 };
 
+// ── Cachet de l'entreprise (PDF, apposé automatiquement sur les attestations) ─
+
+export interface AttestationStamp {
+  id:          number;
+  file_url:    string | null;
+  pos_x:       number;
+  pos_y:       number;
+  width:       number;
+  uploaded_by: string;
+  uploaded_at: string;
+}
+
+const STAMP_API = `${BASE_URL}/api/employees/attestation-stamp`;
+
+export const attestationStampService = {
+  get: async (): Promise<AttestationStamp | null> => {
+    const res = await axios.get(`${STAMP_API}/`, { headers: authHeaders() });
+    return res.data;
+  },
+
+  upload: async (file: File): Promise<AttestationStamp> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await axios.post<AttestationStamp>(`${STAMP_API}/`, formData, {
+      headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
+  delete: async (): Promise<void> => {
+    await axios.delete(`${STAMP_API}/`, { headers: authHeaders() });
+  },
+};
+
 // ── Profil employé pour pré-remplissage ──────────────────────────────────────
 export interface AttestationProfile {
   prenom:          string;
