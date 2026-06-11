@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";
 import {
@@ -34,6 +34,7 @@ import {
 } from "@/services/questionnaireService";
 import { getEmployees } from "@/services/employeeService";
 import type { Employee } from "@/types/employee";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 
 // ── KpiCard ───────────────────────────────────────────────────────────────────
 function KpiCard({
@@ -348,11 +349,18 @@ function EnvoiModal({
   const [sending, setSending]       = useState(false);
   const [loadingEmp, setLoadingEmp] = useState(true);
 
-  useEffect(() => {
+  const loadEmployees = useCallback(() => {
+    setLoadingEmp(true);
     getEmployees({ status: "ACTIVE" })
       .then(setEmployees)
       .finally(() => setLoadingEmp(false));
   }, []);
+
+  useEffect(() => { loadEmployees(); }, [loadEmployees]);
+
+  useEffect(() => {
+    return onEmployeesSynced(() => { loadEmployees(); });
+  }, [loadEmployees]);
 
   const filtered = employees.filter((e) => {
     const q = search.toLowerCase();

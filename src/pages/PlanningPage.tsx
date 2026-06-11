@@ -30,6 +30,7 @@ import {
   Calendar, Users, Download, GripVertical, AlertTriangle, Pencil, Check, X, Search,
 } from "lucide-react";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const SHIFT_LABELS: Record<string, string> = {
@@ -136,6 +137,10 @@ export default function PlanningPage() {
   }, [weekDates]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    return onEmployeesSynced(() => { load(); });
+  }, [load]);
 
   // ── Polling temps réel : rafraîchissement silencieux toutes les 30s ───────
   useEffect(() => {

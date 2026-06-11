@@ -42,6 +42,7 @@ import {
 import { UserPlus } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ProfileFilter  = "ALL" | "ACTIVE" | "EXITED";
@@ -772,6 +773,11 @@ export default function GlobalEmployeesPage() {
   useEffect(() => { fetchAllEmployees(); }, []);
   useEffect(() => { fetchAllEmployees(matriculeChangedOnly); }, [matriculeChangedOnly]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    return onEmployeesSynced(() => { fetchAllEmployees(); });
+  }, []);
+
   // ── Import Excel ─────────────────────────────────────────────────────────────
   const handleImport = async (file: File) => {
     setIsImporting(true);
@@ -844,10 +850,19 @@ export default function GlobalEmployeesPage() {
   };
 
   // ── Compteurs ─────────────────────────────────────────────────────────────────
-  const totalCount   = allEmployees.length;
-  const activeCount  = allEmployees.filter((e) => e.status === "ACTIVE" || e.is_active_employee).length;
-  const interimCount = allEmployees.filter((e) => e.type_contrat === "INTERIM").length;
-  const interneCount = allEmployees.filter((e) => e.type_contrat !== "INTERIM").length;
+  // Les compteurs du tableau de bord (cartes du haut + EmployeesStatsHeader) doivent
+  // refléter le filtre "Contrat" actuellement appliqué (Tous / Internes / Intérimaires),
+  // afin de rester cohérents avec le tableau affiché en dessous.
+  const dashboardEmployees = allEmployees.filter((e) =>
+    contractFilter === "ALL" ||
+    (contractFilter === "INTERIM" && e.type_contrat === "INTERIM") ||
+    (contractFilter === "INTERNE" && e.type_contrat !== "INTERIM")
+  );
+
+  const totalCount   = dashboardEmployees.length;
+  const activeCount  = dashboardEmployees.filter((e) => e.status === "ACTIVE" || e.is_active_employee).length;
+  const interimCount = dashboardEmployees.filter((e) => e.type_contrat === "INTERIM").length;
+  const interneCount = dashboardEmployees.filter((e) => e.type_contrat !== "INTERIM").length;
 
   const contractLabel =
     contractFilter === "ALL"       ? "Tous les contrats"
@@ -1001,7 +1016,7 @@ export default function GlobalEmployeesPage() {
         {/* ── Stats header ── */}
         <div className="shrink-0">
           <EmployeesStatsHeader
-            data={allEmployees}
+            data={dashboardEmployees}
             loading={isLoading}
             profileFilter={matriculeChangedOnly ? "ALL" : profileFilter}
             onProfileFilterChange={setProfileFilter}

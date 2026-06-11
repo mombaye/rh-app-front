@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
@@ -23,6 +23,7 @@ import { getEmployeeDocuments } from "@/services/employeeService";
 import { LeaveBalance, LeaveRequest } from "@/types/leave";
 import { Link } from "react-router-dom";
 import DownloadAppButton from "@/components/common/DownloadAppButton";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
   PENDING:        { label: "En attente",       color: "text-amber-700",  bg: "bg-amber-50 border-amber-200",  Icon: Clock          },
@@ -47,10 +48,11 @@ export default function EmployeeDashboardPage() {
   const [loading, setLoading]       = useState(true);
   const [hierarchy, setHierarchy]   = useState<MyHierarchyChain | null>(null);
 
-  useEffect(() => {
+  const loadDashboardData = useCallback(() => {
     if (!employeeId) { setLoading(false); return; }
 
     const year = new Date().getFullYear();
+    setLoading(true);
     Promise.all([
       leaveBalanceService.getByEmployee(employeeId, year).catch(() => []),
       leaveRequestService.getByEmployee(employeeId).catch(() => []),
@@ -67,6 +69,12 @@ export default function EmployeeDashboardPage() {
       setDocCount(Array.isArray((docs as any).items) ? (docs as any).items.length : 0);
     }).finally(() => setLoading(false));
   }, [employeeId, employeeMatricule]);
+
+  useEffect(() => { loadDashboardData(); }, [loadDashboardData]);
+
+  useEffect(() => {
+    return onEmployeesSynced(() => { loadDashboardData(); });
+  }, [loadDashboardData]);
 
   useEffect(() => {
     employeeHierarchyService.getMyHierarchy()

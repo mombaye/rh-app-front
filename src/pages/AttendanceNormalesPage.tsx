@@ -21,6 +21,7 @@ import type {
 import type { ExitAuthorization } from "@/types/leave";
 import type { Employee } from "@/types/employee";
 import * as XLSX from "xlsx";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ViewMode = "daily" | "weekly" | "monthly";
@@ -1477,7 +1478,7 @@ export default function AttendanceNormalesPage() {
 
   const pad2 = (n: number) => String(n).padStart(2,"0");
 
-  useEffect(() => {
+  const loadEmployeeMaps = useCallback(() => {
     getEmployees()
       .then((list: Employee[]) => {
         const m  = new Map<string,string>();
@@ -1498,13 +1499,21 @@ export default function AttendanceNormalesPage() {
         setDepartmentMap(dm);
         setProjectMap(pm);
       }).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    loadEmployeeMaps();
 
     getShiftDailyStats({ date: isoToday() })
       .then((res) => {
         const set = new Set<string>(res.records.map((r: { matricule: string }) => r.matricule));
         setShiftMatricules(set);
       }).catch(console.error);
-  }, []);
+  }, [loadEmployeeMaps]);
+
+  useEffect(() => {
+    return onEmployeesSynced(() => { loadEmployeeMaps(); });
+  }, [loadEmployeeMaps]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);

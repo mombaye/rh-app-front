@@ -158,9 +158,7 @@ export const leaveBalanceService = {
       matricule: string;
       poste?: string;
       date_embauche?: string;
-      acquired?: number;
-      taken?: number;
-      solde_restant: number;
+      solde_anterieur: number;
     }[],
     opts: { year?: number; leave_type_code?: string }
   ): Promise<{ processed: number; errors_count: number; results: any[] }> => {

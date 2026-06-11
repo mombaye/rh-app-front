@@ -40,6 +40,7 @@ import {
 } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 // ─── Types locaux ─────────────────────────────────────────────────────────────
 type ProfileFilter = "ALL" | "ACTIVE" | "EXITED";
 
@@ -792,6 +793,11 @@ export default function InterneEmployeesPage() {
   };
 
   useEffect(() => { fetchInternalEmployees(); }, []);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    return onEmployeesSynced(() => { fetchInternalEmployees(); });
+  }, []);
 
   const handleEdit = (emp: Employee) => { setSelected(emp); setShowModal(true); };
 

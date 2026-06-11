@@ -29,6 +29,7 @@ import type {
 import type { Employee } from "@/types/employee";
 import * as XLSX from "xlsx";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 
 // ============================================================================
 // TYPES ET INTERFACES
@@ -2244,7 +2245,7 @@ export default function AttendanceShiftsPage() {
 
   }, []);
 
-  useEffect(() => {
+  const loadEmployeesList = useCallback(() => {
     getEmployees().then((list: Employee[]) => {
       setEmployeesList(list);
       const m  = new Map<string, string>();
@@ -2265,6 +2266,12 @@ export default function AttendanceShiftsPage() {
       setAssignments((prev) => ({ ...apiAssignments, ...prev }));
     }).catch(console.error);
   }, []);
+
+  useEffect(() => { loadEmployeesList(); }, [loadEmployeesList]);
+
+  useEffect(() => {
+    return onEmployeesSynced(() => { loadEmployeesList(); });
+  }, [loadEmployeesList]);
 
   const effectiveSchedule: WorkSchedulePreset = useMemo(() => {
     if (activeSchedule && isPeriodActive(activeSchedule)) return activeSchedule;

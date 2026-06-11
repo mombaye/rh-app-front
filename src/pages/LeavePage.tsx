@@ -29,6 +29,7 @@ import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 import HierarchyManagement from "@/components/leaves/HierarchyManagement";
 import LeaveTypeManagement from "@/components/leaves/LeaveTypeManagement";
 import ExitAuthorizationPanel from "@/components/leaves/ExitAuthorizationPanel";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 
 // ─── Config statuts ───────────────────────────────────────────────────────────
 const STATUS_CFG: Record<
@@ -238,6 +239,10 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   }, [statusFilter, filterLeaveTypeId, filterStartDate, filterEndDate, filterDepartment, filterEmployeeName, filterYear]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  useEffect(() => {
+    return onEmployeesSynced(() => { fetchAll(); });
+  }, [fetchAll]);
 
   const handleSendReminder = async (id: number) => {
     setReminderLoadingId(id);

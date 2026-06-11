@@ -282,67 +282,37 @@ export default function LeavesMigrationPage() {
     setPendingFile(null);
   };
 
-  // ── Modifier une ligne (avec recalcul de cohérence) ─────────────────────────
-  // Règles :
+  // ── Modifier le solde antérieur (seule saisie manuelle) ─────────────────────
+  // Règles (calcul automatique) :
+  //   Congés acquis      = mois de présence écoulés depuis la date d'embauche
+  //                         × incrément mensuel (incrément du mois en cours
+  //                         crédité seulement en fin de mois)
+  //   Congé pris         = somme des demandes de congé validées de l'année
   //   Solde congé actuel = Solde antérieur + Congés acquis
   //   Congé restant      = Solde congé actuel - Congé pris
-  // → Toute saisie sur un champ recalcule automatiquement les champs dépendants
-  //   pour garantir SOLDE_CONGE_ACTUEL = SOLDE_ANTERIEUR + CONGES_ACQUIS
-  //   et CONGE_RESTANT = SOLDE_CONGE_ACTUEL - CONGE_PRIS.
-  const recomputeRow = (
-    r: EditableRow,
-    field: "solde_anterieur" | "acquired" | "taken" | "edited",
-    value: number,
-  ): EditableRow => {
-    let soldeAnterieur = r.solde_anterieur ?? ((r.acquired ?? 0) - (r.taken ?? 0));
-    let acquired       = r.acquired ?? 0;
-    let taken          = r.taken ?? 0;
-    let edited         = r.edited;
-
-    switch (field) {
-      case "solde_anterieur": soldeAnterieur = value; break;
-      case "acquired":        acquired       = value; break;
-      case "taken":           taken          = value; break;
-      case "edited":          edited         = value; break;
-    }
-
+  const recomputeRow = (r: EditableRow, soldeAnterieur: number): EditableRow => {
+    const acquired    = r.acquired ?? 0;
+    const taken       = r.taken ?? 0;
     const soldeActuel = soldeAnterieur + acquired;
-
-    if (field === "edited") {
-      // L'utilisateur fixe directement le congé restant → on en déduit le congé pris.
-      taken = Math.max(0, soldeActuel - edited);
-    } else {
-      // Toute autre modification recalcule le congé restant.
-      edited = soldeActuel - taken;
-    }
+    const edited      = soldeActuel - taken;
 
     return {
       ...r,
       solde_anterieur:   soldeAnterieur,
-      acquired,
-      taken,
       current_remaining: soldeActuel,
       edited,
     };
   };
 
-  const updateEdited = (rowIndex: number, value: string) => {
-    const num = parseFloat(value);
-    setRows(prev => prev.map((r, i) =>
-      i === rowIndex ? recomputeRow(r, "edited", isNaN(num) ? 0 : num) : r
-    ));
-    if (synced) setSynced(false);
-  };
-
-  /** Met à jour un champ numérique éditable (solde antérieur, congés acquis, congé pris). */
+  /** Met à jour le solde antérieur (seul champ éditable) — recalcule les totaux dépendants. */
   const updateField = (
     rowIndex: number,
-    field: "solde_anterieur" | "acquired" | "taken",
+    _field: "solde_anterieur",
     value: string,
   ) => {
     const num = parseFloat(value);
     setRows(prev => prev.map((r, i) =>
-      i === rowIndex ? recomputeRow(r, field, isNaN(num) ? 0 : num) : r
+      i === rowIndex ? recomputeRow(r, isNaN(num) ? 0 : num) : r
     ));
     if (synced) setSynced(false);
   };
@@ -361,12 +331,10 @@ export default function LeavesMigrationPage() {
 
       await leaveBalanceService.migrationApply(
         okRows.map(r => ({
-          matricule:     r.matricule!,
-          poste:         r.poste,
-          date_embauche: r.date_embauche,
-          acquired:      r.acquired,
-          taken:         r.taken,
-          solde_restant: r.edited,
+          matricule:       r.matricule!,
+          poste:           r.poste,
+          date_embauche:   r.date_embauche,
+          solde_anterieur: r.solde_anterieur ?? 0,
         })),
         { year: currentYear }
       );
@@ -401,17 +369,15 @@ export default function LeavesMigrationPage() {
   const downloadTemplate = () => {
     const headers = [
       "NOM_PRENOM", "MATRICULE", "POSTE", "DATE_EMBAUCHE", "SOLDE_ANTERIEUR",
-      "CONGES_ACQUIS", "SOLDE_CONGE_ACTUEL", "CONGE_PRIS", "CONGE_RESTANT",
     ];
     const ws = XLSXStyle.utils.aoa_to_sheet([
       headers,
-      ["Jean Dupont",  "EMP001",    "Technicien",     "15/03/2020",    10,                25,              16.5,                 18.5,         15.5],
-      ["Marie Martin", "EMP002",    "Comptable",      "01/09/2019",    5,                 24,              13,                   10,           8],
-      ["Ahmed Diallo", "EMP003",    "Chef de service","10/01/2018",    12,                26,              25,                   3,            22],
+      ["Jean Dupont",  "EMP001",    "Technicien",     "15/03/2020",    10],
+      ["Marie Martin", "EMP002",    "Comptable",      "01/09/2019",    5],
+      ["Ahmed Diallo", "EMP003",    "Chef de service","10/01/2018",    12],
     ]);
     ws["!cols"] = [
-      { wch: 28 }, { wch: 14 }, { wch: 20 }, { wch: 16 },
-      { wch: 16 }, { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 16 },
+      { wch: 28 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 16 },
     ];
     // En-têtes en bleu (#003c71) avec texte blanc en gras, comme le reste de la plateforme
     headers.forEach((_, idx) => {
@@ -616,7 +582,7 @@ export default function LeavesMigrationPage() {
                 <p className="font-semibold text-gray-500">Glissez votre fichier ici</p>
                 <p className="text-sm text-gray-400 mt-1">.xlsx · .xls · .csv</p>
                 <p className="text-xs text-gray-300 mt-3">
-                  Colonnes détectées automatiquement : NOM · MATRICULE · SOLDE_RESTANT
+                  Colonnes détectées automatiquement : NOM · MATRICULE · SOLDE_ANTERIEUR (POSTE et DATE_EMBAUCHE optionnels)
                 </p>
               </div>
             </motion.div>
@@ -817,48 +783,20 @@ export default function LeavesMigrationPage() {
                                 <span className="text-gray-300 text-sm">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-center">
-                              {isOk ? (
-                                <input
-                                  type="number"
-                                  step="0.5"
-                                  value={acquired}
-                                  onChange={(e) => updateField(globalIdx, "acquired", e.target.value)}
-                                  className="w-20 text-center font-mono text-gray-600 border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
-                                />
-                              ) : (
-                                <span className="text-gray-300 text-sm">—</span>
-                              )}
+                            <td className="px-4 py-3 text-center font-mono text-gray-600 text-sm"
+                              title="Calculé automatiquement : mois de présence depuis la date d'embauche × incrément mensuel (l'incrément du mois en cours n'est crédité qu'en fin de mois)">
+                              {isOk ? acquired.toFixed(2) : <span className="text-gray-300">—</span>}
                             </td>
                             <td className="px-4 py-3 text-center font-mono font-semibold text-gray-700 text-sm" title="Calculé automatiquement : Solde antérieur + Congés acquis">
                               {isOk && row.current_remaining !== null ? row.current_remaining.toFixed(2) : "—"}
                             </td>
-                            <td className="px-4 py-3 text-center">
-                              {isOk ? (
-                                <input
-                                  type="number"
-                                  step="0.5"
-                                  value={taken}
-                                  onChange={(e) => updateField(globalIdx, "taken", e.target.value)}
-                                  className="w-20 text-center font-mono text-gray-600 border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
-                                />
-                              ) : (
-                                <span className="text-gray-300 text-sm">—</span>
-                              )}
+                            <td className="px-4 py-3 text-center font-mono text-gray-600 text-sm"
+                              title="Récupéré automatiquement depuis les demandes de congé validées de l'année">
+                              {isOk ? taken.toFixed(2) : <span className="text-gray-300">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-center">
-                              {isOk ? (
-                                <input
-                                  type="number"
-                                  step="0.5"
-                                  min="0"
-                                  value={row.edited}
-                                  onChange={(e) => updateEdited(globalIdx, e.target.value)}
-                                  className="w-24 text-center font-mono font-bold text-[#003c71] border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
-                                />
-                              ) : (
-                                <span className="text-gray-300 text-sm">—</span>
-                              )}
+                            <td className="px-4 py-3 text-center font-mono font-bold text-[#003c71] text-sm"
+                              title="Calculé automatiquement : Solde congé actuel - Congé pris">
+                              {isOk ? row.edited.toFixed(2) : <span className="text-gray-300">—</span>}
                             </td>
                           </motion.tr>
                         );

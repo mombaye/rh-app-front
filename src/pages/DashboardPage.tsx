@@ -27,6 +27,7 @@ import {
 } from "@/services/employeeService";
 import DashboardAlertesBar from "@/components/dashboard/DashboardAlertesBar";
 import DownloadAppButton from "@/components/common/DownloadAppButton";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 import {
   getDailyStats, getWeeklyStats, getMonthlyStats, getShiftDailyStats,
 } from "@/services/attendanceService";
@@ -1169,6 +1170,10 @@ export default function DashboardPage() {
   }, []);
   useEffect(() => { fetchAttendance(dateStart, dateEnd); }, [dateStart, dateEnd]);
   useEffect(() => { fetchEmployees(empFilter); }, [empFilter]);
+
+  useEffect(() => {
+    return onEmployeesSynced(() => { fetchEmployees(empFilter); });
+  }, [fetchEmployees, empFilter]);
 
   const handleMonthChange = (m: MonthYear) => {
     setSelectedMonth(m);

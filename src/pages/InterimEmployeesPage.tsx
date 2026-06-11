@@ -33,6 +33,7 @@ import {
 } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ProfileFilter = "ALL" | "ACTIVE" | "EXITED";
@@ -905,6 +906,11 @@ export default function InterimEmployeesPage() {
   };
 
   useEffect(() => { fetchInterimEmployees(); }, []);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    return onEmployeesSynced(() => { fetchInterimEmployees(); });
+  }, []);
 
   const handleEdit = (employee: Employee) => { setSelected(employee); setShowModal(true); };
   const handleExitClick    = (emp: Employee) => { setExitTarget(emp); setExitOpen(true); };

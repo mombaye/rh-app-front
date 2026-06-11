@@ -12,6 +12,7 @@ import { leaveRequestService } from "@/services/leaveService";
 import { LeaveRequest } from "@/types/leave";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -187,6 +188,10 @@ export default function ManagerTeamLeavesPage() {
   }, [user?.employee_id]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    return onEmployeesSynced(() => { load(); });
+  }, [load]);
 
   const q        = search.trim().toLowerCase();
   const filtered = all.filter(r =>

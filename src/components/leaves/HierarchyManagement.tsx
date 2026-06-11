@@ -14,6 +14,7 @@ import { patchEmployee } from "@/services/employeeService";
 import { Department, DepartmentCreate, EmployeeHierarchy } from "@/types/leave";
 import { departmentService, employeeHierarchyService, GlobalDGInfo } from "@/services/hierarchyService";
 import { getEmployees } from "@/services/employeeService";
+import { notifyEmployeesSynced } from "@/utils/employeeSync";
 
 // ─── Sections ───────────────────────────────────────────────────────────────
 type HierarchySection = "orgchart" | "employees" | "interimaires";
@@ -250,6 +251,7 @@ function OrgChartTab() {
       }
       toast.success("Hiérarchie mise à jour — profils et congés synchronisés automatiquement ✓", { duration: 3500 });
       setEditingEmp(null);
+      notifyEmployeesSynced();
       load();
     } catch {
       toast.error("Erreur lors de la mise à jour.");
@@ -290,6 +292,7 @@ function OrgChartTab() {
         // Si le responsable a changé, forcer la synchronisation de tous les employés du département
         if (headChanged) {
           await employeeHierarchyService.syncAll();
+          notifyEmployeesSynced();
           toast.success("Département mis à jour — managers des employés synchronisés ✓", { duration: 4000 });
         } else {
           toast.success("Département mis à jour ✓", { duration: 2500 });
@@ -338,6 +341,7 @@ function OrgChartTab() {
         `Synchronisation terminée — ${result.employees_synced} employé(s) mis à jour`,
         { id: toastId, duration: 4000 }
       );
+      notifyEmployeesSynced();
       load();
     } catch {
       toast.error("Erreur lors de la synchronisation.", { id: toastId });
@@ -377,6 +381,7 @@ function OrgChartTab() {
         // Synchroniser la hiérarchie pour que les managers soient auto-assignés aux nouveaux membres
         await employeeHierarchyService.syncAll();
         toast.success(`${changed} employé(s) mis à jour — managers synchronisés ✓`, { duration: 4000 });
+        notifyEmployeesSynced();
       } else {
         toast.success("Aucun changement.");
       }
@@ -1381,6 +1386,7 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
       await employeeHierarchyService.update(empId, editForm);
       toast.success("Hiérarchie mise à jour — profils et congés synchronisés automatiquement ✓", { duration: 3500 });
       setEditingId(null);
+      notifyEmployeesSynced();
       load();
     } catch {
       toast.error("Erreur lors de la mise à jour.");
@@ -1396,6 +1402,7 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
     try {
       const result = await employeeHierarchyService.syncAll();
       toast.success(`Synchronisation terminée : ${result.employees_synced} employés, ${result.users_checked} profils vérifiés ✓`, { duration: 4000 });
+      notifyEmployeesSynced();
       load();
     } catch {
       toast.error("Erreur lors de la synchronisation.");

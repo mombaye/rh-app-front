@@ -25,6 +25,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import * as XLSX from "xlsx";
 import SharedConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 import DownloadAppButton from "@/components/common/DownloadAppButton";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 import {
   Users,
   UserCheck,
@@ -484,11 +485,17 @@ function UserModal({
   const [empSearch,  setEmpSearch]  = useState("");
 
   // Charger la liste des employés pour le double accès
-  useEffect(() => {
+  const loadEmployeesForAdmin = useCallback(() => {
     getEmployeesForAdmin()
       .then(setEmployees)
       .catch(() => {/* silently fail */});
   }, []);
+
+  useEffect(() => { loadEmployeesForAdmin(); }, [loadEmployeesForAdmin]);
+
+  useEffect(() => {
+    return onEmployeesSynced(() => { loadEmployeesForAdmin(); });
+  }, [loadEmployeesForAdmin]);
 
   const setField = <K extends keyof UserForm>(k: K, v: UserForm[K]) =>
     setForm((p) => ({ ...p, [k]: v }));

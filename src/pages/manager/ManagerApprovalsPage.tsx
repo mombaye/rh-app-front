@@ -11,6 +11,7 @@ import ManagerLayout from "@/layouts/ManagerLayout";
 import { leaveRequestService } from "@/services/leaveService";
 import { LeaveRequest } from "@/types/leave";
 import ExitAuthorizationPanel from "@/components/leaves/ExitAuthorizationPanel";
+import { onEmployeesSynced } from "@/utils/employeeSync";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import jsPDF from "jspdf";
@@ -1038,6 +1039,10 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
   }, [employeeId, isRh]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    return onEmployeesSynced(() => { refresh(); });
+  }, [refresh]);
 
   const PENDING_STATUSES = ["PENDING", "PENDING_SECOND", ...(isRh ? ["PENDING_RH"] : [])] as string[];
 
