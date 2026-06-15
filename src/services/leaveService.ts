@@ -142,7 +142,11 @@ export const leaveBalanceService = {
     if (opts.year)            form.append("year",            String(opts.year));
     if (opts.leave_type_code) form.append("leave_type_code", opts.leave_type_code);
     const res = await api.post(`${API}/balances/migration_import/`, form, {
-      // laisser axios définir Content-Type + boundary automatiquement
+      // L'instance `api` force Content-Type: application/json par défaut,
+      // ce qui empêche axios d'envoyer un vrai multipart/form-data (le
+      // fichier arrive alors vide côté backend). On le réinitialise pour
+      // qu'axios/le navigateur génère le bon Content-Type + boundary.
+      headers: { "Content-Type": undefined },
     });
     return res.data;
   },
