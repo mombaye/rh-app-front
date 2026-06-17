@@ -26,7 +26,8 @@ const InterimEmployeesPage     = lazy(() => import("@/pages/InterimEmployeesPage
 const InterneEmployeesPage     = lazy(() => import("@/pages/InterneEmployeesPage"));
 const GlobalEmployeesPage      = lazy(() => import("@/pages/GlobalEmployeesPage"));
 const AlertesEmployesPage      = lazy(() => import("@/pages/AlertesEmployesPage"));
-const GestionQuestionnairesPage = lazy(() => import("@/pages/GestionQuestionnairesPage"));
+const GestionQuestionnairesPage    = lazy(() => import("@/pages/GestionQuestionnairesPage"));
+const EmployeesDisciplinaryPage    = lazy(() => import("@/pages/EmployeesDisciplinaryPage"));
 const QuestionnaireSortiePage  = lazy(() => import("@/pages/QuestionnaireSortiePage"));
 const AttendanceNormalesPage   = lazy(() => import("@/pages/AttendanceNormalesPage"));
 const AttendanceShiftsPage     = lazy(() => import("@/pages/Attendanceshiftspage"));
@@ -279,6 +280,11 @@ function App() {
         <Route path="/employees/questionnaires" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <GestionQuestionnairesPage />
+          </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/employees/disciplinaire" element={
+          <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
+            <EmployeesDisciplinaryPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
 

@@ -733,3 +733,67 @@ export const submitDispute = async (work_date: string, justification_text: strin
     raw_punch_count: number;
     created_at: string;
   };
+
+// ══════════════════════════════════════════════════════
+//  DOSSIERS DISCIPLINAIRES
+// ══════════════════════════════════════════════════════
+
+export type SanctionType =
+  | "SAN-01" | "SAN-02" | "SAN-03"
+  | "SAN-04" | "SAN-05" | "SAN-06";
+
+export type DisciplinaryStatut = "ACTIF" | "CLOS";
+
+export interface DisciplinaryRecord {
+  id: number;
+  employee: number;
+  employee_nom: string;
+  employee_prenom: string;
+  employee_matricule: string;
+  code: SanctionType;
+  niveau: number;
+  type_sanction: SanctionType;
+  type_sanction_label: string;
+  date_demande: string | null;
+  date_reception: string | null;
+  date_notification: string | null;
+  duree: string;
+  motif: string;
+  statut: DisciplinaryStatut;
+  statut_label: string;
+  created_at: string;
+  created_by: string;
+}
+
+export interface DisciplinaryRecordPayload {
+  employee: number;
+  type_sanction: SanctionType;
+  date_demande?: string | null;
+  date_reception?: string | null;
+  date_notification?: string | null;
+  duree?: string;
+  motif?: string;
+  statut?: DisciplinaryStatut;
+}
+
+const DISC_API = "/api/employees/disciplinary";
+
+export const disciplinaryService = {
+  list: (params?: { employee?: number; statut?: DisciplinaryStatut; search?: string }) =>
+    api.get<DisciplinaryRecord[]>(`${DISC_API}/`, { params }).then((r) => r.data),
+
+  get: (id: number) =>
+    api.get<DisciplinaryRecord>(`${DISC_API}/${id}/`).then((r) => r.data),
+
+  create: (payload: DisciplinaryRecordPayload) =>
+    api.post<DisciplinaryRecord>(`${DISC_API}/`, payload).then((r) => r.data),
+
+  update: (id: number, payload: Partial<DisciplinaryRecordPayload>) =>
+    api.patch<DisciplinaryRecord>(`${DISC_API}/${id}/`, payload).then((r) => r.data),
+
+  delete: (id: number) =>
+    api.delete(`${DISC_API}/${id}/`),
+
+  import: (form: FormData) =>
+    api.post(`${DISC_API}/import/`, form, { headers: { "Content-Type": undefined } }).then((r) => r.data),
+};
