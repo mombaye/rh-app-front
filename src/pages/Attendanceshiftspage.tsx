@@ -3614,115 +3614,144 @@ export default function AttendanceShiftsPage() {
             return (
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4">
+                className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
                 <motion.div
-                  initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+                  initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 16 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
                   className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+
+                  {/* ── Header bleu ── */}
+                  <div className="bg-camublue-900 px-6 py-5 flex items-start justify-between">
                     <div>
-                      <h2 className="font-black text-camublue-900 text-base">Export personnalisé</h2>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <FileSpreadsheet className="h-5 w-5 text-white/80" />
+                        <h2 className="text-white font-bold text-lg">Export Excel</h2>
+                      </div>
+                      <p className="text-white/60 text-xs">
                         {isDailyMode
-                          ? (exportFrom === exportTo ? `Journalier · ${exportFrom}` : `Plage · ${exportFrom} → ${exportTo}`)
+                          ? (exportFrom === exportTo ? `Journalier · ${exportFrom}` : `${exportFrom} → ${exportTo}`)
                           : isPeriodMode
                           ? `Période · ${exportFrom} → ${exportTo}`
                           : viewMode === "weekly" ? "Vue hebdomadaire" : "Vue mensuelle"}
-                        {" · "}Sélectionnez les colonnes à inclure
                       </p>
                     </div>
                     <button onClick={() => setShowExportDlg(false)}
-                      className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
+                      className="p-1.5 rounded-lg hover:bg-white/10 transition text-white/70 hover:text-white">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
-                    {/* Date range — always shown for all modes */}
+
+                  <div className="px-6 py-5 space-y-5 max-h-[60vh] overflow-y-auto">
+                    {/* Période */}
                     <div>
-                      <p className="text-xs font-semibold text-slate-500 mb-2">Période d'export</p>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2.5">Période d'export</p>
                       <div className="flex gap-3">
                         <div className="flex-1">
                           <label className="text-xs text-slate-400 block mb-1">Du</label>
                           <input type="date" value={exportFrom} onChange={(e) => setExportFrom(e.target.value)}
-                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 outline-none transition" />
                         </div>
                         <div className="flex-1">
                           <label className="text-xs text-slate-400 block mb-1">Au</label>
                           <input type="date" value={exportTo} onChange={(e) => setExportTo(e.target.value)}
                             min={exportFrom}
-                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 outline-none transition" />
                         </div>
                       </div>
                     </div>
-                    {/* Department filter */}
+
+                    {/* Département */}
                     {allDepts.length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold text-slate-500 mb-2">
-                          Département <span className="text-slate-400 font-normal">(optionnel — laisser vide pour tous)</span>
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2.5">
+                          Département <span className="text-slate-400 font-normal normal-case">(laisser vide = tous)</span>
                         </p>
-                        <div className="relative mb-2">
+                        <div className="relative mb-2.5">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                           <input type="text" value={exportDeptSearch} onChange={(e) => setExportDeptSearch(e.target.value)}
                             placeholder="Rechercher un département…"
-                            className="w-full rounded-xl border border-slate-200 pl-8 pr-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
+                            className="w-full rounded-xl border border-slate-200 pl-8 pr-3 py-2.5 text-sm focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 outline-none transition" />
                         </div>
-                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                        <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">
                           {filteredDepts.map(dept => {
                             const sel = exportDepts.includes(dept);
                             return (
                               <button key={dept} onClick={() => setExportDepts(sel ? exportDepts.filter(d => d !== dept) : [...exportDepts, dept])}
-                                className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${sel ? "bg-camublue-900 text-white border-transparent" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+                                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                                  sel
+                                    ? "bg-camublue-900 text-white border-camublue-900 shadow-sm"
+                                    : "bg-white border-slate-200 text-slate-600 hover:border-camublue-900/40 hover:text-camublue-900"
+                                }`}>
                                 {dept}
                               </button>
                             );
                           })}
                         </div>
                         {exportDepts.length > 0 && (
-                          <button onClick={() => setExportDepts([])} className="text-xs text-red-500 hover:underline mt-1">Effacer la sélection</button>
+                          <button onClick={() => setExportDepts([])} className="text-xs text-slate-400 hover:text-red-500 transition mt-1.5">
+                            Effacer la sélection
+                          </button>
                         )}
                       </div>
                     )}
-                    {/* Column selection */}
+
+                    {/* Colonnes */}
                     <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <p className="text-xs font-semibold text-slate-500">
-                          {selCols.length}/{availCols.length} colonnes sélectionnées
+                      <div className="flex justify-between items-center mb-2.5">
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                          Colonnes
+                          <span className="ml-2 px-2 py-0.5 rounded-full bg-camublue-900 text-white text-[10px] font-bold normal-case tracking-normal">
+                            {selCols.length}/{availCols.length}
+                          </span>
                         </p>
-                        <div className="flex gap-2">
+                        <div className="flex gap-3">
                           <button onClick={() => setSelCols([...availCols] as any)}
-                            className="text-xs text-camublue-700 hover:underline font-medium">Tout</button>
-                          <span className="text-slate-300">|</span>
+                            className="text-xs text-camublue-900 hover:underline font-semibold">Tout</button>
+                          <span className="text-slate-200">|</span>
                           <button onClick={() => setSelCols([] as any)}
-                            className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
+                            className="text-xs text-slate-400 hover:underline font-semibold">Aucun</button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                      <div className="grid grid-cols-2 gap-2">
                         {availCols.map((col) => {
                           const checked = (selCols as string[]).includes(col);
                           return (
-                            <label key={col}
-                              className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer border transition text-sm ${
-                                checked ? "bg-camublue-50 border-camublue-200 text-camublue-800" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                              }`}>
-                              <input type="checkbox" checked={checked} onChange={() => {
+                            <label key={col} onClick={() => {
                                 const next = checked
                                   ? (selCols as string[]).filter((k) => k !== col)
                                   : [...(selCols as string[]), col];
                                 setSelCols(next as any);
-                              }} className="accent-camublue-700 w-3.5 h-3.5" />
-                              <span className="font-medium">{col}</span>
+                              }}
+                              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer border transition select-none ${
+                                checked
+                                  ? "bg-camublue-900 border-camublue-900 text-white shadow-sm"
+                                  : "bg-white border-slate-200 text-slate-600 hover:border-camublue-900/30 hover:bg-slate-50"
+                              }`}>
+                              <span className={`w-4 h-4 rounded-md border-2 flex items-center justify-center shrink-0 transition ${
+                                checked ? "bg-white border-white" : "border-slate-300"
+                              }`}>
+                                {checked && (
+                                  <svg viewBox="0 0 10 8" className="w-2.5 h-2.5 fill-camublue-900">
+                                    <path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                )}
+                              </span>
+                              <span className="text-sm font-medium">{col}</span>
                             </label>
                           );
                         })}
                       </div>
                     </div>
                   </div>
-                  <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+
+                  {/* Footer */}
+                  <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
                     <button onClick={() => setShowExportDlg(false)}
-                      className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
+                      className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50 transition">
                       Annuler
                     </button>
                     <button onClick={doExport} disabled={selCols.length === 0 || exportLoading}
-                      className="flex items-center gap-2 px-5 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
+                      className="flex-[2] flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
                       <FileSpreadsheet className="h-4 w-4" />
                       {exportLoading ? "Chargement…" : "Télécharger"}
                     </button>
