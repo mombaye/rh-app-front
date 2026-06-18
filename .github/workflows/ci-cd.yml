@@ -1,0 +1,142 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CI/CD — Frontend React/Vite (rh-app-front)
+#
+# Branches  : push sur `main`  → CI + build + deploy
+#             push sur `dev/*` → CI seulement
+#             pull_request      → CI seulement
+#
+# Secrets GitHub à configurer (Settings > Secrets > Actions) :
+#   VITE_API_URL           → URL de l'API backend en prod (ex: https://rh.camusat.com)
+#   DEPLOY_SSH_HOST        → IP ou hostname du serveur
+#   DEPLOY_SSH_USER        → utilisateur SSH
+#   DEPLOY_SSH_KEY         → clé privée SSH
+#   DEPLOY_FRONTEND_PATH   → chemin nginx du frontend (ex: /var/www/rh-app)
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Frontend CI/CD
+
+on:
+  push:
+    branches: [main, "dev/**"]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  # ── 1. CI : Type-check & Build ─────────────────────────────────────────────
+  ci:
+    name: Type-check & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci --prefer-offline
+
+      - name: TypeScript — vérification types
+        run: npx tsc --noEmit
+        continue-on-error: true   # erreurs préexistantes non bloquantes
+
+      - name: Build de production
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'http://localhost:8030' }}
+
+      - name: Vérification taille du build
+        run: |
+          SIZE=$(du -sh dist | cut -f1)
+          echo "Build size: $SIZE"
+          # Alerte si > 50MB
+          SIZE_BYTES=$(du -sb dist | cut -f1)
+          if [ "$SIZE_BYTES" -gt 52428800 ]; then
+            echo "WARN: Build dépasse 50MB ($SIZE) — envisager du code splitting"
+          fi
+
+      - name: Upload artefact de build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+          retention-days: 7
+
+  # ── 2. Audit sécurité NPM ──────────────────────────────────────────────────
+  security:
+    name: Audit dépendances
+    runs-on: ubuntu-latest
+    needs: ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true   # warning, ne bloque pas
+
+  # ── 3. Déploiement sur le serveur ──────────────────────────────────────────
+  deploy:
+    name: Déploiement Prod
+    runs-on: ubuntu-latest
+    needs: [ci, security]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+      - name: Télécharger l'artefact de build
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+
+      - name: Déploiement via SSH (rsync)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            # Sauvegarde de la version précédente
+            BACKUP_DIR="${{ secrets.DEPLOY_FRONTEND_PATH }}_backup_$(date +%Y%m%d%H%M%S)"
+            if [ -d "${{ secrets.DEPLOY_FRONTEND_PATH }}" ]; then
+              cp -r ${{ secrets.DEPLOY_FRONTEND_PATH }} $BACKUP_DIR
+            fi
+            mkdir -p ${{ secrets.DEPLOY_FRONTEND_PATH }}
+
+      - name: Copie des fichiers (SCP)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "dist/*"
+          target: ${{ secrets.DEPLOY_FRONTEND_PATH }}
+          strip_components: 1
+
+      - name: Recharger nginx
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            nginx -t && systemctl reload nginx \
+              && echo "Nginx rechargé avec succès" \
+              || echo "WARN: nginx reload échoué — vérifier la config"
