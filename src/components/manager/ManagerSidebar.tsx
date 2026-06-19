@@ -25,16 +25,16 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const navItems: NavItem[] = [
-    { label: "Tableau de bord",      path: "/manager/dashboard",    icon: <LayoutDashboard size={20} />                                                    },
-    { label: "Approbations",         path: "/manager/approvals",    icon: <ClipboardCheck size={20} />, badge: pendingCount > 0 ? pendingCount : undefined },
-    { label: "Equipe en congés",      path: "/manager/team-leaves",  icon: <Users size={20} />                                                                  },
-    { label: "Mes Dossiers RH",       path: "/manager/dossier",      icon: <FolderOpen size={20} />                                                         },
-    { label: "Bulletins de salaires", path: "/manager/payslips",     icon: <BadgeDollarSign size={20} />                                                    },
-    { label: "Mes Pointages",         path: "/manager/attendance",   icon: <Clock size={20} />                                                              },
-    { label: "Demande de congé",     path: "/manager/leaves",       icon: <CalendarDays size={20} />                                                       },
-    { label: "Demande de sortie",    path: "/manager/exits",        icon: <LogOut size={20} />                                                             },
-    { label: "Demandes Attestation", path: "/manager/attestations", icon: <FileBadge size={20} />                                                          },
-    { label: "Documents RH",         path: "/manager/documents",    icon: <FileStack size={20} />                                                          },
+    { label: "Tableau de bord",          path: "/manager/dashboard",    icon: <LayoutDashboard size={20} />                                                    },
+    { label: "Validation congé employé", path: "/manager/approvals",    icon: <ClipboardCheck size={20} />, badge: pendingCount > 0 ? pendingCount : undefined },
+    { label: "Equipe en congés",         path: "/manager/team-leaves",  icon: <Users size={20} />                                                              },
+    { label: "Mes Dossiers",             path: "/manager/dossier",      icon: <FolderOpen size={20} />                                                         },
+    { label: "Bulletins de salaires",    path: "/manager/payslips",     icon: <BadgeDollarSign size={20} />                                                    },
+    { label: "Mes Pointages",            path: "/manager/attendance",   icon: <Clock size={20} />                                                              },
+    { label: "Demande de congé",         path: "/manager/leaves",       icon: <CalendarDays size={20} />                                                       },
+    { label: "Demande de sortie",        path: "/manager/exits",        icon: <LogOut size={20} />                                                             },
+    { label: "Demande d'attestation",    path: "/manager/attestations", icon: <FileBadge size={20} />                                                          },
+    { label: "Documents RH",            path: "/manager/documents",    icon: <FileStack size={20} />                                                          },
   ];
 
   useEffect(() => {
