@@ -150,11 +150,11 @@ export default function Sidebar() {
       path: "/rh/my",
       icon: <UserCircle size={20} />,
       subItems: [
-        { label: "Mes Congés",    path: "/rh/my-leaves"    },
-        { label: "Mes Bulletins", path: "/rh/my-payslips"  },
-        { label: "Mon Dossier",   path: "/rh/my-dossier"   },
-        { label: "Équipe en congé",      path: "/rh/my-service-leaves" },
-        { label: "Mes Sorties",          path: "/rh/my-exits"          },
+        { label: "Demande de congé",     path: "/rh/my-leaves"         },
+        { label: "Bulletins de salaires", path: "/rh/my-payslips"       },
+        { label: "Mes Dossiers RH",       path: "/rh/my-dossier"        },
+        { label: "Equipe en congés",       path: "/rh/my-service-leaves" },
+        { label: "Demande de sortie",    path: "/rh/my-exits"          },
         // TODO: Questionnaire sortie — à activer quand disponible
         // { label: "Questionnaire sortie", path: "/rh/my-questionnaire"  },
         ...(isRhManager

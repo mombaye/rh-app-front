@@ -28,7 +28,7 @@ const baseNavItems = [
     icon: <LayoutDashboard size={20} />,
   },
   {
-    label: "Mon Dossier",
+    label: "Mes Dossiers",
     path: "/employee/dossier",
     icon: <FolderOpen size={20} />,
   },
@@ -38,24 +38,24 @@ const baseNavItems = [
     icon: <Clock size={20} />,
   },
   {
-    label: "Mes Congés",
+    label: "Bulletins de salaires",
+    path: "/employee/payslips",
+    icon: <BadgeDollarSign size={20} />,
+  },
+  {
+    label: "Demande de congé",
     path: "/employee/leaves",
     icon: <CalendarDays size={20} />,
   },
   {
-    label: "Équipe en congé",
-    path: "/employee/service-leaves",
-    icon: <Users size={20} />,
-  },
-  {
-    label: "Mes sorties",
+    label: "Demande de sortie",
     path: "/employee/exits",
     icon: <LogOut size={20} />,
   },
   {
-    label: "Mes Bulletins",
-    path: "/employee/payslips",
-    icon: <BadgeDollarSign size={20} />,
+    label: "Equipe en congés",
+    path: "/employee/service-leaves",
+    icon: <Users size={20} />,
   },
   {
     label: "Demandes Attestation",
@@ -84,7 +84,7 @@ export default function EmployeeSidebar() {
   const isManager =
     availableRoles.includes("manager1") || availableRoles.includes("manager2");
 
-  // Compteur collègues en congé (badge "Équipe en congé")
+  // Compteur collègues en congé (badge "Equipe en congés")
   const [serviceLeaveCount, setServiceLeaveCount] = useState(0);
 
   useEffect(() => {
