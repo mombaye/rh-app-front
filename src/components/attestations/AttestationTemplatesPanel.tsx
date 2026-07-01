@@ -1,5 +1,6 @@
 // src/components/attestations/AttestationTemplatesPanel.tsx
 import { useEffect, useRef, useState } from "react";
+// useRef conservé pour TemplateCard (fileRef) et StampCard (fileInputRef)
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload, Trash2, Download, FileText, CheckCircle,
@@ -8,7 +9,7 @@ import {
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
 import {
-  templateService, attestationSignatureService, AttestationSignature,
+  templateService,
   attestationStampService, AttestationStamp,
 } from "@/services/attestationService";
 import { AttestationTemplate, AttestationDocumentType, TemplatePlaceholder, DOC_TYPE_LABELS } from "@/types/attestation";
@@ -200,229 +201,6 @@ function TemplateCard({ docType, template, onUploaded, onDeleted }: TemplateCard
   );
 }
 
-// ─── Signature RH (dessinée directement sur la plateforme) ───────────────────
-
-function SignatureCard() {
-  const [signature, setSignature] = useState<AttestationSignature | null>(null);
-  const [loading,   setLoading]   = useState(true);
-  const [saving,    setSaving]    = useState(false);
-  const [deleting,  setDeleting]  = useState(false);
-  const [editing,   setEditing]   = useState(false);
-  const [hasDrawn,  setHasDrawn]  = useState(false);
-
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const drawingRef = useRef(false);
-  const lastPos = useRef<{ x: number; y: number } | null>(null);
-
-  useEffect(() => {
-    attestationSignatureService.get()
-      .then(setSignature)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  const setupCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    // Toile haute résolution pour un tracé net
-    const ratio = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width  = rect.width  * ratio;
-    canvas.height = rect.height * ratio;
-    ctx.scale(ratio, ratio);
-    ctx.lineWidth   = 2.5;
-    ctx.lineCap     = "round";
-    ctx.lineJoin    = "round";
-    ctx.strokeStyle = "#1e293b";
-    return ctx;
-  };
-
-  useEffect(() => {
-    if (editing) {
-      // Laisser le canvas s'afficher avant de l'initialiser à sa taille réelle
-      requestAnimationFrame(() => setupCanvas());
-      setHasDrawn(false);
-    }
-  }, [editing]);
-
-  const getPos = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    canvasRef.current?.setPointerCapture(e.pointerId);
-    drawingRef.current = true;
-    lastPos.current = getPos(e);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawingRef.current) return;
-    const ctx = canvasRef.current?.getContext("2d");
-    if (!ctx || !lastPos.current) return;
-    const pos = getPos(e);
-    ctx.beginPath();
-    ctx.moveTo(lastPos.current.x, lastPos.current.y);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-    lastPos.current = pos;
-    setHasDrawn(true);
-  };
-
-  const handlePointerUp = () => {
-    drawingRef.current = false;
-    lastPos.current = null;
-  };
-
-  const handleClearCanvas = () => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasDrawn(false);
-  };
-
-  const handleSave = async () => {
-    const canvas = canvasRef.current;
-    if (!canvas || !hasDrawn) {
-      toast.error("Veuillez d'abord dessiner votre signature.");
-      return;
-    }
-    setSaving(true);
-    try {
-      const blob: Blob | null = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
-      if (!blob) throw new Error("Impossible de générer l'image");
-      const file = new File([blob], "signature.png", { type: "image/png" });
-      const sig = await attestationSignatureService.upload(file);
-      setSignature(sig);
-      setEditing(false);
-      toast.success("Signature enregistrée !");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || "Erreur lors de l'enregistrement");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    setDeleting(true);
-    try {
-      await attestationSignatureService.delete();
-      setSignature(null);
-      toast.success("Signature supprimée.");
-    } catch {
-      toast.error("Erreur lors de la suppression.");
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  return (
-    <div className={`transition ${signature && !editing ? "bg-emerald-50/40" : "bg-white"}`}>
-      <div className="flex items-center gap-3 px-5 py-4">
-        <span className="text-2xl select-none">✍️</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-800 truncate">Ma signature</p>
-          {loading ? (
-            <p className="text-xs text-gray-400 mt-0.5">Chargement…</p>
-          ) : signature && !editing ? (
-            <p className="text-xs text-emerald-700 mt-0.5 flex items-center gap-1">
-              <CheckCircle size={11} className="shrink-0" />
-              Enregistrée le {fmtDate(signature.uploaded_at)} — utilisable par glisser-déposer
-              sur l'aperçu des attestations à valider
-            </p>
-          ) : !editing ? (
-            <p className="text-xs text-gray-400 mt-0.5">
-              Dessinez votre signature directement sur la plateforme pour pouvoir
-              la glisser-déposer sur les attestations avant validation.
-            </p>
-          ) : (
-            <p className="text-xs text-gray-400 mt-0.5">
-              Dessinez votre signature dans le cadre ci-dessous (souris ou tactile).
-            </p>
-          )}
-        </div>
-
-        {!editing && (
-          <div className="flex items-center gap-2 shrink-0">
-            {signature && (
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                title="Supprimer la signature"
-                className="p-2 rounded-lg bg-white border border-red-100 hover:bg-red-50 text-red-400 hover:text-red-600 transition disabled:opacity-60"
-              >
-                {deleting ? <ImSpinner2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
-              </button>
-            )}
-            <button
-              onClick={() => setEditing(true)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition ${
-                signature
-                  ? "bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                  : "bg-[#003c71] text-white hover:bg-[#003c71]/90"
-              }`}
-            >
-              ✍️ {signature ? "Modifier" : "Signer"}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {editing && (
-        <div className="border-t border-gray-100 px-5 py-4 space-y-3">
-          <canvas
-            ref={canvasRef}
-            className="w-full h-40 bg-white rounded-xl border-2 border-dashed border-gray-300 touch-none cursor-crosshair"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-          />
-          <div className="flex items-center justify-end gap-2">
-            <button
-              onClick={handleClearCanvas}
-              disabled={saving}
-              className="px-3 py-2 rounded-xl text-xs font-semibold bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 transition disabled:opacity-60"
-            >
-              Effacer
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              disabled={saving}
-              className="px-3 py-2 rounded-xl text-xs font-semibold bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 transition disabled:opacity-60"
-            >
-              Annuler
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || !hasDrawn}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-[#003c71] hover:bg-[#003c71]/90 disabled:opacity-60 text-white transition"
-            >
-              {saving ? <ImSpinner2 className="animate-spin" size={12} /> : <CheckCircle size={12} />}
-              Enregistrer
-            </button>
-          </div>
-        </div>
-      )}
-
-      {signature?.image_url && !editing && (
-        <div className="border-t border-emerald-100 px-5 py-3">
-          <img
-            src={signature.image_url}
-            alt="Signature"
-            className="h-16 object-contain bg-white rounded-lg border border-gray-100 px-3"
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Cachet de l'entreprise (PDF, apposé automatiquement sur les documents) ──
 
 function StampCard() {
@@ -444,8 +222,10 @@ function StampCard() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      toast.error("Le cachet doit être un fichier PDF.");
+    const allowed = ["application/pdf", "image/png", "image/jpeg"];
+    const allowedExt = [".pdf", ".png", ".jpg", ".jpeg"];
+    if (!allowed.includes(file.type) && !allowedExt.some(e => file.name.toLowerCase().endsWith(e))) {
+      toast.error("Le cachet doit être un fichier PDF ou PNG.");
       return;
     }
     setSaving(true);
@@ -489,7 +269,7 @@ function StampCard() {
             </p>
           ) : (
             <p className="text-xs text-gray-400 mt-0.5">
-              Téléversez le cachet de l'entreprise au format PDF : il sera apposé
+              Téléversez le cachet de l'entreprise (PDF ou PNG) : il sera apposé
               automatiquement sur tous les documents d'attestation générés.
             </p>
           )}
@@ -532,7 +312,7 @@ function StampCard() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="application/pdf"
+            accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
             onChange={handleFileChange}
             className="hidden"
           />
@@ -651,9 +431,8 @@ export default function AttestationTemplatesPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Signature & cachet RH */}
-      <div className="rounded-2xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
-        <SignatureCard />
+      {/* Cachet de l'entreprise */}
+      <div className="rounded-2xl border border-gray-200 overflow-hidden">
         <StampCard />
       </div>
 

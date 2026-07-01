@@ -10,7 +10,7 @@ import {
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
 import AppLayout from "@/layouts/AppLayout";
-import { attestationService, attestationSignatureService } from "@/services/attestationService";
+import { attestationService, attestationSignatureService, attestationStampService, AttestationStamp } from "@/services/attestationService";
 import { AttestationRequest, AttestationStatus, AttestationHistory } from "@/types/attestation";
 import AttestationTemplatesPanel from "@/components/attestations/AttestationTemplatesPanel";
 
@@ -69,10 +69,11 @@ interface SignaturePlacerProps {
   onApplied: (updated: AttestationRequest) => void;
   onRegenerate: () => Promise<void>;
   regenerating: boolean;
+  noStamp?: boolean;
 }
 
 /** Logique partagée de positionnement / application de la signature. */
-function useSignaturePlacement({ attestationId, onApplied, onRegenerate, regenerating }: SignaturePlacerProps) {
+function useSignaturePlacement({ attestationId, onApplied, onRegenerate, regenerating, noStamp }: SignaturePlacerProps) {
   const [preview, setPreview] = useState<{
     image: string; page_width: number; page_height: number; page_index: number; page_count: number;
   } | null>(null);
@@ -93,7 +94,7 @@ function useSignaturePlacement({ attestationId, onApplied, onRegenerate, regener
   const loadPreview = async () => {
     setLoading(true);
     try {
-      const data = await attestationService.getPreviewImage(attestationId);
+      const data = await attestationService.getPreviewImage(attestationId, !!noStamp);
       setPreview(data);
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors du chargement de l'aperçu");
@@ -202,11 +203,116 @@ function useSignaturePlacement({ attestationId, onApplied, onRegenerate, regener
     pos, placed, dragging,
     containerRef, sigWidth, SIG_WIDTH_MIN, SIG_WIDTH_MAX, changeSigWidth, applySigWidth,
     handlePointerDown, handlePointerMove, handlePointerUp,
-    handleApply, handleRemoveApplied, setPlaced,
+    handleApply, handleRemoveApplied, setPlaced, loadPreview,
   };
 }
 
 type SignaturePlacement = ReturnType<typeof useSignaturePlacement>;
+
+// ── Hook de placement du cachet ─────────────────────────────────────────────
+interface StampPlacerProps {
+  containerRef: React.RefObject<HTMLDivElement>;
+  previewReady: boolean;
+  previewWidth: number;
+  previewHeight: number;
+  onRegenerate: () => Promise<void>;
+  reloadPreview: () => Promise<void>;
+}
+
+function useStampPlacement({ containerRef, previewReady, previewWidth, previewHeight, onRegenerate, reloadPreview }: StampPlacerProps) {
+  const STAMP_W_MIN = 0.05;
+  const STAMP_W_MAX = 0.60;
+
+  const [stamp, setStamp] = useState<AttestationStamp | null>(null);
+  const [pos, setPos] = useState({ x: 0.58, y: 0.80 });
+  const [stampWidth, setStampWidth] = useState(0.35);
+  const [dragging, setDragging] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [moved, setMoved] = useState(false);
+  // Offset entre le point de clic et le coin haut-gauche du cachet
+  const dragOffset = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    attestationStampService.get()
+      .then(s => {
+        if (s) {
+          setStamp(s);
+          setPos({ x: s.pos_x, y: s.pos_y });
+          setStampWidth(s.width);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+
+  const updatePosFromClient = (clientX: number, clientY: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const stampH = previewWidth > 0 ? stampWidth * (previewHeight / previewWidth) : stampWidth;
+    let x = (clientX - rect.left) / rect.width - dragOffset.current.x;
+    let y = (clientY - rect.top) / rect.height - dragOffset.current.y;
+    x = clamp(x, 0, 1 - stampWidth);
+    y = clamp(y, 0, 1 - stampH);
+    setPos({ x, y });
+    setMoved(true);
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    // Calcul de l'offset : où dans le cachet a-t-on cliqué ?
+    const el = containerRef.current;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      dragOffset.current = {
+        x: (e.clientX - rect.left) / rect.width - pos.x,
+        y: (e.clientY - rect.top) / rect.height - pos.y,
+      };
+    }
+    setDragging(true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragging) return;
+    updatePosFromClient(e.clientX, e.clientY);
+  };
+
+  const handlePointerUp = () => setDragging(false);
+
+  const changeWidth = (delta: number) => {
+    setStampWidth(w => {
+      const next = clamp(w + delta, STAMP_W_MIN, STAMP_W_MAX);
+      setPos(p => ({ x: clamp(p.x, 0, 1 - next), y: p.y }));
+      return next;
+    });
+    setMoved(true);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await attestationStampService.updatePosition(pos.x, pos.y, stampWidth);
+      await onRegenerate();
+      await reloadPreview();
+      setMoved(false);
+      toast.success("Position du cachet sauvegardée !");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors de la sauvegarde");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return {
+    stamp, pos, stampWidth, dragging, saving, moved,
+    STAMP_W_MIN, STAMP_W_MAX,
+    handlePointerDown, handlePointerMove, handlePointerUp,
+    changeWidth, setStampWidth, setMoved, handleSave,
+  };
+}
 
 // ── Bloc complet pour l'état GENERATED : aperçu à gauche, actions à droite ──
 interface GeneratedPanelProps {
@@ -223,14 +329,25 @@ function GeneratedPanel({
   manageTarget, onApplied, onRegenerate, regenerating, onValidate, validating, rejecting,
 }: GeneratedPanelProps) {
   const sig = useSignaturePlacement({
-    attestationId: manageTarget.id, onApplied, onRegenerate, regenerating,
+    attestationId: manageTarget.id, onApplied, onRegenerate, regenerating, noStamp: true,
   });
+
+  const stamp = useStampPlacement({
+    containerRef: sig.containerRef,
+    previewReady: !!sig.preview,
+    previewWidth:  sig.preview?.page_width  ?? 595,
+    previewHeight: sig.preview?.page_height ?? 842,
+    onRegenerate,
+    reloadPreview: sig.loadPreview,
+  });
+
+  const busy = regenerating || validating || rejecting || stamp.saving;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {/* ── Aperçu du document (gauche) ── */}
       <div className="space-y-2">
-        <SignaturePreview sig={sig} />
+        <SignaturePreview sig={sig} stampOverlay={stamp.stamp ? stamp : null} />
         <SignatureControls sig={sig} />
       </div>
 
@@ -239,6 +356,41 @@ function GeneratedPanel({
         {/* Taille de la signature */}
         {sig.signatureUrl && (
           <SignatureSizeControl sig={sig} />
+        )}
+
+        {/* ── Contrôles taille du cachet ── */}
+        {stamp.stamp && (
+          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                <Move size={14} className="text-gray-400" />
+                Cachet
+              </p>
+              <span className="text-xs text-gray-400">{Math.round(stamp.stampWidth * 100)}% largeur</span>
+            </div>
+            <p className="text-xs text-gray-400">Glissez le cachet sur l'aperçu pour le repositionner.</p>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => stamp.changeWidth(-0.02)}
+                disabled={stamp.stampWidth <= stamp.STAMP_W_MIN}
+                className="w-7 h-7 shrink-0 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition">
+                <Minus size={12} />
+              </button>
+              <input type="range" min={stamp.STAMP_W_MIN} max={stamp.STAMP_W_MAX} step={0.01}
+                value={stamp.stampWidth}
+                onChange={e => { stamp.setStampWidth(parseFloat(e.target.value)); stamp.setMoved(true); }}
+                className="flex-1 accent-[#003c71]" />
+              <button type="button" onClick={() => stamp.changeWidth(0.02)}
+                disabled={stamp.stampWidth >= stamp.STAMP_W_MAX}
+                className="w-7 h-7 shrink-0 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition">
+                <Plus size={12} />
+              </button>
+            </div>
+            {stamp.moved && (
+              <p className="text-xs text-amber-600 flex items-center gap-1">
+                ● Position modifiée — sera appliquée à la validation
+              </p>
+            )}
+          </div>
         )}
 
         {/* Visualiser le PDF généré */}
@@ -262,7 +414,7 @@ function GeneratedPanel({
         {/* Re-générer (avant validation) */}
         <button
           onClick={onRegenerate}
-          disabled={regenerating || validating || rejecting}
+          disabled={busy}
           className="flex items-center gap-3 w-full px-4 py-3.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition disabled:opacity-60 text-left"
         >
           <div className="w-9 h-9 rounded-lg bg-gray-200 flex items-center justify-center shrink-0">
@@ -281,15 +433,22 @@ function GeneratedPanel({
 
         <div className="flex-1" />
 
-        {/* Valider & envoyer */}
+        {/* Valider & envoyer (sauvegarde la position du cachet si modifiée) */}
         <button
-          onClick={onValidate}
-          disabled={validating || regenerating || rejecting}
+          onClick={async () => {
+            if (stamp.stamp && stamp.moved) {
+              await stamp.handleSave();
+            }
+            onValidate();
+          }}
+          disabled={busy}
           className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition"
         >
-          {validating
-            ? <><ImSpinner2 className="animate-spin" size={15} /> Envoi en cours…</>
-            : <><Send size={15} /> Valider &amp; envoyer à l'employé</>
+          {stamp.saving
+            ? <><ImSpinner2 className="animate-spin" size={15} /> Application du cachet…</>
+            : validating
+              ? <><ImSpinner2 className="animate-spin" size={15} /> Envoi en cours…</>
+              : <><Send size={15} /> Valider &amp; envoyer à l'employé</>
           }
         </button>
       </div>
@@ -297,13 +456,28 @@ function GeneratedPanel({
   );
 }
 
-/** Aperçu image du document, avec la signature déplaçable par glisser-déposer. */
-function SignaturePreview({ sig }: { sig: SignaturePlacement }) {
+type StampPlacement = ReturnType<typeof useStampPlacement>;
+
+/** Aperçu image du document, avec la signature et le cachet déplaçables. */
+function SignaturePreview({ sig, stampOverlay }: { sig: SignaturePlacement; stampOverlay: StampPlacement | null }) {
   const {
     preview, signatureUrl, loading, pos, placed, dragging,
     containerRef, sigWidth,
     handlePointerDown, handlePointerMove, handlePointerUp, setPlaced,
   } = sig;
+
+  // Événements du cachet (drag)
+  const stampDragging = stampOverlay?.dragging ?? false;
+
+  const handleContainerPointerMove = (e: React.PointerEvent) => {
+    handlePointerMove(e);
+    stampOverlay?.handlePointerMove(e);
+  };
+
+  const handleContainerPointerUp = () => {
+    handlePointerUp();
+    stampOverlay?.handlePointerUp();
+  };
 
   if (loading) {
     return (
@@ -315,14 +489,17 @@ function SignaturePreview({ sig }: { sig: SignaturePlacement }) {
 
   if (!preview) return null;
 
+  const stampFileUrl = stampOverlay?.stamp?.file_url ?? null;
+  const isPng = stampFileUrl && /\.(png|jpg|jpeg)(\?|$)/i.test(stampFileUrl);
+
   return (
     <div
       ref={containerRef}
       className="relative w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-50 select-none"
       style={{ aspectRatio: `${preview.page_width} / ${preview.page_height}`, touchAction: "none" }}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
+      onPointerMove={handleContainerPointerMove}
+      onPointerUp={handleContainerPointerUp}
+      onPointerLeave={handleContainerPointerUp}
     >
       <img
         src={preview.image}
@@ -330,6 +507,31 @@ function SignaturePreview({ sig }: { sig: SignaturePlacement }) {
         className="absolute inset-0 w-full h-full object-contain pointer-events-none"
         draggable={false}
       />
+
+      {/* ── Cachet draggable ── */}
+      {stampOverlay?.stamp?.file_url && (
+        <div
+          style={{
+            position: "absolute",
+            left:   `${stampOverlay.pos.x * 100}%`,
+            top:    `${stampOverlay.pos.y * 100}%`,
+            width:  `${stampOverlay.stampWidth * 100}%`,
+            cursor: stampDragging ? "grabbing" : "grab",
+            userSelect: "none",
+            touchAction: "none",
+          }}
+          onPointerDown={stampOverlay.handlePointerDown}
+        >
+          <img
+            src={stampOverlay.stamp.file_url}
+            alt="Cachet"
+            draggable={false}
+            style={{ display: "block", width: "100%", pointerEvents: "none" }}
+          />
+        </div>
+      )}
+
+      {/* ── Overlay signature draggable ── */}
       {signatureUrl && placed && (
         <div
           className="absolute group"
@@ -343,7 +545,6 @@ function SignaturePreview({ sig }: { sig: SignaturePlacement }) {
             className={`block w-full object-contain ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
             style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }}
           />
-          {/* Bouton pour retirer la signature de l'aperçu (avant application) */}
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); setPlaced(false); }}

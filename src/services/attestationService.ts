@@ -77,11 +77,14 @@ export const attestationService = {
     return res.data;
   },
 
-  /** Aperçu PNG (base64) de la dernière page du PDF généré, pour positionner la signature. */
-  getPreviewImage: async (id: number): Promise<{
+  /** Aperçu PNG (base64) de la dernière page du PDF généré. no_stamp=true → sans cachet. */
+  getPreviewImage: async (id: number, noStamp = false): Promise<{
     image: string; page_width: number; page_height: number; page_index: number; page_count: number;
   }> => {
-    const res = await axios.get(`${API}/${id}/preview-image/`, { headers: authHeaders() });
+    const res = await axios.get(`${API}/${id}/preview-image/`, {
+      headers: authHeaders(),
+      params: noStamp ? { no_stamp: "1" } : undefined,
+    });
     return res.data;
   },
 
@@ -198,6 +201,18 @@ export const attestationStampService = {
   upload: async (file: File): Promise<AttestationStamp> => {
     const formData = new FormData();
     formData.append("file", file);
+    const res = await axios.post<AttestationStamp>(`${STAMP_API}/`, formData, {
+      headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
+  /** Met à jour uniquement la position du cachet (sans re-uploader le fichier). */
+  updatePosition: async (pos_x: number, pos_y: number, width: number): Promise<AttestationStamp> => {
+    const formData = new FormData();
+    formData.append("pos_x", String(pos_x));
+    formData.append("pos_y", String(pos_y));
+    formData.append("width", String(width));
     const res = await axios.post<AttestationStamp>(`${STAMP_API}/`, formData, {
       headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
     });
