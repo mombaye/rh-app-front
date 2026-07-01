@@ -1,5 +1,4 @@
 // src/components/leaves/LeaveRequestList.tsx
-
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { leaveRequestService } from "@/services/leaveService";
@@ -8,15 +7,12 @@ import { ImSpinner2 } from "react-icons/im";
 import { FiX, FiAlertCircle, FiRefreshCw } from "react-icons/fi";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/useAuth";
-
 // ─── Types locaux ─────────────────────────────────────────────────────────────
 type StatusFilter = "ALL" | "PENDING" | "APPROVED";
-
 interface Props {
   statusFilter?: StatusFilter;
   contractType?: ContractType;
 }
-
 // ─── Config statut ────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<
   LeaveStatus | "CONSUMED" | "ON_LEAVE",
@@ -32,22 +28,18 @@ const STATUS_CONFIG: Record<
   CONSUMED:       { label: "Consommé",            color: "#9ca3af", bg: "#f3f4f6", dotClass: "bg-gray-500"    },
   ON_LEAVE:       { label: "En congé",            color: "#0284c7", bg: "#f0f9ff", dotClass: "bg-sky-500"     },
 };
-
 // Convertit le filtre UI → LeaveStatus API
 function toApiStatus(sf: StatusFilter): LeaveStatus | undefined {
   if (sf === "PENDING")  return "PENDING";
   if (sf === "APPROVED") return "APPROVED";
   return undefined;
 }
-
 // Formate une date "YYYY-MM-DD" en "DD/MM/YYYY"
 function fmtDate(d: string): string {
   if (!d) return "—";
   const [y, m, day] = d.split("-");
   return `${day}/${m}/${y}`;
 }
-
-
 // ─── Composant ────────────────────────────────────────────────────────────────
 export default function LeaveRequestList({
   statusFilter = "ALL",
@@ -60,7 +52,6 @@ export default function LeaveRequestList({
   const [selected,      setSelected]      = useState<LeaveRequest | null>(null);
   const [rejectReason,  setRejectReason]  = useState("");
   const [actionLoading, setActionLoading] = useState(false);
-
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -72,17 +63,14 @@ export default function LeaveRequestList({
         // contract_type est retiré côté service avant l'appel API
         contract_type: contractType,
       });
-
       // data doit être un tableau — sécurisation
       if (Array.isArray(data)) {
         setRequests(data);
       } else {
-        console.error("Réponse inattendue de /requests/ :", data);
         setRequests([]);
         setFetchError("Format de réponse inattendu du serveur.");
       }
     } catch (err: any) {
-      console.error("Erreur chargement demandes :", err);
       const msg =
         err?.response?.data?.detail ??
         err?.response?.data?.error  ??
@@ -94,11 +82,8 @@ export default function LeaveRequestList({
       setLoading(false);
     }
   }, [statusFilter, contractType]);
-
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
-
   // ── Actions ────────────────────────────────────────────────────────────────
-
   /** POST approve or hr_validate based on current status */
   const handleApprove = async (id: number) => {
     setActionLoading(true);
@@ -120,7 +105,6 @@ export default function LeaveRequestList({
       setActionLoading(false);
     }
   };
-
   /** POST reject or hr_reject based on current status */
   const handleReject = async (id: number) => {
     if (!rejectReason.trim()) {
@@ -145,7 +129,6 @@ export default function LeaveRequestList({
       setActionLoading(false);
     }
   };
-
   /** POST /api/leaves/requests/<id>/cancel/ */
   const handleCancel = async (id: number) => {
     setActionLoading(true);
@@ -160,7 +143,6 @@ export default function LeaveRequestList({
       setActionLoading(false);
     }
   };
-
   const openDetail = (r: LeaveRequest) => {
     setSelected(r);
     setRejectReason("");
@@ -169,9 +151,7 @@ export default function LeaveRequestList({
     setSelected(null);
     setRejectReason("");
   };
-
   // ── Render ─────────────────────────────────────────────────────────────────
-
   // État : chargement
   if (loading) {
     return (
@@ -181,7 +161,6 @@ export default function LeaveRequestList({
       </div>
     );
   }
-
   // État : erreur fetch
   if (fetchError) {
     return (
@@ -197,10 +176,8 @@ export default function LeaveRequestList({
       </div>
     );
   }
-
   return (
     <div className="space-y-3">
-
       {/* Compteur + refresh */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">
@@ -213,7 +190,6 @@ export default function LeaveRequestList({
           <FiRefreshCw size={12} /> Actualiser
         </button>
       </div>
-
       {/* Table */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {requests.length === 0 ? (
@@ -254,7 +230,6 @@ export default function LeaveRequestList({
                   const st         = STATUS_CONFIG[statusKey];
                   const leaveColor = r.leave_type?.color ?? "#6b7280";
                   const initials   = (r.employee?.full_name ?? "??").slice(0, 2).toUpperCase();
-
                   return (
                     <motion.tr
                       key={r.id}
@@ -285,7 +260,6 @@ export default function LeaveRequestList({
                           </div>
                         </div>
                       </td>
-
                       {/* Type de congé */}
                       <td className="px-5 py-4">
                         <span
@@ -301,17 +275,14 @@ export default function LeaveRequestList({
                           )}
                         </span>
                       </td>
-
                       {/* Période */}
                       <td className="px-5 py-4 text-gray-600 text-xs whitespace-nowrap">
                         {fmtDate(r.start_date)} → {fmtDate(r.end_date)}
                       </td>
-
                       {/* Durée — days est un DecimalField string côté DRF */}
                       <td className="px-5 py-4 font-semibold text-gray-800 whitespace-nowrap">
                         {r.days ?? r.duration_days ?? "—"}j
                       </td>
-
                       {/* Statut */}
                       <td className="px-5 py-4">
                         <span
@@ -322,7 +293,6 @@ export default function LeaveRequestList({
                           {st.label}
                         </span>
                       </td>
-
                       {/* Actions rapides inline */}
                       <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-2">
@@ -375,7 +345,6 @@ export default function LeaveRequestList({
           </div>
         )}
       </div>
-
       {/* ── Modal Détail ────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {selected && (
@@ -404,7 +373,6 @@ export default function LeaveRequestList({
                   <FiX size={18} />
                 </button>
               </div>
-
               <div className="px-8 py-6 space-y-4">
                 {/* Badge statut en haut */}
                 <div className="flex items-center gap-2">
@@ -422,7 +390,6 @@ export default function LeaveRequestList({
                     <span className="text-xs text-gray-400">{selected.status_label}</span>
                   )}
                 </div>
-
                 {/* Grille d'informations */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {([
@@ -451,7 +418,6 @@ export default function LeaveRequestList({
                     </div>
                   ))}
                 </div>
-
                 {/* Motif de la demande */}
                 <div className="bg-gray-50 rounded-xl p-3">
                   <p className="text-xs text-gray-400 uppercase font-semibold mb-1 tracking-wide">Motif</p>
@@ -459,7 +425,6 @@ export default function LeaveRequestList({
                     {selected.motif || "—"}
                   </p>
                 </div>
-
                 {/* ── Chaîne d'approbation hiérarchique ── */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
                   <p className="text-xs text-slate-500 uppercase font-semibold mb-3 tracking-wide">
@@ -519,7 +484,6 @@ export default function LeaveRequestList({
                     </div>
                   </div>
                 </div>
-
                 {/* Motif de rejet — affiché uniquement si REJECTED */}
                 {selected.status === "REJECTED" && selected.reject_reason && (
                   <div className="bg-red-50 border border-red-100 rounded-xl p-3">
@@ -531,7 +495,6 @@ export default function LeaveRequestList({
                     </p>
                   </div>
                 )}
-
                 {/* Zone saisie motif rejet — pour tout statut en attente */}
                 {(selected.status === "PENDING" || selected.status === "PENDING_SECOND" || selected.status === "PENDING_RH") && (
                   <div>
@@ -550,7 +513,6 @@ export default function LeaveRequestList({
                     />
                   </div>
                 )}
-
                 {/* Boutons d'action modal — pour tout statut en attente */}
                 {(selected.status === "PENDING" || selected.status === "PENDING_SECOND" || selected.status === "PENDING_RH") && (
                   <div className="flex gap-3 pt-1">

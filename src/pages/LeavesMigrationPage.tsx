@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload, Download, FileSpreadsheet, X,
   CheckCircle, AlertTriangle, Search, AlertCircle,
-  ChevronLeft, ChevronRight, SlidersHorizontal,
+  ChevronLeft, ChevronRight, SlidersHorizontal, RefreshCw,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import * as XLSXStyle from "xlsx-js-style";
@@ -17,6 +17,8 @@ import { MigrationImportResult, MigrationImportRow } from "@/types/leave";
 // ─── Types locaux ─────────────────────────────────────────────────────────────
 interface EditableRow extends MigrationImportRow {
   edited: number;
+  acquired_override?: number | null;  // null = utiliser calcul auto
+  taken_override?: number | null;     // null = utiliser somme DB
 }
 
 // ─── Export Excel ─────────────────────────────────────────────────────────────
@@ -152,6 +154,7 @@ export default function LeavesMigrationPage() {
 
   const [loadingPrev,   setLoadingPrev]   = useState(false);
   const [loadingSync,   setLoadingSync]   = useState(false);
+  const [loadingSnap,   setLoadingSnap]   = useState(false);
   const [showSyncBanner, setShowSyncBanner] = useState(false);
   const [search,      setSearch]      = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -273,8 +276,10 @@ export default function LeavesMigrationPage() {
 
   const handleOverwriteConfirm = () => {
     setConfirmOpen(false);
-    if (pendingFile) loadFile(pendingFile);
-    setPendingFile(null);
+    if (pendingFile) {
+      loadFile(pendingFile);
+      setPendingFile(null);
+    }
   };
 
   const handleOverwriteCancel = () => {
@@ -290,29 +295,35 @@ export default function LeavesMigrationPage() {
   //   Congé pris         = somme des demandes de congé validées de l'année
   //   Solde congé actuel = Solde antérieur + Congés acquis
   //   Congé restant      = Solde congé actuel - Congé pris
-  const recomputeRow = (r: EditableRow, soldeAnterieur: number): EditableRow => {
-    const acquired    = r.acquired ?? 0;
-    const taken       = r.taken ?? 0;
-    const soldeActuel = soldeAnterieur + acquired;
-    const edited      = soldeActuel - taken;
+  const recomputeRow = (
+    r: EditableRow,
+    overrides: Partial<{ solde_anterieur: number; acquired: number; taken: number }>,
+  ): EditableRow => {
+    const solde_anterieur  = overrides.solde_anterieur  ?? r.solde_anterieur  ?? 0;
+    const acquired         = overrides.acquired         ?? r.acquired_override ?? r.acquired ?? 0;
+    const taken            = overrides.taken            ?? r.taken_override    ?? r.taken    ?? 0;
+    const current_remaining = solde_anterieur + acquired;
+    const edited            = current_remaining - taken;
 
     return {
       ...r,
-      solde_anterieur:   soldeAnterieur,
-      current_remaining: soldeActuel,
+      solde_anterieur,
+      acquired_override: "acquired" in overrides ? overrides.acquired! : r.acquired_override ?? null,
+      taken_override:    "taken"    in overrides ? overrides.taken!    : r.taken_override    ?? null,
+      current_remaining,
       edited,
     };
   };
 
-  /** Met à jour le solde antérieur (seul champ éditable) — recalcule les totaux dépendants. */
   const updateField = (
     rowIndex: number,
-    _field: "solde_anterieur",
+    field: "solde_anterieur" | "acquired" | "taken",
     value: string,
   ) => {
     const num = parseFloat(value);
+    const val = isNaN(num) ? 0 : num;
     setRows(prev => prev.map((r, i) =>
-      i === rowIndex ? recomputeRow(r, isNaN(num) ? 0 : num) : r
+      i === rowIndex ? recomputeRow(r, { [field]: val }) : r
     ));
     if (synced) setSynced(false);
   };
@@ -331,10 +342,12 @@ export default function LeavesMigrationPage() {
 
       await leaveBalanceService.migrationApply(
         okRows.map(r => ({
-          matricule:       r.matricule!,
-          poste:           r.poste,
-          date_embauche:   r.date_embauche,
-          solde_anterieur: r.solde_anterieur ?? 0,
+          matricule:         r.matricule!,
+          poste:             r.poste,
+          date_embauche:     r.date_embauche,
+          solde_anterieur:   r.solde_anterieur ?? 0,
+          ...(r.acquired_override != null ? { acquired_override: r.acquired_override } : {}),
+          ...(r.taken_override    != null ? { taken_override:    r.taken_override    } : {}),
         })),
         { year: currentYear }
       );
@@ -353,6 +366,67 @@ export default function LeavesMigrationPage() {
       toast.error(e?.response?.data?.error || "Erreur lors de la synchronisation.");
     } finally {
       setLoadingSync(false);
+    }
+  };
+
+  // ── Générer depuis la base (tous les employés non-intérimaires) ─────────────
+  // Fusionne les données DB avec les soldes_anterieur déjà saisis dans la session.
+  // Les employés du fichier conservent leur solde_anterieur.
+  // Les nouveaux (basculements, nouvelles intégrations) apparaissent avec leur solde calculé.
+  const handleSnapshot = () => doSnapshot();
+
+  const doSnapshot = async () => {
+    setLoadingSnap(true);
+    try {
+      const res = await leaveBalanceService.migrationSnapshot(currentYear);
+
+      // Index des soldes_anterieur déjà saisis dans la session courante (par matricule)
+      const existingSoldes: Record<string, number> = {};
+      for (const r of rows) {
+        if (r.matricule && r.status === "ok") {
+          existingSoldes[r.matricule.toUpperCase()] = r.solde_anterieur ?? 0;
+        }
+      }
+
+      const newRows = res.results.map((r: any) => {
+        // Préserver le solde_anterieur saisi manuellement dans la session (depuis fichier)
+        const mat = (r.matricule || "").toUpperCase();
+        const solde_anterieur = mat in existingSoldes ? existingSoldes[mat] : (r.solde_anterieur ?? 0);
+        const acquired = r.acquired ?? 0;
+        const taken    = r.taken ?? 0;
+        const current_remaining = solde_anterieur + acquired;
+        const edited = current_remaining - taken;
+        return { ...r, solde_anterieur, current_remaining, edited };
+      });
+
+      const newFileName = fileName && !fileName.startsWith("Employés base")
+        ? fileName  // Conserver le nom du fichier original
+        : `Employés base de données (${res.processed})`;
+
+      setRows(newRows);
+      setFileName(newFileName);
+      setSynced(false);
+      setSearch("");
+
+      migrationSessionService.save({
+        year: currentYear,
+        filename: newFileName,
+        synced: false,
+        rows: newRows,
+      }).catch(() => {});
+
+      const newCount = newRows.filter(
+        (r: any) => !(r.matricule?.toUpperCase() in existingSoldes)
+      ).length;
+      if (newCount > 0) {
+        toast.success(`${res.processed} employé(s) chargé(s) · ${newCount} nouveau(x) ajouté(s).`);
+      } else {
+        toast.success(`${res.processed} employé(s) chargé(s) depuis la base de données.`);
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors du chargement.");
+    } finally {
+      setLoadingSnap(false);
     }
   };
 
@@ -538,6 +612,18 @@ export default function LeavesMigrationPage() {
               </button>
             )}
 
+            {/* Générer depuis la base */}
+            <button
+              onClick={handleSnapshot}
+              disabled={loadingSnap || loadingPrev}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[#003c71] text-[#003c71] bg-white hover:bg-[#003c71]/5 text-sm font-bold transition shadow-sm disabled:opacity-60"
+            >
+              {loadingSnap
+                ? <ImSpinner2 className="animate-spin" size={15} />
+                : <RefreshCw size={15} />}
+              Générer depuis la base
+            </button>
+
             {/* Importer */}
             <input
               ref={inputRef}
@@ -548,15 +634,13 @@ export default function LeavesMigrationPage() {
             />
             <button
               onClick={() => inputRef.current?.click()}
-              disabled={loadingPrev}
+              disabled={loadingPrev || loadingSnap}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#003c71] hover:bg-[#003c71]/90 text-white text-sm font-bold transition shadow-sm disabled:opacity-60"
             >
               {loadingPrev
                 ? <ImSpinner2 className="animate-spin" size={15} />
                 : <Upload size={15} />}
-              {fileName
-                ? fileName.length > 22 ? fileName.slice(0, 20) + "…" : fileName
-                : "Importer un fichier"}
+              Importer un fichier
             </button>
           </div>
         </motion.div>
@@ -749,9 +833,9 @@ export default function LeavesMigrationPage() {
                       {paginated.map((row, idx) => {
                         const globalIdx = rows.indexOf(row);
                         const isOk      = row.status === "ok";
-                        const acquired  = row.acquired ?? 0;
-                        const taken     = row.taken ?? 0;
-                        const soldeAnterieur = row.solde_anterieur ?? (acquired - taken);
+                        const acquired  = row.acquired_override ?? row.acquired ?? 0;
+                        const taken     = row.taken_override    ?? row.taken    ?? 0;
+                        const soldeAnterieur = row.solde_anterieur ?? 0;
                         const nom    = row.nom    ?? row.employee.split(" ")[0] ?? "";
                         const prenom = row.prenom ?? row.employee.split(" ").slice(1).join(" ");
                         return (
@@ -783,16 +867,32 @@ export default function LeavesMigrationPage() {
                                 <span className="text-gray-300 text-sm">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-center font-mono text-gray-600 text-sm"
-                              title="Calculé automatiquement : mois de présence depuis la date d'embauche × incrément mensuel (l'incrément du mois en cours n'est crédité qu'en fin de mois)">
-                              {isOk ? acquired.toFixed(2) : <span className="text-gray-300">—</span>}
+                            <td className="px-4 py-3 text-center"
+                              title="Modifiable : remplace le calcul automatique si vous saisissez une valeur">
+                              {isOk ? (
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={acquired.toFixed(2)}
+                                  onChange={(e) => updateField(globalIdx, "acquired", e.target.value)}
+                                  className="w-20 text-center font-mono border border-gray-200 text-gray-600 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
+                                />
+                              ) : <span className="text-gray-300">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-center font-mono font-semibold text-gray-700 text-sm" title="Calculé automatiquement : Solde antérieur + Congés acquis">
+                            <td className="px-4 py-3 text-center font-mono font-semibold text-gray-700 text-sm" title="Calculé : Solde antérieur + Congés acquis">
                               {isOk && row.current_remaining !== null ? row.current_remaining.toFixed(2) : "—"}
                             </td>
-                            <td className="px-4 py-3 text-center font-mono text-gray-600 text-sm"
-                              title="Récupéré automatiquement depuis les demandes de congé validées de l'année">
-                              {isOk ? taken.toFixed(2) : <span className="text-gray-300">—</span>}
+                            <td className="px-4 py-3 text-center"
+                              title="Modifiable : remplace la somme automatique des demandes validées si vous saisissez une valeur">
+                              {isOk ? (
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={taken.toFixed(2)}
+                                  onChange={(e) => updateField(globalIdx, "taken", e.target.value)}
+                                  className="w-20 text-center font-mono border border-gray-200 text-gray-600 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
+                                />
+                              ) : <span className="text-gray-300">—</span>}
                             </td>
                             <td className="px-4 py-3 text-center font-mono font-bold text-[#003c71] text-sm"
                               title="Calculé automatiquement : Solde congé actuel - Congé pris">

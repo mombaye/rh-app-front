@@ -163,6 +163,8 @@ export const leaveBalanceService = {
       poste?: string;
       date_embauche?: string;
       solde_anterieur: number;
+      acquired_override?: number;
+      taken_override?: number;
     }[],
     opts: { year?: number; leave_type_code?: string }
   ): Promise<{ processed: number; errors_count: number; results: any[] }> => {
@@ -170,6 +172,16 @@ export const leaveBalanceService = {
     if (opts.year)            body.year            = opts.year;
     if (opts.leave_type_code) body.leave_type_code = opts.leave_type_code;
     const res = await api.post(`${API}/balances/migration_apply/`, body);
+    return res.data;
+  },
+
+  /**
+   * GET /api/leaves/balances/migration_snapshot/?year=2026
+   * Génère la vue migration depuis la base de données sans import de fichier.
+   * Retourne tous les employés non-intérimaires avec leurs soldes calculés.
+   */
+  migrationSnapshot: async (year: number): Promise<{ processed: number; errors_count: number; results: any[] }> => {
+    const res = await api.get(`${API}/balances/migration_snapshot/`, { params: { year } });
     return res.data;
   },
 

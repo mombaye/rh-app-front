@@ -11,13 +11,27 @@ export default defineConfig({
     },
   },
 
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8030',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/media': {
+        target: 'http://localhost:8030',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
+
   build: {
-    // Augmente le seuil d'avertissement (les pages sont déjà découpées via React.lazy)
     chunkSizeWarningLimit: 1000,
+    // Supprime tous les console.* du bundle de production (sécurité)
+    minify: 'esbuild',
     rollupOptions: {
       output: {
-        // Sépare les grosses librairies tierces dans leurs propres chunks
-        // pour profiter du cache navigateur entre les déploiements.
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-charts': ['recharts'],
@@ -26,6 +40,10 @@ export default defineConfig({
         },
       },
     },
+  },
+  esbuild: {
+    // Élimine tous les appels console.* dans le build de production
+    drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
   },
 
   test: {
