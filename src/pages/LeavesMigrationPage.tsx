@@ -502,7 +502,7 @@ export default function LeavesMigrationPage() {
   const errCount = rows.filter(r => r.status !== "ok").length;
   const hasData  = rows.length > 0 || !!fileName;
 
-  // Export Excel
+  // Export Excel complet
   const doExport = () => {
     const okRows = filtered.filter(r => r.status === "ok");
     const ALL: Record<MigrationExportCol, (r: EditableRow) => any> = {
@@ -521,6 +521,22 @@ export default function LeavesMigrationPage() {
       okRows.map((r) => Object.fromEntries(exportCols.map((k) => [k, ALL[k](r)])))
     );
     setShowExportDlg(false);
+  };
+
+  // Export modèle "solde antérieur uniquement" (à remplir et réimporter)
+  const exportSoldeAnterieurTemplate = () => {
+    const okRows = rows.filter(r => r.status === "ok");
+    if (!okRows.length) {
+      toast.error("Générez d'abord les données depuis la base.");
+      return;
+    }
+    const data = okRows.map(r => ({
+      "MATRICULE":        r.matricule || "",
+      "NOM":              r.nom ?? r.employee.split(" ")[0] ?? "",
+      "PRENOM":           r.prenom ?? r.employee.split(" ").slice(1).join(" ") ?? "",
+      "SOLDE_ANTERIEUR":  r.solde_anterieur ?? 0,
+    }));
+    exportMigrationXLSX("solde_anterieur_a_remplir", data);
   };
 
   // Pagination dérivée
@@ -572,14 +588,6 @@ export default function LeavesMigrationPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Modèle */}
-            <button
-              onClick={downloadTemplate}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition font-medium"
-            >
-              <Download size={15} /> Modèle
-            </button>
-
             {/* Exporter */}
             {okCount > 0 && (
               <button
@@ -623,6 +631,18 @@ export default function LeavesMigrationPage() {
                 : <RefreshCw size={15} />}
               Générer depuis la base
             </button>
+
+            {/* Export modèle solde antérieur */}
+            {rows.length > 0 && (
+              <button
+                onClick={exportSoldeAnterieurTemplate}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 text-sm font-bold transition shadow-sm"
+                title="Exporter un fichier à remplir avec les soldes antérieurs"
+              >
+                <Download size={15} />
+                Modèle solde antérieur
+              </button>
+            )}
 
             {/* Importer */}
             <input
