@@ -4,22 +4,23 @@ import {
   ClipboardCheck, CheckCircle2, Clock, XCircle, AlertCircle,
   Calendar, ChevronLeft, ChevronRight, Filter, User,
   MessageSquare, ThumbsUp, ThumbsDown, Search, RefreshCw,
-  Hash, Briefcase, Building2, Download, FileText, X, Ban, LogOut,
+  Hash, Briefcase, Building2, Download, FileText, X, Ban, LogOut, Plane,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
 import { leaveRequestService } from "@/services/leaveService";
 import { LeaveRequest } from "@/types/leave";
 import ExitAuthorizationPanel from "@/components/leaves/ExitAuthorizationPanel";
+import ManagerMissionApprovalsPanel from "@/components/manager/ManagerMissionApprovalsPanel";
 import { onEmployeesSynced } from "@/utils/employeeSync";
 import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ������ Helpers ��������������������������������������������������������������������������������������������������������������������������������
 const fmt = (d: string) =>
-  d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+  d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "�";
 
 const PAGE_SIZE = 8;
 
@@ -33,23 +34,23 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   REVOKED:        { label: "Révoqué",         color: "#7c3aed", bg: "#f5f3ff", Icon: AlertCircle,  textColor: "text-purple-700", borderColor: "border-purple-200" },
 };
 
-// ─── Colonnes exportables PDF ────────────────────────────────────────────────
+// ������ Colonnes exportables PDF ������������������������������������������������������������������������������������������������
 type ColKey = "employee" | "matricule" | "service" | "leave_type" | "start_date" | "end_date" | "days" | "motif" | "status" | "reviewed_by" | "reviewed_at" | "second_reviewer" | "reject_reason" | "created_at";
 
 const EXPORT_COLUMNS: { key: ColKey; label: string; get: (r: LeaveRequest) => string }[] = [
   { key: "employee",        label: "Employé",             get: r => r.employee.full_name ?? `${r.employee.nom} ${r.employee.prenom}` },
-  { key: "matricule",       label: "Matricule",           get: r => r.employee.matricule ?? "—"                                     },
-  { key: "service",         label: "Service",             get: r => r.employee.service   ?? "—"                                     },
+  { key: "matricule",       label: "Matricule",           get: r => r.employee.matricule ?? "�"                                     },
+  { key: "service",         label: "Service",             get: r => r.employee.service   ?? "�"                                     },
   { key: "leave_type",      label: "Type de congé",       get: r => r.leave_type.label                                              },
   { key: "start_date",      label: "Date début",          get: r => fmt(r.start_date)                                               },
   { key: "end_date",        label: "Date fin",            get: r => fmt(r.end_date)                                                 },
   { key: "days",            label: "Jours",               get: r => String(r.days)                                                  },
-  { key: "motif",           label: "Motif",               get: r => r.motif || "—"                                                  },
+  { key: "motif",           label: "Motif",               get: r => r.motif || "�"                                                  },
   { key: "status",          label: "Statut",              get: r => STATUS_CONFIG[r.status]?.label ?? r.status                      },
-  { key: "reviewed_by",     label: "Validé par (N+1)",    get: r => r.reviewed_by?.full_name     ?? "—"                             },
-  { key: "reviewed_at",     label: "Date validation N+1", get: r => r.reviewed_at ? fmt(r.reviewed_at)         : "—"                },
-  { key: "second_reviewer", label: "Validé par (N+2)",    get: r => r.second_reviewer?.full_name ?? "—"                             },
-  { key: "reject_reason",   label: "Motif de rejet",      get: r => r.reject_reason              ?? "—"                             },
+  { key: "reviewed_by",     label: "Validé par (N+1)",    get: r => r.reviewed_by?.full_name     ?? "�"                             },
+  { key: "reviewed_at",     label: "Date validation N+1", get: r => r.reviewed_at ? fmt(r.reviewed_at)         : "�"                },
+  { key: "second_reviewer", label: "Validé par (N+2)",    get: r => r.second_reviewer?.full_name ?? "�"                             },
+  { key: "reject_reason",   label: "Motif de rejet",      get: r => r.reject_reason              ?? "�"                             },
   { key: "created_at",      label: "Date de demande",     get: r => fmt(r.created_at)                                               },
 ];
 
@@ -93,7 +94,7 @@ function exportManagerPDF(
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Camusat Sénégal RH — Document confidentiel — Page ${i}/${pageCount}`,
+      `Camusat Sénégal RH � Document confidentiel � Page ${i}/${pageCount}`,
       148.5, 207, { align: "center" },
     );
   }
@@ -101,7 +102,7 @@ function exportManagerPDF(
   doc.save(`approbations_${tab}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
-// ─── Modal Export PDF personnalisé ───────────────────────────────────────────
+// ������ Modal Export PDF personnalisé ��������������������������������������������������������������������������������������
 function ExportModal({
   onClose, requests, managerName, tab,
 }: {
@@ -143,7 +144,7 @@ function ExportModal({
             <div>
               <h3 className="text-white font-bold text-sm">Export PDF personnalisé</h3>
               <p className="text-blue-200 text-xs">
-                {tab === "pending" ? "Demandes en attente" : "Historique des décisions"} — {requests.length} ligne{requests.length > 1 ? "s" : ""}
+                {tab === "pending" ? "Demandes en attente" : "Historique des décisions"} � {requests.length} ligne{requests.length > 1 ? "s" : ""}
               </p>
             </div>
           </div>
@@ -204,7 +205,7 @@ function ExportModal({
   );
 }
 
-// ─── Modal Approbation ────────────────────────────────────────────────────────
+// ������ Modal Approbation ����������������������������������������������������������������������������������������������������������������
 function ApproveModal({
   req, reviewerId, onConfirm, onClose,
 }: {
@@ -240,7 +241,7 @@ function ApproveModal({
             </div>
             <div>
               <h3 className="text-white font-bold text-base">
-                {isPendingSecond ? "Validation N+2 — Approuver" : "Approuver la demande"}
+                {isPendingSecond ? "Validation N+2 � Approuver" : "Approuver la demande"}
               </h3>
               <p className="text-green-100 text-xs">{req.employee.full_name}</p>
             </div>
@@ -257,7 +258,7 @@ function ApproveModal({
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <Calendar size={12} className="text-gray-300" />
-              {fmt(req.start_date)} → {fmt(req.end_date)}
+              {fmt(req.start_date)} �  {fmt(req.end_date)}
             </div>
             {req.motif && (
               <p className="text-xs text-gray-400 italic">"{req.motif}"</p>
@@ -280,7 +281,7 @@ function ApproveModal({
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
               <AlertCircle size={15} className="text-blue-500 mt-0.5 shrink-0" />
               <div>
-                <p className="text-xs text-blue-700 font-medium">Validation N+2 — Décision finale</p>
+                <p className="text-xs text-blue-700 font-medium">Validation N+2 � Décision finale</p>
                 <p className="text-xs text-blue-600 mt-0.5">
                   La demande a déjà été approuvée par le N+1
                   {req.reviewed_by ? ` (${req.reviewed_by.full_name})` : ""}.
@@ -313,7 +314,7 @@ function ApproveModal({
   );
 }
 
-// ─── Modal Rejet ─────────────────────────────────────────────────────────────
+// ������ Modal Rejet ��������������������������������������������������������������������������������������������������������������������������
 function RejectModal({
   req, onConfirm, onClose,
 }: {
@@ -360,7 +361,7 @@ function RejectModal({
               <span className="text-gray-400">·</span>
               <span className="text-gray-600">{parseFloat(req.days)} j</span>
             </div>
-            <div className="text-xs text-gray-500">{fmt(req.start_date)} → {fmt(req.end_date)}</div>
+            <div className="text-xs text-gray-500">{fmt(req.start_date)} �  {fmt(req.end_date)}</div>
           </div>
 
           <div>
@@ -397,7 +398,7 @@ function RejectModal({
   );
 }
 
-// ─── Modal Annulation (Manager) ───────────────────────────────────────────────
+// ������ Modal Annulation (Manager) ����������������������������������������������������������������������������������������������
 function CancelModal({
   req, onConfirm, onClose,
 }: {
@@ -442,7 +443,7 @@ function CancelModal({
               <span className="text-gray-400">·</span>
               <span className="text-gray-600">{parseFloat(req.days)} jour{parseFloat(req.days) > 1 ? "s" : ""}</span>
             </div>
-            <div className="text-xs text-gray-500">{fmt(req.start_date)} → {fmt(req.end_date)}</div>
+            <div className="text-xs text-gray-500">{fmt(req.start_date)} �  {fmt(req.end_date)}</div>
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
@@ -475,7 +476,7 @@ function CancelModal({
   );
 }
 
-// ─── Modal Alerte congé en cours ──────────────────────────────────────────────
+// ������ Modal Alerte congé en cours ��������������������������������������������������������������������������������������������
 function InProgressAlertModal({ req, onClose }: { req: LeaveRequest; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
@@ -506,7 +507,7 @@ function InProgressAlertModal({ req, onClose }: { req: LeaveRequest; onClose: ()
               <span className="text-gray-400">·</span>
               <span className="text-gray-600">{parseFloat(req.days)} jour{parseFloat(req.days) > 1 ? "s" : ""}</span>
             </div>
-            <div className="text-xs text-gray-500">{fmt(req.start_date)} → {fmt(req.end_date)}</div>
+            <div className="text-xs text-gray-500">{fmt(req.start_date)} �  {fmt(req.end_date)}</div>
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
@@ -534,7 +535,7 @@ function InProgressAlertModal({ req, onClose }: { req: LeaveRequest; onClose: ()
   );
 }
 
-// ─── Modal Détails Demande ────────────────────────────────────────────────────
+// ������ Modal Détails Demande ��������������������������������������������������������������������������������������������������������
 function LeaveDetailModal({
   req, onClose, onApprove, onReject,
 }: {
@@ -565,7 +566,7 @@ function LeaveDetailModal({
         onClick={e => e.stopPropagation()}
         className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col"
       >
-        {/* ── Header ── */}
+        {/* ���� Header ���� */}
         <div className="bg-gradient-to-r from-[#003c71] to-blue-700 px-6 py-5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div
@@ -593,7 +594,7 @@ function LeaveDetailModal({
           </button>
         </div>
 
-        {/* ── Body scrollable ── */}
+        {/* ���� Body scrollable ���� */}
         <div className="overflow-y-auto flex-1 p-5 space-y-4">
 
           {/* Employé */}
@@ -644,7 +645,7 @@ function LeaveDetailModal({
               <Calendar size={13} className="text-gray-400 shrink-0" />
               {fmt(req.start_date)}
               {req.half_day_start && <span className="text-xs text-gray-400">(après-midi)</span>}
-              <span className="text-gray-400">→</span>
+              <span className="text-gray-400">� </span>
               {fmt(req.end_date)}
               {req.half_day_end && <span className="text-xs text-gray-400">(matin)</span>}
             </div>
@@ -682,7 +683,7 @@ function LeaveDetailModal({
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-700">
-                  Validation N+1 {req.reviewed_by ? `— ${req.reviewed_by.full_name}` : req.status === "PENDING" ? "— En attente" : ""}
+                  Validation N+1 {req.reviewed_by ? `� ${req.reviewed_by.full_name}` : req.status === "PENDING" ? "� En attente" : ""}
                 </p>
                 {req.reviewed_at && (
                   <p className="text-[11px] text-gray-400">{fmt(req.reviewed_at.slice(0, 10))}</p>
@@ -706,7 +707,7 @@ function LeaveDetailModal({
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-gray-700">
-                    Validation N+2 {req.second_reviewer ? `— ${req.second_reviewer.full_name}` : "— En attente"}
+                    Validation N+2 {req.second_reviewer ? `� ${req.second_reviewer.full_name}` : "� En attente"}
                   </p>
                   {req.second_reviewed_at && (
                     <p className="text-[11px] text-gray-400">{fmt(req.second_reviewed_at.slice(0, 10))}</p>
@@ -790,7 +791,7 @@ function LeaveDetailModal({
           </p>
         </div>
 
-        {/* ── Footer ── */}
+        {/* ���� Footer ���� */}
         <div className="shrink-0 px-5 pb-5 pt-3 border-t border-gray-100">
           {isPending && onApprove && onReject ? (
             <div className="flex gap-3">
@@ -821,7 +822,7 @@ function LeaveDetailModal({
   );
 }
 
-// ─── Carte de demande ────────────────────────────────────────────────────────
+// ������ Carte de demande ����������������������������������������������������������������������������������������������������������������
 function ApprovalCard({
   req, onApprove, onReject, onCancel, onDetail, isHistory,
 }: {
@@ -895,7 +896,7 @@ function ApprovalCard({
               <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md">{req.leave_type.label}</span>
               <span className="flex items-center gap-1 text-xs text-gray-500">
                 <Calendar size={11} className="text-gray-400" />
-                {fmt(req.start_date)} → {fmt(req.end_date)}
+                {fmt(req.start_date)} �  {fmt(req.end_date)}
               </span>
               <span className="text-xs font-bold text-gray-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md">{days} j</span>
             </div>
@@ -905,14 +906,14 @@ function ApprovalCard({
                 <MessageSquare size={10} className="inline mr-1" />"{req.motif}"
               </p>
             )}
-            {/* Bandeau N+1 déjà validé — visible uniquement pour PENDING_SECOND */}
+            {/* Bandeau N+1 déjà validé � visible uniquement pour PENDING_SECOND */}
             {req.status === "PENDING_SECOND" && req.reviewed_by && (
               <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 rounded-lg bg-green-50 border border-green-200">
                 <CheckCircle2 size={11} className="text-green-600 shrink-0" />
                 <p className="text-[11px] text-green-700 font-medium">
                   Validé par {req.reviewed_by.full_name}
                   {req.reviewed_at && <span className="text-green-500 font-normal"> · {fmt(req.reviewed_at.slice(0, 10))}</span>}
-                  {" "}— En attente de votre validation
+                  {" "}� En attente de votre validation
                 </p>
               </div>
             )}
@@ -971,9 +972,9 @@ function ApprovalCard({
   );
 }
 
-// ─── Page principale ─────────────────────────────────────────────────────────
+// ������ Page principale ������������������������������������������������������������������������������������������������������������������
 type Tab = "pending" | "history";
-type SectionTab = "leaves" | "exits";
+type SectionTab = "leaves" | "exits" | "missions";
 
 interface ManagerApprovalsPageProps {
   layout?: React.ComponentType<{ children: React.ReactNode }>;
@@ -985,6 +986,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
   const employeeId = user?.employee_id;
 
   const [sectionTab,    setSectionTab]    = useState<SectionTab>("leaves");
+  const [missionPendingCount, setMissionPendingCount] = useState(0);
   const [tab,           setTab]           = useState<Tab>("pending");
   const [requests,      setRequests]      = useState<LeaveRequest[]>([]);
   const [loading,       setLoading]       = useState(true);
@@ -1078,7 +1080,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
         // Validation finale RH
         await leaveRequestService.hrValidate(reqId, employeeId);
       } else {
-        // Approbation manager (N+1 ou N+2) — même si l'utilisateur est RH
+        // Approbation manager (N+1 ou N+2) � même si l'utilisateur est RH
         await leaveRequestService.approve(reqId, { reviewer_id: employeeId });
       }
       toast.success("Demande approuvée !");
@@ -1097,7 +1099,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
         // Rejet RH
         await leaveRequestService.hrReject(reqId, reason, employeeId);
       } else {
-        // Rejet manager — même si l'utilisateur est RH
+        // Rejet manager � même si l'utilisateur est RH
         await leaveRequestService.reject(reqId, reason);
       }
       toast.success("Demande rejetée.");
@@ -1137,7 +1139,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
     <Layout>
       <div className="px-4 md:px-6 pb-10">
 
-        {/* ── Header ── */}
+        {/* ���� Header ���� */}
         <motion.div
           initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-between flex-wrap gap-3 mb-6"
@@ -1157,7 +1159,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            {/* ── Onglets de section ── */}
+            {/* ���� Onglets de section ���� */}
             <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl">
               <button
                 onClick={() => setSectionTab("leaves")}
@@ -1186,9 +1188,25 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
                 <LogOut size={15} />
                 Sorties
               </button>
+              <button
+                onClick={() => setSectionTab("missions")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                  sectionTab === "missions"
+                    ? "bg-white text-[#003c71] shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <Plane size={15} />
+                Missions
+                {missionPendingCount > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${sectionTab === "missions" ? "bg-[#003c71] text-white" : "bg-gray-300 text-gray-700"}`}>
+                    {missionPendingCount}
+                  </span>
+                )}
+              </button>
             </div>
 
-            {/* ── Actualiser ── */}
+            {/* ���� Actualiser ���� */}
             <button
               onClick={refresh}
               className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition"
@@ -1199,7 +1217,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
           </div>
         </motion.div>
 
-        {/* ── Section Autorisations de sortie ── */}
+        {/* ���� Section Autorisations de sortie ���� */}
         {sectionTab === "exits" && employeeId && (
           <ExitAuthorizationPanel
             managerId={employeeId}
@@ -1210,11 +1228,19 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
           />
         )}
 
-        {/* ── Section Congés ── */}
+        {/* Section Missions */}
+        {sectionTab === "missions" && employeeId && (
+          <ManagerMissionApprovalsPanel
+            managerId={employeeId}
+            onPendingCountChange={setMissionPendingCount}
+          />
+        )}
+
+        {/* ���� Section Congés ���� */}
         {sectionTab === "leaves" && (
         <>
 
-        {/* ── Stats ── */}
+        {/* ���� Stats ���� */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           {statsCards.map((s, i) => (
             <motion.button
@@ -1229,7 +1255,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
                   : "border-gray-200 hover:border-gray-300"
               }`}
             >
-              <span className="text-2xl font-bold text-[#003c71]">{loading ? "…" : s.count}</span>
+              <span className="text-2xl font-bold text-[#003c71]">{loading ? "⬦" : s.count}</span>
               <span className="text-xs mt-0.5 font-medium text-gray-600 inline-flex items-center gap-1.5">
                 <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
                 {s.label}
@@ -1238,7 +1264,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
           ))}
         </div>
 
-        {/* ── Barre filtres + tabs + export ── */}
+        {/* ���� Barre filtres + tabs + export ���� */}
         <div className="flex items-center gap-2 mb-4 flex-wrap">
 
           {/* Recherche (gauche, flex-1) */}
@@ -1247,7 +1273,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
             <input
               value={search}
               onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-              placeholder="Nom, matricule, service…"
+              placeholder="Nom, matricule, service⬦"
               className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white"
             />
           </div>
@@ -1267,7 +1293,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
             </select>
           </div>
 
-          {/* Filtre statut — visible uniquement sur l'onglet historique */}
+          {/* Filtre statut � visible uniquement sur l'onglet historique */}
           {tab === "history" && (
             <div className="relative">
               <Filter size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -1318,7 +1344,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
           </button>
         </div>
 
-        {/* ── Liste ── */}
+        {/* ���� Liste ���� */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           {/* Toolbar */}
           <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2 flex-wrap">
@@ -1461,3 +1487,4 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
     </Layout>
   );
 }
+

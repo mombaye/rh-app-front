@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import ManagerSidebar from "@/components/manager/ManagerSidebar";
 import { useAuth } from "@/contexts/useAuth";
 import { leaveRequestService, exitAuthorizationService } from "@/services/leaveService";
+import { missionService } from "@/services/missionService";
 
 export default function ManagerLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -35,3 +36,4 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
     </div>
   );
 }
+

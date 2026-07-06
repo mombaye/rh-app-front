@@ -36,6 +36,7 @@ const AttendanceFeriesPage     = lazy(() => import("@/pages/AttendanceFeriesPage
 const PlanningPage             = lazy(() => import("@/pages/PlanningPage"));
 
 // Espace Employé
+const EmployeeMissionsPage          = lazy(() => import("@/pages/employee/EmployeeMissionsPage"));
 const EmployeeDashboardPage         = lazy(() => import("@/pages/employee/EmployeeDashboardPage"));
 const EmployeeLeavesPage            = lazy(() => import("@/pages/employee/EmployeeLeavesPage"));
 const EmployeePayslipPage           = lazy(() => import("@/pages/employee/EmployeePayslipPage"));
@@ -72,6 +73,7 @@ const RhQuestionnairePage       = lazy(() => import("@/pages/rh/RhQuestionnaireP
 const RhServiceLeavesPage       = lazy(() => import("@/pages/rh/RhServiceLeavesPage"));
 const RhAnticipationPage        = lazy(() => import("@/pages/rh/RhAnticipationPage"));
 const RhAttestationsPage        = lazy(() => import("@/pages/rh/RhAttestationsPage"));
+const RhMissionsPage            = lazy(() => import("@/pages/rh/RhMissionsPage"));
 
 // ── Fallback de chargement ────────────────────────────────────────────────────
 function PageLoader() {
@@ -219,6 +221,11 @@ function App() {
             <EmployeeQuestionnairePage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
+        <Route path="/employee/missions" element={
+          <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
+            <EmployeeMissionsPage />
+          </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />
 
         {/* ── Espace Manager ───────────────────────────────────── */}
         <Route path="/manager/dashboard"  element={<MgrRoute><ManagerDashboardPage         /></MgrRoute>} />
@@ -250,6 +257,7 @@ function App() {
         <Route path="/rh/my-service-leaves" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhServiceLeavesPage        /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/documents"      element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDocumentsPage      /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/attestations"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttestationsPage   /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/missions"        element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMissionsPage         /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
 
         {/* ── Espace RH ────────────────────────────────────────── */}
         <Route path="/dashboard" element={

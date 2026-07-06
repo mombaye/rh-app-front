@@ -269,7 +269,7 @@ function StampCard() {
             </p>
           ) : (
             <p className="text-xs text-gray-400 mt-0.5">
-              Téléversez le cachet de l'entreprise (PDF ou PNG) : il sera apposé
+              Téléversez le cachet de l'entreprise (PDF, PNG ou JPEG) : il sera apposé
               automatiquement sur tous les documents d'attestation générés.
             </p>
           )}

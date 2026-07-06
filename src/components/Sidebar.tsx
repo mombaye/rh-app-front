@@ -15,12 +15,14 @@ import {
   FolderOpen,
   FileStack,
   FileBadge,
+  Plane,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useAlertes } from "@/contexts/AlertesContext";
 import { useState, useEffect, useCallback } from "react";
 import { leaveRequestService, exitAuthorizationService } from "@/services/leaveService";
+import { missionService } from "@/services/missionService";
 import { getQuestionnaires } from "@/services/questionnaireService";
 
 type NavItem = {
@@ -37,7 +39,7 @@ export default function Sidebar() {
 
   const isRhManager = availableRoles.includes("manager1") || availableRoles.includes("manager2");
 
-  // ── Badge questionnaires complétés ───────────────────────────────────────
+  // ���� Badge questionnaires complétés ������������������������������������������������������������������������������
   const [questionnaireDoneCount, setQuestionnaireDoneCount] = useState(0);
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export default function Sidebar() {
     return () => clearInterval(id);
   }, []);
 
-  // ── Badge approbation RH ──────────────────────────────────────────────────
+  // ���� Badge approbation RH ����������������������������������������������������������������������������������������������������
   const [approvalPendingCount, setApprovalPendingCount] = useState(0);
 
   const fetchApprovalPending = useCallback(async () => {
@@ -63,15 +65,18 @@ export default function Sidebar() {
         leaveRequestService.getAll({ manager_employee_id: user.employee_id, status: "PENDING_SECOND" } as any),
         leaveRequestService.getAll({ status: "PENDING_RH" } as any),
         exitAuthorizationService.getAll({ manager_employee_id: user.employee_id, status: "PENDING" }),
+        missionService.list(),
       ]);
       const get = (r: PromiseSettledResult<any[]>): any[] => r.status === "fulfilled" ? r.value : [];
-      const [pendingMgr, pendingSecond, pendingRh, exits] = results.map(get);
+      const [pendingMgr, pendingSecond, pendingRh, exits, missions] = results.map(get);
       const eid = user.employee_id;
+      const mPending = (missions as any[]).filter(m => m.status === "PENDING" && m.employee?.id !== eid && m.employee?.n1_manager_id === eid);
       const count =
-        pendingMgr.filter((r: any)  => r.employee?.id  !== eid).length +
+        pendingMgr.filter((r: any)   => r.employee?.id !== eid).length +
         pendingSecond.filter((r: any) => r.employee?.id !== eid).length +
         pendingRh.length +
-        exits.filter((r: any) => r.employee?.id !== eid).length;
+        exits.filter((r: any) => r.employee?.id !== eid).length +
+        mPending.length;
       setApprovalPendingCount(count);
     } catch {
       // silencieux
@@ -84,7 +89,7 @@ export default function Sidebar() {
     const id = setInterval(fetchApprovalPending, 60_000);
     return () => clearInterval(id);
   }, [fetchApprovalPending]);
-  // ──────────────────────────────────────────────────────────────────────────
+  // ����������������������������������������������������������������������������������������������������������������������������������������������������
 
   const navItems: NavItem[] = [
     {
@@ -102,7 +107,7 @@ export default function Sidebar() {
         { label: "Intérimaires",          path: "/employees/interims"       },
         { label: "Alertes",               path: "/employees/alertes",  badge: totalCount },
         { label: "Disciplinaire",          path: "/employees/disciplinaire" },
-        // TODO: Questionnaires sortie — à activer quand disponible
+        // TODO: Questionnaires sortie � à activer quand disponible
         // { label: "Questionnaires sortie", path: "/employees/questionnaires", badge: questionnaireDoneCount || undefined, badgeRed: true },
       ],
     },
@@ -146,6 +151,11 @@ export default function Sidebar() {
       icon: <FileBadge size={20} />,
     },
     {
+      label: "Demandes de mission",
+      path: "/rh/missions",
+      icon: <Plane size={20} />,
+    },
+    {
       label: "Mon espace",
       path: "/rh/my",
       icon: <UserCircle size={20} />,
@@ -155,7 +165,7 @@ export default function Sidebar() {
         { label: "Mes Dossiers RH",       path: "/rh/my-dossier"        },
         { label: "Equipe en congés",       path: "/rh/my-service-leaves" },
         { label: "Demande de sortie",    path: "/rh/my-exits"          },
-        // TODO: Questionnaire sortie — à activer quand disponible
+        // TODO: Questionnaire sortie � à activer quand disponible
         // { label: "Questionnaire sortie", path: "/rh/my-questionnaire"  },
         ...(isRhManager
           ? [
@@ -386,3 +396,4 @@ export default function Sidebar() {
     </>
   );
 }
+
