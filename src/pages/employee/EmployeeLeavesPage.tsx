@@ -8,6 +8,7 @@ import {
   ThumbsUp, Upload, FileCheck, Paperclip, ExternalLink,
   AlertTriangle, UserX, Trash2, Eye, RefreshCw,
   LayoutGrid, List, ArrowUpDown, Star,
+  GitBranch, Mail,
 } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import jsPDF from "jspdf";
@@ -873,6 +874,178 @@ function ExportModal({ requests, employeeName, matricule, onClose }: ExportModal
 }
 
 // ── Modal de détail (lecture seule) ───────────────────────────────────────────
+// ── Circuit de validation ──────────────────────────────────────────────────────
+function ValidationChain({ r }: { r: LeaveRequest }) {
+  const fmtDt = (s: string | null | undefined) =>
+    s ? new Date(s).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : null;
+
+  type StepStatus = "done" | "waiting" | "rejected" | "pending" | "revoked";
+  interface Step {
+    label:  string;
+    name?:  string | null;
+    email?: string | null;
+    date?:  string | null;
+    note?:  string | null;
+    status: StepStatus;
+  }
+
+  const hasN1 = !!r.employee?.n1_manager_id;
+  const hasN2 = r.requires_second_approval || !!r.second_reviewer || !!r.employee?.n2_manager_id;
+  const isDgFlow = !hasN1 && !hasN2 && r.status === "APPROVED" && !!r.reviewed_by;
+
+  const steps: Step[] = [];
+
+  steps.push({
+    label:  "Demande soumise",
+    name:   r.employee?.full_name ?? null,
+    date:   fmtDt(r.created_at),
+    status: "done",
+  });
+
+  if (isDgFlow) {
+    steps.push({
+      label:  "Validation DG",
+      name:   r.reviewed_by?.full_name ?? null,
+      date:   fmtDt(r.reviewed_at),
+      note:   r.status === "REJECTED" ? r.reject_reason : null,
+      status: r.status === "APPROVED" ? "done" : r.status === "REJECTED" ? "rejected" : "waiting",
+    });
+  } else {
+    const n1Done    = !!r.reviewed_at;
+    const n1Waiting = r.status === "PENDING";
+    const n1Status: StepStatus =
+      r.status === "REJECTED" && !r.requires_second_approval && !r.second_reviewer
+        ? (n1Done ? "done" : "rejected")
+        : n1Done ? "done" : n1Waiting ? "waiting" : "pending";
+
+    steps.push({
+      label:  "Validation N+1",
+      name:   r.reviewed_by?.full_name ?? r.employee?.n1_manager_name ?? null,
+      email:  r.reviewed_by?.email ?? null,
+      date:   fmtDt(r.reviewed_at),
+      note:   r.status === "REJECTED" && !r.second_reviewer ? r.reject_reason : null,
+      status: n1Status,
+    });
+
+    if (hasN2) {
+      const n2Done     = !!r.second_reviewed_at;
+      const n2Waiting  = r.status === "PENDING_SECOND";
+      const n2Rejected = r.status === "REJECTED" && !!r.second_reviewer;
+      const n2Status: StepStatus =
+        n2Rejected ? "rejected" : n2Done ? "done" : n2Waiting ? "waiting" : "pending";
+
+      steps.push({
+        label:  "Validation N+2",
+        name:   r.second_reviewer?.full_name ?? r.employee?.n2_manager_name ?? null,
+        email:  r.second_reviewer?.email ?? null,
+        date:   fmtDt(r.second_reviewed_at),
+        note:   n2Rejected ? r.reject_reason : null,
+        status: n2Status,
+      });
+    }
+  }
+
+  // Étape finale RH (si PENDING_RH ou déjà traité par RH)
+  if (r.status === "PENDING_RH" || (r.status === "APPROVED" && (hasN1 || hasN2))) {
+    const rhDone = r.status === "APPROVED";
+    steps.push({
+      label:  "Validation RH",
+      name:   rhDone && r.reviewed_by && !hasN1 ? r.reviewed_by.full_name : null,
+      date:   rhDone ? fmtDt(r.reviewed_at) : null,
+      status: r.status === "PENDING_RH" ? "waiting" : rhDone ? "done" : "pending",
+    });
+  }
+
+  // Étape révocation (si congé révoqué après approbation)
+  if (r.status === "REVOKED") {
+    steps.push({
+      label:  "Révocation",
+      name:   r.revoked_by?.full_name ?? null,
+      email:  r.revoked_by?.email ?? null,
+      date:   fmtDt(r.revoked_at),
+      note:   r.revoke_reason || null,
+      status: "revoked",
+    });
+  }
+
+  const dot: Record<StepStatus, string> = {
+    done:     "bg-emerald-500 border-emerald-300 shadow-emerald-200",
+    waiting:  "bg-amber-400  border-amber-300   shadow-amber-200   animate-pulse",
+    pending:  "bg-slate-200  border-slate-200",
+    rejected: "bg-red-500    border-red-300     shadow-red-200",
+    revoked:  "bg-orange-500 border-orange-300  shadow-orange-200",
+  };
+  const line: Record<StepStatus, string> = {
+    done: "bg-emerald-200", waiting: "bg-amber-200", pending: "bg-slate-100",
+    rejected: "bg-red-200",  revoked: "bg-orange-200",
+  };
+  const badgeStyle: Record<StepStatus, string> = {
+    done:     "bg-emerald-50 text-emerald-700 border-emerald-200",
+    waiting:  "bg-amber-50   text-amber-700   border-amber-200",
+    pending:  "bg-slate-50   text-slate-400   border-slate-200",
+    rejected: "bg-red-50     text-red-700     border-red-200",
+    revoked:  "bg-orange-50  text-orange-700  border-orange-200",
+  };
+  const badgeText: Record<StepStatus, string> = {
+    done: "✓ Validé", waiting: "En attente…", pending: "Non démarré",
+    rejected: "✗ Rejeté", revoked: "↩ Révoqué",
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center gap-2 mb-4">
+        <GitBranch className="h-3.5 w-3.5 text-slate-400" />
+        <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+          Circuit de validation
+        </p>
+      </div>
+      <div>
+        {steps.map((step, i) => {
+          const isLast = i === steps.length - 1;
+          return (
+            <div key={i} className="flex gap-3">
+              <div className="flex flex-col items-center pt-0.5">
+                <div className={`w-3 h-3 rounded-full border-2 shrink-0 shadow-sm ${dot[step.status]}`} />
+                {!isLast && <div className={`w-0.5 flex-1 min-h-[28px] my-1.5 rounded-full ${line[step.status]}`} />}
+              </div>
+              <div className={`flex-1 min-w-0 ${isLast ? "" : "pb-4"}`}>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-slate-700">{step.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded border font-bold ${badgeStyle[step.status]}`}>
+                    {badgeText[step.status]}
+                  </span>
+                  {step.date && <span className="text-[10px] text-slate-400">{step.date}</span>}
+                </div>
+                {(step.name || step.email) && step.status !== "pending" && (
+                  <div className="mt-1.5 flex flex-col gap-0.5">
+                    {step.name && <span className="text-xs text-slate-600 font-medium">{step.name}</span>}
+                    {step.email && (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 font-mono">
+                        <Mail className="h-2.5 w-2.5 shrink-0" />
+                        {step.email}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {step.note && (
+                  <div className={`mt-1.5 flex items-start gap-1.5 rounded-lg px-2.5 py-1.5 border ${
+                    step.status === "revoked"
+                      ? "bg-orange-50 border-orange-100"
+                      : "bg-red-50 border-red-100"
+                  }`}>
+                    <XCircle className={`h-3 w-3 shrink-0 mt-0.5 ${step.status === "revoked" ? "text-orange-400" : "text-red-400"}`} />
+                    <p className={`text-[11px] leading-snug ${step.status === "revoked" ? "text-orange-700" : "text-red-600"}`}>{step.note}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 interface LeaveDetailModalProps {
   req: LeaveRequest;
   onClose: () => void;
@@ -998,6 +1171,9 @@ function LeaveDetailModal({ req, onClose, onEdit, onRefresh }: LeaveDetailModalP
                 </p>
               </div>
             </div>
+
+            {/* Circuit de validation */}
+            <ValidationChain r={localReq} />
 
             {/* Motif de rejet */}
             {localReq.reject_reason && (
