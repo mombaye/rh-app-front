@@ -37,6 +37,7 @@ const PlanningPage             = lazy(() => import("@/pages/PlanningPage"));
 
 // Espace Employé
 const EmployeeMissionsPage          = lazy(() => import("@/pages/employee/EmployeeMissionsPage"));
+const EmployeeInfirmeriePage        = lazy(() => import("@/pages/employee/EmployeeInfirmeriePage"));
 const EmployeeDashboardPage         = lazy(() => import("@/pages/employee/EmployeeDashboardPage"));
 const EmployeeLeavesPage            = lazy(() => import("@/pages/employee/EmployeeLeavesPage"));
 const EmployeePayslipPage           = lazy(() => import("@/pages/employee/EmployeePayslipPage"));
@@ -224,6 +225,11 @@ function App() {
         <Route path="/employee/missions" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeMissionsPage />
+          </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/employee/infirmerie" element={
+          <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
+            <EmployeeInfirmeriePage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
 

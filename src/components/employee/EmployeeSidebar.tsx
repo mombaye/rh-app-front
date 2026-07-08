@@ -15,6 +15,7 @@ import {
   Users,
   FileBadge,
   Plane,
+  Stethoscope,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -67,6 +68,11 @@ const baseNavItems = [
     label: "Demandes de mission",
     path: "/employee/missions",
     icon: <Plane size={20} />,
+  },
+  {
+    label: "Infirmerie",
+    path: "/employee/infirmerie",
+    icon: <Stethoscope size={20} />,
   },
   {
     label: "Document RH",
