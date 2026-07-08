@@ -234,6 +234,7 @@ export default function LeavesMigrationPage() {
       const newRows = res.results.map(r => ({
         ...r,
         edited: r.new_remaining ?? r.current_remaining ?? 0,
+        taken_override: r.taken_override ?? null,
       }));
       setRows(newRows);
       // Sauvegarder la session sur le serveur (visible pour tous les utilisateurs)
@@ -328,18 +329,17 @@ export default function LeavesMigrationPage() {
     if (synced) setSynced(false);
   };
 
-  // ── Synchroniser ────────────────────────────────────────────────────────────
-  // Applique directement les valeurs (édités ou non) du tableau aux soldes des
-  // employés concernés, sans avoir besoin de re-soumettre un fichier.
-  const handleSync = async () => {
+  // ── Synchroniser ─────────────────────────────────────────────────────────────
+  // Fonction centrale : accepte les rows en paramètre pour pouvoir être appelée
+  // directement après doSnapshot sans attendre la mise à jour du state.
+  const doSyncRows = async (targetRows: EditableRow[], targetFileName?: string) => {
     setLoadingSync(true);
     try {
-      const okRows = rows.filter(r => r.status === "ok" && r.matricule);
+      const okRows = targetRows.filter(r => r.status === "ok" && r.matricule);
       if (okRows.length === 0) {
         toast.error("Aucun employé à synchroniser.");
         return;
       }
-
       await leaveBalanceService.migrationApply(
         okRows.map(r => ({
           matricule:         r.matricule!,
@@ -355,12 +355,11 @@ export default function LeavesMigrationPage() {
       setShowSyncBanner(true);
       setTimeout(() => setShowSyncBanner(false), 3000);
       toast.success("Synchronisation réussie — soldes mis à jour.");
-      // Mettre à jour la session serveur avec synced=true
       migrationSessionService.save({
         year: currentYear,
-        filename: fileName,
+        filename: targetFileName ?? fileName,
         synced: true,
-        rows,
+        rows: targetRows,
       }).catch(() => {});
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors de la synchronisation.");
@@ -368,6 +367,8 @@ export default function LeavesMigrationPage() {
       setLoadingSync(false);
     }
   };
+
+  const handleSync = () => doSyncRows(rows);
 
   // ── Générer depuis la base (tous les employés non-intérimaires) ─────────────
   // Fusionne les données DB avec les soldes_anterieur déjà saisis dans la session.
@@ -419,10 +420,13 @@ export default function LeavesMigrationPage() {
         (r: any) => !(r.matricule?.toUpperCase() in existingSoldes)
       ).length;
       if (newCount > 0) {
-        toast.success(`${res.processed} employé(s) chargé(s) · ${newCount} nouveau(x) ajouté(s).`);
+        toast(`${res.processed} employé(s) chargé(s) · ${newCount} nouveau(x). Synchronisation…`, { icon: "⏳" });
       } else {
-        toast.success(`${res.processed} employé(s) chargé(s) depuis la base de données.`);
+        toast(`${res.processed} employé(s) chargé(s). Synchronisation en cours…`, { icon: "⏳" });
       }
+
+      // Auto-synchroniser immédiatement après la génération
+      await doSyncRows(newRows, newFileName);
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors du chargement.");
     } finally {
@@ -442,13 +446,13 @@ export default function LeavesMigrationPage() {
 
   const downloadTemplate = () => {
     const headers = [
-      "NOM_PRENOM", "MATRICULE", "POSTE", "DATE_EMBAUCHE", "SOLDE_ANTERIEUR",
+      "NOM_PRENOM", "MATRICULE", "POSTE", "DATE_EMBAUCHE", "SOLDE_ANTERIEUR", "CONGE_PRIS",
     ];
     const ws = XLSXStyle.utils.aoa_to_sheet([
       headers,
-      ["Jean Dupont",  "EMP001",    "Technicien",     "15/03/2020",    10],
-      ["Marie Martin", "EMP002",    "Comptable",      "01/09/2019",    5],
-      ["Ahmed Diallo", "EMP003",    "Chef de service","10/01/2018",    12],
+      ["Jean Dupont",  "EMP001",    "Technicien",     "15/03/2020",    10,  2],
+      ["Marie Martin", "EMP002",    "Comptable",      "01/09/2019",    5,   0],
+      ["Ahmed Diallo", "EMP003",    "Chef de service","10/01/2018",    12,  5],
     ]);
     ws["!cols"] = [
       { wch: 28 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 16 },
@@ -523,7 +527,7 @@ export default function LeavesMigrationPage() {
     setShowExportDlg(false);
   };
 
-  // Export modèle "solde antérieur uniquement" (à remplir et réimporter)
+  // Export modèle "solde antérieur + congé pris" (à remplir et réimporter)
   const exportSoldeAnterieurTemplate = () => {
     const okRows = rows.filter(r => r.status === "ok");
     if (!okRows.length) {
@@ -535,6 +539,7 @@ export default function LeavesMigrationPage() {
       "NOM":              r.nom ?? r.employee.split(" ")[0] ?? "",
       "PRENOM":           r.prenom ?? r.employee.split(" ").slice(1).join(" ") ?? "",
       "SOLDE_ANTERIEUR":  r.solde_anterieur ?? 0,
+      "CONGE_PRIS":       r.taken_override ?? r.taken ?? 0,
     }));
     exportMigrationXLSX("solde_anterieur_a_remplir", data);
   };
