@@ -1,15 +1,17 @@
-import { useEffect, useState, useCallback } from "react";
+﻿﻿﻿﻿﻿﻿import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ClipboardCheck, CheckCircle2, Clock, XCircle, AlertCircle,
   Calendar, ChevronLeft, ChevronRight, Filter, User,
   MessageSquare, ThumbsUp, ThumbsDown, Search, RefreshCw,
   Hash, Briefcase, Building2, Download, FileText, X, Ban, LogOut, Plane,
+  Bell, ArrowRight,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
-import { leaveRequestService } from "@/services/leaveService";
-import { LeaveRequest } from "@/types/leave";
+import { leaveRequestService, exitAuthorizationService } from "@/services/leaveService";
+import { LeaveRequest, ExitAuthorization } from "@/types/leave";
+import { missionService, MissionRequest } from "@/services/missionService";
 import ExitAuthorizationPanel from "@/components/leaves/ExitAuthorizationPanel";
 import ManagerMissionApprovalsPanel from "@/components/manager/ManagerMissionApprovalsPanel";
 import { onEmployeesSynced } from "@/utils/employeeSync";
@@ -20,7 +22,7 @@ import autoTable from "jspdf-autotable";
 
 // ������ Helpers ��������������������������������������������������������������������������������������������������������������������������������
 const fmt = (d: string) =>
-  d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "�";
+  d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 const PAGE_SIZE = 8;
 
@@ -39,18 +41,18 @@ type ColKey = "employee" | "matricule" | "service" | "leave_type" | "start_date"
 
 const EXPORT_COLUMNS: { key: ColKey; label: string; get: (r: LeaveRequest) => string }[] = [
   { key: "employee",        label: "Employé",             get: r => r.employee.full_name ?? `${r.employee.nom} ${r.employee.prenom}` },
-  { key: "matricule",       label: "Matricule",           get: r => r.employee.matricule ?? "�"                                     },
-  { key: "service",         label: "Service",             get: r => r.employee.service   ?? "�"                                     },
+  { key: "matricule",       label: "Matricule",           get: r => r.employee.matricule ?? "—"                                     },
+  { key: "service",         label: "Service",             get: r => r.employee.service   ?? "—"                                     },
   { key: "leave_type",      label: "Type de congé",       get: r => r.leave_type.label                                              },
   { key: "start_date",      label: "Date début",          get: r => fmt(r.start_date)                                               },
   { key: "end_date",        label: "Date fin",            get: r => fmt(r.end_date)                                                 },
   { key: "days",            label: "Jours",               get: r => String(r.days)                                                  },
-  { key: "motif",           label: "Motif",               get: r => r.motif || "�"                                                  },
+  { key: "motif",           label: "Motif",               get: r => r.motif || "—"                                                  },
   { key: "status",          label: "Statut",              get: r => STATUS_CONFIG[r.status]?.label ?? r.status                      },
-  { key: "reviewed_by",     label: "Validé par (N+1)",    get: r => r.reviewed_by?.full_name     ?? "�"                             },
-  { key: "reviewed_at",     label: "Date validation N+1", get: r => r.reviewed_at ? fmt(r.reviewed_at)         : "�"                },
-  { key: "second_reviewer", label: "Validé par (N+2)",    get: r => r.second_reviewer?.full_name ?? "�"                             },
-  { key: "reject_reason",   label: "Motif de rejet",      get: r => r.reject_reason              ?? "�"                             },
+  { key: "reviewed_by",     label: "Validé par (N+1)",    get: r => r.reviewed_by?.full_name     ?? "—"                             },
+  { key: "reviewed_at",     label: "Date validation N+1", get: r => r.reviewed_at ? fmt(r.reviewed_at)         : "—"                },
+  { key: "second_reviewer", label: "Validé par (N+2)",    get: r => r.second_reviewer?.full_name ?? "—"                             },
+  { key: "reject_reason",   label: "Motif de rejet",      get: r => r.reject_reason              ?? "—"                             },
   { key: "created_at",      label: "Date de demande",     get: r => fmt(r.created_at)                                               },
 ];
 
@@ -94,7 +96,7 @@ function exportManagerPDF(
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Camusat Sénégal RH � Document confidentiel � Page ${i}/${pageCount}`,
+      `Camusat Sénégal RH · Document confidentiel · Page ${i}/${pageCount}`,
       148.5, 207, { align: "center" },
     );
   }
@@ -144,7 +146,7 @@ function ExportModal({
             <div>
               <h3 className="text-white font-bold text-sm">Export PDF personnalisé</h3>
               <p className="text-blue-200 text-xs">
-                {tab === "pending" ? "Demandes en attente" : "Historique des décisions"} � {requests.length} ligne{requests.length > 1 ? "s" : ""}
+                {tab === "pending" ? "Demandes en attente" : "Historique des décisions"} · {requests.length} ligne{requests.length > 1 ? "s" : ""}
               </p>
             </div>
           </div>
@@ -241,7 +243,7 @@ function ApproveModal({
             </div>
             <div>
               <h3 className="text-white font-bold text-base">
-                {isPendingSecond ? "Validation N+2 � Approuver" : "Approuver la demande"}
+                {isPendingSecond ? "Validation N+2 → Approuver" : "Approuver la demande"}
               </h3>
               <p className="text-green-100 text-xs">{req.employee.full_name}</p>
             </div>
@@ -258,7 +260,7 @@ function ApproveModal({
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <Calendar size={12} className="text-gray-300" />
-              {fmt(req.start_date)} �  {fmt(req.end_date)}
+              {fmt(req.start_date)} →  {fmt(req.end_date)}
             </div>
             {req.motif && (
               <p className="text-xs text-gray-400 italic">"{req.motif}"</p>
@@ -281,7 +283,7 @@ function ApproveModal({
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
               <AlertCircle size={15} className="text-blue-500 mt-0.5 shrink-0" />
               <div>
-                <p className="text-xs text-blue-700 font-medium">Validation N+2 � Décision finale</p>
+                <p className="text-xs text-blue-700 font-medium">Validation N+2 → Décision finale</p>
                 <p className="text-xs text-blue-600 mt-0.5">
                   La demande a déjà été approuvée par le N+1
                   {req.reviewed_by ? ` (${req.reviewed_by.full_name})` : ""}.
@@ -361,7 +363,7 @@ function RejectModal({
               <span className="text-gray-400">·</span>
               <span className="text-gray-600">{parseFloat(req.days)} j</span>
             </div>
-            <div className="text-xs text-gray-500">{fmt(req.start_date)} �  {fmt(req.end_date)}</div>
+            <div className="text-xs text-gray-500">{fmt(req.start_date)} →  {fmt(req.end_date)}</div>
           </div>
 
           <div>
@@ -443,7 +445,7 @@ function CancelModal({
               <span className="text-gray-400">·</span>
               <span className="text-gray-600">{parseFloat(req.days)} jour{parseFloat(req.days) > 1 ? "s" : ""}</span>
             </div>
-            <div className="text-xs text-gray-500">{fmt(req.start_date)} �  {fmt(req.end_date)}</div>
+            <div className="text-xs text-gray-500">{fmt(req.start_date)} →  {fmt(req.end_date)}</div>
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
@@ -507,7 +509,7 @@ function InProgressAlertModal({ req, onClose }: { req: LeaveRequest; onClose: ()
               <span className="text-gray-400">·</span>
               <span className="text-gray-600">{parseFloat(req.days)} jour{parseFloat(req.days) > 1 ? "s" : ""}</span>
             </div>
-            <div className="text-xs text-gray-500">{fmt(req.start_date)} �  {fmt(req.end_date)}</div>
+            <div className="text-xs text-gray-500">{fmt(req.start_date)} →  {fmt(req.end_date)}</div>
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
@@ -645,7 +647,7 @@ function LeaveDetailModal({
               <Calendar size={13} className="text-gray-400 shrink-0" />
               {fmt(req.start_date)}
               {req.half_day_start && <span className="text-xs text-gray-400">(après-midi)</span>}
-              <span className="text-gray-400">� </span>
+              <span className="text-gray-400">→ </span>
               {fmt(req.end_date)}
               {req.half_day_end && <span className="text-xs text-gray-400">(matin)</span>}
             </div>
@@ -683,7 +685,7 @@ function LeaveDetailModal({
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-700">
-                  Validation N+1 {req.reviewed_by ? `� ${req.reviewed_by.full_name}` : req.status === "PENDING" ? "� En attente" : ""}
+                  Validation N+1 {req.reviewed_by ? `· ${req.reviewed_by.full_name}` : req.status === "PENDING" ? "· En attente" : ""}
                 </p>
                 {req.reviewed_at && (
                   <p className="text-[11px] text-gray-400">{fmt(req.reviewed_at.slice(0, 10))}</p>
@@ -707,7 +709,7 @@ function LeaveDetailModal({
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-gray-700">
-                    Validation N+2 {req.second_reviewer ? `� ${req.second_reviewer.full_name}` : "� En attente"}
+                    Validation N+2 {req.second_reviewer ? `· ${req.second_reviewer.full_name}` : "· En attente"}
                   </p>
                   {req.second_reviewed_at && (
                     <p className="text-[11px] text-gray-400">{fmt(req.second_reviewed_at.slice(0, 10))}</p>
@@ -896,7 +898,7 @@ function ApprovalCard({
               <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md">{req.leave_type.label}</span>
               <span className="flex items-center gap-1 text-xs text-gray-500">
                 <Calendar size={11} className="text-gray-400" />
-                {fmt(req.start_date)} �  {fmt(req.end_date)}
+                {fmt(req.start_date)} →  {fmt(req.end_date)}
               </span>
               <span className="text-xs font-bold text-gray-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md">{days} j</span>
             </div>
@@ -913,7 +915,7 @@ function ApprovalCard({
                 <p className="text-[11px] text-green-700 font-medium">
                   Validé par {req.reviewed_by.full_name}
                   {req.reviewed_at && <span className="text-green-500 font-normal"> · {fmt(req.reviewed_at.slice(0, 10))}</span>}
-                  {" "}� En attente de votre validation
+                  {" "}· En attente de votre validation
                 </p>
               </div>
             )}
@@ -973,8 +975,248 @@ function ApprovalCard({
 }
 
 // ������ Page principale ������������������������������������������������������������������������������������������������������������������
+// ── Panneau global des demandes en attente ────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 type Tab = "pending" | "history";
-type SectionTab = "leaves" | "exits" | "missions";
+type SectionTab = "pending_all" | "leaves" | "exits" | "missions";
+
+// ─── Modal Filtre ─────────────────────────────────────────────────────────────
+function SectionFilterModal({
+  sectionTab, setSectionTab,
+  tab, setTab,
+  filterType, setFilterType,
+  filterStatus, setFilterStatus,
+  leaveTypes,
+  totalPendingCount, missionPendingCount,
+  onClose,
+}: {
+  sectionTab: SectionTab; setSectionTab: (s: SectionTab) => void;
+  tab: Tab; setTab: (t: Tab) => void;
+  filterType: string; setFilterType: (v: string) => void;
+  filterStatus: string; setFilterStatus: (v: string) => void;
+  leaveTypes: { code: string; label: string }[];
+  totalPendingCount: number; missionPendingCount: number;
+  onClose: () => void;
+}) {
+  const SECTIONS: { key: SectionTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { key: "pending_all", label: "En attente",  icon: <Bell size={16} />,          badge: totalPendingCount   },
+    { key: "leaves",      label: "Conges",       icon: <ClipboardCheck size={16} />                           },
+    { key: "exits",       label: "Sorties",      icon: <LogOut size={16} />                                   },
+    { key: "missions",    label: "Missions",     icon: <Plane size={16} />,         badge: missionPendingCount },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.97 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+      >
+        <div className="bg-gradient-to-r from-[#003c71] to-blue-700 px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+              <Filter size={18} className="text-white" />
+            </div>
+            <h3 className="text-white font-bold text-sm">Filtres & Vue</h3>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white transition"><X size={18} /></button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Vue</p>
+            <div className="grid grid-cols-2 gap-2">
+              {SECTIONS.map(s => (
+                <button
+                  key={s.key}
+                  onClick={() => setSectionTab(s.key)}
+                  className={`flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-semibold transition ${
+                    sectionTab === s.key
+                      ? "border-[#003c71] bg-[#003c71]/5 text-[#003c71]"
+                      : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  {s.icon}
+                  {s.label}
+                  {s.badge != null && s.badge > 0 && (
+                    <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-bold ${sectionTab === s.key ? "bg-[#003c71] text-white" : "bg-gray-200 text-gray-600"}`}>
+                      {s.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {sectionTab === "leaves" && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Onglet</p>
+                <div className="flex gap-2">
+                  {(["pending", "history"] as Tab[]).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setTab(t)}
+                      className={`flex-1 py-2 rounded-xl border text-sm font-semibold transition ${
+                        tab === t ? "border-[#003c71] bg-[#003c71]/5 text-[#003c71]" : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                      }`}
+                    >
+                      {t === "pending" ? "En attente" : "Historique"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Type de conge</p>
+                <select
+                  value={filterType}
+                  onChange={e => setFilterType(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white"
+                >
+                  <option value="ALL">Tous les types</option>
+                  {leaveTypes.map(lt => (
+                    <option key={lt.code} value={lt.code}>{lt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {tab === "history" && (
+                <div>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Statut</p>
+                  <select
+                    value={filterStatus}
+                    onChange={e => setFilterStatus(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white"
+                  >
+                    <option value="ALL">Tous les statuts</option>
+                    <option value="APPROVED">Approuve</option>
+                    <option value="REJECTED">Rejete</option>
+                    <option value="PENDING">En attente (N+1)</option>
+                    <option value="PENDING_SECOND">En attente (N+2)</option>
+                    <option value="PENDING_RH">En attente (RH)</option>
+                    <option value="REVOKED">Revoque</option>
+                    <option value="CANCELLED">Annule</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 pb-5 pt-2">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl bg-[#003c71] text-white text-sm font-bold hover:bg-[#002d56] transition"
+          >
+            Appliquer
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+type PendingItem =
+  | { kind: "leave";   data: LeaveRequest      }
+  | { kind: "exit";    data: ExitAuthorization  }
+  | { kind: "mission"; data: MissionRequest     };
+
+const fmtDtShort = (s: string | null | undefined) => {
+  if (!s) return "—";
+  return new Date(s).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+function PendingAllPanel({
+  items, loading, onGoTo,
+}: {
+  items: PendingItem[];
+  loading: boolean;
+  onGoTo: (section: "leaves" | "exits" | "missions") => void;
+}) {
+  const TYPE_CFG = {
+    leave:   { label: "Congé",   dotClass: "bg-blue-500",   badgeClass: "bg-blue-100 text-blue-700 border-blue-200",     section: "leaves"   as const },
+    exit:    { label: "Sortie",  dotClass: "bg-orange-500", badgeClass: "bg-orange-100 text-orange-700 border-orange-200", section: "exits"    as const },
+    mission: { label: "Mission", dotClass: "bg-violet-500", badgeClass: "bg-violet-100 text-violet-700 border-violet-200", section: "missions" as const },
+  };
+
+  if (loading) {
+    return (
+      <div className="p-5 space-y-3">
+        {[1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 rounded-2xl animate-pulse" />)}
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="text-center py-16 text-gray-400">
+        <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
+          <CheckCircle2 size={28} className="opacity-40" />
+        </div>
+        <p className="text-sm font-medium text-gray-500">Aucune demande en attente</p>
+        <p className="text-xs mt-1 text-gray-400">Toutes les demandes ont été traitées</p>
+      </div>
+    );
+  }
+
+  const getName = (item: PendingItem) => {
+    if (item.kind === "leave")   return item.data.employee.full_name;
+    if (item.kind === "exit")    return item.data.employee_name;
+    return `${item.data.employee.nom} ${item.data.employee.prenom}`;
+  };
+
+  const getSub = (item: PendingItem) => {
+    if (item.kind === "leave")   return `${item.data.leave_type.label} · ${fmtDtShort(item.data.start_date)} → ${fmtDtShort(item.data.end_date)}`;
+    if (item.kind === "exit")    return `Sortie le ${fmtDtShort(item.data.datetime_exit?.slice(0, 10))} · ${item.data.motif || "—"}`;
+    return `Mission : ${item.data.destination} · ${fmtDtShort(item.data.date_debut)}`;
+  };
+
+  const getInitials = (name: string) =>
+    name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+
+  return (
+    <div className="p-4 space-y-2">
+      {items.map((item, idx) => {
+        const cfg  = TYPE_CFG[item.kind];
+        const name = getName(item);
+        return (
+          <motion.div
+            key={`${item.kind}-${item.data.id}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.04 }}
+            onClick={() => onGoTo(cfg.section)}
+            className="flex items-center gap-3 p-3.5 rounded-2xl border border-gray-100 bg-white hover:shadow-md hover:border-gray-200 transition-all cursor-pointer group"
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 ${cfg.dotClass}`}>
+              {getInitials(name)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                <span className="font-semibold text-gray-800 text-sm truncate">{name}</span>
+                <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-semibold shrink-0 ${cfg.badgeClass}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${cfg.dotClass}`} />
+                  {cfg.label}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 truncate">{getSub(item)}</p>
+            </div>
+            <div className="shrink-0 flex items-center gap-2">
+              <span className="text-[11px] text-gray-400 hidden sm:block">
+                {fmtDtShort((item.data as any).created_at?.slice(0, 10))}
+              </span>
+              <ArrowRight size={14} className="text-gray-300 group-hover:text-[#003c71] transition-colors" />
+            </div>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
+
 
 interface ManagerApprovalsPageProps {
   layout?: React.ComponentType<{ children: React.ReactNode }>;
@@ -985,16 +1227,20 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
   const { user } = useAuth();
   const employeeId = user?.employee_id;
 
-  const [sectionTab,    setSectionTab]    = useState<SectionTab>("leaves");
+  const [sectionTab,    setSectionTab]    = useState<SectionTab>("pending_all");
   const [missionPendingCount, setMissionPendingCount] = useState(0);
   const [tab,           setTab]           = useState<Tab>("pending");
   const [requests,      setRequests]      = useState<LeaveRequest[]>([]);
+  const [pendingExits,  setPendingExits]  = useState<ExitAuthorization[]>([]);
+  const [pendingMissions, setPendingMissions] = useState<MissionRequest[]>([]);
+  const [loadingAll,    setLoadingAll]    = useState(true);
   const [loading,       setLoading]       = useState(true);
   const [search,        setSearch]        = useState("");
   const [filterType,    setFilterType]    = useState("ALL");
   const [filterStatus,  setFilterStatus]  = useState("ALL");
   const [currentPage,   setCurrentPage]   = useState(1);
-  const [showExport,    setShowExport]    = useState(false);
+  const [showExport,      setShowExport]      = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
   const [detailTarget,     setDetailTarget]     = useState<LeaveRequest | null>(null);
   const [approveTarget,    setApproveTarget]    = useState<LeaveRequest | null>(null);
@@ -1003,40 +1249,48 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
   const [inProgressLeave,  setInProgressLeave]  = useState<LeaveRequest | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!employeeId) { setLoading(false); return; }
+    if (!employeeId) { setLoading(false); setLoadingAll(false); return; }
     setLoading(true);
+    setLoadingAll(true);
     try {
-      // Helper : récupère le résultat d'une promesse settled, tableau vide si rejetée
       const settle = <T,>(r: PromiseSettledResult<T[]>): T[] => {
         if (r.status === "fulfilled") return r.value;
         console.warn("[ManagerApprovalsPage] Requête échouée :", (r as PromiseRejectedResult).reason);
         return [];
       };
 
-      // Un seul appel sans filtre de statut : le backend retourne
-      // toutes les demandes liées à ce manager (en attente + historique).
-      // Le tri pending/historique est fait côté frontend.
-      const settled = await Promise.allSettled([
-        // Toutes les demandes des subordonnés (pending + historique)
+      const [leavesResult, exitsResult, missionsResult, ...rhResults] = await Promise.allSettled([
         leaveRequestService.getAll({ manager_employee_id: employeeId } as any),
-        // RH : en plus, les PENDING_RH de toute l'entreprise
+        exitAuthorizationService.getAll({ manager_employee_id: employeeId, status: "PENDING" } as any),
+        missionService.list({ status: "PENDING" }),
         ...(isRh ? [leaveRequestService.getAll({ status: "PENDING_RH" } as any)] : []),
       ]);
 
-      const allData = settled.flatMap(r => settle(r as PromiseSettledResult<LeaveRequest[]>));
-
-      // Exclure ses propres demandes + dédupliquer par ID
+      // Congés
+      const allLeaves = [
+        ...settle(leavesResult as PromiseSettledResult<LeaveRequest[]>),
+        ...rhResults.flatMap(r => settle(r as PromiseSettledResult<LeaveRequest[]>)),
+      ];
       const seen = new Set<number>();
       setRequests(
-        allData
+        allLeaves
           .filter(r => r.employee.id !== employeeId)
           .filter(r => seen.has(r.id) ? false : !!seen.add(r.id))
       );
+
+      // Sorties en attente
+      const exits = settle(exitsResult as PromiseSettledResult<ExitAuthorization[]>);
+      setPendingExits(exits.filter(e => e.employee !== employeeId));
+
+      // Missions en attente dont je suis N+1
+      const missions = settle(missionsResult as PromiseSettledResult<MissionRequest[]>);
+      setPendingMissions(missions.filter(m => m.employee.n1_manager_id === employeeId));
     } catch (err) {
       console.error("[ManagerApprovalsPage] Erreur inattendue :", err);
       toast.error("Erreur lors du chargement des demandes.");
     } finally {
       setLoading(false);
+      setLoadingAll(false);
     }
   }, [employeeId, isRh]);
 
@@ -1049,6 +1303,14 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
   const PENDING_STATUSES = ["PENDING", "PENDING_SECOND", ...(isRh ? ["PENDING_RH"] : [])] as string[];
 
   const pending = requests.filter(r => PENDING_STATUSES.includes(r.status));
+
+  // Items agrégés pour le panneau "En attente"
+  const allPendingItems: PendingItem[] = [
+    ...pending.map(d => ({ kind: "leave" as const, data: d })),
+    ...pendingExits.map(d => ({ kind: "exit" as const, data: d })),
+    ...pendingMissions.map(d => ({ kind: "mission" as const, data: d })),
+  ];
+  const totalPendingCount = allPendingItems.length;
   // Historique = TOUTES les demandes des subordonnés (tous statuts)
   // comme /employee/leaves montre toutes les demandes d'un employé.
   const history = requests;
@@ -1158,55 +1420,19 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
             </div>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* ���� Onglets de section ���� */}
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl">
-              <button
-                onClick={() => setSectionTab("leaves")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
-                  sectionTab === "leaves"
-                    ? "bg-white text-[#003c71] shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                <ClipboardCheck size={15} />
-                Congés
-                {pending.length > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${sectionTab === "leaves" ? "bg-[#003c71] text-white" : "bg-gray-300 text-gray-700"}`}>
-                    {pending.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setSectionTab("exits")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
-                  sectionTab === "exits"
-                    ? "bg-white text-[#003c71] shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                <LogOut size={15} />
-                Sorties
-              </button>
-              <button
-                onClick={() => setSectionTab("missions")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
-                  sectionTab === "missions"
-                    ? "bg-white text-[#003c71] shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                <Plane size={15} />
-                Missions
-                {missionPendingCount > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${sectionTab === "missions" ? "bg-[#003c71] text-white" : "bg-gray-300 text-gray-700"}`}>
-                    {missionPendingCount}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {/* ���� Actualiser ���� */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowFilterModal(true)}
+              className="relative flex items-center gap-2 px-4 py-2 rounded-xl border border-[#003c71] text-sm font-semibold text-[#003c71] hover:bg-[#003c71]/5 transition"
+            >
+              <Filter size={15} />
+              Filtre
+              {totalPendingCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {totalPendingCount > 9 ? "9+" : totalPendingCount}
+                </span>
+              )}
+            </button>
             <button
               onClick={refresh}
               className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition"
@@ -1218,6 +1444,26 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
         </motion.div>
 
         {/* ���� Section Autorisations de sortie ���� */}
+        {/* Section En attente globale */}
+        {sectionTab === "pending_all" && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+              <Bell size={16} className="text-[#003c71]" />
+              <span className="font-semibold text-gray-800">Demandes en attente de validation</span>
+              {!loadingAll && (
+                <span className="text-xs text-gray-400">
+                  ({totalPendingCount} demande{totalPendingCount > 1 ? "s" : ""})
+                </span>
+              )}
+            </div>
+            <PendingAllPanel
+              items={allPendingItems}
+              loading={loadingAll}
+              onGoTo={(section) => setSectionTab(section)}
+            />
+          </div>
+        )}
+
         {sectionTab === "exits" && employeeId && (
           <ExitAuthorizationPanel
             managerId={employeeId}
@@ -1264,77 +1510,36 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
           ))}
         </div>
 
-        {/* ���� Barre filtres + tabs + export ���� */}
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
 
-          {/* Recherche (gauche, flex-1) */}
+        {/* Barre recherche + export */}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
           <div className="relative flex-1 min-w-[180px]">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <input
               value={search}
               onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-              placeholder="Nom, matricule, service⬦"
+              placeholder="Nom, matricule, service..."
               className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white"
             />
           </div>
-
-          {/* Filtre type de congé */}
-          <div className="relative">
-            <Filter size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <select
-              value={filterType}
-              onChange={e => { setFilterType(e.target.value); setCurrentPage(1); }}
-              className="pl-7 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white"
-            >
-              <option value="ALL">Tous les types</option>
-              {leaveTypes.map(lt => (
-                <option key={lt.code} value={lt.code}>{lt.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Filtre statut � visible uniquement sur l'onglet historique */}
+          {/* Chips filtres actifs */}
           {tab === "history" && (
-            <div className="relative">
-              <Filter size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              <select
-                value={filterStatus}
-                onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-                className="pl-7 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 bg-white"
-              >
-                <option value="ALL">Tous les statuts</option>
-                <option value="APPROVED">Approuvé</option>
-                <option value="REJECTED">Rejeté</option>
-                <option value="PENDING">En attente (N+1)</option>
-                <option value="PENDING_SECOND">En attente (N+2)</option>
-                <option value="PENDING_RH">En attente (RH)</option>
-                <option value="REVOKED">Révoqué</option>
-                <option value="CANCELLED">Annulé</option>
-              </select>
-            </div>
+            <span className="text-xs px-2.5 py-1.5 rounded-full bg-[#003c71]/10 text-[#003c71] font-semibold border border-[#003c71]/20">
+              Historique
+            </span>
           )}
-
-          {/* Tabs (En attente | Historique) */}
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-            {([ ["pending", "En attente", pending.length], ["history", `Historique`, history.length] ] as const).map(([t, label, count]) => (
-              <button
-                key={t}
-                onClick={() => changeTab(t)}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition ${
-                  tab === t ? "bg-white shadow-sm text-[#003c71]" : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                {label}
-                {(count as number) > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === t ? "bg-[#003c71] text-white" : "bg-gray-200 text-gray-600"}`}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-
-          {/* Bouton Export */}
+          {filterType !== "ALL" && (
+            <span className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-full bg-blue-50 text-blue-700 font-semibold border border-blue-200">
+              {leaveTypes.find(lt => lt.code === filterType)?.label ?? filterType}
+              <button onClick={() => setFilterType("ALL")} className="ml-0.5 hover:text-blue-900"><X size={10} /></button>
+            </span>
+          )}
+          {filterStatus !== "ALL" && (
+            <span className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-full bg-gray-100 text-gray-700 font-semibold border border-gray-200">
+              {STATUS_CONFIG[filterStatus]?.label ?? filterStatus}
+              <button onClick={() => setFilterStatus("ALL")} className="ml-0.5 hover:text-gray-900"><X size={10} /></button>
+            </span>
+          )}
           <button
             onClick={() => setShowExport(true)}
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-600 hover:bg-gray-50 hover:border-[#003c71] hover:text-[#003c71] transition font-medium whitespace-nowrap"
@@ -1343,6 +1548,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
             Exporter
           </button>
         </div>
+
 
         {/* ���� Liste ���� */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -1455,6 +1661,22 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
             tab={tab}
           />
         )}
+      {showFilterModal && (
+        <SectionFilterModal
+          sectionTab={sectionTab}
+          setSectionTab={(s) => { setSectionTab(s); setCurrentPage(1); setSearch(""); }}
+          tab={tab}
+          setTab={(t) => { changeTab(t); }}
+          filterType={filterType}
+          setFilterType={(v) => { setFilterType(v); setCurrentPage(1); }}
+          filterStatus={filterStatus}
+          setFilterStatus={(v) => { setFilterStatus(v); setCurrentPage(1); }}
+          leaveTypes={leaveTypes}
+          totalPendingCount={totalPendingCount}
+          missionPendingCount={missionPendingCount}
+          onClose={() => setShowFilterModal(false)}
+        />
+      )}
         {approveTarget && (
           <ApproveModal
             req={approveTarget}

@@ -55,7 +55,7 @@ const baseNavItems = [
     icon: <LogOut size={20} />,
   },
   {
-    label: "Equipe en congés",
+    label: "Equipe de service",
     path: "/employee/service-leaves",
     icon: <Users size={20} />,
   },

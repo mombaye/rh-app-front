@@ -55,7 +55,7 @@ export const departmentService = {
 // Employee Hierarchy  →  /api/employees/hierarchy/
 // ─────────────────────────────────────────────────────────────────────────────
 export const employeeHierarchyService = {
-  getAll: async (params?: { service?: string; search?: string }): Promise<EmployeeHierarchy[]> => {
+  getAll: async (params?: { service?: string; search?: string; n1_manager_id?: number; department_head_id?: number }): Promise<EmployeeHierarchy[]> => {
     const res = await axios.get(`${EMP_API}/hierarchy/`, {
       headers: getAuthHeaders(),
       params,

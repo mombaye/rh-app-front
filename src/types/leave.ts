@@ -475,6 +475,8 @@ export interface ExitAuthorization {
   reviewed_by_name:     string | null;
   reviewed_at:          string | null;
   reject_reason:        string;
+  n1_manager_name:      string | null;
+  n1_manager_email:     string | null;
   created_at:           string;
   updated_at:           string;
 }

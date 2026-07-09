@@ -3,23 +3,35 @@ import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, Calendar, RefreshCw, Search, X, Clock,
-  Download, Hash, Building2, Briefcase,
+  Download, Hash, Building2, Briefcase, Bell, CheckCircle2,
+  TrendingDown, AlertTriangle, UserCheck, Mail,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
-import { leaveRequestService } from "@/services/leaveService";
-import { LeaveRequest } from "@/types/leave";
+import { leaveRequestService, leaveBalanceService } from "@/services/leaveService";
+import { LeaveRequest, LeaveBalance } from "@/types/leave";
+import { employeeHierarchyService } from "@/services/hierarchyService";
+import { EmployeeHierarchy } from "@/types/leave";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
 import { onEmployeesSynced } from "@/utils/employeeSync";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+const currentYear = new Date().getFullYear();
+
 function fmt(d: string) {
   return new Date(d).toLocaleDateString("fr-FR", {
     day: "2-digit", month: "short", year: "numeric",
   });
+}
+
+function fmtRelative(d: string) {
+  const diff = Math.round((Date.now() - new Date(d).getTime()) / 86_400_000);
+  if (diff === 0) return "aujourd'hui";
+  if (diff === 1) return "hier";
+  return `il y a ${diff} j`;
 }
 
 function daysRemaining(endDate: string): number {
@@ -39,126 +51,294 @@ function getInitials(name: string) {
 }
 
 // ─── Export Excel ─────────────────────────────────────────────────────────────
-function exportExcel(rows: LeaveRequest[], managerName: string) {
-  const data = rows.map(r => ({
-    "Employé":        r.employee.full_name,
-    "Matricule":      r.employee.matricule ?? "—",
-    "Service":        r.employee.service   ?? "—",
-    "Type de congé":  r.leave_type?.label  ?? "—",
-    "Début":          fmt(r.start_date),
-    "Fin":            fmt(r.end_date),
-    "Durée (j)":      parseFloat(r.days ?? r.duration_days ?? "0"),
-    "Jours écoulés":  daysElapsed(r.start_date),
-    "Jours restants": daysRemaining(r.end_date),
-  }));
+function exportExcel(members: EmployeeHierarchy[], balances: LeaveBalance[], inProgress: LeaveRequest[]) {
+  const inProgressMap = new Map(inProgress.map(r => [r.employee.id, r]));
+  const balanceMap    = new Map(balances.map(b => [b.employee, b]));
+
+  const data = members.map(m => {
+    const leave = inProgressMap.get(m.id);
+    const bal   = balanceMap.get(m.id);
+    return {
+      "Employé":          m.full_name,
+      "Matricule":        m.matricule ?? "—",
+      "Service":          m.service   ?? "—",
+      "Fonction":         m.fonction  ?? "—",
+      "Statut":           leave ? "En congé" : "Disponible",
+      "Type de congé":    leave?.leave_type?.label  ?? "—",
+      "Début congé":      leave ? fmt(leave.start_date) : "—",
+      "Fin congé":        leave ? fmt(leave.end_date)   : "—",
+      "Solde restant (j)": bal ? parseFloat(bal.remaining) : "—",
+    };
+  });
   const ws = XLSX.utils.json_to_sheet(data);
-  ws["!cols"] = [
-    { wch: 28 }, { wch: 12 }, { wch: 20 }, { wch: 18 },
-    { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 },
-  ];
+  ws["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
   const wb = XLSX.utils.book_new();
-  const today = new Date().toLocaleDateString("fr-FR");
-  XLSX.utils.book_append_sheet(wb, ws, `Équipe en congé ${today}`);
-  XLSX.writeFile(wb, `equipe_en_conge_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, ws, `Équipe ${new Date().toLocaleDateString("fr-FR")}`);
+  XLSX.writeFile(wb, `equipe_${new Date().toISOString().slice(0, 10)}.xlsx`);
   toast.success("Export Excel généré.");
 }
 
-// ─── Carte employé en congé ───────────────────────────────────────────────────
-function LeaveCard({ req, index }: { req: LeaveRequest; index: number }) {
-  const total     = parseFloat(req.days ?? req.duration_days ?? "0");
-  const elapsed   = daysElapsed(req.start_date);
-  const remaining = daysRemaining(req.end_date);
-  const progress  = total > 0 ? Math.min(100, Math.round((elapsed / total) * 100)) : 0;
-  const color     = req.leave_type?.color ?? "#003c71";
-  const initials  = getInitials(req.employee.full_name);
+// ─── Carte notification (demande en attente) ──────────────────────────────────
+function PendingNotifCard({ req, index }: { req: LeaveRequest; index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.06 }}
+      className="flex items-start gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl"
+    >
+      <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+        <Clock size={16} className="text-amber-600" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+          <span className="font-semibold text-gray-800 text-sm">{req.employee.full_name}</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-200 text-amber-800 font-semibold border border-amber-300">
+            En attente
+          </span>
+        </div>
+        <p className="text-xs text-gray-600">
+          {req.leave_type?.label} · {fmt(req.start_date)} → {fmt(req.end_date)}
+          <span className="text-gray-400"> · {parseFloat(req.days)} j</span>
+        </p>
+        {req.motif && (
+          <p className="text-[11px] text-gray-400 italic mt-0.5 truncate">"{req.motif}"</p>
+        )}
+      </div>
+      <span className="text-[11px] text-gray-400 shrink-0 mt-0.5">{fmtRelative(req.created_at)}</span>
+    </motion.div>
+  );
+}
+
+// ─── Badge solde ──────────────────────────────────────────────────────────────
+function BalancePill({ remaining }: { remaining: number | null }) {
+  if (remaining === null) {
+    return <span className="text-sm font-bold text-gray-300">— j</span>;
+  }
+  return (
+    <span className="text-base font-bold text-blue-600">
+      {remaining} j
+    </span>
+  );
+}
+
+// ─── Modal détail membre ──────────────────────────────────────────────────────
+function MemberDetailModal({
+  member, leave, balance, onClose,
+}: {
+  member:  EmployeeHierarchy;
+  leave:   LeaveRequest | undefined;
+  balance: LeaveBalance | undefined;
+  onClose: () => void;
+}) {
+  const isOnLeave = !!leave;
+  const remaining = balance ? parseFloat(balance.remaining)  : null;
+  const acquired  = balance ? parseFloat(balance.acquired)   : null;
+  const taken     = balance ? parseFloat(balance.taken)      : null;
+  const color     = isOnLeave ? (leave.leave_type?.color ?? "#f59e0b") : "#003c71";
+
+  const total    = leave ? parseFloat(leave.days ?? leave.duration_days ?? "0") : 0;
+  const elapsed  = leave ? daysElapsed(leave.start_date)  : 0;
+  const leftover = leave ? daysRemaining(leave.end_date)  : 0;
+  const progress = total > 0 ? Math.min(100, Math.round((elapsed / total) * 100)) : 0;
+
+  const initials = getInitials(member.full_name);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0,  scale: 1    }}
+        exit={{    opacity: 0, y: 24, scale: 0.97 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+      >
+        {/* Header */}
+        <div className="px-6 py-5 flex items-center gap-3 justify-between" style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)` }}>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-white/25 flex items-center justify-center text-sm font-bold text-white shrink-0">
+              {initials}
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-base leading-tight">{member.full_name}</h3>
+              <p className="text-white/80 text-xs mt-0.5">
+                {isOnLeave ? "En congé" : "Disponible"}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white transition">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-4 overflow-y-auto max-h-[70vh]">
+
+          {/* Infos employé */}
+          <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Employé</p>
+            {member.matricule && (
+              <div className="flex items-center gap-2 text-sm">
+                <Hash size={13} className="text-gray-400 shrink-0" />
+                <span className="font-semibold text-gray-700">{member.matricule}</span>
+              </div>
+            )}
+            {member.fonction && (
+              <div className="flex items-center gap-2 text-sm">
+                <Briefcase size={13} className="text-gray-400 shrink-0" />
+                <span className="text-gray-600">{member.fonction}</span>
+              </div>
+            )}
+            {member.service && (
+              <div className="flex items-center gap-2 text-sm">
+                <Building2 size={13} className="text-gray-400 shrink-0" />
+                <span className="text-gray-600">{member.service}</span>
+              </div>
+            )}
+            {member.n1_manager_name && (
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <Users size={12} className="text-gray-300 shrink-0" />
+                Manager N+1 : <span className="font-medium">{member.n1_manager_name}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Solde congé */}
+          <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
+            <p className="text-sm text-gray-500">Solde congé restant</p>
+            {balance ? (
+              <span className="text-2xl font-bold text-blue-600">{remaining ?? "—"} j</span>
+            ) : (
+              <span className="text-sm text-gray-400 italic">Non renseigné</span>
+            )}
+          </div>
+
+          {/* Congé en cours */}
+          {isOnLeave && leave && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-3">
+              <p className="text-[10px] font-bold text-orange-500 uppercase tracking-wider">Congé en cours</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-semibold text-gray-800">{leave.leave_type?.label ?? "Congé"}</span>
+                <span className="text-xs font-bold text-white bg-orange-400 px-2 py-0.5 rounded-md">{total} j</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                <Calendar size={13} className="text-gray-400" />
+                {fmt(leave.start_date)} → {fmt(leave.end_date)}
+              </div>
+              {leave.motif && (
+                <p className="text-xs text-gray-500 italic">"{leave.motif}"</p>
+              )}
+              <div className="space-y-1.5">
+                <div className="h-2 bg-orange-100 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.6 }}
+                    className="h-full rounded-full bg-orange-400"
+                  />
+                </div>
+                <div className="flex justify-between text-[11px] text-gray-500">
+                  <span>{elapsed}j écoulé{elapsed > 1 ? "s" : ""}</span>
+                  <span className={leftover <= 2 ? "text-red-500 font-semibold" : ""}>{leftover}j restant{leftover > 1 ? "s" : ""}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 pt-2">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl bg-[#003c71] text-white text-sm font-bold hover:bg-[#002d56] transition"
+          >
+            Fermer
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Carte membre ─────────────────────────────────────────────────────────────
+function MemberCard({
+  member, leave, balance, index, onClick,
+}: {
+  member:  EmployeeHierarchy;
+  leave:   LeaveRequest | undefined;
+  balance: LeaveBalance | undefined;
+  index:   number;
+  onClick: () => void;
+}) {
+  const isOnLeave  = !!leave;
+  const remaining  = balance ? parseFloat(balance.remaining) : null;
+  const initials   = getInitials(member.full_name);
+  const color      = isOnLeave ? (leave.leave_type?.color ?? "#f59e0b") : "#003c71";
+
+  const total    = leave ? (parseFloat(leave.days ?? leave.duration_days ?? "0")) : 0;
+  const elapsed  = leave ? daysElapsed(leave.start_date)   : 0;
+  const leftover = leave ? daysRemaining(leave.end_date) : 0;
+  const progress = total > 0 ? Math.min(100, Math.round((elapsed / total) * 100)) : 0;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04 }}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+      onClick={onClick}
+      className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer"
     >
-      <div className="p-4">
-        <div className="flex items-start gap-3">
-          {/* Avatar */}
-          <div
-            className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0"
-            style={{ backgroundColor: color }}
-          >
-            {initials}
-          </div>
+      <div className="px-4 py-3 flex items-center gap-3">
+        {/* Avatar */}
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0"
+          style={{ backgroundColor: color }}
+        >
+          {initials}
+        </div>
 
-          {/* Infos */}
-          <div className="flex-1 min-w-0">
-            {/* Nom */}
-            <div className="flex items-center gap-2 flex-wrap mb-0.5">
-              <span className="font-bold text-gray-800 text-sm">{req.employee.full_name}</span>
-            </div>
+        {/* Nom */}
+        <span className="flex-1 font-semibold text-gray-800 text-sm truncate">{member.full_name}</span>
 
-            {/* Matricule · Service · Fonction */}
-            <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-2 flex-wrap">
-              {req.employee.matricule && (
-                <span className="flex items-center gap-1">
-                  <Hash size={10} />{req.employee.matricule}
-                </span>
-              )}
-              {req.employee.service && (
-                <>
-                  <span className="text-gray-200">·</span>
-                  <span className="flex items-center gap-1">
-                    <Building2 size={10} />{req.employee.service}
-                  </span>
-                </>
-              )}
-              {req.employee.fonction && (
-                <>
-                  <span className="text-gray-200">·</span>
-                  <span className="flex items-center gap-1">
-                    <Briefcase size={10} />{req.employee.fonction}
-                  </span>
-                </>
-              )}
-            </div>
-
-            {/* Type · Dates · Durée */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md">
-                {req.leave_type?.label ?? "Congé"}
-              </span>
-              <span className="flex items-center gap-1 text-xs text-gray-500">
-                <Calendar size={11} className="text-gray-400" />
-                {fmt(req.start_date)} → {fmt(req.end_date)}
-              </span>
-              <span className="text-xs font-bold text-gray-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md">
-                {total} j
-              </span>
-            </div>
-
-            {/* Barre de progression */}
-            <div className="mt-3 space-y-1.5">
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.6, delay: index * 0.04 + 0.2 }}
-                  className="h-full rounded-full"
-                  style={{ backgroundColor: color }}
-                />
-              </div>
-              <div className="flex justify-between text-[10px] text-gray-400">
-                <span className="flex items-center gap-1">
-                  <Clock size={9} />
-                  {elapsed}j écoulé{elapsed > 1 ? "s" : ""}
-                </span>
-                <span className={remaining <= 2 ? "text-red-500 font-semibold" : ""}>
-                  {remaining}j restant{remaining > 1 ? "s" : ""}
-                </span>
-              </div>
-            </div>
-          </div>
+        {/* Solde CP + badge en congé */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isOnLeave && (
+            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200 font-semibold">
+              <Clock size={9} /> En congé
+            </span>
+          )}
+          <BalancePill remaining={remaining} />
         </div>
       </div>
+
+      {/* Barre de progression si en congé */}
+      {isOnLeave && leave && (
+        <div className="px-4 pb-3">
+          <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-1.5">
+            <span className="font-medium text-gray-600">{leave.leave_type?.label ?? "Congé"}</span>
+            <span>·</span>
+            <span>{fmt(leave.start_date)} → {fmt(leave.end_date)}</span>
+            <span className="ml-auto font-semibold text-gray-500">{total} j</span>
+          </div>
+          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.6, delay: index * 0.04 + 0.2 }}
+              className="h-full rounded-full"
+              style={{ backgroundColor: color }}
+            />
+          </div>
+          <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+            <span>{elapsed}j écoulés</span>
+            <span className={leftover <= 2 ? "text-red-500 font-semibold" : ""}>{leftover}j restants</span>
+          </div>
+        </div>
+      )}
+
     </motion.div>
   );
 }
@@ -166,42 +346,77 @@ function LeaveCard({ req, index }: { req: LeaveRequest; index: number }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ManagerTeamLeavesPage() {
   const { user } = useAuth();
+  const employeeId = user?.employee_id;
 
-  const [all,     setAll]     = useState<LeaveRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search,  setSearch]  = useState("");
+  const [members,        setMembers]        = useState<EmployeeHierarchy[]>([]);
+  const [requests,       setRequests]       = useState<LeaveRequest[]>([]);
+  const [balances,       setBalances]       = useState<LeaveBalance[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [search,         setSearch]         = useState("");
+  const [selectedMember, setSelectedMember] = useState<EmployeeHierarchy | null>(null);
 
   const load = useCallback(async () => {
-    if (!user?.employee_id) return;
+    if (!employeeId) return;
     setLoading(true);
     try {
-      const data = await leaveRequestService.getAll({
-        manager_employee_id: user.employee_id,
-        status: "APPROVED",
-      } as any);
-      setAll(data.filter((r: LeaveRequest) => r.is_in_progress));
-    } catch {
-      setAll([]);
+      const [hier, reqs, bals] = await Promise.allSettled([
+        employeeHierarchyService.getAll({ department_head_id: employeeId }),
+        leaveRequestService.getAll({ manager_employee_id: employeeId } as any),
+        leaveBalanceService.getAll(currentYear),
+      ]);
+
+      const allHier = hier.status === "fulfilled" ? hier.value : [];
+      const allReqs = reqs.status === "fulfilled" ? reqs.value : [];
+      const allBals = bals.status === "fulfilled" ? bals.value : [];
+
+      // Le backend filtre déjà par n1_manager_id — on exclut juste le manager lui-même
+      const team = allHier.filter(m => m.id !== employeeId);
+      setMembers(team);
+
+      // Filtrer les balances CP pour l'année courante
+      const cpBals = allBals.filter(b =>
+        (b.leave_type as any)?.code === "CP" || (b.leave_type as any)?.label?.toLowerCase().includes("payé")
+      );
+      setBalances(cpBals.length > 0 ? cpBals : allBals);
+      setRequests(allReqs.filter(r => r.employee.id !== employeeId));
+    } catch (err) {
+      console.error(err);
+      toast.error("Erreur lors du chargement de l'équipe.");
     } finally {
       setLoading(false);
     }
-  }, [user?.employee_id]);
+  }, [employeeId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { return onEmployeesSynced(() => { load(); }); }, [load]);
 
-  useEffect(() => {
-    return onEmployeesSynced(() => { load(); });
-  }, [load]);
+  // ── Dérivés ────────────────────────────────────────────────────────────────
+  const pending    = requests.filter(r => r.status === "PENDING" || r.status === "PENDING_SECOND");
+  const inProgress = requests.filter(r => r.is_in_progress && r.status === "APPROVED");
 
-  const q        = search.trim().toLowerCase();
-  const filtered = all.filter(r =>
+  // Map employee_id → leave (currently active)
+  const inProgressMap = new Map(inProgress.map(r => [r.employee.id, r]));
+
+  // Map employee_id → balance (CP restant)
+  const balanceMap = new Map(balances.map(b => [b.employee, b]));
+
+  const q       = search.trim().toLowerCase();
+  const filtered = members.filter(m =>
     !q ||
-    r.employee.full_name.toLowerCase().includes(q) ||
-    (r.employee.matricule ?? "").toLowerCase().includes(q) ||
-    (r.employee.service   ?? "").toLowerCase().includes(q)
+    m.full_name.toLowerCase().includes(q) ||
+    (m.matricule ?? "").toLowerCase().includes(q) ||
+    (m.service   ?? "").toLowerCase().includes(q)
   );
 
-  const managerName = user?.employee_name ?? user?.username ?? "Manager";
+  // Trier : en congé en premier, puis disponibles par nom
+  const sorted = [...filtered].sort((a, b) => {
+    const aOn = inProgressMap.has(a.id) ? 0 : 1;
+    const bOn = inProgressMap.has(b.id) ? 0 : 1;
+    if (aOn !== bOn) return aOn - bOn;
+    return a.full_name.localeCompare(b.full_name);
+  });
+
+  const onLeaveCount = members.filter(m => inProgressMap.has(m.id)).length;
 
   return (
     <ManagerLayout>
@@ -218,23 +433,17 @@ export default function ManagerTeamLeavesPage() {
               <Users size={20} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-[#003c71]">
-                Équipe en congé
-                {!loading && (
-                  <span className="ml-2 text-base font-bold text-white bg-[#003c71] rounded-full px-2.5 py-0.5 align-middle">
-                    {all.length}
-                  </span>
-                )}
-              </h1>
-              <p className="text-gray-500 text-sm mt-0.5">Collaborateurs actuellement en congé</p>
+              <h1 className="text-2xl font-bold text-[#003c71]">Mon équipe</h1>
+              <p className="text-gray-500 text-sm mt-0.5">
+                Membres du service · solde de congé · statut
+              </p>
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => exportExcel(filtered, managerName)}
-              disabled={loading || filtered.length === 0}
+              onClick={() => exportExcel(members, balances, inProgress)}
+              disabled={loading || members.length === 0}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#003c71] text-white text-sm font-semibold hover:bg-[#002d56] transition shadow-sm disabled:opacity-40"
             >
               <Download size={15} /> Exporter
@@ -250,11 +459,59 @@ export default function ManagerTeamLeavesPage() {
           </div>
         </motion.div>
 
-        {/* ── Recherche centrée ────────────────────────────────────────────── */}
+        {/* ── Stats rapides ────────────────────────────────────────────────── */}
+        {!loading && members.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="grid grid-cols-3 gap-3 mb-6"
+          >
+            {[
+              { label: "Membres",      count: members.length,              dot: "bg-slate-400"  },
+              { label: "En congé",     count: onLeaveCount,                dot: "bg-orange-400" },
+              { label: "Disponibles",  count: members.length - onLeaveCount, dot: "bg-green-500" },
+            ].map(s => (
+              <div key={s.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center">
+                <p className="text-2xl font-bold text-[#003c71]">{s.count}</p>
+                <p className="text-xs text-gray-500 mt-0.5 flex items-center justify-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />{s.label}
+                </p>
+              </div>
+            ))}
+          </motion.div>
+        )}
+
+        {/* ── Notifications (demandes en attente) ─────────────────────────── */}
+        <AnimatePresence>
+          {!loading && pending.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="mb-6 bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden"
+            >
+              <div className="px-5 py-3.5 border-b border-amber-100 flex items-center gap-2">
+                <Bell size={15} className="text-amber-500" />
+                <span className="font-semibold text-gray-800 text-sm">Demandes en attente de validation</span>
+                <span className="ml-auto text-[10px] bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full border border-amber-200">
+                  {pending.length}
+                </span>
+              </div>
+              <div className="p-4 space-y-2">
+                {pending.map((req, i) => (
+                  <PendingNotifCard key={req.id} req={req} index={i} />
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Recherche ───────────────────────────────────────────────────── */}
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
+          transition={{ delay: 0.08 }}
           className="relative mb-6 max-w-2xl mx-auto"
         >
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -262,14 +519,11 @@ export default function ManagerTeamLeavesPage() {
             type="text"
             placeholder="Rechercher par nom, matricule, service…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={e => setSearch(e.target.value)}
             className="w-full pl-11 pr-10 py-3 border border-gray-200 rounded-2xl text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition bg-white shadow-sm"
           />
           {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
+            <button onClick={() => setSearch("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
               <X size={14} />
             </button>
           )}
@@ -281,29 +535,46 @@ export default function ManagerTeamLeavesPage() {
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="flex flex-col items-center justify-center py-24 gap-3">
               <ImSpinner2 className="animate-spin text-[#003c71]" size={28} />
-              <p className="text-gray-400 text-sm">Chargement…</p>
+              <p className="text-gray-400 text-sm">Chargement de l'équipe…</p>
             </motion.div>
-          ) : filtered.length === 0 ? (
+          ) : sorted.length === 0 ? (
             <motion.div key="empty" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="flex flex-col items-center justify-center py-24 text-center">
               <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
                 <Users size={28} className="text-gray-300" />
               </div>
               <p className="font-semibold text-gray-400">
-                {search ? "Aucun résultat pour cette recherche" : "Aucun collaborateur en congé en ce moment"}
+                {search ? "Aucun résultat pour cette recherche" : "Aucun membre d'équipe trouvé"}
               </p>
-              {!search && <p className="text-sm text-gray-300 mt-1">Votre équipe est entièrement disponible 🎉</p>}
             </motion.div>
           ) : (
             <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filtered.map((req, i) => (
-                <LeaveCard key={req.id} req={req} index={i} />
+              {sorted.map((member, i) => (
+                <MemberCard
+                  key={member.id}
+                  member={member}
+                  leave={inProgressMap.get(member.id)}
+                  balance={balanceMap.get(member.id)}
+                  index={i}
+                  onClick={() => setSelectedMember(member)}
+                />
               ))}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+      {/* Modal détail membre */}
+      <AnimatePresence>
+        {selectedMember && (
+          <MemberDetailModal
+            member={selectedMember}
+            leave={inProgressMap.get(selectedMember.id)}
+            balance={balanceMap.get(selectedMember.id)}
+            onClose={() => setSelectedMember(null)}
+          />
+        )}
+      </AnimatePresence>
     </ManagerLayout>
   );
 }
