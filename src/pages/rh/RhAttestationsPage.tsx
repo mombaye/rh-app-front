@@ -5,12 +5,12 @@ import {
   FileText, Download, RefreshCw, Search, X,
   RotateCcw, LayoutTemplate, Settings2,
   User, Calendar, Briefcase, Building2, FileCheck, Clock,
-  CheckCircle2, Ban, History, PlusCircle, Send, XCircle, Move, Trash2, Minus, Plus,
+  CheckCircle2, Ban, History, PlusCircle, Send, XCircle, Move, Minus, Plus,
 } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
 import AppLayout from "@/layouts/AppLayout";
-import { attestationService, attestationSignatureService, attestationStampService, AttestationStamp } from "@/services/attestationService";
+import { attestationService, attestationStampService, AttestationStamp } from "@/services/attestationService";
 import { AttestationRequest, AttestationStatus, AttestationHistory } from "@/types/attestation";
 import AttestationTemplatesPanel from "@/components/attestations/AttestationTemplatesPanel";
 
@@ -63,39 +63,23 @@ function Divider({ label }: { label: string }) {
   );
 }
 
-// ── Aperçu du document généré + glisser-déposer de la signature ─────────────
-interface SignaturePlacerProps {
-  attestationId: number;
-  onApplied: (updated: AttestationRequest) => void;
-  onRegenerate: () => Promise<void>;
-  regenerating: boolean;
-  noStamp?: boolean;
-}
-
-/** Logique partagée de positionnement / application de la signature. */
-function useSignaturePlacement({ attestationId, onApplied, onRegenerate, regenerating, noStamp }: SignaturePlacerProps) {
+// ── Chargement de l'aperçu du document ──────────────────────────────────────
+function useDocumentPreview(attestationId: number) {
   const [preview, setPreview] = useState<{
     image: string; page_width: number; page_height: number; page_index: number; page_count: number;
   } | null>(null);
-  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
-  const [loading,  setLoading]  = useState(true);
-  const [applying, setApplying] = useState(false);
-  const [applied,  setApplied]  = useState(false);
-  const [removing, setRemoving] = useState(false);
-  const [pos, setPos] = useState({ x: 0.65, y: 0.8 }); // fractions, coin haut-gauche
-  const [placed, setPlaced] = useState(true); // signature visible/positionnée sur l'aperçu
-  const [dragging, setDragging] = useState(false);
-
+  const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
-  const SIG_WIDTH_MIN = 0.08;
-  const SIG_WIDTH_MAX = 0.5;
-  const [sigWidth, setSigWidth] = useState(0.22); // largeur de la signature, fraction de la largeur de page
 
   const loadPreview = async () => {
     setLoading(true);
     try {
-      const data = await attestationService.getPreviewImage(attestationId, !!noStamp);
-      setPreview(data);
+      const data = await attestationService.getPreviewImage(attestationId, false);
+      const bust = Date.now();
+      const image = data.image && !data.image.startsWith("data:")
+        ? `${data.image}${data.image.includes("?") ? "&" : "?"}_t=${bust}`
+        : data.image;
+      setPreview({ ...data, image });
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors du chargement de l'aperçu");
     } finally {
@@ -103,111 +87,10 @@ function useSignaturePlacement({ attestationId, onApplied, onRegenerate, regener
     }
   };
 
-  useEffect(() => {
-    loadPreview();
-    attestationSignatureService.get()
-      .then(sig => setSignatureUrl(sig?.image_url || null))
-      .catch(() => setSignatureUrl(null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attestationId]);
+  useEffect(() => { loadPreview(); }, [attestationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
-
-  const updatePosFromClient = (clientX: number, clientY: number) => {
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const sigWFrac = sigWidth;
-    const sigHFrac = sigWFrac; // approximation pour le clamp ; le ratio réel est géré côté backend
-    let x = (clientX - rect.left) / rect.width;
-    let y = (clientY - rect.top) / rect.height;
-    x = clamp(x, 0, 1 - sigWFrac);
-    y = clamp(y, 0, 1 - sigHFrac);
-    setPos({ x, y });
-  };
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (!signatureUrl || !placed) return;
-    e.preventDefault();
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-    setDragging(true);
-    updatePosFromClient(e.clientX, e.clientY);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragging) return;
-    updatePosFromClient(e.clientX, e.clientY);
-  };
-
-  const handlePointerUp = () => setDragging(false);
-
-  const handleApply = async () => {
-    setApplying(true);
-    try {
-      // Si une signature a déjà été appliquée, on re-génère d'abord le document
-      // (ce qui retire l'ancienne signature) afin de pouvoir la replacer ailleurs.
-      if (applied) {
-        await onRegenerate();
-      }
-      const updated = await attestationService.applySignature(attestationId, {
-        x: pos.x,
-        y: pos.y,
-        width: sigWidth,
-        page: preview?.page_index,
-      });
-      onApplied(updated);
-      setApplied(true);
-      toast.success(applied ? "Signature repositionnée sur le document !" : "Signature apposée sur le document !");
-      await loadPreview();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error || "Erreur lors de l'apposition de la signature");
-    } finally {
-      setApplying(false);
-    }
-  };
-
-  /** Retire la signature précédemment apposée en re-générant le document à partir des données actuelles. */
-  const handleRemoveApplied = async () => {
-    setRemoving(true);
-    try {
-      await onRegenerate();
-      setApplied(false);
-      setPlaced(true);
-      await loadPreview();
-      toast.success("Signature retirée du document.");
-    } catch (e: any) {
-      toast.error("Erreur lors du retrait de la signature");
-    } finally {
-      setRemoving(false);
-    }
-  };
-
-  /** Applique une nouvelle taille de signature (bornée), en ré-ajustant sa position si besoin. */
-  const applySigWidth = (next: number) => {
-    const clamped = clamp(next, SIG_WIDTH_MIN, SIG_WIDTH_MAX);
-    setSigWidth(clamped);
-    setPos(p => ({ x: clamp(p.x, 0, 1 - clamped), y: clamp(p.y, 0, 1 - clamped) }));
-  };
-
-  /** Modifie la taille de la signature d'un incrément donné (boutons +/-). */
-  const changeSigWidth = (delta: number) => {
-    setSigWidth(w => {
-      const next = clamp(w + delta, SIG_WIDTH_MIN, SIG_WIDTH_MAX);
-      setPos(p => ({ x: clamp(p.x, 0, 1 - next), y: clamp(p.y, 0, 1 - next) }));
-      return next;
-    });
-  };
-
-  return {
-    preview, signatureUrl, loading, applying, applied, removing, regenerating,
-    pos, placed, dragging,
-    containerRef, sigWidth, SIG_WIDTH_MIN, SIG_WIDTH_MAX, changeSigWidth, applySigWidth,
-    handlePointerDown, handlePointerMove, handlePointerUp,
-    handleApply, handleRemoveApplied, setPlaced, loadPreview,
-  };
+  return { preview, loading, containerRef, loadPreview };
 }
-
-type SignaturePlacement = ReturnType<typeof useSignaturePlacement>;
 
 // ── Hook de placement du cachet ─────────────────────────────────────────────
 interface StampPlacerProps {
@@ -262,7 +145,9 @@ function useStampPlacement({ containerRef, previewReady, previewWidth, previewHe
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    // Capture au niveau du container (pas de e.target) pour que les pointermove
+    // arrivent toujours sur le container même si le pointeur sort du cachet
+    containerRef.current?.setPointerCapture(e.pointerId);
     // Calcul de l'offset : où dans le cachet a-t-on cliqué ?
     const el = containerRef.current;
     if (el) {
@@ -317,7 +202,6 @@ function useStampPlacement({ containerRef, previewReady, previewWidth, previewHe
 // ── Bloc complet pour l'état GENERATED : aperçu à gauche, actions à droite ──
 interface GeneratedPanelProps {
   manageTarget: AttestationRequest;
-  onApplied: (updated: AttestationRequest) => void;
   onRegenerate: () => Promise<void>;
   regenerating: boolean;
   onValidate: () => void;
@@ -326,19 +210,17 @@ interface GeneratedPanelProps {
 }
 
 function GeneratedPanel({
-  manageTarget, onApplied, onRegenerate, regenerating, onValidate, validating, rejecting,
+  manageTarget, onRegenerate, regenerating, onValidate, validating, rejecting,
 }: GeneratedPanelProps) {
-  const sig = useSignaturePlacement({
-    attestationId: manageTarget.id, onApplied, onRegenerate, regenerating, noStamp: true,
-  });
+  const doc = useDocumentPreview(manageTarget.id);
 
   const stamp = useStampPlacement({
-    containerRef: sig.containerRef,
-    previewReady: !!sig.preview,
-    previewWidth:  sig.preview?.page_width  ?? 595,
-    previewHeight: sig.preview?.page_height ?? 842,
+    containerRef: doc.containerRef,
+    previewReady: !!doc.preview,
+    previewWidth:  doc.preview?.page_width  ?? 595,
+    previewHeight: doc.preview?.page_height ?? 842,
     onRegenerate,
-    reloadPreview: sig.loadPreview,
+    reloadPreview: doc.loadPreview,
   });
 
   const busy = regenerating || validating || rejecting || stamp.saving;
@@ -346,18 +228,12 @@ function GeneratedPanel({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {/* ── Aperçu du document (gauche) ── */}
-      <div className="space-y-2">
-        <SignaturePreview sig={sig} stampOverlay={stamp.stamp ? stamp : null} />
-        <SignatureControls sig={sig} />
+      <div>
+        <DocumentPreview doc={doc} stampOverlay={stamp.stamp ? stamp : null} />
       </div>
 
       {/* ── Actions (droite) ── */}
       <div className="space-y-3 flex flex-col">
-        {/* Taille de la signature */}
-        {sig.signatureUrl && (
-          <SignatureSizeControl sig={sig} />
-        )}
-
         {/* ── Contrôles taille du cachet ── */}
         {stamp.stamp && (
           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
@@ -457,27 +333,12 @@ function GeneratedPanel({
 }
 
 type StampPlacement = ReturnType<typeof useStampPlacement>;
+type DocumentPreviewProps = { doc: ReturnType<typeof useDocumentPreview>; stampOverlay: StampPlacement | null };
 
-/** Aperçu image du document, avec la signature et le cachet déplaçables. */
-function SignaturePreview({ sig, stampOverlay }: { sig: SignaturePlacement; stampOverlay: StampPlacement | null }) {
-  const {
-    preview, signatureUrl, loading, pos, placed, dragging,
-    containerRef, sigWidth,
-    handlePointerDown, handlePointerMove, handlePointerUp, setPlaced,
-  } = sig;
-
-  // Événements du cachet (drag)
+/** Aperçu image du document avec le cachet déplaçable. */
+function DocumentPreview({ doc, stampOverlay }: DocumentPreviewProps) {
+  const { preview, loading, containerRef } = doc;
   const stampDragging = stampOverlay?.dragging ?? false;
-
-  const handleContainerPointerMove = (e: React.PointerEvent) => {
-    handlePointerMove(e);
-    stampOverlay?.handlePointerMove(e);
-  };
-
-  const handleContainerPointerUp = () => {
-    handlePointerUp();
-    stampOverlay?.handlePointerUp();
-  };
 
   if (loading) {
     return (
@@ -490,16 +351,16 @@ function SignaturePreview({ sig, stampOverlay }: { sig: SignaturePlacement; stam
   if (!preview) return null;
 
   const stampFileUrl = stampOverlay?.stamp?.file_url ?? null;
-  const isPng = stampFileUrl && /\.(png|jpg|jpeg)(\?|$)/i.test(stampFileUrl);
+  const isStampPdf = stampFileUrl && /\.pdf(\?|$)/i.test(stampFileUrl);
 
   return (
     <div
       ref={containerRef}
       className="relative w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-50 select-none"
       style={{ aspectRatio: `${preview.page_width} / ${preview.page_height}`, touchAction: "none" }}
-      onPointerMove={handleContainerPointerMove}
-      onPointerUp={handleContainerPointerUp}
-      onPointerLeave={handleContainerPointerUp}
+      onPointerMove={e => stampOverlay?.handlePointerMove(e)}
+      onPointerUp={() => stampOverlay?.handlePointerUp()}
+      onPointerLeave={() => stampOverlay?.handlePointerUp()}
     >
       <img
         src={preview.image}
@@ -522,154 +383,26 @@ function SignaturePreview({ sig, stampOverlay }: { sig: SignaturePlacement; stam
           }}
           onPointerDown={stampOverlay.handlePointerDown}
         >
-          <img
-            src={stampOverlay.stamp.file_url}
-            alt="Cachet"
-            draggable={false}
-            style={{ display: "block", width: "100%", pointerEvents: "none" }}
-          />
+          {isStampPdf ? (
+            <div style={{ position: "relative" }}>
+              <object
+                data={`${stampOverlay.stamp.file_url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                type="application/pdf"
+                style={{ display: "block", width: "100%", aspectRatio: "1 / 1", border: "none", overflow: "hidden" }}
+              >
+                <img src={stampOverlay.stamp.file_url} alt="Cachet" draggable={false} style={{ display: "block", width: "100%" }} />
+              </object>
+              <div style={{ position: "absolute", inset: 0, cursor: "inherit" }} />
+            </div>
+          ) : (
+            <img
+              src={stampOverlay.stamp.file_url}
+              alt="Cachet"
+              draggable={false}
+              style={{ display: "block", width: "100%", pointerEvents: "none" }}
+            />
+          )}
         </div>
-      )}
-
-      {/* ── Overlay signature draggable ── */}
-      {signatureUrl && placed && (
-        <div
-          className="absolute group"
-          style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%`, width: `${sigWidth * 100}%` }}
-        >
-          <img
-            src={signatureUrl}
-            alt="Signature"
-            draggable={false}
-            onPointerDown={handlePointerDown}
-            className={`block w-full object-contain ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
-            style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }}
-          />
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setPlaced(false); }}
-            title="Retirer la signature de l'aperçu"
-            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition"
-          >
-            <X size={11} />
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Contrôle de la taille de la signature (curseur + boutons +/-). */
-function SignatureSizeControl({ sig }: { sig: SignaturePlacement }) {
-  const { sigWidth, SIG_WIDTH_MIN, SIG_WIDTH_MAX, changeSigWidth, applySigWidth, placed } = sig;
-  const STEP = 0.02;
-
-  return (
-    <div className="px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-semibold text-gray-700">Taille de la signature</p>
-        <span className="text-xs text-gray-400">{Math.round((sigWidth / SIG_WIDTH_MAX) * 100)}%</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => changeSigWidth(-STEP)}
-          disabled={!placed || sigWidth <= SIG_WIDTH_MIN}
-          title="Réduire la signature"
-          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition"
-        >
-          <Minus size={14} />
-        </button>
-        <input
-          type="range"
-          min={SIG_WIDTH_MIN}
-          max={SIG_WIDTH_MAX}
-          step={STEP}
-          value={sigWidth}
-          disabled={!placed}
-          onChange={(e) => applySigWidth(parseFloat(e.target.value))}
-          className="flex-1 accent-[#003c71] disabled:opacity-40"
-        />
-        <button
-          type="button"
-          onClick={() => changeSigWidth(STEP)}
-          disabled={!placed || sigWidth >= SIG_WIDTH_MAX}
-          title="Agrandir la signature"
-          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition"
-        >
-          <Plus size={14} />
-        </button>
-      </div>
-      {!placed && (
-        <p className="text-xs text-gray-400 mt-1.5">Replacez la signature sur l'aperçu pour ajuster sa taille.</p>
-      )}
-    </div>
-  );
-}
-
-/** Boutons d'action liés au positionnement de la signature. */
-function SignatureControls({ sig }: { sig: SignaturePlacement }) {
-  const {
-    preview, signatureUrl, loading, applying, applied, removing, regenerating,
-    placed, handleApply, handleRemoveApplied, setPlaced,
-  } = sig;
-
-  if (loading || !preview) return null;
-
-  if (!signatureUrl) {
-    return (
-      <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-        Aucune signature enregistrée. Dessinez votre signature dans l'onglet « Modèles ».
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {placed ? (
-        <>
-          <p className="text-xs text-gray-400 flex items-center gap-1.5">
-            <Move size={12} className="shrink-0" />
-            {applied
-              ? "Glissez la signature vers le bon endroit, puis appliquez à nouveau pour la repositionner."
-              : "Glissez-déposez votre signature sur le document, puis appliquez-la."}
-          </p>
-          <button
-            onClick={handleApply}
-            disabled={applying || removing || regenerating}
-            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 bg-[#003c71] hover:bg-[#003c71]/90 disabled:opacity-60 text-white rounded-lg text-xs font-semibold transition"
-          >
-            {applying
-              ? <><ImSpinner2 className="animate-spin" size={13} /> {applied ? "Repositionnement…" : "Application…"}</>
-              : applied
-                ? <><Move size={13} /> Repositionner la signature</>
-                : <>✍️ Appliquer la signature</>
-            }
-          </button>
-        </>
-      ) : (
-        <>
-          <p className="text-xs text-gray-400">Signature retirée de l'aperçu.</p>
-          <button
-            onClick={() => setPlaced(true)}
-            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold transition"
-          >
-            <RotateCcw size={12} /> Replacer la signature
-          </button>
-        </>
-      )}
-
-      {applied && (
-        <button
-          onClick={handleRemoveApplied}
-          disabled={removing || regenerating}
-          className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 bg-red-50 hover:bg-red-100 border border-red-200 disabled:opacity-60 text-red-600 rounded-lg text-xs font-semibold transition"
-        >
-          {removing || regenerating
-            ? <><ImSpinner2 className="animate-spin" size={13} /> Retrait…</>
-            : <><Trash2 size={12} /> Retirer la signature du document</>
-          }
-        </button>
       )}
     </div>
   );
@@ -1270,10 +1003,6 @@ export default function RhAttestationsPage() {
                 {manageTarget.status === "GENERATED" && (
                   <GeneratedPanel
                     manageTarget={manageTarget}
-                    onApplied={(updated) => {
-                      setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
-                      setManageTarget(updated);
-                    }}
                     onRegenerate={handleRegenerate}
                     regenerating={regenerating}
                     onValidate={handleValidate}
