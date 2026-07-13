@@ -112,15 +112,23 @@ function useStampPlacement({ containerRef, previewReady, previewWidth, previewHe
   const [dragging, setDragging] = useState(false);
   const [saving, setSaving] = useState(false);
   const [moved, setMoved] = useState(false);
-  // Offset entre le point de clic et le coin haut-gauche du cachet
+
+  // Refs pour éviter les stale-closure dans les handlers de pointeur
+  const draggingRef = useRef(false);
+  const posRef = useRef({ x: 0.58, y: 0.80 });
   const dragOffset = useRef({ x: 0, y: 0 });
+
+  const updatePos = (p: { x: number; y: number }) => {
+    posRef.current = p;
+    setPos(p);
+  };
 
   useEffect(() => {
     attestationStampService.get()
       .then(s => {
         if (s) {
           setStamp(s);
-          setPos({ x: s.pos_x, y: s.pos_y });
+          updatePos({ x: s.pos_x, y: s.pos_y });
           setStampWidth(s.width);
         }
       })
@@ -133,39 +141,46 @@ function useStampPlacement({ containerRef, previewReady, previewWidth, previewHe
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const stampH = previewWidth > 0 ? stampWidth * (previewHeight / previewWidth) : stampWidth;
+    // Le container a aspect-ratio = page_width/page_height
+    // Un cachet carré (stampWidth × stampWidth) en fraction de largeur
+    // occupe stampWidth * (page_width/page_height) en fraction de hauteur
+    const stampH = previewWidth > 0 ? stampWidth * (previewWidth / previewHeight) : stampWidth;
     let x = (clientX - rect.left) / rect.width - dragOffset.current.x;
     let y = (clientY - rect.top) / rect.height - dragOffset.current.y;
     x = clamp(x, 0, 1 - stampWidth);
     y = clamp(y, 0, 1 - stampH);
-    setPos({ x, y });
+    updatePos({ x, y });
     setMoved(true);
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Capture au niveau du container (pas de e.target) pour que les pointermove
-    // arrivent toujours sur le container même si le pointeur sort du cachet
+    // Capture au niveau du container pour que pointermove arrive toujours ici
     containerRef.current?.setPointerCapture(e.pointerId);
-    // Calcul de l'offset : où dans le cachet a-t-on cliqué ?
     const el = containerRef.current;
     if (el) {
       const rect = el.getBoundingClientRect();
+      // Lire posRef.current (toujours à jour) plutôt que pos (closure potentiellement stale)
       dragOffset.current = {
-        x: (e.clientX - rect.left) / rect.width - pos.x,
-        y: (e.clientY - rect.top) / rect.height - pos.y,
+        x: (e.clientX - rect.left) / rect.width - posRef.current.x,
+        y: (e.clientY - rect.top) / rect.height - posRef.current.y,
       };
     }
+    draggingRef.current = true;
     setDragging(true);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragging) return;
+    // Utiliser draggingRef (synchrone) plutôt que dragging (state, potentiellement stale)
+    if (!draggingRef.current) return;
     updatePosFromClient(e.clientX, e.clientY);
   };
 
-  const handlePointerUp = () => setDragging(false);
+  const handlePointerUp = () => {
+    draggingRef.current = false;
+    setDragging(false);
+  };
 
   const changeWidth = (delta: number) => {
     setStampWidth(w => {
