@@ -1326,7 +1326,7 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
   const [loading,     setLoading]     = useState(true);
   const [search,      setSearch]      = useState("");
   const [filterService, setFilterService] = useState("");
-  const [editingId,   setEditingId]   = useState<number | null>(null);
+  const [editingEmp,  setEditingEmp]  = useState<EmployeeHierarchy | null>(null);
   const [editForm,    setEditForm]    = useState<{
     n1_manager_id: number | null;
     n2_manager_id: number | null;
@@ -1372,7 +1372,7 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
   });
 
   const openEdit = (emp: EmployeeHierarchy) => {
-    setEditingId(emp.id);
+    setEditingEmp(emp);
     setEditForm({
       n1_manager_id: emp.n1_manager,
       n2_manager_id: emp.n2_manager,
@@ -1380,12 +1380,13 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
     });
   };
 
-  const handleSave = async (empId: number) => {
+  const handleSave = async () => {
+    if (!editingEmp) return;
     setSaving(true);
     try {
-      await employeeHierarchyService.update(empId, editForm);
+      await employeeHierarchyService.update(editingEmp.id, editForm);
       toast.success("Hiérarchie mise à jour — profils et congés synchronisés automatiquement ✓", { duration: 3500 });
-      setEditingId(null);
+      setEditingEmp(null);
       notifyEmployeesSynced();
       load();
     } catch {
@@ -1484,100 +1485,43 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
               </tr>
             ) : filtered.map(emp => (
               <tr key={emp.id} className="hover:bg-gray-50">
-                {editingId === emp.id ? (
-                  <>
-                    <td className="px-4 py-3 font-medium">{emp.full_name}<br/><span className="text-xs text-gray-400">{emp.matricule}</span></td>
-                    <td className="px-4 py-3 text-gray-500">{emp.service ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      <EmployeeSelect
-                        employees={activeEmployees.filter(e => e.id !== emp.id)}
-                        value={editForm.n1_manager_id}
-                        onChange={v => setEditForm(f => ({ ...f, n1_manager_id: v }))}
-                        placeholder="Manager N+1..."
-                        compact
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <EmployeeSelect
-                        employees={activeEmployees.filter(e => e.id !== emp.id)}
-                        value={editForm.n2_manager_id}
-                        onChange={v => setEditForm(f => ({
-                          ...f,
-                          n2_manager_id: v,
-                          requires_two_approvals: v !== null ? true : f.requires_two_approvals,
-                        }))}
-                        placeholder="Manager N+2..."
-                        compact
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={editForm.requires_two_approvals}
-                        onChange={e => setEditForm(f => ({ ...f, requires_two_approvals: e.target.checked }))}
-                        className="h-4 w-4 text-blue-600 rounded"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => handleSave(emp.id)}
-                          disabled={saving}
-                          className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:opacity-60"
-                        >
-                          {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                          Sauver
-                        </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="px-2 py-1 border text-xs rounded hover:bg-gray-50"
-                        >
-                          <X size={11} />
-                        </button>
-                      </div>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="px-4 py-3">
-                      <span className="font-medium">{emp.full_name}</span>
-                      <br />
-                      <span className="text-xs text-gray-400">{emp.matricule}</span>
-                      {(emp.manages_n1_count > 0 || emp.manages_n2_count > 0) && (
-                        <span className="ml-2 bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded">
-                          Manager ({emp.manages_n1_count}N+1/{emp.manages_n2_count}N+2)
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">{emp.service ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      {emp.n1_manager_name
-                        ? <span className="text-green-700">{emp.n1_manager_name}</span>
-                        : <span className="italic text-gray-400">Non défini</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3">
-                      {emp.n2_manager_name
-                        ? <span className="text-purple-700">{emp.n2_manager_name}</span>
-                        : <span className="italic text-gray-400">—</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3">
-                      {emp.requires_two_approvals
-                        ? <span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded">Oui</span>
-                        : <span className="text-gray-400 text-xs">Non</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => openEdit(emp)}
-                        className="flex items-center gap-1 px-2 py-1 border text-xs rounded hover:bg-gray-50 text-gray-600"
-                      >
-                        <Pencil size={11} /> Modifier
-                      </button>
-                    </td>
-                  </>
-                )}
+                <td className="px-4 py-3">
+                  <span className="font-medium">{emp.full_name}</span>
+                  <br />
+                  <span className="text-xs text-gray-400">{emp.matricule}</span>
+                  {(emp.manages_n1_count > 0 || emp.manages_n2_count > 0) && (
+                    <span className="ml-2 bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded">
+                      Manager ({emp.manages_n1_count}N+1/{emp.manages_n2_count}N+2)
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-gray-500">{emp.service ?? "—"}</td>
+                <td className="px-4 py-3">
+                  {emp.n1_manager_name
+                    ? <span className="text-green-700">{emp.n1_manager_name}</span>
+                    : <span className="italic text-gray-400">Non défini</span>
+                  }
+                </td>
+                <td className="px-4 py-3">
+                  {emp.n2_manager_name
+                    ? <span className="text-purple-700">{emp.n2_manager_name}</span>
+                    : <span className="italic text-gray-400">—</span>
+                  }
+                </td>
+                <td className="px-4 py-3">
+                  {emp.requires_two_approvals
+                    ? <span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded">Oui</span>
+                    : <span className="text-gray-400 text-xs">Non</span>
+                  }
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => openEdit(emp)}
+                    className="flex items-center gap-1 px-2 py-1 border text-xs rounded hover:bg-gray-50 text-gray-600"
+                  >
+                    <Pencil size={11} /> Modifier
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1592,6 +1536,84 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
           si renseigné, la validation à 2 niveaux est automatiquement activée.
         </span>
       </div>
+
+      {/* ── Modal : édition hiérarchie employé ──────────────────────────────── */}
+      {editingEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+          onClick={() => setEditingEmp(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-sm flex-shrink-0">
+                  {editingEmp.full_name.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-bold text-gray-800">{editingEmp.full_name}</p>
+                  <p className="text-xs text-gray-400">{editingEmp.matricule} · {editingEmp.service ?? "—"}</p>
+                </div>
+              </div>
+              <button onClick={() => setEditingEmp(null)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
+                <X size={16} />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              {/* N+1 */}
+              <FormField label="Manager direct N+1">
+                <EmployeeSelect
+                  employees={activeEmployees.filter(e => e.id !== editingEmp.id)}
+                  value={editForm.n1_manager_id}
+                  onChange={v => setEditForm(f => ({ ...f, n1_manager_id: v }))}
+                  placeholder="Choisir le N+1..."
+                />
+              </FormField>
+
+              {/* N+2 */}
+              <FormField label="Manager N+2 (sous-département uniquement)">
+                <EmployeeSelect
+                  employees={activeEmployees.filter(e => e.id !== editingEmp.id)}
+                  value={editForm.n2_manager_id}
+                  onChange={v => setEditForm(f => ({
+                    ...f,
+                    n2_manager_id: v,
+                    requires_two_approvals: v !== null ? true : f.requires_two_approvals,
+                  }))}
+                  placeholder="Choisir le N+2..."
+                />
+              </FormField>
+
+              {/* Double validation */}
+              <label className="flex items-center gap-3 cursor-pointer select-none p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition">
+                <input
+                  type="checkbox"
+                  checked={editForm.requires_two_approvals}
+                  onChange={e => setEditForm(f => ({ ...f, requires_two_approvals: e.target.checked }))}
+                  className="h-4 w-4 rounded accent-blue-600"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Double validation requise</p>
+                  <p className="text-xs text-gray-400">N+1 et N+2 doivent tous deux approuver</p>
+                </div>
+              </label>
+            </div>
+            {/* Footer */}
+            <div className="flex gap-2 justify-end px-6 py-4 border-t border-gray-100 bg-gray-50">
+              <button onClick={() => setEditingEmp(null)}
+                className="px-4 py-2 text-sm border rounded-xl hover:bg-gray-100 font-medium transition">
+                Annuler
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60 font-bold transition">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                Valider
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
