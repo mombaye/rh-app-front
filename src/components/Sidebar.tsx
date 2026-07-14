@@ -16,6 +16,7 @@ import {
   FileStack,
   FileBadge,
   Plane,
+  BookUser,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -35,6 +36,7 @@ type NavItem = {
 export default function Sidebar() {
   const location = useLocation();
   const { user, logout, availableRoles } = useAuth();
+  const isHse = user?.is_hse === true;
   const { totalCount, urgentsCount } = useAlertes();
 
   const isRhManager = availableRoles.includes("manager1") || availableRoles.includes("manager2");
@@ -155,6 +157,11 @@ export default function Sidebar() {
       path: "/rh/missions",
       icon: <Plane size={20} />,
     },
+    ...(isHse ? [{
+      label: "Gestion Passeports",
+      path: "/hse/passeports",
+      icon: <BookUser size={20} />,
+    }] : []),
     {
       label: "Mon espace",
       path: "/rh/my",

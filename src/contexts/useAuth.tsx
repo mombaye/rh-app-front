@@ -21,6 +21,7 @@ type User = {
   employee_fonction?: string | null;
   is_department_head?: boolean;
   department_name?: string | null;
+  is_hse?: boolean;
   roles?: UserRole[];
 };
 

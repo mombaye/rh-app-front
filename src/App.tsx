@@ -76,6 +76,9 @@ const RhAnticipationPage        = lazy(() => import("@/pages/rh/RhAnticipationPa
 const RhAttestationsPage        = lazy(() => import("@/pages/rh/RhAttestationsPage"));
 const RhMissionsPage            = lazy(() => import("@/pages/rh/RhMissionsPage"));
 
+// HSE
+const PassportManagementPage    = lazy(() => import("@/pages/hse/PassportManagementPage"));
+
 // ── Fallback de chargement ────────────────────────────────────────────────────
 function PageLoader() {
   return (
@@ -110,6 +113,14 @@ function EmployeeOnlyRoute({ children }: { children: React.ReactNode }) {
   if (activeRole === "rh") return <Navigate to="/dashboard" replace />;
   if (activeRole === "manager1" || activeRole === "manager2") return <Navigate to="/manager/dashboard" replace />;
   return <Navigate to="/employee/dashboard" replace />;
+}
+
+/** Accessible uniquement au responsable HSE (user.is_hse === true) */
+function HseOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return null;
+  if (user.is_hse) return <>{children}</>;
+  return <Navigate to="/dashboard" replace />;
 }
 
 /** Accessible si l'utilisateur a au moins un rôle manager (même en mode Employé). */
@@ -362,6 +373,15 @@ function App() {
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <LeavesMigrationPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+
+        {/* ── Espace HSE ───────────────────────────────────────── */}
+        <Route path="/hse/passeports" element={
+          <ProtectedRoute><FirstLoginGuard>
+            <HseOnlyRoute>
+              <PassportManagementPage />
+            </HseOnlyRoute>
+          </FirstLoginGuard></ProtectedRoute>
         } />
 
         {/* Fallback */}

@@ -146,8 +146,9 @@ function OrgChartTab() {
     n1_manager_id: number | null;
     n2_manager_id: number | null;
     requires_two_approvals: boolean;
+    is_hse_responsible: boolean;
     service: string;
-  }>({ n1_manager_id: null, n2_manager_id: null, requires_two_approvals: false, service: "" });
+  }>({ n1_manager_id: null, n2_manager_id: null, requires_two_approvals: false, is_hse_responsible: false, service: "" });
   const [saving, setSaving] = useState(false);
 
   // Dept en cours d'édition (depuis l'orgchart) — null = création
@@ -232,6 +233,7 @@ function OrgChartTab() {
       n1_manager_id: emp.n1_manager,
       n2_manager_id: emp.n2_manager,
       requires_two_approvals: emp.requires_two_approvals,
+      is_hse_responsible: emp.is_hse_responsible ?? false,
       service: emp.service ?? "",
     });
   };
@@ -244,6 +246,7 @@ function OrgChartTab() {
         n1_manager_id: editForm.n1_manager_id,
         n2_manager_id: editForm.n2_manager_id,
         requires_two_approvals: editForm.requires_two_approvals,
+        is_hse_responsible: editForm.is_hse_responsible,
       });
       // Mettre à jour le département (service) si changé
       if (editForm.service !== (editingEmp.service ?? "")) {
@@ -676,6 +679,20 @@ function OrgChartTab() {
                 <div>
                   <p className="text-sm font-semibold text-gray-700">Double validation requise</p>
                   <p className="text-xs text-gray-400">N+1 et N+2 doivent tous deux approuver — uniquement pour les sous-départements</p>
+                </div>
+              </label>
+
+              {/* Responsable HSE */}
+              <label className="flex items-center gap-3 cursor-pointer select-none p-3 rounded-xl border border-amber-100 bg-amber-50/40 hover:bg-amber-50 transition">
+                <input
+                  type="checkbox"
+                  checked={editForm.is_hse_responsible}
+                  onChange={e => setEditForm(f => ({ ...f, is_hse_responsible: e.target.checked }))}
+                  className="h-4 w-4 rounded accent-amber-600"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">Responsable HSE</p>
+                  <p className="text-xs text-amber-600/80">Donne accès à la gestion des passeports des employés</p>
                 </div>
               </label>
             </div>
@@ -1331,7 +1348,8 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
     n1_manager_id: number | null;
     n2_manager_id: number | null;
     requires_two_approvals: boolean;
-  }>({ n1_manager_id: null, n2_manager_id: null, requires_two_approvals: false });
+    is_hse_responsible: boolean;
+  }>({ n1_manager_id: null, n2_manager_id: null, requires_two_approvals: false, is_hse_responsible: false });
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
@@ -1377,6 +1395,7 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
       n1_manager_id: emp.n1_manager,
       n2_manager_id: emp.n2_manager,
       requires_two_approvals: emp.requires_two_approvals,
+      is_hse_responsible: emp.is_hse_responsible ?? false,
     });
   };
 
@@ -1596,6 +1615,20 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
                 <div>
                   <p className="text-sm font-semibold text-gray-700">Double validation requise</p>
                   <p className="text-xs text-gray-400">N+1 et N+2 doivent tous deux approuver</p>
+                </div>
+              </label>
+
+              {/* Responsable HSE */}
+              <label className="flex items-center gap-3 cursor-pointer select-none p-3 rounded-xl border border-amber-100 bg-amber-50/40 hover:bg-amber-50 transition">
+                <input
+                  type="checkbox"
+                  checked={editForm.is_hse_responsible}
+                  onChange={e => setEditForm(f => ({ ...f, is_hse_responsible: e.target.checked }))}
+                  className="h-4 w-4 rounded accent-amber-600"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">Responsable HSE</p>
+                  <p className="text-xs text-amber-600/80">Donne accès à la gestion des passeports des employés</p>
                 </div>
               </label>
             </div>

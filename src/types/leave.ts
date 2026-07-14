@@ -44,6 +44,7 @@ export interface EmployeeMini {
   n2_manager_id?:          number | null;
   n1_manager_name?:        string | null;
   n2_manager_name?:        string | null;
+  is_hse_responsible?:     boolean;
 }
 
 // ── LeaveStatus ── mirrors LeaveRequest.Status choices ───────────────────────
@@ -392,6 +393,7 @@ export interface EmployeeHierarchy {
   manages_n1_count:     number;
   manages_n2_count:     number;
   status:               string;
+  is_hse_responsible?:  boolean;
 }
 
 // ── ManagerDelegation ── mirrors ManagerDelegationSerializer ──────────────────

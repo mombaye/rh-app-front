@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, CalendarDays, BadgeDollarSign,
   FolderOpen, ClipboardCheck, X, Menu, UserCircle2, FileStack, LogOut, Users, FileBadge, Clock,
+  BookUser,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -24,6 +25,8 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
+  const isHse = user?.is_hse === true;
+
   const navItems: NavItem[] = [
     { label: "Tableau de bord",          path: "/manager/dashboard",    icon: <LayoutDashboard size={20} />                                                    },
     { label: "Validation demande",       path: "/manager/approvals",    icon: <ClipboardCheck size={20} />, badge: pendingCount > 0 ? pendingCount : undefined },
@@ -35,6 +38,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
     { label: "Demande de sortie",        path: "/manager/exits",        icon: <LogOut size={20} />                                                             },
     { label: "Demande d'attestation",    path: "/manager/attestations", icon: <FileBadge size={20} />                                                          },
     { label: "Documents RH",            path: "/manager/documents",    icon: <FileStack size={20} />                                                          },
+    ...(isHse ? [{ label: "Gestion Passeports", path: "/hse/passeports", icon: <BookUser size={20} /> }] : []),
   ];
 
   useEffect(() => {
