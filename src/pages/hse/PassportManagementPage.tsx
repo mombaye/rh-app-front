@@ -23,12 +23,11 @@ const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("access_token")}`,
 });
 
-// ── Modal Détail — rendu HTML direct depuis le fichier Excel ─────────────────
+// ── Modal Détail — HTML généré depuis openpyxl (styles + images exact) ───────
 function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: () => void }) {
-  const [htmlContent, setHtmlContent] = useState<string | null>(null);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState(false);
-  const iframeRef                     = useRef<HTMLIFrameElement>(null);
+  const [html, setHtml]       = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
@@ -37,24 +36,10 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
         `${BASE_URL}/api/employees/passeports/${file.slug}/html/?token=${token}`,
         { headers: authHeaders(), responseType: "text" }
       )
-      .then((r) => setHtmlContent(r.data))
+      .then((r) => setHtml(r.data))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [file.slug]);
-
-  // Ajuste la hauteur de l'iframe à son contenu réel
-  const onIframeLoad = () => {
-    try {
-      const doc = iframeRef.current?.contentDocument;
-      if (doc && iframeRef.current) {
-        iframeRef.current.style.height = doc.documentElement.scrollHeight + "px";
-      }
-    } catch {}
-  };
-
-  const handlePrint = () => {
-    iframeRef.current?.contentWindow?.print();
-  };
 
   return (
     <div
@@ -76,20 +61,9 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
               <p className="text-xs text-gray-400">Passeport Sécurité CAMUSAT</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {htmlContent && (
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 transition"
-              >
-                <Printer size={13} />
-                Imprimer
-              </button>
-            )}
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
-              <X size={16} />
-            </button>
-          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+            <X size={16} />
+          </button>
         </div>
 
         {/* Corps */}
@@ -105,14 +79,13 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
               <p className="text-sm">Impossible de charger la fiche.</p>
             </div>
           )}
-          {htmlContent && (
+          {html && (
             <iframe
-              ref={iframeRef}
-              srcDoc={htmlContent}
-              className="w-full border-0 min-h-[600px]"
+              srcDoc={html}
+              className="w-full border-0"
+              style={{ minHeight: "calc(98vh - 56px)", height: "100%" }}
               title={file.display_name}
-              onLoad={onIframeLoad}
-              sandbox="allow-same-origin allow-scripts allow-modals"
+              sandbox="allow-same-origin allow-scripts"
             />
           )}
         </div>
