@@ -14,6 +14,7 @@ export interface PassportFile {
   nom_prenom: string;
   poste: string;
   date_embauche: string;
+  qr_generated: boolean;
 }
 
 export interface PassportFormation {
@@ -84,5 +85,13 @@ export const passportService = {
 
   deleteFile: async (slug: string): Promise<void> => {
     await axios.delete(`${API}/${slug}/delete/`, { headers: authHeaders() });
+  },
+
+  markQrGenerated: async (slug: string, generated = true): Promise<void> => {
+    await axios.post(`${API}/${slug}/mark-qr/`, { generated }, { headers: authHeaders() });
+  },
+
+  markQrGeneratedBulk: async (slugs: string[], generated = true): Promise<void> => {
+    await axios.post(`${API}/mark-qr-bulk/`, { slugs, generated }, { headers: authHeaders() });
   },
 };

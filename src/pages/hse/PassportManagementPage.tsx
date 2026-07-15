@@ -24,10 +24,11 @@ const qrScanUrl = (slug: string) =>
 function QrModal({ file, alreadyGenerated, onGenerated, onClose }: {
   file: PassportFile;
   alreadyGenerated: boolean;
-  onGenerated: () => void;
+  onGenerated: (slug: string) => void;
   onClose: () => void;
 }) {
   const [confirmed, setConfirmed] = useState(alreadyGenerated);
+  const [saving, setSaving] = useState(false);
   const canvasId = `qr-${file.slug}`;
   const url = qrScanUrl(file.slug);
 
@@ -118,10 +119,20 @@ function QrModal({ file, alreadyGenerated, onGenerated, onClose }: {
                   Annuler
                 </button>
                 <button
-                  onClick={() => { setConfirmed(true); onGenerated(); }}
-                  className="flex-1 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium transition"
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true);
+                    try {
+                      await passportService.markQrGenerated(file.slug);
+                      setConfirmed(true);
+                      onGenerated(file.slug);
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium transition disabled:opacity-60"
                 >
-                  Générer
+                  {saving ? "..." : "Générer"}
                 </button>
               </div>
             </div>
@@ -220,6 +231,195 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
             />
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal Génération QR en masse ─────────────────────────────────────────────
+function BulkGenerateModal({
+  files,
+  alreadyGenerated,
+  onDone,
+  onClose,
+}: {
+  files: PassportFile[];
+  alreadyGenerated: Set<string>;
+  onDone: (newSlugs: string[]) => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode]       = useState<"choose" | "select">("choose");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [search, setSearch]   = useState("");
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const notYet = files.filter((f) => !alreadyGenerated.has(f.slug));
+  const filtered = notYet.filter((f) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (f.nom_prenom || f.display_name).toLowerCase().includes(q);
+  });
+
+  const toggle = (slug: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(slug) ? next.delete(slug) : next.add(slug);
+      return next;
+    });
+
+  const generate = async (slugs: string[]) => {
+    if (slugs.length === 0) return;
+    setLoading(true);
+    setProgress(50);
+    try {
+      await passportService.markQrGeneratedBulk(slugs);
+      setProgress(100);
+      onDone(slugs);
+    } catch {
+      // fallback séquentiel si le bulk échoue
+      const done: string[] = [];
+      for (let i = 0; i < slugs.length; i++) {
+        try { await passportService.markQrGenerated(slugs[i]); done.push(slugs[i]); } catch { /* skip */ }
+        setProgress(Math.round(((i + 1) / slugs.length) * 100));
+      }
+      setLoading(false);
+      onDone(done);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-purple-50"><QrCode size={16} className="text-purple-600" /></div>
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">Générer QR en masse</p>
+              <p className="text-xs text-gray-400">
+                {notYet.length} passeport{notYet.length !== 1 ? "s" : ""} sans QR
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={16} /></button>
+        </div>
+
+        {loading ? (
+          /* Barre de progression */
+          <div className="p-8 text-center space-y-4">
+            <div className="w-14 h-14 rounded-full bg-purple-50 flex items-center justify-center mx-auto">
+              <QrCode size={28} className="text-purple-500 animate-pulse" />
+            </div>
+            <p className="text-sm font-semibold text-gray-700">Génération en cours…</p>
+            <div className="w-full bg-gray-100 rounded-full h-2">
+              <div className="bg-purple-600 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+            </div>
+            <p className="text-xs text-gray-400">{progress}%</p>
+          </div>
+        ) : mode === "choose" ? (
+          /* Choix : Tous ou Sélectionner */
+          <div className="p-5 space-y-3">
+            <>
+              <button
+                onClick={() => generate(files.map((f) => f.slug))}
+                className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition text-left group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 transition">
+                  <QrCode size={18} className="text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Tous les membres</p>
+                  <p className="text-xs text-gray-400">
+                    Générer pour les {files.length} passeports
+                    {notYet.length < files.length ? ` (${notYet.length} restants, ${files.length - notYet.length} déjà faits)` : ""}
+                  </p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setMode("select")}
+                className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border border-gray-200 hover:border-[#003c71] hover:bg-[#003c71]/5 transition text-left group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#003c71]/10 flex items-center justify-center flex-shrink-0 group-hover:bg-[#003c71]/20 transition">
+                  <BookUser size={18} className="text-[#003c71]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Sélectionner des membres</p>
+                  <p className="text-xs text-gray-400">Choisir manuellement qui générer</p>
+                </div>
+              </button>
+            </>
+          </div>
+        ) : (
+          /* Sélection individuelle */
+          <div className="flex flex-col" style={{ maxHeight: "70vh" }}>
+            {/* Barre recherche + tout cocher */}
+            <div className="px-4 py-3 border-b space-y-2">
+              <div className="relative">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={search} onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Rechercher…"
+                  className="w-full pl-8 pr-3 py-1.5 border rounded-lg text-xs focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every((f) => selected.has(f.slug))}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelected(new Set(filtered.map((f) => f.slug)));
+                      else setSelected(new Set());
+                    }}
+                    className="accent-purple-600"
+                  />
+                  Tout sélectionner ({filtered.length})
+                </label>
+                <span className="text-xs text-purple-600 font-medium">{selected.size} sélectionné{selected.size !== 1 ? "s" : ""}</span>
+              </div>
+            </div>
+
+            {/* Liste */}
+            <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
+              {filtered.map((f) => (
+                <label key={f.slug} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(f.slug)}
+                    onChange={() => toggle(f.slug)}
+                    className="accent-purple-600 flex-shrink-0"
+                  />
+                  <div className="w-7 h-7 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                    {(f.nom_prenom || f.display_name).split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
+                  </div>
+                  <span className="text-sm text-gray-800 truncate">{f.nom_prenom || f.display_name}</span>
+                </label>
+              ))}
+              {filtered.length === 0 && (
+                <p className="text-center text-xs text-gray-400 py-6">Aucun résultat</p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-4 py-3 border-t flex gap-2">
+              <button onClick={() => { setMode("choose"); setSelected(new Set()); setSearch(""); }}
+                className="flex-1 px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition">
+                Retour
+              </button>
+              <button
+                disabled={selected.size === 0}
+                onClick={() => generate([...selected])}
+                className="flex-1 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium transition disabled:opacity-40"
+              >
+                Générer ({selected.size})
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -386,11 +586,16 @@ export default function PassportManagementPage() {
   const [detailFile, setDetailFile]   = useState<PassportFile | null>(null);
   const [qrFile, setQrFile]           = useState<PassportFile | null>(null);
   const [qrGenerated, setQrGenerated] = useState<Set<string>>(new Set());
-  const [showBulkQr, setShowBulkQr]   = useState(false);
+  const [showBulkQr, setShowBulkQr]         = useState(false);
+  const [showBulkGenerate, setShowBulkGenerate] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setFiles(await passportService.getAll()); }
+    try {
+      const data = await passportService.getAll();
+      setFiles(data);
+      setQrGenerated(new Set(data.filter((f) => f.qr_generated).map((f) => f.slug)));
+    }
     catch (e: any) { toast.error(e?.response?.data?.error || "Erreur lors du chargement."); }
     finally { setLoading(false); }
   }, []);
@@ -423,10 +628,19 @@ export default function PassportManagementPage() {
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
+            {files.length > 0 && (
+              <button
+                onClick={() => setShowBulkGenerate(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium hover:bg-purple-100 transition"
+              >
+                <QrCode size={15} />
+                Générer QR en masse
+              </button>
+            )}
             {qrGenerated.size > 0 && (
               <button
                 onClick={() => setShowBulkQr(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium hover:bg-purple-100 transition"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
               >
                 <QrCode size={15} />
                 QR Codes ({qrGenerated.size})
@@ -560,6 +774,24 @@ export default function PassportManagementPage() {
         )}
       </div>
 
+      {/* Modal génération QR en masse */}
+      {showBulkGenerate && (
+        <BulkGenerateModal
+          files={files}
+          alreadyGenerated={qrGenerated}
+          onDone={(newSlugs) => {
+            setQrGenerated((prev) => {
+              const next = new Set(prev);
+              newSlugs.forEach((s) => next.add(s));
+              return next;
+            });
+            setShowBulkGenerate(false);
+            toast.success(`${newSlugs.length} QR code${newSlugs.length > 1 ? "s" : ""} généré${newSlugs.length > 1 ? "s" : ""} !`);
+          }}
+          onClose={() => setShowBulkGenerate(false)}
+        />
+      )}
+
       {/* Modal export QR en masse */}
       {showBulkQr && (
         <BulkQrModal files={files} generated={qrGenerated} onClose={() => setShowBulkQr(false)} />
@@ -570,7 +802,7 @@ export default function PassportManagementPage() {
         <QrModal
           file={qrFile}
           alreadyGenerated={qrGenerated.has(qrFile.slug)}
-          onGenerated={() => setQrGenerated((prev) => new Set(prev).add(qrFile.slug))}
+          onGenerated={(slug) => setQrGenerated((prev) => new Set(prev).add(slug))}
           onClose={() => setQrFile(null)}
         />
       )}
