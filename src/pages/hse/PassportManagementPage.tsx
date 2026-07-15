@@ -1,20 +1,12 @@
 // src/pages/hse/PassportManagementPage.tsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import axios from "axios";
-import { QRCodeCanvas } from "qrcode.react";
-import {
-  BookUser, Upload, Search, RefreshCw, Download, QrCode,
-  Trash2, X, ChevronLeft, ChevronRight, Settings2,
-  RefreshCcw, CheckCircle2, Printer,
-} from "lucide-react";
+import JSZip from "jszip";
+import { BookUser, Search, RefreshCw, X, ChevronLeft, ChevronRight, QrCode, Download, Printer } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
+import { QRCodeCanvas } from "qrcode.react";
 import toast from "react-hot-toast";
 import ManagerLayout from "@/layouts/ManagerLayout";
-import {
-  passportService,
-  PassportFile,
-  UploadResult,
-} from "@/services/passportService";
+import { passportService, PassportFile } from "@/services/passportService";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
 const PAGE_SIZE = 10;
@@ -23,22 +15,166 @@ const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("access_token")}`,
 });
 
-// ── Modal Détail — HTML généré depuis openpyxl (styles + images exact) ───────
+// ── URL publique QR (scan sans login) ────────────────────────────────────────
+const PROD_URL = import.meta.env.VITE_PUBLIC_URL || BASE_URL;
+const qrScanUrl = (slug: string) =>
+  `${PROD_URL}/api/employees/passeports/${slug}/pdf/scan/`;
+
+// ── Modal QR Code ─────────────────────────────────────────────────────────────
+function QrModal({ file, alreadyGenerated, onGenerated, onClose }: {
+  file: PassportFile;
+  alreadyGenerated: boolean;
+  onGenerated: () => void;
+  onClose: () => void;
+}) {
+  const [confirmed, setConfirmed] = useState(alreadyGenerated);
+  const canvasId = `qr-${file.slug}`;
+  const url = qrScanUrl(file.slug);
+
+  const download = () => {
+    const qr = document.getElementById(canvasId) as HTMLCanvasElement | null;
+    if (!qr) return;
+
+    const name = file.nom_prenom || file.display_name;
+    const padding  = 16;
+    const fontSize = 15;
+    const lineHeight = fontSize + 8;
+
+    // Nouveau canvas = CAMUSAT + QR + nom
+    const out = document.createElement("canvas");
+    out.width  = qr.width + padding * 2;
+    out.height = qr.height + lineHeight * 2 + padding * 2;
+
+    const ctx = out.getContext("2d")!;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, out.width, out.height);
+
+    // CAMUSAT en haut
+    ctx.fillStyle = "#003c71";
+    ctx.font      = `bold ${fontSize + 2}px Arial, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText("CAMUSAT", out.width / 2, padding + fontSize);
+
+    // QR
+    ctx.drawImage(qr, padding, padding + lineHeight);
+
+    // Nom en bas
+    ctx.fillStyle = "#111827";
+    ctx.font      = `bold ${fontSize}px Arial, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText(name, out.width / 2, padding + lineHeight + qr.height + lineHeight - 4);
+
+    const a = document.createElement("a");
+    a.download = `QR_${name}.png`;
+    a.href = out.toDataURL("image/png");
+    a.click();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-purple-50">
+              <QrCode size={16} className="text-purple-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">{file.nom_prenom || file.display_name}</p>
+              <p className="text-xs text-gray-400">Passeport Sécurité — QR Code</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-5">
+          {!confirmed ? (
+            /* Confirmation */
+            <div className="text-center space-y-4">
+              <div className="w-14 h-14 rounded-full bg-purple-50 flex items-center justify-center mx-auto">
+                <QrCode size={28} className="text-purple-500" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Générer le code QR ?</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Le QR permettra d'ouvrir le passeport PDF de{" "}
+                  <span className="font-medium text-gray-600">{file.nom_prenom || file.display_name}</span>{" "}
+                  depuis n'importe quel appareil photo.
+                </p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={onClose}
+                  className="flex-1 px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => { setConfirmed(true); onGenerated(); }}
+                  className="flex-1 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium transition"
+                >
+                  Générer
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* QR affiché */
+            <div className="text-center space-y-4">
+              <div className="flex flex-col items-center p-4 bg-white rounded-xl border border-gray-200 shadow-sm gap-2">
+                <p className="text-base font-extrabold text-[#003c71] tracking-widest uppercase">
+                  CAMUSAT
+                </p>
+                <QRCodeCanvas id={canvasId} value={url} size={180} level="H" marginSize={1} />
+                <p className="text-sm font-bold text-gray-800 text-center tracking-wide">
+                  {file.nom_prenom || file.display_name}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 break-all">{url}</p>
+              </div>
+              <button
+                onClick={download}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#003c71] hover:bg-[#003c71]/90 text-white text-sm font-medium transition"
+              >
+                <Download size={14} />
+                Télécharger le QR
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal Détail — PDF chargé via fetch (contourne X-Frame-Options) ──────────
 function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: () => void }) {
-  const [html, setHtml]       = useState<string | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(false);
+  const [error, setError]     = useState<string | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
-    axios
-      .get<string>(
-        `${BASE_URL}/api/employees/passeports/${file.slug}/html/?token=${token}`,
-        { headers: authHeaders(), responseType: "text" }
-      )
-      .then((r) => setHtml(r.data))
-      .catch(() => setError(true))
+    fetch(`${BASE_URL}/api/employees/passeports/${file.slug}/pdf/?token=${token}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.blob();
+      })
+      .then((blob) => setBlobUrl(URL.createObjectURL(blob)))
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+
+    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl); };
   }, [file.slug]);
 
   return (
@@ -67,25 +203,20 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
         </div>
 
         {/* Corps */}
-        <div className="flex-1 overflow-auto bg-gray-50">
-          {loading && (
-            <div className="flex justify-center py-20">
-              <ImSpinner2 className="animate-spin text-[#003c71]" size={32} />
-            </div>
-          )}
+        <div className="flex-1 bg-gray-100 flex items-center justify-center">
+          {loading && <ImSpinner2 className="animate-spin text-[#003c71]" size={32} />}
           {error && (
-            <div className="text-center py-20 text-gray-400">
+            <div className="text-center text-gray-400">
               <BookUser size={36} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Impossible de charger la fiche.</p>
+              <p className="text-sm">{error}</p>
             </div>
           )}
-          {html && (
+          {blobUrl && (
             <iframe
-              srcDoc={html}
+              src={blobUrl}
               className="w-full border-0"
-              style={{ minHeight: "calc(98vh - 56px)", height: "100%" }}
+              style={{ height: "calc(98vh - 56px)" }}
               title={file.display_name}
-              sandbox="allow-same-origin allow-scripts"
             />
           )}
         </div>
@@ -94,187 +225,155 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   );
 }
 
-// ── Modal Gérer ───────────────────────────────────────────────────────────────
-function GestionModal({
-  file, hasQr, onClose, onVoirDetail, onQrGenerated, onDelete,
+// ── Modal Export QR en masse ─────────────────────────────────────────────────
+function BulkQrModal({
+  files, generated, onClose,
 }: {
-  file: PassportFile;
-  hasQr: boolean;
+  files: PassportFile[];
+  generated: Set<string>;
   onClose: () => void;
-  onVoirDetail: () => void;
-  onQrGenerated: (slug: string) => void;
-  onDelete: () => void;
 }) {
-  const [showQr, setShowQr] = useState(hasQr);
-  const qrCanvasId = `qr-canvas-${file.slug}`;
-  const qrValue = `${BASE_URL}/api/employees/passeports/${file.slug}/pdf/`;
+  const items = files.filter((f) => generated.has(f.slug));
+  const hiddenRef = useRef<HTMLDivElement>(null);
 
-  const handleGenerate = () => {
-    setShowQr(true);
-    onQrGenerated(file.slug);
+  const buildQrCanvas = (slug: string, name: string): Promise<HTMLCanvasElement> =>
+    new Promise((resolve) => {
+      const src = document.getElementById(`bulk-qr-${slug}`) as HTMLCanvasElement | null;
+      if (!src) { resolve(document.createElement("canvas")); return; }
+
+      const pad = 14; const fs = 14; const lh = fs + 8;
+      const out = document.createElement("canvas");
+      out.width  = src.width + pad * 2;
+      out.height = src.height + lh * 2 + pad * 2;
+      const ctx = out.getContext("2d")!;
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, out.width, out.height);
+      ctx.fillStyle = "#003c71"; ctx.font = `bold ${fs + 2}px Arial`; ctx.textAlign = "center";
+      ctx.fillText("CAMUSAT", out.width / 2, pad + fs);
+      ctx.drawImage(src, pad, pad + lh);
+      ctx.fillStyle = "#111827"; ctx.font = `bold ${fs}px Arial`;
+      ctx.fillText(name, out.width / 2, pad + lh + src.height + lh - 4);
+      resolve(out);
+    });
+
+  const handleDownload = async () => {
+    if (items.length === 0) return;
+
+    const zip = new JSZip();
+    const folder = zip.folder("QR_Passeports_CAMUSAT")!;
+
+    for (const f of items) {
+      const name = f.nom_prenom || f.display_name;
+      const qr   = await buildQrCanvas(f.slug, name);
+      // Convertir le canvas en blob PNG
+      const blob: Blob = await new Promise((res) =>
+        qr.toBlob((b) => res(b!), "image/png")
+      );
+      // Nom du fichier = nom du technicien
+      const safeName = name.replace(/[/\\?%*:|"<>]/g, "_");
+      folder.file(`${safeName}.png`, blob);
+    }
+
+    const content = await zip.generateAsync({ type: "blob" });
+    const a = document.createElement("a");
+    a.download = `QR_Passeports_CAMUSAT_${new Date().toLocaleDateString("fr").replace(/\//g, "-")}.zip`;
+    a.href = URL.createObjectURL(content);
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
-  const downloadQr = () => {
-    const canvas = document.getElementById(qrCanvasId) as HTMLCanvasElement | null;
-    if (!canvas) return;
-    const a = document.createElement("a");
-    a.download = `QR_${file.display_name}.png`;
-    a.href = canvas.toDataURL("image/png");
-    a.click();
+  const handlePrint = () => {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const canvases = items.map((f) => {
+      const c = document.getElementById(`bulk-qr-${f.slug}`) as HTMLCanvasElement | null;
+      return { name: f.nom_prenom || f.display_name, src: c?.toDataURL("image/png") || "" };
+    });
+
+    win.document.write(`<!DOCTYPE html><html><head><title>QR Passeports CAMUSAT</title>
+    <style>
+      body { margin: 0; font-family: Arial, sans-serif; background: #fff; }
+      .grid { display: flex; flex-wrap: wrap; gap: 0; }
+      .card { width: 33.33%; box-sizing: border-box; padding: 16px;
+              display: flex; flex-direction: column; align-items: center;
+              border: 0.5px solid #e5e7eb; page-break-inside: avoid; }
+      .brand { font-size: 14px; font-weight: 900; color: #003c71;
+               letter-spacing: 4px; margin-bottom: 8px; }
+      img { width: 140px; height: 140px; }
+      .name { font-size: 11px; font-weight: 700; color: #111827;
+              text-align: center; margin-top: 8px; }
+      @media print { @page { margin: 8mm; } }
+    </style></head><body>
+    <div class="grid">${canvases.map(({ name, src }) =>
+      `<div class="card">
+        <div class="brand">CAMUSAT</div>
+        <img src="${src}" />
+        <div class="name">${name}</div>
+      </div>`
+    ).join("")}</div>
+    <script>window.onload=()=>{ window.print(); }<\/script>
+    </body></html>`);
+    win.document.close();
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
+
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#003c71]/10 text-[#003c71] flex items-center justify-center font-bold text-sm">
-              {(file.nom_prenom || file.display_name).split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
-            </div>
+            <div className="p-2 rounded-xl bg-purple-50"><QrCode size={16} className="text-purple-600" /></div>
             <div>
-              <p className="font-semibold text-gray-800 text-sm leading-tight">{file.nom_prenom || file.display_name}</p>
-              <p className="text-xs text-gray-400">Passeport Sécurité</p>
+              <p className="font-semibold text-gray-800 text-sm">QR Codes générés</p>
+              <p className="text-xs text-gray-400">{items.length} passeport{items.length > 1 ? "s" : ""}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
-            <X size={16} />
-          </button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={16} /></button>
         </div>
 
-        {/* Actions */}
-        <div className="p-4 space-y-2">
-          {/* Voir le détail */}
-          <button
-            onClick={onVoirDetail}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 hover:border-[#003c71] hover:bg-[#003c71]/5 transition group text-left"
-          >
-            <div className="w-8 h-8 rounded-lg bg-[#003c71]/10 flex items-center justify-center flex-shrink-0 group-hover:bg-[#003c71]/20 transition">
-              <BookUser size={15} className="text-[#003c71]" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-800">Voir le détail</p>
-              <p className="text-xs text-gray-400">Afficher la fiche passeport complète</p>
-            </div>
-          </button>
-
-          {/* Générer / Régénérer QR */}
-          <button
-            onClick={handleGenerate}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 hover:border-[#003c71] hover:bg-[#003c71]/5 transition group text-left"
-          >
-            <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 transition">
-              {showQr ? <RefreshCcw size={15} className="text-purple-600" /> : <QrCode size={15} className="text-purple-600" />}
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-800">
-                {showQr ? "Régénérer le code QR" : "Générer le code QR"}
-              </p>
-              <p className="text-xs text-gray-400">Créer un QR vers la fiche passeport</p>
-            </div>
-            {hasQr && !showQr && (
-              <CheckCircle2 size={15} className="text-green-500 flex-shrink-0" />
-            )}
-          </button>
-
-          {/* QR affiché */}
-          {showQr && (
-            <div className="flex items-center gap-4 px-4 py-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-              <div className="p-2 bg-white rounded-xl border border-gray-200 shadow-sm flex-shrink-0">
-                <QRCodeCanvas id={qrCanvasId} value={qrValue} size={90} level="H" marginSize={1} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-700">QR généré</p>
-                <p className="text-[10px] text-gray-400 break-all mt-1">{qrValue}</p>
-                <button
-                  onClick={downloadQr}
-                  className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-[#003c71] text-white text-xs rounded-lg hover:bg-[#003c71]/90 font-medium transition"
-                >
-                  <Download size={11} />
-                  Télécharger
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Supprimer */}
-          <div className="pt-1 border-t border-gray-100">
-            <button
-              onClick={onDelete}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-red-100 hover:border-red-300 hover:bg-red-50 transition group text-left"
-            >
-              <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0 group-hover:bg-red-100 transition">
-                <Trash2 size={15} className="text-red-400" />
+        {items.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">
+            <QrCode size={36} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm">Aucun QR code généré pour l'instant.</p>
+            <p className="text-xs mt-1">Cliquez sur "Générer QR" sur les lignes.</p>
+          </div>
+        ) : (
+          <div className="p-5 space-y-3">
+            {/* Télécharger */}
+            <button onClick={handleDownload}
+              className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border border-gray-200 hover:border-[#003c71] hover:bg-[#003c71]/5 transition text-left group">
+              <div className="w-10 h-10 rounded-xl bg-[#003c71]/10 flex items-center justify-center flex-shrink-0 group-hover:bg-[#003c71]/20 transition">
+                <Download size={18} className="text-[#003c71]" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-red-500">Supprimer</p>
-                <p className="text-xs text-gray-400">Retirer ce passeport du serveur</p>
+                <p className="text-sm font-semibold text-gray-800">Télécharger les QR codes</p>
+                <p className="text-xs text-gray-400">Image PNG — {items.length} QR en grille 3 par ligne</p>
+              </div>
+            </button>
+
+            {/* Imprimer */}
+            <button onClick={handlePrint}
+              className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition text-left group">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 transition">
+                <Printer size={18} className="text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Imprimer les QR codes</p>
+                <p className="text-xs text-gray-400">Format papier — 3 par ligne, optimisé impression</p>
               </div>
             </button>
           </div>
-        </div>
+        )}
+      </div>
+
+      {/* QR rendus en arrière-plan pour capture canvas */}
+      <div ref={hiddenRef} style={{ position: "absolute", left: -9999, top: -9999 }}>
+        {items.map((f) => (
+          <QRCodeCanvas key={f.slug} id={`bulk-qr-${f.slug}`}
+            value={qrScanUrl(f.slug)} size={140} level="H" marginSize={1} />
+        ))}
       </div>
     </div>
-  );
-}
-
-// ── Bouton upload dossier ─────────────────────────────────────────────────────
-function UploadButton({ onUploaded }: { onUploaded: (r: UploadResult) => void }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-
-  const handleFiles = async (fileList: FileList) => {
-    const files = Array.from(fileList).filter((f) =>
-      /\.(xlsx|xls)$/i.test(f.name)
-    );
-    if (files.length === 0) {
-      toast.error("Aucun fichier Excel (.xlsx) trouvé dans le dossier.");
-      return;
-    }
-    setUploading(true);
-    setProgress(0);
-    try {
-      const result = await passportService.upload(files, setProgress);
-      toast.success(`${result.extracted.length} passeport(s) importé(s).`);
-      onUploaded(result);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error || "Erreur lors de l'import.");
-    } finally {
-      setUploading(false);
-      setProgress(0);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  };
-
-  return (
-    <>
-      <input
-        ref={inputRef}
-        type="file"
-        className="hidden"
-        // @ts-ignore — webkitdirectory n'est pas dans les types React mais supporté par tous les navigateurs modernes
-        webkitdirectory=""
-        multiple
-        onChange={(e) => { if (e.target.files?.length) handleFiles(e.target.files); }}
-      />
-      <button
-        onClick={() => !uploading && inputRef.current?.click()}
-        disabled={uploading}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition disabled:opacity-70"
-      >
-        {uploading
-          ? <><ImSpinner2 className="animate-spin" size={15} />{progress}%</>
-          : <><Upload size={15} />Importer le dossier</>
-        }
-      </button>
-    </>
   );
 }
 
@@ -284,12 +383,10 @@ export default function PassportManagementPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-
-  const [manageFile, setManageFile]     = useState<PassportFile | null>(null);
-  const [detailFile, setDetailFile]     = useState<PassportFile | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<PassportFile | null>(null);
-  const [deleting, setDeleting]         = useState(false);
-  const [qrGenerated, setQrGenerated]   = useState<Set<string>>(new Set());
+  const [detailFile, setDetailFile]   = useState<PassportFile | null>(null);
+  const [qrFile, setQrFile]           = useState<PassportFile | null>(null);
+  const [qrGenerated, setQrGenerated] = useState<Set<string>>(new Set());
+  const [showBulkQr, setShowBulkQr]   = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -310,20 +407,6 @@ export default function PassportManagementPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const handleUploaded = (result: UploadResult) => { setFiles(result.files); setPage(1); };
-
-  const handleDelete = async () => {
-    if (!deleteConfirm) return;
-    setDeleting(true);
-    try {
-      await passportService.deleteFile(deleteConfirm.slug);
-      setFiles((prev) => prev.filter((f) => f.slug !== deleteConfirm.slug));
-      toast.success("Fichier supprimé.");
-      setManageFile(null);
-    } catch { toast.error("Erreur lors de la suppression."); }
-    finally { setDeleting(false); setDeleteConfirm(null); }
-  };
-
   return (
     <ManagerLayout>
       <div className="space-y-6">
@@ -336,13 +419,26 @@ export default function PassportManagementPage() {
           <div>
             <h1 className="text-2xl font-bold text-[#003c71]">Gestion des Passeports Sécurité</h1>
             <p className="text-sm text-gray-500">
-              Importez un dossier ZIP · Consultez les fiches · Générez des QR codes
+              Dossier réseau · Consultez les fiches · Générez des QR codes
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <UploadButton onUploaded={handleUploaded} />
-            <button onClick={load} className="p-2 rounded-lg border bg-white hover:bg-gray-50 transition" title="Rafraîchir">
-              <RefreshCw size={16} className="text-gray-500" />
+            {qrGenerated.size > 0 && (
+              <button
+                onClick={() => setShowBulkQr(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 text-sm font-medium hover:bg-purple-100 transition"
+              >
+                <QrCode size={15} />
+                QR Codes ({qrGenerated.size})
+              </button>
+            )}
+            <button
+              onClick={load}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition disabled:opacity-60"
+            >
+              {loading ? <ImSpinner2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
+              Synchroniser
             </button>
           </div>
         </div>
@@ -370,7 +466,7 @@ export default function PassportManagementPage() {
         ) : files.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <BookUser size={40} className="mx-auto mb-3 opacity-40" />
-            <p className="text-sm">Aucun passeport — importez un ZIP pour commencer</p>
+            <p className="text-sm">Aucun passeport trouvé dans le dossier réseau.</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
@@ -385,41 +481,42 @@ export default function PassportManagementPage() {
                 <span className="w-6 flex-shrink-0" />
                 <span className="w-8 flex-shrink-0" />
                 <span className="flex-1">Nom / Prénom</span>
-                <span className="w-20 text-right flex-shrink-0">Actions</span>
+                <span className="w-24 text-right flex-shrink-0" />
               </div>
 
-              {paginated.map((file, idx) => {
-                const hasQr = qrGenerated.has(file.slug);
-                return (
-                  <div
-                    key={file.slug}
-                    className={`flex items-center gap-3 px-4 py-3 hover:bg-[#003c71]/5 transition ${
-                      idx !== paginated.length - 1 ? "border-b border-gray-100" : ""
-                    }`}
-                  >
-                    <span className="text-xs text-gray-300 w-6 text-right flex-shrink-0 font-mono">
-                      {(page - 1) * PAGE_SIZE + idx + 1}
-                    </span>
-                    <div className="w-8 h-8 rounded-full bg-[#003c71]/10 text-[#003c71] flex items-center justify-center font-bold text-xs flex-shrink-0">
-                      {(file.nom_prenom || file.display_name).split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
-                    </div>
-                    <p className="flex-1 min-w-0 text-sm font-medium text-gray-800 truncate">
-                      {file.nom_prenom || file.display_name}
-                    </p>
-                    {hasQr && (
-                      <span className="flex items-center gap-1 text-[10px] text-purple-600 bg-purple-50 border border-purple-100 rounded-full px-2 py-0.5 flex-shrink-0">
-                        <QrCode size={10} />QR
-                      </span>
-                    )}
+              {paginated.map((file, idx) => (
+                <div
+                  key={file.slug}
+                  className={`flex items-center gap-3 px-4 py-3 hover:bg-[#003c71]/5 transition ${
+                    idx !== paginated.length - 1 ? "border-b border-gray-100" : ""
+                  }`}
+                >
+                  <span className="text-xs text-gray-300 w-6 text-right flex-shrink-0 font-mono">
+                    {(page - 1) * PAGE_SIZE + idx + 1}
+                  </span>
+                  <div className="w-8 h-8 rounded-full bg-[#003c71]/10 text-[#003c71] flex items-center justify-center font-bold text-xs flex-shrink-0">
+                    {(file.nom_prenom || file.display_name).split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
+                  </div>
+                  <p className="flex-1 min-w-0 text-sm font-medium text-gray-800 truncate">
+                    {file.nom_prenom || file.display_name}
+                  </p>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
-                      onClick={() => setManageFile(file)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#003c71] text-white text-xs font-medium hover:bg-[#003c71]/90 transition flex-shrink-0"
+                      onClick={() => setQrFile(file)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-200 text-purple-600 bg-purple-50 text-xs font-medium hover:bg-purple-100 transition"
                     >
-                      <Settings2 size={13} />Gérer
+                      <QrCode size={13} />
+                      {qrGenerated.has(file.slug) ? "Voir QR" : "Générer QR"}
+                    </button>
+                    <button
+                      onClick={() => setDetailFile(file)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#003c71] text-white text-xs font-medium hover:bg-[#003c71]/90 transition"
+                    >
+                      <BookUser size={13} />Voir le détail
                     </button>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
 
             {/* Pagination */}
@@ -463,44 +560,24 @@ export default function PassportManagementPage() {
         )}
       </div>
 
-      {/* Modal Gérer */}
-      {manageFile && (
-        <GestionModal
-          file={manageFile}
-          hasQr={qrGenerated.has(manageFile.slug)}
-          onClose={() => setManageFile(null)}
-          onVoirDetail={() => { setDetailFile(manageFile); setManageFile(null); }}
-          onQrGenerated={(slug) => setQrGenerated((prev) => new Set(prev).add(slug))}
-          onDelete={() => { setDeleteConfirm(manageFile); setManageFile(null); }}
+      {/* Modal export QR en masse */}
+      {showBulkQr && (
+        <BulkQrModal files={files} generated={qrGenerated} onClose={() => setShowBulkQr(false)} />
+      )}
+
+      {/* Modal QR individuel */}
+      {qrFile && (
+        <QrModal
+          file={qrFile}
+          alreadyGenerated={qrGenerated.has(qrFile.slug)}
+          onGenerated={() => setQrGenerated((prev) => new Set(prev).add(qrFile.slug))}
+          onClose={() => setQrFile(null)}
         />
       )}
 
       {/* Modal Détail */}
       {detailFile && (
         <PassportDetailModal file={detailFile} onClose={() => setDetailFile(null)} />
-      )}
-
-      {/* Confirmation suppression */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold text-[#003c71] mb-2">Supprimer le passeport ?</h3>
-            <p className="text-sm text-gray-600 mb-5">
-              <span className="font-semibold">{deleteConfirm.nom_prenom || deleteConfirm.display_name}</span> sera définitivement supprimé.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleteConfirm(null)}
-                className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition">
-                Annuler
-              </button>
-              <button onClick={handleDelete} disabled={deleting}
-                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition disabled:opacity-50 flex items-center gap-2">
-                {deleting ? <ImSpinner2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
-                Supprimer
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </ManagerLayout>
   );
