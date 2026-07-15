@@ -156,12 +156,13 @@ function useStampPlacement({ containerRef, previewReady, previewWidth, previewHe
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Capture au niveau du container pour que pointermove arrive toujours ici
-    containerRef.current?.setPointerCapture(e.pointerId);
+    // setPointerCapture sur l'élément qui reçoit le pointerdown (le div cachet)
+    // — pas sur le container — pour que les événements suivants lui arrivent
+    // même si le pointeur sort du container ou passe au-dessus d'un <object> PDF.
+    e.currentTarget.setPointerCapture(e.pointerId);
     const el = containerRef.current;
     if (el) {
       const rect = el.getBoundingClientRect();
-      // Lire posRef.current (toujours à jour) plutôt que pos (closure potentiellement stale)
       dragOffset.current = {
         x: (e.clientX - rect.left) / rect.width - posRef.current.x,
         y: (e.clientY - rect.top) / rect.height - posRef.current.y,
@@ -172,12 +173,12 @@ function useStampPlacement({ containerRef, previewReady, previewWidth, previewHe
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    // Utiliser draggingRef (synchrone) plutôt que dragging (state, potentiellement stale)
     if (!draggingRef.current) return;
     updatePosFromClient(e.clientX, e.clientY);
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: React.PointerEvent) => {
+    e.currentTarget.releasePointerCapture(e.pointerId);
     draggingRef.current = false;
     setDragging(false);
   };
@@ -373,9 +374,6 @@ function DocumentPreview({ doc, stampOverlay }: DocumentPreviewProps) {
       ref={containerRef}
       className="relative w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-50 select-none"
       style={{ aspectRatio: `${preview.page_width} / ${preview.page_height}`, touchAction: "none" }}
-      onPointerMove={e => stampOverlay?.handlePointerMove(e)}
-      onPointerUp={() => stampOverlay?.handlePointerUp()}
-      onPointerLeave={() => stampOverlay?.handlePointerUp()}
     >
       <img
         src={preview.image}
@@ -397,6 +395,9 @@ function DocumentPreview({ doc, stampOverlay }: DocumentPreviewProps) {
             touchAction: "none",
           }}
           onPointerDown={stampOverlay.handlePointerDown}
+          onPointerMove={stampOverlay.handlePointerMove}
+          onPointerUp={stampOverlay.handlePointerUp}
+          onPointerCancel={stampOverlay.handlePointerUp}
         >
           {isStampPdf ? (
             <div style={{ position: "relative" }}>
