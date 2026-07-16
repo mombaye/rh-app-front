@@ -12,6 +12,7 @@ export default defineConfig({
   },
 
   server: {
+    host: true,   // écoute sur 0.0.0.0 → accessible depuis le réseau local
     proxy: {
       '/api': {
         target: 'http://localhost:8030',

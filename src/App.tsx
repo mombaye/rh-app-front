@@ -78,6 +78,7 @@ const RhMissionsPage            = lazy(() => import("@/pages/rh/RhMissionsPage")
 
 // HSE
 const PassportManagementPage    = lazy(() => import("@/pages/hse/PassportManagementPage"));
+const PassportViewPage          = lazy(() => import("@/pages/hse/PassportViewPage"));
 
 // ── Fallback de chargement ────────────────────────────────────────────────────
 function PageLoader() {
@@ -315,6 +316,9 @@ function App() {
 
         {/* ── Questionnaire de sortie public (sans auth) ───────── */}
         <Route path="/questionnaire-sortie/:token" element={<QuestionnaireSortiePage />} />
+
+        {/* ── Passeport sécurité public (scan QR — sans auth) ──── */}
+        <Route path="/passeports/:slug/view" element={<PassportViewPage />} />
         <Route path="/payslip" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <PayslipPage />

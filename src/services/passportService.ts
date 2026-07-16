@@ -3,6 +3,7 @@ import axios from "axios";
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
 const API = `${BASE_URL}/api/employees/passeports`;
 
+
 const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("access_token")}`,
 });
@@ -29,7 +30,7 @@ export interface PassportAutreFormation {
   date?: string | null;
 }
 
-export interface PassportDetail extends PassportFile {
+export interface PassportDetail extends Omit<PassportFile, "nom_prenom"> {
   societe?: string | null;
   adresse?: string | null;
   nom_prenom?: string | null;
@@ -93,5 +94,14 @@ export const passportService = {
 
   markQrGeneratedBulk: async (slugs: string[], generated = true): Promise<void> => {
     await axios.post(`${API}/mark-qr-bulk/`, { slugs, generated }, { headers: authHeaders() });
+  },
+
+  resetModified: async (slugs?: string[]): Promise<{ deleted: number; errors: string[] }> => {
+    const res = await axios.post<{ deleted: number; errors: string[] }>(
+      `${API}/reset-modified/`,
+      slugs ? { slugs } : {},
+      { headers: authHeaders() }
+    );
+    return res.data;
   },
 };
