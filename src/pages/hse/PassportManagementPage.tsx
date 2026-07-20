@@ -1,7 +1,7 @@
 // src/pages/hse/PassportManagementPage.tsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
-import { BookUser, Search, RefreshCw, X, ChevronLeft, ChevronRight, QrCode, Download, Printer, Upload, Check } from "lucide-react";
+import { BookUser, Search, RefreshCw, X, ChevronLeft, ChevronRight, QrCode, Download, Printer, Upload, Check, Stamp, Plus } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import { QRCodeCanvas } from "qrcode.react";
 import toast from "react-hot-toast";
@@ -47,6 +47,26 @@ function prefetchVisible(slugs: string[]) {
 //           → le téléphone sur le même WiFi atteint le serveur Vite
 //             qui proxyfie /api vers localhost:8030
 // En prod : domaine fixe
+// ── Cache module-level du cachet global ─────────────────────────────────────
+let _cachetBlobUrl: string | null = null;
+let _cachetFetchPromise: Promise<string | null> | null = null;
+
+async function _ensureCachetLoaded(): Promise<string | null> {
+  if (_cachetBlobUrl) return _cachetBlobUrl;
+  if (_cachetFetchPromise) return _cachetFetchPromise;
+  _cachetFetchPromise = passportService.getCachet()
+    .then((blob) => { _cachetBlobUrl = URL.createObjectURL(blob); return _cachetBlobUrl; })
+    .catch(() => null)
+    .finally(() => { _cachetFetchPromise = null; });
+  return _cachetFetchPromise;
+}
+
+function _invalidateCachetCache() {
+  if (_cachetBlobUrl) URL.revokeObjectURL(_cachetBlobUrl);
+  _cachetBlobUrl = null;
+  _cachetFetchPromise = null;
+}
+
 declare const __LOCAL_NETWORK_IP__: string;
 const QR_API_BASE = import.meta.env.PROD
   ? "https://apierh.camusatsn.com"
@@ -207,34 +227,18 @@ function PassportPhoto({ slug, name }: { slug: string; name: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Tenter de charger la photo existante
-    const token = localStorage.getItem("access_token");
-    fetch(`${BASE_URL}/api/employees/passeports/${slug}/photo/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }).then((r) => {
-      if (r.ok) return r.blob();
-      throw new Error("no photo");
-    }).then((blob) => setPhotoUrl(URL.createObjectURL(blob)))
-    .catch(() => setPhotoUrl(null));
+    passportService.getPhoto(slug)
+      .then((blob) => setPhotoUrl(URL.createObjectURL(blob)))
+      .catch(() => setPhotoUrl(null));
   }, [slug]);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    const form = new FormData();
-    form.append("photo", file);
-    const token = localStorage.getItem("access_token");
     try {
-      const r = await fetch(`${BASE_URL}/api/employees/passeports/${slug}/photo/upload/`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
-      });
-      if (!r.ok) throw new Error("upload failed");
-      // Afficher la nouvelle photo
-      const blob = await file.arrayBuffer();
-      setPhotoUrl(URL.createObjectURL(new Blob([blob], { type: file.type })));
+      await passportService.uploadPhoto(slug, file);
+      setPhotoUrl(URL.createObjectURL(file));
       toast.success("Photo enregistrée");
     } catch {
       toast.error("Erreur lors de l'upload");
@@ -280,11 +284,12 @@ function PassportPhoto({ slug, name }: { slug: string; name: string }) {
   );
 }
 
-// ── Types drag photo ─────────────────────────────────────────────────────────
+// ── Types drag photo / cachet ─────────────────────────────────────────────────
 type DragMode = "move" | "tl" | "tr" | "bl" | "br";
 type PhotoPos = { x: number; y: number; w: number; h: number }; // en % de l'image
+type CachetItem = { id: string; pos: PhotoPos };
 
-// ── Modal Détail — PDF rendu en image + placement photo drag-and-drop ─────────
+// ── Modal Détail — PDF rendu en image + placement photo + cachets ─────────────
 function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: () => void }) {
   const cached0 = _page0Cache.get(file.slug);
   const [pages, setPages]         = useState<string[]>(cached0 ? [cached0] : []);
@@ -302,9 +307,21 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   } | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Mode placement cachets
+  const [cachetBlobUrl, setCachetBlobUrl] = useState<string | null>(null);
+  const [cachetItems, setCachetItems]     = useState<CachetItem[]>([]);
+  const [savingCachets, setSavingCachets] = useState(false);
+  const cachetDragRef = useRef<{ id: string; mode: DragMode; sx: number; sy: number; sp: PhotoPos } | null>(null);
+  const placingCachets = cachetItems.length > 0;
+
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef      = useRef<{ mode: DragMode; sx: number; sy: number; sp: PhotoPos } | null>(null);
   const inputRef     = useRef<HTMLInputElement>(null);
+
+  // Charger le cachet au montage
+  useEffect(() => {
+    _ensureCachetLoaded().then(setCachetBlobUrl);
+  }, []);
 
   // ── Chargement pages PDF via service (token toujours frais) ───────────────
   const loadPage = async (pageNum: number, key = cacheKey) => {
@@ -384,6 +401,85 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
     dragRef.current = { mode, sx: e.clientX, sy: e.clientY, sp: { ...placingPhoto.pos } };
   };
 
+  // ── Drag & resize cachets ───────────────────────────────────────────────────
+  const onCachetMouseMove = useCallback((e: MouseEvent) => {
+    const d = cachetDragRef.current;
+    if (!d || !containerRef.current) return;
+    const cr = containerRef.current.getBoundingClientRect();
+    const dx = (e.clientX - d.sx) / cr.width  * 100;
+    const dy = (e.clientY - d.sy) / cr.height * 100;
+    const p  = d.sp;
+    const MIN = 3;
+    setCachetItems((prev) => prev.map((c) => {
+      if (c.id !== d.id) return c;
+      let { x, y, w, h } = p;
+      if (d.mode === "move") {
+        x = Math.max(0, Math.min(100 - w, p.x + dx));
+        y = Math.max(0, Math.min(100 - h, p.y + dy));
+      } else if (d.mode === "br") {
+        w = Math.max(MIN, Math.min(100 - p.x, p.w + dx));
+        h = Math.max(MIN, Math.min(100 - p.y, p.h + dy));
+      } else if (d.mode === "bl") {
+        const nw = Math.max(MIN, p.w - dx); x = p.x + p.w - nw; w = nw;
+        h = Math.max(MIN, Math.min(100 - p.y, p.h + dy));
+      } else if (d.mode === "tr") {
+        w = Math.max(MIN, Math.min(100 - p.x, p.w + dx));
+        const nh = Math.max(MIN, p.h - dy); y = p.y + p.h - nh; h = nh;
+      } else if (d.mode === "tl") {
+        const nw = Math.max(MIN, p.w - dx); x = p.x + p.w - nw; w = nw;
+        const nh = Math.max(MIN, p.h - dy); y = p.y + p.h - nh; h = nh;
+      }
+      return { ...c, pos: { x, y, w, h } };
+    }));
+  }, []);
+
+  const onCachetMouseUp = useCallback(() => { cachetDragRef.current = null; }, []);
+
+  useEffect(() => {
+    if (!placingCachets) return;
+    window.addEventListener("mousemove", onCachetMouseMove);
+    window.addEventListener("mouseup",  onCachetMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onCachetMouseMove);
+      window.removeEventListener("mouseup",  onCachetMouseUp);
+    };
+  }, [placingCachets, onCachetMouseMove, onCachetMouseUp]);
+
+  const startCachetDrag = (id: string, mode: DragMode, e: React.MouseEvent, pos: PhotoPos) => {
+    e.preventDefault();
+    e.stopPropagation();
+    cachetDragRef.current = { id, mode, sx: e.clientX, sy: e.clientY, sp: { ...pos } };
+  };
+
+  const addCachet = () => {
+    setCachetItems((prev) => [
+      ...prev,
+      { id: Math.random().toString(36).slice(2), pos: { x: 5, y: 68, w: 20, h: 14 } },
+    ]);
+  };
+
+  const handleValidateCachets = async () => {
+    if (cachetItems.length === 0) return;
+    setSavingCachets(true);
+    try {
+      await passportService.applyCachetMulti(
+        file.slug,
+        cachetItems.map(({ pos }) => ({ x_pct: pos.x, y_pct: pos.y, w_pct: pos.w, h_pct: pos.h }))
+      );
+      _page0Cache.delete(file.slug);
+      const newKey = cacheKey + 1;
+      setCacheKey(newKey);
+      setPages([]);
+      setCachetItems([]);
+      await loadPage(0, newKey);
+      toast.success("Cachets intégrés dans le passeport !");
+    } catch {
+      toast.error("Erreur lors de l'intégration des cachets");
+    } finally {
+      setSavingCachets(false);
+    }
+  };
+
   // ── Sélection fichier ───────────────────────────────────────────────────────
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -439,6 +535,8 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
               <p className="text-xs text-gray-400">
                 {placingPhoto
                   ? "Glissez la photo au bon endroit, redimensionnez via les coins, puis validez"
+                  : placingCachets
+                  ? "Glissez les cachets, redimensionnez via les coins, supprimez avec ×, puis validez"
                   : "Passeport Sécurité CAMUSAT"}
               </p>
             </div>
@@ -446,7 +544,7 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
 
           <div className="flex items-center gap-2">
             {/* Navigation pages — masquée en mode placement */}
-            {!placingPhoto && pageCount > 1 && (
+            {!placingPhoto && !placingCachets && pageCount > 1 && (
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <button onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} disabled={currentPage === 0}
                   className="p-1 rounded hover:bg-gray-100 disabled:opacity-40">
@@ -460,18 +558,29 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
               </div>
             )}
 
-            {/* Bouton Photo — visible hors mode placement */}
-            {!placingPhoto && (
-              <button
-                onClick={() => inputRef.current?.click()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-200 text-purple-600 bg-purple-50 text-xs font-medium hover:bg-purple-100 transition"
-              >
-                <Upload size={13} />
-                Ajouter une photo
-              </button>
+            {/* Boutons normaux — hors mode placement */}
+            {!placingPhoto && !placingCachets && (
+              <>
+                <button
+                  onClick={() => inputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-200 text-purple-600 bg-purple-50 text-xs font-medium hover:bg-purple-100 transition"
+                >
+                  <Upload size={13} />
+                  Photo
+                </button>
+                {cachetBlobUrl && (
+                  <button
+                    onClick={addCachet}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 bg-amber-50 text-xs font-medium hover:bg-amber-100 transition"
+                  >
+                    <Stamp size={13} />
+                    Cachet
+                  </button>
+                )}
+              </>
             )}
 
-            {/* Actions mode placement */}
+            {/* Actions mode placement photo */}
             {placingPhoto && (
               <>
                 <button
@@ -486,15 +595,41 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                   disabled={saving}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition disabled:opacity-60"
                 >
-                  {saving
-                    ? <ImSpinner2 className="animate-spin" size={13} />
-                    : <Check size={13} />}
-                  Valider
+                  {saving ? <ImSpinner2 className="animate-spin" size={13} /> : <Check size={13} />}
+                  Valider la photo
                 </button>
               </>
             )}
 
-            {!placingPhoto && (
+            {/* Actions mode placement cachets */}
+            {placingCachets && (
+              <>
+                <button
+                  onClick={addCachet}
+                  disabled={savingCachets}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 text-xs font-medium hover:bg-amber-50 transition disabled:opacity-50"
+                >
+                  <Plus size={13} /> Ajouter
+                </button>
+                <button
+                  onClick={() => setCachetItems([])}
+                  disabled={savingCachets}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-100 transition disabled:opacity-50"
+                >
+                  <X size={13} /> Annuler
+                </button>
+                <button
+                  onClick={handleValidateCachets}
+                  disabled={savingCachets}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition disabled:opacity-60"
+                >
+                  {savingCachets ? <ImSpinner2 className="animate-spin" size={13} /> : <Check size={13} />}
+                  Valider ({cachetItems.length})
+                </button>
+              </>
+            )}
+
+            {!placingPhoto && !placingCachets && (
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
                 <X size={16} />
               </button>
@@ -525,6 +660,53 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                 style={{ maxHeight: "calc(98vh - 140px)" }}
                 draggable={false}
               />
+
+              {/* ── Overlays cachets draggables ── */}
+              {placingCachets && cachetBlobUrl && cachetItems.map((item) => (
+                <div
+                  key={item.id}
+                  onMouseDown={(e) => startCachetDrag(item.id, "move", e, item.pos)}
+                  style={{
+                    position: "absolute",
+                    left:   `${item.pos.x}%`,
+                    top:    `${item.pos.y}%`,
+                    width:  `${item.pos.w}%`,
+                    height: `${item.pos.h}%`,
+                    cursor: "move",
+                    boxSizing: "border-box",
+                  }}
+                  className="border-2 border-amber-500 shadow-xl"
+                >
+                  <img
+                    src={cachetBlobUrl}
+                    alt="cachet"
+                    style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", pointerEvents: "none" }}
+                    draggable={false}
+                  />
+                  {/* Bouton supprimer */}
+                  <button
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); setCachetItems((p) => p.filter((c) => c.id !== item.id)); }}
+                    className="absolute -top-3 -right-3 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs leading-none hover:bg-red-600 z-10"
+                    style={{ pointerEvents: "auto" }}
+                  >
+                    ×
+                  </button>
+                  {/* Poignées de redimensionnement */}
+                  {([
+                    ["tl", "-top-1.5 -left-1.5",   "cursor-nw-resize"],
+                    ["tr", "-top-1.5 -right-1.5",  "cursor-ne-resize"],
+                    ["bl", "-bottom-1.5 -left-1.5", "cursor-sw-resize"],
+                    ["br", "-bottom-1.5 -right-1.5","cursor-se-resize"],
+                  ] as const).map(([mode, pos, cur]) => (
+                    <div
+                      key={mode}
+                      onMouseDown={(e) => startCachetDrag(item.id, mode, e, item.pos)}
+                      className={`absolute ${pos} w-3.5 h-3.5 bg-white border-2 border-amber-500 rounded-sm ${cur}`}
+                    />
+                  ))}
+                </div>
+              ))}
 
               {/* ── Overlay photo draggable ── */}
               {placingPhoto && (
@@ -926,12 +1108,34 @@ export default function PassportManagementPage() {
   const [showBulkGenerate, setShowBulkGenerate]   = useState(false);
   const [showResetConfirm, setShowResetConfirm]   = useState(false);
   const [resetting, setResetting]                 = useState(false);
+  const [uploadingCachet, setUploadingCachet]     = useState(false);
+  const cachetInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCachetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingCachet(true);
+    try {
+      await passportService.uploadCachet(file);
+      _invalidateCachetCache();
+      toast.success("Cachet uploadé avec succès !");
+    } catch {
+      toast.error("Erreur lors de l'upload du cachet");
+    } finally {
+      setUploadingCachet(false);
+      e.target.value = "";
+    }
+  };
 
   const handleResetAll = async () => {
     setResetting(true);
     try {
       const res = await passportService.resetAll();
-      toast.success(`Réinitialisé : ${res.deleted_pdfs} fichier(s) supprimé(s).`);
+      // Vider tous les caches locaux (pages PDF rendues + cachet)
+      _page0Cache.clear();
+      _invalidateCachetCache();
+      setQrGenerated(new Set());
+      toast.success(`Réinitialisé : ${res.deleted_pdfs} PDF et ${(res as any).deleted_photos ?? 0} photo(s) supprimé(s).`);
       setShowResetConfirm(false);
       await load();
     } catch {
@@ -981,6 +1185,17 @@ export default function PassportManagementPage() {
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
+            {/* Upload cachet global */}
+            <button
+              onClick={() => cachetInputRef.current?.click()}
+              disabled={uploadingCachet}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition disabled:opacity-60"
+            >
+              {uploadingCachet ? <ImSpinner2 className="animate-spin" size={15} /> : <Stamp size={15} />}
+              Upload cachet
+            </button>
+            <input ref={cachetInputRef} type="file" accept="image/*" className="hidden" onChange={handleCachetUpload} />
+
             {files.length > 0 && (
               <button
                 onClick={() => setShowBulkGenerate(true)}

@@ -77,6 +77,39 @@ export const passportService = {
 
   getPdfUrl: (slug: string): string => `${API}/${slug}/pdf/`,
 
+  getPhoto: async (slug: string): Promise<Blob> => {
+    const res = await api.get(`${API}/${slug}/photo/`, { responseType: "blob" });
+    return res.data as Blob;
+  },
+
+  uploadPhoto: async (slug: string, photo: File): Promise<void> => {
+    const form = new FormData();
+    form.append("photo", photo);
+    await api.post(`${API}/${slug}/photo/upload/`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  getCachet: async (): Promise<Blob> => {
+    const res = await api.get(`${API}/cachet/`, { responseType: "blob" });
+    return res.data as Blob;
+  },
+
+  uploadCachet: async (file: File): Promise<void> => {
+    const form = new FormData();
+    form.append("cachet", file);
+    await api.post(`${API}/cachet/upload/`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  applyCachetMulti: async (
+    slug: string,
+    positions: { x_pct: number; y_pct: number; w_pct: number; h_pct: number }[]
+  ): Promise<void> => {
+    await api.post(`${API}/${slug}/apply-cachet-multi/`, { positions });
+  },
+
   deleteFile: async (slug: string): Promise<void> => {
     await api.delete(`${API}/${slug}/delete/`);
   },
