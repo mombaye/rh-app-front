@@ -42,16 +42,10 @@ function prefetchVisible(slugs: string[]) {
   for (let k = 0; k < Math.min(CONCURRENCY, todo.length); k++) next();
 }
 
-// ── URL publique QR — pointe directement vers le PDF backend (sans React, sans auth) ──
-function getApiBaseUrl(): string {
-  // En prod : VITE_API_URL = https://apierh.camusatsn.com
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-  // En dev via localhost : utiliser l'IP WiFi pour que le téléphone puisse accéder
-  return `http://${__LOCAL_NETWORK_IP__}:8030`;
-}
-
+// ── URL publique QR — toujours vers l'API de production (sans React, sans auth) ──
+const QR_API_BASE = "https://apierh.camusatsn.com";
 const qrScanUrl = (slug: string) =>
-  `${getApiBaseUrl()}/api/employees/passeports/${slug}/pdf/scan/`;
+  `${QR_API_BASE}/api/employees/passeports/${slug}/pdf/scan/`;
 
 // ── Modal QR Code ─────────────────────────────────────────────────────────────
 function QrModal({ file, alreadyGenerated, onGenerated, onClose }: {
