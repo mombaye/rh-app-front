@@ -113,4 +113,32 @@ export const passportService = {
     );
     return res.data;
   },
+
+  getPageImage: async (
+    slug: string,
+    page = 0,
+    v = 0
+  ): Promise<{ blob: Blob; pageCount: number }> => {
+    const res = await axios.get(`${API}/${slug}/page-image/`, {
+      headers: authHeaders(),
+      params: { page, v },
+      responseType: "blob",
+    });
+    const pageCount = parseInt(res.headers["x-page-count"] || "1", 10);
+    return { blob: res.data as Blob, pageCount };
+  },
+
+  embedPhoto: async (
+    slug: string,
+    photo: File,
+    pos: { x: number; y: number; w: number; h: number }
+  ): Promise<void> => {
+    const form = new FormData();
+    form.append("photo", photo);
+    form.append("x_pct", String(pos.x));
+    form.append("y_pct", String(pos.y));
+    form.append("w_pct", String(pos.w));
+    form.append("h_pct", String(pos.h));
+    await axios.post(`${API}/${slug}/embed-photo/`, form, { headers: authHeaders() });
+  },
 };

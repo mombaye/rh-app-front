@@ -1,19 +1,46 @@
 // src/pages/hse/PassportManagementPage.tsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
-import { BookUser, Search, RefreshCw, X, ChevronLeft, ChevronRight, QrCode, Download, Printer, Upload } from "lucide-react";
+import { BookUser, Search, RefreshCw, X, ChevronLeft, ChevronRight, QrCode, Download, Printer, Upload, Check } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import { QRCodeCanvas } from "qrcode.react";
 import toast from "react-hot-toast";
 import ManagerLayout from "@/layouts/ManagerLayout";
 import { passportService, PassportFile } from "@/services/passportService";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
 const PAGE_SIZE = 10;
 
-const authHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem("access_token")}`,
-});
+// ── Cache module-level des images de page 0 (persistant entre renders) ──────
+// slug → blob URL de la page 0 rendue en PNG
+const _page0Cache = new Map<string, string>();
+// slugs dont le préchargement est en cours (éviter doublons)
+const _prefetchingSet = new Set<string>();
+
+async function _prefetchPage0(slug: string) {
+  if (_page0Cache.has(slug) || _prefetchingSet.has(slug)) return;
+  _prefetchingSet.add(slug);
+  try {
+    const { blob } = await passportService.getPageImage(slug, 0, 0);
+    _page0Cache.set(slug, URL.createObjectURL(blob));
+  } catch { /* silencieux */ } finally {
+    _prefetchingSet.delete(slug);
+  }
+}
+
+// Précharge les slugs visibles avec max 4 requêtes en parallèle
+function prefetchVisible(slugs: string[]) {
+  const todo = slugs.filter((s) => !_page0Cache.has(s) && !_prefetchingSet.has(s));
+  if (todo.length === 0) return;
+  // Par lots de 4
+  const CONCURRENCY = 4;
+  let i = 0;
+  const next = () => {
+    if (i >= todo.length) return;
+    const slug = todo[i++];
+    _prefetchPage0(slug).then(next);
+  };
+  for (let k = 0; k < Math.min(CONCURRENCY, todo.length); k++) next();
+}
 
 // ── URL publique QR (scan sans login) ────────────────────────────────────────
 function getFrontendUrl(): string {
@@ -256,96 +283,149 @@ function PassportPhoto({ slug, name }: { slug: string; name: string }) {
   );
 }
 
-// ── Modal Détail — PDF rendu en image avec zone photo cliquable ───────────────
+// ── Types drag photo ─────────────────────────────────────────────────────────
+type DragMode = "move" | "tl" | "tr" | "bl" | "br";
+type PhotoPos = { x: number; y: number; w: number; h: number }; // en % de l'image
+
+// ── Modal Détail — PDF rendu en image + placement photo drag-and-drop ─────────
 function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: () => void }) {
-  const [pages, setPages]     = useState<string[]>([]);   // blob URLs par page
+  const cached0 = _page0Cache.get(file.slug);
+  const [pages, setPages]         = useState<string[]>(cached0 ? [cached0] : []);
   const [pageCount, setPageCount] = useState(1);
   const [currentPage, setCurrentPage] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
-  const [photoRect, setPhotoRect] = useState<{ x_pct: number; y_pct: number; w_pct: number; h_pct: number } | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [cacheKey, setCacheKey] = useState(0); // forcer rechargement image
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading]     = useState(!cached0);
+  const [error, setError]         = useState<string | null>(null);
+  const [cacheKey, setCacheKey]   = useState(0);
 
-  const token = localStorage.getItem("access_token");
-  const headers = { Authorization: `Bearer ${token}` };
+  // Mode placement photo
+  const [placingPhoto, setPlacingPhoto] = useState<{
+    file: File;
+    previewUrl: string;
+    pos: PhotoPos;
+  } | null>(null);
+  const [saving, setSaving] = useState(false);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragRef      = useRef<{ mode: DragMode; sx: number; sy: number; sp: PhotoPos } | null>(null);
+  const inputRef     = useRef<HTMLInputElement>(null);
+
+  // ── Chargement pages PDF via service (token toujours frais) ───────────────
   const loadPage = async (pageNum: number, key = cacheKey) => {
+    if (pageNum === 0 && key === 0 && _page0Cache.has(file.slug)) {
+      setPages((p) => { const n = [...p]; n[0] = _page0Cache.get(file.slug)!; return n; });
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const r = await fetch(
-        `${BASE_URL}/api/employees/passeports/${file.slug}/page-image/?page=${pageNum}&v=${key}`,
-        { headers }
-      );
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const count = parseInt(r.headers.get("X-Page-Count") || "1", 10);
-      setPageCount(count);
-      const blob = await r.blob();
+      const { blob, pageCount: pc } = await passportService.getPageImage(file.slug, pageNum, key);
+      setPageCount(pc);
       const url = URL.createObjectURL(blob);
-      setPages((prev) => {
-        const next = [...prev];
-        next[pageNum] = url;
-        return next;
-      });
+      if (pageNum === 0 && key === 0) _page0Cache.set(file.slug, url);
+      setPages((p) => { const n = [...p]; n[pageNum] = url; return n; });
     } catch (e: any) {
-      setError(e.message);
+      setError(e?.response?.status ? `HTTP ${e.response.status}` : e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadPage(0);
-    // Charger la zone photo (seulement page 0)
-    fetch(`${BASE_URL}/api/employees/passeports/${file.slug}/photo-rect/`, { headers })
-      .then((r) => r.json())
-      .then((d) => setPhotoRect(d.rect || null))
-      .catch(() => setPhotoRect(null));
-  }, [file.slug]);
+  useEffect(() => { loadPage(0); }, [file.slug]);
+  useEffect(() => { if (!pages[currentPage]) loadPage(currentPage); }, [currentPage]);
+
+  // ── Drag & resize ───────────────────────────────────────────────────────────
+  const onMouseMove = useCallback((e: MouseEvent) => {
+    const d = dragRef.current;
+    if (!d || !containerRef.current) return;
+    const cr  = containerRef.current.getBoundingClientRect();
+    const dx  = (e.clientX - d.sx) / cr.width  * 100;
+    const dy  = (e.clientY - d.sy) / cr.height * 100;
+    const p   = d.sp;
+    const MIN = 4;
+
+    setPlacingPhoto((prev) => {
+      if (!prev) return prev;
+      let { x, y, w, h } = p;
+      if (d.mode === "move") {
+        x = Math.max(0, Math.min(100 - w, p.x + dx));
+        y = Math.max(0, Math.min(100 - h, p.y + dy));
+      } else if (d.mode === "br") {
+        w = Math.max(MIN, Math.min(100 - p.x, p.w + dx));
+        h = Math.max(MIN, Math.min(100 - p.y, p.h + dy));
+      } else if (d.mode === "bl") {
+        const nw = Math.max(MIN, p.w - dx);
+        x = p.x + p.w - nw; w = nw;
+        h = Math.max(MIN, Math.min(100 - p.y, p.h + dy));
+      } else if (d.mode === "tr") {
+        w = Math.max(MIN, Math.min(100 - p.x, p.w + dx));
+        const nh = Math.max(MIN, p.h - dy);
+        y = p.y + p.h - nh; h = nh;
+      } else if (d.mode === "tl") {
+        const nw = Math.max(MIN, p.w - dx); x = p.x + p.w - nw; w = nw;
+        const nh = Math.max(MIN, p.h - dy); y = p.y + p.h - nh; h = nh;
+      }
+      return { ...prev, pos: { x, y, w, h } };
+    });
+  }, []);
+
+  const onMouseUp = useCallback(() => { dragRef.current = null; }, []);
 
   useEffect(() => {
-    if (!pages[currentPage]) loadPage(currentPage);
-  }, [currentPage]);
+    if (!placingPhoto) return;
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup",  onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup",  onMouseUp);
+    };
+  }, [placingPhoto, onMouseMove, onMouseUp]);
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const startDrag = (mode: DragMode, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!placingPhoto) return;
+    dragRef.current = { mode, sx: e.clientX, sy: e.clientY, sp: { ...placingPhoto.pos } };
+  };
+
+  // ── Sélection fichier ───────────────────────────────────────────────────────
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    setUploading(true);
-    const form = new FormData();
-    form.append("photo", f);
-    if (photoRect) {
-      form.append("x_pct", String(photoRect.x_pct));
-      form.append("y_pct", String(photoRect.y_pct));
-      form.append("w_pct", String(photoRect.w_pct));
-      form.append("h_pct", String(photoRect.h_pct));
-    }
+    setPlacingPhoto({
+      file: f,
+      previewUrl: URL.createObjectURL(f),
+      pos: { x: 5, y: 8, w: 14, h: 18 }, // position initiale en haut à gauche
+    });
+    e.target.value = "";
+  };
+
+  // ── Validation → embed dans le PDF via service (token toujours frais) ──────
+  const handleValidate = async () => {
+    if (!placingPhoto) return;
+    setSaving(true);
     try {
-      const r = await fetch(
-        `${BASE_URL}/api/employees/passeports/${file.slug}/embed-photo/`,
-        { method: "POST", headers, body: form }
-      );
-      if (!r.ok) throw new Error("upload failed");
-      // Forcer rechargement de la page image
+      await passportService.embedPhoto(file.slug, placingPhoto.file, placingPhoto.pos);
+      _page0Cache.delete(file.slug);
       const newKey = cacheKey + 1;
       setCacheKey(newKey);
       setPages([]);
+      setPlacingPhoto(null);
       await loadPage(0, newKey);
       toast.success("Photo intégrée dans le passeport !");
     } catch {
       toast.error("Erreur lors de l'intégration de la photo");
     } finally {
-      setUploading(false);
-      e.target.value = "";
+      setSaving(false);
     }
   };
 
   const pageUrl = pages[currentPage];
 
+  // ── Rendu ───────────────────────────────────────────────────────────────────
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-2"
-      onClick={onClose}
+      onClick={placingPhoto ? undefined : onClose}
     >
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[98vh] flex flex-col overflow-hidden"
@@ -359,11 +439,17 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
             </div>
             <div>
               <p className="font-bold text-gray-800 text-sm">{file.nom_prenom || file.display_name}</p>
-              <p className="text-xs text-gray-400">Passeport Sécurité CAMUSAT</p>
+              <p className="text-xs text-gray-400">
+                {placingPhoto
+                  ? "Glissez la photo au bon endroit, redimensionnez via les coins, puis validez"
+                  : "Passeport Sécurité CAMUSAT"}
+              </p>
             </div>
           </div>
+
           <div className="flex items-center gap-2">
-            {pageCount > 1 && (
+            {/* Navigation pages — masquée en mode placement */}
+            {!placingPhoto && pageCount > 1 && (
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <button onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} disabled={currentPage === 0}
                   className="p-1 rounded hover:bg-gray-100 disabled:opacity-40">
@@ -376,13 +462,50 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                 </button>
               </div>
             )}
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
-              <X size={16} />
-            </button>
+
+            {/* Bouton Photo — visible hors mode placement */}
+            {!placingPhoto && (
+              <button
+                onClick={() => inputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-200 text-purple-600 bg-purple-50 text-xs font-medium hover:bg-purple-100 transition"
+              >
+                <Upload size={13} />
+                Ajouter une photo
+              </button>
+            )}
+
+            {/* Actions mode placement */}
+            {placingPhoto && (
+              <>
+                <button
+                  onClick={() => setPlacingPhoto(null)}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-100 transition disabled:opacity-50"
+                >
+                  <X size={13} /> Annuler
+                </button>
+                <button
+                  onClick={handleValidate}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition disabled:opacity-60"
+                >
+                  {saving
+                    ? <ImSpinner2 className="animate-spin" size={13} />
+                    : <Check size={13} />}
+                  Valider
+                </button>
+              </>
+            )}
+
+            {!placingPhoto && (
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                <X size={16} />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Corps — image PDF avec overlay photo cliquable */}
+        {/* Corps */}
         <div className="flex-1 overflow-auto bg-gray-100 flex items-start justify-center p-4">
           {loading && !pageUrl ? (
             <div className="flex items-center justify-center h-64">
@@ -394,54 +517,59 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
               <p className="text-sm">{error}</p>
             </div>
           ) : pageUrl ? (
-            <div className="relative inline-block shadow-lg">
+            <div
+              ref={containerRef}
+              className="relative inline-block shadow-lg select-none"
+            >
               <img
                 src={pageUrl}
                 alt={`Page ${currentPage + 1}`}
                 className="max-w-full block"
                 style={{ maxHeight: "calc(98vh - 140px)" }}
+                draggable={false}
               />
 
-              {/* Overlay zone photo — visible seulement sur la page 0 */}
-              {currentPage === 0 && photoRect && (
-                <button
-                  onClick={() => inputRef.current?.click()}
-                  disabled={uploading}
-                  title="Cliquer pour ajouter / modifier la photo"
+              {/* ── Overlay photo draggable ── */}
+              {placingPhoto && (
+                <div
+                  onMouseDown={(e) => startDrag("move", e)}
                   style={{
                     position: "absolute",
-                    left:   `${photoRect.x_pct}%`,
-                    top:    `${photoRect.y_pct}%`,
-                    width:  `${photoRect.w_pct}%`,
-                    height: `${photoRect.h_pct}%`,
+                    left:   `${placingPhoto.pos.x}%`,
+                    top:    `${placingPhoto.pos.y}%`,
+                    width:  `${placingPhoto.pos.w}%`,
+                    height: `${placingPhoto.pos.h}%`,
+                    cursor: "move",
+                    boxSizing: "border-box",
                   }}
-                  className="border-2 border-dashed border-purple-400 bg-purple-400/10 hover:bg-purple-400/25 transition flex items-center justify-center group cursor-pointer"
+                  className="border-2 border-purple-500 shadow-xl"
                 >
-                  {uploading
-                    ? <ImSpinner2 className="animate-spin text-purple-600" size={20} />
-                    : <Upload size={18} className="text-purple-600 opacity-0 group-hover:opacity-100 transition" />}
-                </button>
-              )}
-
-              {/* Si pas de zone détectée, bouton flottant en haut à droite */}
-              {currentPage === 0 && !photoRect && (
-                <button
-                  onClick={() => inputRef.current?.click()}
-                  disabled={uploading}
-                  title="Ajouter une photo"
-                  className="absolute top-2 right-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-medium shadow hover:bg-purple-700 transition"
-                >
-                  {uploading
-                    ? <ImSpinner2 className="animate-spin" size={12} />
-                    : <Upload size={12} />}
-                  Photo
-                </button>
+                  <img
+                    src={placingPhoto.previewUrl}
+                    alt="photo à placer"
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}
+                    draggable={false}
+                  />
+                  {/* Poignées de redimensionnement aux 4 coins */}
+                  {([
+                    ["tl", "-top-1.5 -left-1.5",  "cursor-nw-resize"],
+                    ["tr", "-top-1.5 -right-1.5", "cursor-ne-resize"],
+                    ["bl", "-bottom-1.5 -left-1.5","cursor-sw-resize"],
+                    ["br", "-bottom-1.5 -right-1.5","cursor-se-resize"],
+                  ] as const).map(([mode, pos, cur]) => (
+                    <div
+                      key={mode}
+                      onMouseDown={(e) => startDrag(mode, e)}
+                      className={`absolute ${pos} w-3.5 h-3.5 bg-white border-2 border-purple-500 rounded-sm ${cur}`}
+                    />
+                  ))}
+                </div>
               )}
             </div>
           ) : null}
         </div>
 
-        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
       </div>
     </div>
   );
@@ -830,6 +958,13 @@ export default function PassportManagementPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [search]);
 
+  // Précharger les images de la page visible dès que les fichiers ou la page changent
+  useEffect(() => {
+    if (files.length === 0) return;
+    const visible = files.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((f) => f.slug);
+    prefetchVisible(visible);
+  }, [files, page]);
+
 
   const filtered = files.filter((f) => {
     if (!search) return true;
@@ -959,6 +1094,7 @@ export default function PassportManagementPage() {
                     </button>
                     <button
                       onClick={() => setDetailFile(file)}
+                      onMouseEnter={() => _prefetchPage0(file.slug)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#003c71] text-white text-xs font-medium hover:bg-[#003c71]/90 transition"
                     >
                       <BookUser size={13} />Voir le détail
