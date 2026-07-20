@@ -958,13 +958,6 @@ export default function PassportManagementPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [search]);
 
-  // Précharger les images de la page visible dès que les fichiers ou la page changent
-  useEffect(() => {
-    if (files.length === 0) return;
-    const visible = files.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((f) => f.slug);
-    prefetchVisible(visible);
-  }, [files, page]);
-
 
   const filtered = files.filter((f) => {
     if (!search) return true;
