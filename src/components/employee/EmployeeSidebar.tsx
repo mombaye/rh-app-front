@@ -16,6 +16,7 @@ import {
   FileBadge,
   Plane,
   Stethoscope,
+  BookUser,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -112,6 +113,8 @@ export default function EmployeeSidebar() {
     }).catch(() => {});
   }, [user?.employee_service, user?.employee_id]);
 
+  const isHse = user?.is_hse === true;
+
   const navItems: NavItem[] = [
     ...baseNavItems,
     ...(isManager
@@ -120,6 +123,15 @@ export default function EmployeeSidebar() {
             label: "Approbations",
             path: "/manager/approvals",
             icon: <ClipboardCheck size={20} />,
+          },
+        ]
+      : []),
+    ...(isHse
+      ? [
+          {
+            label: "Gestion Passeports",
+            path: "/hse/passeports",
+            icon: <BookUser size={20} />,
           },
         ]
       : []),
