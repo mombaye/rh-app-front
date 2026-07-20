@@ -42,8 +42,15 @@ function prefetchVisible(slugs: string[]) {
   for (let k = 0; k < Math.min(CONCURRENCY, todo.length); k++) next();
 }
 
-// ── URL publique QR — toujours vers l'API de production (sans React, sans auth) ──
-const QR_API_BASE = "https://apierh.camusatsn.com";
+// ── URL publique QR ──────────────────────────────────────────────────────────
+// En dev  : IP réseau locale injectée par Vite + port courant
+//           → le téléphone sur le même WiFi atteint le serveur Vite
+//             qui proxyfie /api vers localhost:8030
+// En prod : domaine fixe
+declare const __LOCAL_NETWORK_IP__: string;
+const QR_API_BASE = import.meta.env.PROD
+  ? "https://apierh.camusatsn.com"
+  : `http://${__LOCAL_NETWORK_IP__}:${window.location.port || 5173}`;
 const qrScanUrl = (slug: string) =>
   `${QR_API_BASE}/api/employees/passeports/${slug}/pdf/scan/`;
 
