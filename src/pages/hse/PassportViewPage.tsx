@@ -1,16 +1,16 @@
-// Page publique — affiche le passeport PDF sans authentification
-// Accessible via le QR code scanné depuis n'importe quel réseau
+// Page publique — affiche le passeport PDF via QR code (sans authentification)
+// Accessible depuis n'importe quel réseau (WiFi local ou internet)
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { ImSpinner2 } from "react-icons/im";
 
 export default function PassportViewPage() {
   const { slug } = useParams<{ slug: string }>();
-  const [error, setError] = useState(false);
+  const [error, setError]   = useState(false);
   const [loaded, setLoaded] = useState(false);
 
+  // passeport_pdf_scan : endpoint public (sans auth), génère le PDF si absent
   // URL relative → proxiée par Vite en dev, par nginx en prod
-  // Fonctionne depuis n'importe quel appareil sur le réseau
   const pdfUrl = `/api/employees/passeports/${slug}/pdf/scan/`;
 
   if (error) {
@@ -54,10 +54,10 @@ export default function PassportViewPage() {
           onLoad={() => setLoaded(true)}
           onError={() => setError(true)}
         />
-        {/* Spinner masqué dès que l'iframe est chargée */}
         {!loaded && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-100 pointer-events-none">
             <ImSpinner2 className="animate-spin text-[#003c71]" size={32} />
+            <p className="ml-3 text-sm text-gray-500">Chargement du passeport…</p>
           </div>
         )}
       </div>

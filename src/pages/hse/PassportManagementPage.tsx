@@ -16,8 +16,18 @@ const authHeaders = () => ({
 });
 
 // ── URL publique QR (scan sans login) ────────────────────────────────────────
-// Pointe vers la page frontend publique /passeports/:slug/view
-const FRONTEND_URL = import.meta.env.VITE_PUBLIC_URL || window.location.origin;
+function getFrontendUrl(): string {
+  // 1. En prod : VITE_PUBLIC_URL est défini dans .env.production
+  if (import.meta.env.VITE_PUBLIC_URL) return import.meta.env.VITE_PUBLIC_URL;
+  // 2. En dev via localhost : remplacer par l'IP WiFi réelle pour que le téléphone puisse accéder
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return `http://${__LOCAL_NETWORK_IP__}:${window.location.port}`;
+  }
+  // 3. Déjà accédé via IP réseau → utiliser tel quel
+  return window.location.origin;
+}
+
+const FRONTEND_URL = getFrontendUrl();
 const qrScanUrl = (slug: string) => `${FRONTEND_URL}/passeports/${slug}/view`;
 
 // ── Modal QR Code ─────────────────────────────────────────────────────────────

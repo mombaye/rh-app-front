@@ -1,9 +1,26 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import os from 'os';
+
+// Détecte l'IP WiFi locale (192.168.x.x) pour les QR codes accessibles sur le même réseau
+function getLocalNetworkIP(): string {
+  for (const ifaces of Object.values(os.networkInterfaces())) {
+    for (const iface of ifaces || []) {
+      if (iface.family === 'IPv4' && !iface.internal && iface.address.startsWith('192.168.')) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    // IP réseau locale injectée au démarrage de Vite (utilisée pour les QR codes)
+    __LOCAL_NETWORK_IP__: JSON.stringify(getLocalNetworkIP()),
+  },
 
   resolve: {
     alias: {
