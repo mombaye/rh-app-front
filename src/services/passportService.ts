@@ -1,12 +1,6 @@
-import axios from "axios";
+import api from "@/api/axios";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
-const API = `${BASE_URL}/api/employees/passeports`;
-
-
-const authHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem("access_token")}`,
-});
+const API = "/api/employees/passeports";
 
 export interface PassportFile {
   slug: string;
@@ -56,12 +50,12 @@ export interface UploadResult {
 
 export const passportService = {
   getAll: async (): Promise<PassportFile[]> => {
-    const res = await axios.get<PassportFile[]>(`${API}/`, { headers: authHeaders() });
+    const res = await api.get<PassportFile[]>(`${API}/`);
     return res.data;
   },
 
   getDetail: async (slug: string): Promise<PassportDetail> => {
-    const res = await axios.get<PassportDetail>(`${API}/${slug}/`, { headers: authHeaders() });
+    const res = await api.get<PassportDetail>(`${API}/${slug}/`);
     return res.data;
   },
 
@@ -72,8 +66,8 @@ export const passportService = {
     const form = new FormData();
     const list = Array.isArray(files) ? files : [files];
     list.forEach((f) => form.append("files", f));
-    const res = await axios.post<UploadResult>(`${API}/upload/`, form, {
-      headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
+    const res = await api.post<UploadResult>(`${API}/upload/`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
       onUploadProgress: (e) => {
         if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
       },
@@ -81,36 +75,30 @@ export const passportService = {
     return res.data;
   },
 
-  getPdfUrl: (slug: string): string =>
-    `${API}/${slug}/pdf/`,
+  getPdfUrl: (slug: string): string => `${API}/${slug}/pdf/`,
 
   deleteFile: async (slug: string): Promise<void> => {
-    await axios.delete(`${API}/${slug}/delete/`, { headers: authHeaders() });
+    await api.delete(`${API}/${slug}/delete/`);
   },
 
   markQrGenerated: async (slug: string, generated = true): Promise<void> => {
-    await axios.post(`${API}/${slug}/mark-qr/`, { generated }, { headers: authHeaders() });
+    await api.post(`${API}/${slug}/mark-qr/`, { generated });
   },
 
   markQrGeneratedBulk: async (slugs: string[], generated = true): Promise<void> => {
-    await axios.post(`${API}/mark-qr-bulk/`, { slugs, generated }, { headers: authHeaders() });
+    await api.post(`${API}/mark-qr-bulk/`, { slugs, generated });
   },
 
   resetModified: async (slugs?: string[]): Promise<{ deleted: number; errors: string[] }> => {
-    const res = await axios.post<{ deleted: number; errors: string[] }>(
+    const res = await api.post<{ deleted: number; errors: string[] }>(
       `${API}/reset-modified/`,
-      slugs ? { slugs } : {},
-      { headers: authHeaders() }
+      slugs ? { slugs } : {}
     );
     return res.data;
   },
 
   resetAll: async (): Promise<{ deleted_pdfs: number; errors: string[] }> => {
-    const res = await axios.post<{ deleted_pdfs: number; errors: string[] }>(
-      `${API}/reset-all/`,
-      {},
-      { headers: authHeaders() }
-    );
+    const res = await api.post<{ deleted_pdfs: number; errors: string[] }>(`${API}/reset-all/`, {});
     return res.data;
   },
 
@@ -119,8 +107,7 @@ export const passportService = {
     page = 0,
     v = 0
   ): Promise<{ blob: Blob; pageCount: number }> => {
-    const res = await axios.get(`${API}/${slug}/page-image/`, {
-      headers: authHeaders(),
+    const res = await api.get(`${API}/${slug}/page-image/`, {
       params: { page, v },
       responseType: "blob",
     });
@@ -139,6 +126,8 @@ export const passportService = {
     form.append("y_pct", String(pos.y));
     form.append("w_pct", String(pos.w));
     form.append("h_pct", String(pos.h));
-    await axios.post(`${API}/${slug}/embed-photo/`, form, { headers: authHeaders() });
+    await api.post(`${API}/${slug}/embed-photo/`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
   },
 };
