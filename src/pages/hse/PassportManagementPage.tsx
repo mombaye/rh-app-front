@@ -42,20 +42,16 @@ function prefetchVisible(slugs: string[]) {
   for (let k = 0; k < Math.min(CONCURRENCY, todo.length); k++) next();
 }
 
-// ── URL publique QR (scan sans login) ────────────────────────────────────────
-function getFrontendUrl(): string {
-  // 1. En prod : VITE_PUBLIC_URL est défini dans .env.production
-  if (import.meta.env.VITE_PUBLIC_URL) return import.meta.env.VITE_PUBLIC_URL;
-  // 2. En dev via localhost : remplacer par l'IP WiFi réelle pour que le téléphone puisse accéder
-  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-    return `http://${__LOCAL_NETWORK_IP__}:${window.location.port}`;
-  }
-  // 3. Déjà accédé via IP réseau → utiliser tel quel
-  return window.location.origin;
+// ── URL publique QR — pointe directement vers le PDF backend (sans React, sans auth) ──
+function getApiBaseUrl(): string {
+  // En prod : VITE_API_URL = https://apierh.camusatsn.com
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  // En dev via localhost : utiliser l'IP WiFi pour que le téléphone puisse accéder
+  return `http://${__LOCAL_NETWORK_IP__}:8030`;
 }
 
-const FRONTEND_URL = getFrontendUrl();
-const qrScanUrl = (slug: string) => `${FRONTEND_URL}/passeports/${slug}/view`;
+const qrScanUrl = (slug: string) =>
+  `${getApiBaseUrl()}/api/employees/passeports/${slug}/pdf/scan/`;
 
 // ── Modal QR Code ─────────────────────────────────────────────────────────────
 function QrModal({ file, alreadyGenerated, onGenerated, onClose }: {
