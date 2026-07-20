@@ -787,8 +787,24 @@ export default function PassportManagementPage() {
   const [detailFile, setDetailFile]   = useState<PassportFile | null>(null);
   const [qrFile, setQrFile]           = useState<PassportFile | null>(null);
   const [qrGenerated, setQrGenerated] = useState<Set<string>>(new Set());
-  const [showBulkQr, setShowBulkQr]         = useState(false);
-  const [showBulkGenerate, setShowBulkGenerate] = useState(false);
+  const [showBulkQr, setShowBulkQr]               = useState(false);
+  const [showBulkGenerate, setShowBulkGenerate]   = useState(false);
+  const [showResetConfirm, setShowResetConfirm]   = useState(false);
+  const [resetting, setResetting]                 = useState(false);
+
+  const handleResetAll = async () => {
+    setResetting(true);
+    try {
+      const res = await passportService.resetAll();
+      toast.success(`Réinitialisé : ${res.deleted_pdfs} fichier(s) supprimé(s).`);
+      setShowResetConfirm(false);
+      await load();
+    } catch {
+      toast.error("Erreur lors de la réinitialisation.");
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -848,7 +864,14 @@ export default function PassportManagementPage() {
                 QR Codes ({qrGenerated.size})
               </button>
             )}
-<button
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-red-200 bg-red-50 text-red-600 text-sm font-medium hover:bg-red-100 transition"
+            >
+              <RefreshCw size={15} />
+              Réinitialiser
+            </button>
+            <button
               onClick={load}
               disabled={loading}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition disabled:opacity-60"
@@ -1013,6 +1036,59 @@ export default function PassportManagementPage() {
       {/* Modal Détail */}
       {detailFile && (
         <PassportDetailModal file={detailFile} onClose={() => setDetailFile(null)} />
+      )}
+
+      {/* ── Modal Réinitialiser tout ─────────────────────────────────────── */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+          onClick={() => !resetting && setShowResetConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-red-50">
+                  <RefreshCw size={16} className="text-red-500" />
+                </div>
+                <p className="font-semibold text-gray-800 text-sm">Réinitialiser tout</p>
+              </div>
+              {!resetting && (
+                <button onClick={() => setShowResetConfirm(false)}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700 space-y-1">
+                <p className="font-semibold">Cette action va :</p>
+                <ul className="list-disc list-inside space-y-0.5 text-xs mt-1">
+                  <li>Supprimer toutes les photos et cachets intégrés</li>
+                  <li>Remettre tous les QR codes à zéro (régénérables)</li>
+                  <li>Effacer les positions de cachet sauvegardées</li>
+                </ul>
+                <p className="text-xs font-medium mt-2">Les fichiers Excel originaux ne sont pas modifiés.</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowResetConfirm(false)}
+                  disabled={resetting}
+                  className="flex-1 px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleResetAll}
+                  disabled={resetting}
+                  className="flex-1 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {resetting
+                    ? <><ImSpinner2 className="animate-spin" size={14} /> Réinitialisation…</>
+                    : "Confirmer"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </ManagerLayout>
   );

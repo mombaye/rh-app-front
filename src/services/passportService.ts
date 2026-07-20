@@ -30,7 +30,7 @@ export interface PassportAutreFormation {
   date?: string | null;
 }
 
-export interface PassportDetail extends Omit<PassportFile, "nom_prenom"> {
+export interface PassportDetail extends Omit<PassportFile, "nom_prenom" | "poste" | "date_embauche"> {
   societe?: string | null;
   adresse?: string | null;
   nom_prenom?: string | null;
@@ -100,6 +100,15 @@ export const passportService = {
     const res = await axios.post<{ deleted: number; errors: string[] }>(
       `${API}/reset-modified/`,
       slugs ? { slugs } : {},
+      { headers: authHeaders() }
+    );
+    return res.data;
+  },
+
+  resetAll: async (): Promise<{ deleted_pdfs: number; errors: string[] }> => {
+    const res = await axios.post<{ deleted_pdfs: number; errors: string[] }>(
+      `${API}/reset-all/`,
+      {},
       { headers: authHeaders() }
     );
     return res.data;
