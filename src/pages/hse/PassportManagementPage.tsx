@@ -6,7 +6,7 @@ import { ImSpinner2 } from "react-icons/im";
 import { QRCodeCanvas } from "qrcode.react";
 import toast from "react-hot-toast";
 import ManagerLayout from "@/layouts/ManagerLayout";
-import { passportService, PassportFile } from "@/services/passportService";
+import { passportService, PassportFile, PassportCheckbox } from "@/services/passportService";
 
 const PAGE_SIZE = 10;
 
@@ -318,10 +318,38 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   const dragRef      = useRef<{ mode: DragMode; sx: number; sy: number; sp: PhotoPos } | null>(null);
   const inputRef     = useRef<HTMLInputElement>(null);
 
+  // Checkboxes interactives
+  const [checkboxes, setCheckboxes] = useState<PassportCheckbox[]>([]);
+  const [togglingCb, setTogglingCb] = useState<string | null>(null);
+
   // Charger le cachet au montage
   useEffect(() => {
     _ensureCachetLoaded().then(setCachetBlobUrl);
   }, []);
+
+  // Charger les checkboxes au montage
+  useEffect(() => {
+    passportService.getCheckboxes(file.slug).then(setCheckboxes).catch(() => {});
+  }, [file.slug]);
+
+  const handleCheckboxClick = async (cb: PassportCheckbox) => {
+    if (togglingCb || placingPhoto || placingCachets) return;
+    setTogglingCb(cb.id);
+    try {
+      const res = await passportService.toggleCheckbox(file.slug, cb.id);
+      setCheckboxes((prev) => prev.map((c) => c.id === cb.id ? { ...c, checked: res.checked } : c));
+      // Recharger l'image PDF pour refléter la case cochée/décochée
+      _page0Cache.delete(file.slug);
+      const newKey = cacheKey + 1;
+      setCacheKey(newKey);
+      setPages([]);
+      await loadPage(0, newKey);
+    } catch {
+      toast.error("Impossible de mettre à jour la case.");
+    } finally {
+      setTogglingCb(null);
+    }
+  };
 
   // ── Chargement pages PDF via service (token toujours frais) ───────────────
   const loadPage = async (pageNum: number, key = cacheKey) => {
@@ -707,6 +735,40 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                   ))}
                 </div>
               ))}
+
+              {/* ── Overlays cases à cocher (page 0) ── */}
+              {currentPage === 0 && !placingPhoto && !placingCachets && checkboxes.map((cb) => {
+                const cx = cb.x_pct + cb.w_pct / 2;
+                const cy = cb.y_pct + cb.h_pct / 2;
+                const isToggling = togglingCb === cb.id;
+                return (
+                  <div
+                    key={cb.id}
+                    onClick={() => handleCheckboxClick(cb)}
+                    title={`${cb.label} — cliquer pour ${cb.checked ? "décocher" : "cocher"}`}
+                    style={{
+                      position: "absolute",
+                      left: `${cx}%`,
+                      top: `${cy}%`,
+                      transform: "translate(-50%, -50%)",
+                      minWidth: "22px",
+                      minHeight: "22px",
+                      cursor: isToggling ? "wait" : "pointer",
+                      zIndex: 20,
+                      boxSizing: "border-box",
+                      borderRadius: "3px",
+                      opacity: isToggling ? 0.5 : 1,
+                      transition: "opacity 0.15s, background-color 0.15s",
+                      border: cb.checked
+                        ? "2px solid rgba(20,40,140,0.7)"      /* bleu marine si coché */
+                        : "2px dashed rgba(59,130,246,0.5)",   /* bleu pointillé si vide */
+                      backgroundColor: cb.checked
+                        ? "rgba(20,40,140,0.12)"
+                        : "rgba(59,130,246,0.04)",
+                    }}
+                  />
+                );
+              })}
 
               {/* ── Overlay photo draggable ── */}
               {placingPhoto && (
@@ -1351,6 +1413,7 @@ export default function PassportManagementPage() {
               {paginated.map((file, idx) => (
                 <div
                   key={file.slug}
+                  onMouseEnter={() => _prefetchPage0(file.slug)}
                   className={`flex items-center gap-3 px-4 py-3 hover:bg-[#003c71]/5 transition ${
                     idx !== paginated.length - 1 ? "border-b border-gray-100" : ""
                   }`}
@@ -1389,7 +1452,6 @@ export default function PassportManagementPage() {
                     </button>
                     <button
                       onClick={() => setDetailFile(file)}
-                      onMouseEnter={() => _prefetchPage0(file.slug)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#003c71] text-white text-xs font-medium hover:bg-[#003c71]/90 transition"
                     >
                       <BookUser size={13} />Voir le détail

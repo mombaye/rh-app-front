@@ -56,6 +56,16 @@ export interface UploadResult {
   files: PassportFile[];
 }
 
+export interface PassportCheckbox {
+  id: string;
+  label: string;
+  x_pct: number;
+  y_pct: number;
+  w_pct: number;
+  h_pct: number;
+  checked: boolean;
+}
+
 export const passportService = {
   getAll: async (): Promise<PassportFile[]> => {
     const res = await api.get<PassportFile[]>(`${API}/`);
@@ -182,5 +192,15 @@ export const passportService = {
     await api.post(`${API}/${slug}/embed-photo/`, form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
+  },
+
+  getCheckboxes: async (slug: string): Promise<PassportCheckbox[]> => {
+    const res = await api.get<{ checkboxes: PassportCheckbox[] }>(`${API}/${slug}/checkboxes/`);
+    return res.data.checkboxes;
+  },
+
+  toggleCheckbox: async (slug: string, cb_id: string): Promise<{ ok: boolean; cb_id: string; checked: boolean }> => {
+    const res = await api.post(`${API}/${slug}/checkbox-toggle/`, { cb_id });
+    return res.data;
   },
 };
