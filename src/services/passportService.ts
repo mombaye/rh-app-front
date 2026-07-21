@@ -10,6 +10,14 @@ export interface PassportFile {
   poste: string;
   date_embauche: string;
   qr_generated: boolean;
+  // Signatures des 4 formations
+  sig_th: boolean;
+  sig_el: boolean;
+  sig_ps: boolean;
+  sig_af: boolean;
+  has_photo: boolean;
+  signature_count: number;   // 0-4 (TH+EL+PS+AF)
+  has_all_signatures: boolean;
 }
 
 export interface PassportFormation {

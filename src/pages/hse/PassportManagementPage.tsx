@@ -1,7 +1,7 @@
 // src/pages/hse/PassportManagementPage.tsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
-import { BookUser, Search, RefreshCw, X, ChevronLeft, ChevronRight, QrCode, Download, Printer, Upload, Check, Stamp, Plus } from "lucide-react";
+import { BookUser, Search, RefreshCw, X, ChevronLeft, ChevronRight, QrCode, Download, Printer, Upload, Check, Stamp, Plus, Filter, ShieldCheck, ShieldAlert } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import { QRCodeCanvas } from "qrcode.react";
 import toast from "react-hot-toast";
@@ -1109,6 +1109,7 @@ export default function PassportManagementPage() {
   const [showResetConfirm, setShowResetConfirm]   = useState(false);
   const [resetting, setResetting]                 = useState(false);
   const [uploadingCachet, setUploadingCachet]     = useState(false);
+  const [sigFilter, setSigFilter] = useState<"all" | "complete" | "incomplete">("all");
   const cachetInputRef = useRef<HTMLInputElement>(null);
 
   const handleCachetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1157,13 +1158,16 @@ export default function PassportManagementPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(1); }, [search]);
-
+  useEffect(() => { setPage(1); }, [search, sigFilter]);
 
   const filtered = files.filter((f) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return f.display_name.toLowerCase().includes(q) || f.nom_prenom.toLowerCase().includes(q);
+    if (search) {
+      const q = search.toLowerCase();
+      if (!f.display_name.toLowerCase().includes(q) && !f.nom_prenom.toLowerCase().includes(q)) return false;
+    }
+    if (sigFilter === "complete" && !f.has_all_signatures) return false;
+    if (sigFilter === "incomplete" && f.has_all_signatures) return false;
+    return true;
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -1232,7 +1236,7 @@ export default function PassportManagementPage() {
           </div>
         </div>
 
-        {/* Recherche */}
+        {/* Recherche + Filtres */}
         {files.length > 0 && (
           <div className="flex flex-wrap gap-3 items-center">
             <div className="relative flex-1 min-w-[200px]">
@@ -1241,6 +1245,44 @@ export default function PassportManagementPage() {
                 placeholder="Rechercher par nom…"
                 className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#003c71]/20 focus:border-[#003c71] outline-none" />
             </div>
+
+            {/* Filtre signatures */}
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setSigFilter("all")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                  sigFilter === "all"
+                    ? "bg-white text-gray-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <Filter size={12} />
+                Tous
+              </button>
+              <button
+                onClick={() => setSigFilter("complete")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                  sigFilter === "complete"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-gray-500 hover:text-emerald-600"
+                }`}
+              >
+                <ShieldCheck size={12} />
+                4 signatures
+              </button>
+              <button
+                onClick={() => setSigFilter("incomplete")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                  sigFilter === "incomplete"
+                    ? "bg-amber-500 text-white shadow-sm"
+                    : "text-gray-500 hover:text-amber-500"
+                }`}
+              >
+                <ShieldAlert size={12} />
+                Incomplets
+              </button>
+            </div>
+
             <span className="text-xs text-gray-400 whitespace-nowrap">
               {filtered.length} passeport{filtered.length > 1 ? "s" : ""}
             </span>
@@ -1286,9 +1328,24 @@ export default function PassportManagementPage() {
                   <div className="w-8 h-8 rounded-full bg-[#003c71]/10 text-[#003c71] flex items-center justify-center font-bold text-xs flex-shrink-0">
                     {(file.nom_prenom || file.display_name).split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
                   </div>
-                  <p className="flex-1 min-w-0 text-sm font-medium text-gray-800 truncate">
-                    {file.nom_prenom || file.display_name}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {file.nom_prenom || file.display_name}
+                    </p>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      {(["sig_th", "sig_el", "sig_ps", "sig_af"] as const).map((key) => {
+                        const labels: Record<string, string> = { sig_th: "TH", sig_el: "EL", sig_ps: "PS", sig_af: "AF" };
+                        const ok = file[key] as boolean;
+                        return (
+                          <span key={key} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            ok ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-400"
+                          }`}>
+                            {labels[key]}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
                       onClick={() => setQrFile(file)}
