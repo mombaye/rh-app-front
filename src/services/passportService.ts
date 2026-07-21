@@ -103,12 +103,24 @@ export const passportService = {
     return res.data as Blob;
   },
 
-  uploadCachet: async (file: File): Promise<void> => {
+  uploadCachet: async (file: File): Promise<{ ok: boolean; auto_task_id?: string; auto_total?: number }> => {
     const form = new FormData();
     form.append("cachet", file);
-    await api.post(`${API}/cachet/upload/`, form, {
+    const res = await api.post(`${API}/cachet/upload/`, form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
+    return res.data;
+  },
+
+  getCachetTaskProgress: async (taskId: string): Promise<{
+    state: "PENDING" | "PROGRESS" | "SUCCESS" | "NOT_FOUND";
+    current: number;
+    total: number;
+    ok?: number;
+    errors?: string[];
+  }> => {
+    const res = await api.get(`${API}/cachet-apply-progress/${taskId}/`);
+    return res.data;
   },
 
   applyCachetMulti: async (

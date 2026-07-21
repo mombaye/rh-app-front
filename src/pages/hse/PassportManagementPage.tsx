@@ -1116,15 +1116,48 @@ export default function PassportManagementPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingCachet(true);
+    e.target.value = "";
     try {
-      await passportService.uploadCachet(file);
+      const res = await passportService.uploadCachet(file);
       _invalidateCachetCache();
-      toast.success("Cachet uploadé avec succès !");
+
+      const taskId   = res.auto_task_id;
+      const total    = res.auto_total ?? 0;
+
+      if (!taskId || total === 0) {
+        toast.success("Cachet uploadé. Aucun passeport avec 4 signatures trouvé.");
+        return;
+      }
+
+      // Toast dynamique de progression
+      const toastId = toast.loading(`Application automatique sur ${total} passeport(s)…`);
+
+      const poll = async () => {
+        try {
+          const progress = await passportService.getCachetTaskProgress(taskId);
+          if (progress.state === "PROGRESS" || progress.state === "PENDING") {
+            const pct = total > 0 ? Math.round((progress.current / total) * 100) : 0;
+            toast.loading(`Cachets en cours… ${progress.current}/${total} (${pct}%)`, { id: toastId });
+            setTimeout(poll, 1500);
+          } else if (progress.state === "SUCCESS") {
+            toast.success(
+              `Cachet appliqué sur ${progress.ok ?? total} passeport(s) avec 4 signatures !`,
+              { id: toastId, duration: 5000 }
+            );
+            // Invalider le cache page0 pour forcer le rechargement des aperçus
+            _page0Cache.clear();
+          } else {
+            toast.success("Cachet uploadé et appliqué.", { id: toastId });
+          }
+        } catch {
+          toast.success("Cachet uploadé.", { id: toastId });
+        }
+      };
+      setTimeout(poll, 1000);
     } catch {
       toast.error("Erreur lors de l'upload du cachet");
     } finally {
       setUploadingCachet(false);
-      e.target.value = "";
     }
   };
 
