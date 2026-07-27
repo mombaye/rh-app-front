@@ -1,7 +1,7 @@
 // src/pages/hse/PassportManagementPage.tsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
-import { BookUser, Search, RefreshCw, X, ChevronLeft, ChevronRight, QrCode, Download, Printer, Upload, Check, Stamp, Plus, Filter, ShieldCheck, ShieldAlert } from "lucide-react";
+import { BookUser, Search, RefreshCw, X, ChevronLeft, ChevronRight, QrCode, Download, Printer, Upload, Check, Stamp, Plus, Filter, ShieldCheck, ShieldAlert, PenLine, Trash2 } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import { QRCodeCanvas } from "qrcode.react";
 import toast from "react-hot-toast";
@@ -314,6 +314,25 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   const cachetDragRef = useRef<{ id: string; mode: DragMode; sx: number; sy: number; sp: PhotoPos } | null>(null);
   const placingCachets = cachetItems.length > 0;
 
+  // Confirmations de suppression globale
+  const [confirmDelete, setConfirmDelete] = useState<"photo" | "signature" | "cachets" | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Cachets déjà intégrés (overlays sélectionnables)
+  const [appliedCachets, setAppliedCachets] = useState<{ idx: number; x_pct: number; y_pct: number; w_pct: number; h_pct: number }[]>([]);
+  const [selectedCachetIdx, setSelectedCachetIdx] = useState<number | null>(null);
+  const [deletingCachetIdx, setDeletingCachetIdx] = useState<number | null>(null);
+
+  // Mode placement signature
+  const [placingSig, setPlacingSig] = useState<{
+    file: File;
+    previewUrl: string;
+    pos: PhotoPos;
+  } | null>(null);
+  const [savingSig, setSavingSig] = useState(false);
+  const sigDragRef = useRef<{ mode: DragMode; sx: number; sy: number; sp: PhotoPos } | null>(null);
+  const sigInputRef = useRef<HTMLInputElement>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef      = useRef<{ mode: DragMode; sx: number; sy: number; sp: PhotoPos } | null>(null);
   const inputRef     = useRef<HTMLInputElement>(null);
@@ -332,8 +351,14 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
     passportService.getCheckboxes(file.slug).then(setCheckboxes).catch(() => {});
   }, [file.slug]);
 
+  // Charger les cachets intégrés
+  const reloadAppliedCachets = () => {
+    passportService.getAppliedCachets(file.slug).then(setAppliedCachets).catch(() => setAppliedCachets([]));
+  };
+  useEffect(() => { reloadAppliedCachets(); }, [file.slug]);
+
   const handleCheckboxClick = async (cb: PassportCheckbox) => {
-    if (togglingCb || placingPhoto || placingCachets) return;
+    if (togglingCb || placingPhoto || placingCachets || placingSig) return;
     setTogglingCb(cb.id);
     try {
       const res = await passportService.toggleCheckbox(file.slug, cb.id);
@@ -479,6 +504,127 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
     cachetDragRef.current = { id, mode, sx: e.clientX, sy: e.clientY, sp: { ...pos } };
   };
 
+  // ── Drag & resize signature ─────────────────────────────────────────────────
+  const onSigMouseMove = useCallback((e: MouseEvent) => {
+    const d = sigDragRef.current;
+    if (!d || !containerRef.current) return;
+    const cr  = containerRef.current.getBoundingClientRect();
+    const dx  = (e.clientX - d.sx) / cr.width  * 100;
+    const dy  = (e.clientY - d.sy) / cr.height * 100;
+    const p   = d.sp;
+    const MIN = 4;
+    setPlacingSig((prev) => {
+      if (!prev) return prev;
+      let { x, y, w, h } = p;
+      if (d.mode === "move") {
+        x = Math.max(0, Math.min(100 - w, p.x + dx));
+        y = Math.max(0, Math.min(100 - h, p.y + dy));
+      } else if (d.mode === "br") {
+        w = Math.max(MIN, Math.min(100 - p.x, p.w + dx));
+        h = Math.max(MIN, Math.min(100 - p.y, p.h + dy));
+      } else if (d.mode === "bl") {
+        const nw = Math.max(MIN, p.w - dx); x = p.x + p.w - nw; w = nw;
+        h = Math.max(MIN, Math.min(100 - p.y, p.h + dy));
+      } else if (d.mode === "tr") {
+        w = Math.max(MIN, Math.min(100 - p.x, p.w + dx));
+        const nh = Math.max(MIN, p.h - dy); y = p.y + p.h - nh; h = nh;
+      } else if (d.mode === "tl") {
+        const nw = Math.max(MIN, p.w - dx); x = p.x + p.w - nw; w = nw;
+        const nh = Math.max(MIN, p.h - dy); y = p.y + p.h - nh; h = nh;
+      }
+      return { ...prev, pos: { x, y, w, h } };
+    });
+  }, []);
+
+  const onSigMouseUp = useCallback(() => { sigDragRef.current = null; }, []);
+
+  useEffect(() => {
+    if (!placingSig) return;
+    window.addEventListener("mousemove", onSigMouseMove);
+    window.addEventListener("mouseup",  onSigMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onSigMouseMove);
+      window.removeEventListener("mouseup",  onSigMouseUp);
+    };
+  }, [placingSig, onSigMouseMove, onSigMouseUp]);
+
+  const startSigDrag = (mode: DragMode, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!placingSig) return;
+    sigDragRef.current = { mode, sx: e.clientX, sy: e.clientY, sp: { ...placingSig.pos } };
+  };
+
+  const handleSigFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setPlacingSig({
+      file: f,
+      previewUrl: URL.createObjectURL(f),
+      pos: { x: 5, y: 60, w: 20, h: 10 },
+    });
+    e.target.value = "";
+  };
+
+  const handleValidateSig = async () => {
+    if (!placingSig) return;
+    setSavingSig(true);
+    try {
+      await passportService.uploadSignature(file.slug, placingSig.file);
+      await passportService.embedSignature(file.slug, placingSig.pos, currentPage);
+      _page0Cache.delete(file.slug);
+      const newKey = cacheKey + 1;
+      setCacheKey(newKey);
+      setPages([]);
+      setPlacingSig(null);
+      await loadPage(currentPage, newKey);
+      toast.success("Signature intégrée dans le passeport !");
+    } catch {
+      toast.error("Erreur lors de l'intégration de la signature");
+    } finally {
+      setSavingSig(false);
+    }
+  };
+
+  const handleDelete = async (type: "photo" | "signature" | "cachets") => {
+    setDeleting(true);
+    try {
+      if (type === "photo")     await passportService.deletePhoto(file.slug);
+      if (type === "signature") await passportService.deleteSignature(file.slug);
+      if (type === "cachets")   await passportService.deleteCachets(file.slug);
+      _page0Cache.delete(file.slug);
+      const newKey = cacheKey + 1;
+      setCacheKey(newKey);
+      setPages([]);
+      setConfirmDelete(null);
+      await loadPage(currentPage, newKey);
+      toast.success(`${type === "photo" ? "Photo" : type === "signature" ? "Signature" : "Cachets"} supprimé(s) du passeport`);
+    } catch {
+      toast.error("Erreur lors de la suppression");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteCachetIdx = async (idx: number) => {
+    setDeletingCachetIdx(idx);
+    try {
+      await passportService.deleteCachetIdx(file.slug, idx);
+      _page0Cache.delete(file.slug);
+      const newKey = cacheKey + 1;
+      setCacheKey(newKey);
+      setPages([]);
+      setSelectedCachetIdx(null);
+      reloadAppliedCachets();
+      await loadPage(currentPage, newKey);
+      toast.success("Cachet supprimé");
+    } catch {
+      toast.error("Erreur lors de la suppression du cachet");
+    } finally {
+      setDeletingCachetIdx(null);
+    }
+  };
+
   const addCachet = () => {
     setCachetItems((prev) => [
       ...prev,
@@ -499,6 +645,7 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
       setCacheKey(newKey);
       setPages([]);
       setCachetItems([]);
+      reloadAppliedCachets();
       await loadPage(0, newKey);
       toast.success("Cachets intégrés dans le passeport !");
     } catch {
@@ -546,7 +693,7 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-2"
-      onClick={placingPhoto ? undefined : onClose}
+      onClick={placingPhoto || placingSig ? undefined : onClose}
     >
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[98vh] flex flex-col overflow-hidden"
@@ -565,6 +712,8 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                   ? "Glissez la photo au bon endroit, redimensionnez via les coins, puis validez"
                   : placingCachets
                   ? "Glissez les cachets, redimensionnez via les coins, supprimez avec ×, puis validez"
+                  : placingSig
+                  ? "Glissez la signature au bon endroit, redimensionnez via les coins, puis validez"
                   : "Passeport Sécurité CAMUSAT"}
               </p>
             </div>
@@ -572,7 +721,7 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
 
           <div className="flex items-center gap-2">
             {/* Navigation pages — masquée en mode placement */}
-            {!placingPhoto && !placingCachets && pageCount > 1 && (
+            {!placingPhoto && !placingCachets && !placingSig && pageCount > 1 && (
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <button onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} disabled={currentPage === 0}
                   className="p-1 rounded hover:bg-gray-100 disabled:opacity-40">
@@ -587,23 +736,95 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
             )}
 
             {/* Boutons normaux — hors mode placement */}
-            {!placingPhoto && !placingCachets && (
+            {!placingPhoto && !placingCachets && !placingSig && (
               <>
-                <button
-                  onClick={() => inputRef.current?.click()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-200 text-purple-600 bg-purple-50 text-xs font-medium hover:bg-purple-100 transition"
-                >
-                  <Upload size={13} />
-                  Photo
-                </button>
-                {cachetBlobUrl && (
+                {/* Photo + supprimer */}
+                <div className="flex items-center gap-0.5">
                   <button
-                    onClick={addCachet}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 bg-amber-50 text-xs font-medium hover:bg-amber-100 transition"
+                    onClick={() => { setConfirmDelete(null); inputRef.current?.click(); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg border border-purple-200 text-purple-600 bg-purple-50 text-xs font-medium hover:bg-purple-100 transition"
                   >
-                    <Stamp size={13} />
-                    Cachet
+                    <Upload size={13} />
+                    Photo
                   </button>
+                  {confirmDelete === "photo" ? (
+                    <span className="flex items-center gap-1 px-2 py-1.5 border border-red-300 bg-red-50 rounded-r-lg text-xs">
+                      <span className="text-red-600 font-medium">Supprimer ?</span>
+                      <button onClick={() => handleDelete("photo")} disabled={deleting}
+                        className="px-1.5 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:opacity-50">
+                        {deleting ? "…" : "Oui"}
+                      </button>
+                      <button onClick={() => setConfirmDelete(null)}
+                        className="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300">
+                        Non
+                      </button>
+                    </span>
+                  ) : (
+                    <button onClick={() => setConfirmDelete("photo")}
+                      className="px-2 py-1.5 rounded-r-lg border border-purple-200 text-purple-400 bg-purple-50 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition">
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Signature + supprimer */}
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => { setConfirmDelete(null); sigInputRef.current?.click(); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg border border-blue-200 text-blue-600 bg-blue-50 text-xs font-medium hover:bg-blue-100 transition"
+                  >
+                    <PenLine size={13} />
+                    Signature
+                  </button>
+                  {confirmDelete === "signature" ? (
+                    <span className="flex items-center gap-1 px-2 py-1.5 border border-red-300 bg-red-50 rounded-r-lg text-xs">
+                      <span className="text-red-600 font-medium">Supprimer ?</span>
+                      <button onClick={() => handleDelete("signature")} disabled={deleting}
+                        className="px-1.5 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:opacity-50">
+                        {deleting ? "…" : "Oui"}
+                      </button>
+                      <button onClick={() => setConfirmDelete(null)}
+                        className="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300">
+                        Non
+                      </button>
+                    </span>
+                  ) : (
+                    <button onClick={() => setConfirmDelete("signature")}
+                      className="px-2 py-1.5 rounded-r-lg border border-blue-200 text-blue-400 bg-blue-50 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition">
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Cachet + supprimer */}
+                {cachetBlobUrl && (
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => { setConfirmDelete(null); addCachet(); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg border border-amber-200 text-amber-700 bg-amber-50 text-xs font-medium hover:bg-amber-100 transition"
+                    >
+                      <Stamp size={13} />
+                      Cachet
+                    </button>
+                    {confirmDelete === "cachets" ? (
+                      <span className="flex items-center gap-1 px-2 py-1.5 border border-red-300 bg-red-50 rounded-r-lg text-xs">
+                        <span className="text-red-600 font-medium">Supprimer ?</span>
+                        <button onClick={() => handleDelete("cachets")} disabled={deleting}
+                          className="px-1.5 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:opacity-50">
+                          {deleting ? "…" : "Oui"}
+                        </button>
+                        <button onClick={() => setConfirmDelete(null)}
+                          className="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300">
+                          Non
+                        </button>
+                      </span>
+                    ) : (
+                      <button onClick={() => setConfirmDelete("cachets")}
+                        className="px-2 py-1.5 rounded-r-lg border border-amber-200 text-amber-400 bg-amber-50 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition">
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </div>
                 )}
               </>
             )}
@@ -657,7 +878,28 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
               </>
             )}
 
-            {!placingPhoto && !placingCachets && (
+            {/* Actions mode placement signature */}
+            {placingSig && (
+              <>
+                <button
+                  onClick={() => setPlacingSig(null)}
+                  disabled={savingSig}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-100 transition disabled:opacity-50"
+                >
+                  <X size={13} /> Annuler
+                </button>
+                <button
+                  onClick={handleValidateSig}
+                  disabled={savingSig}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition disabled:opacity-60"
+                >
+                  {savingSig ? <ImSpinner2 className="animate-spin" size={13} /> : <Check size={13} />}
+                  Valider la signature
+                </button>
+              </>
+            )}
+
+            {!placingPhoto && !placingCachets && !placingSig && (
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
                 <X size={16} />
               </button>
@@ -770,6 +1012,101 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                 );
               })}
 
+              {/* ── Overlays cachets déjà intégrés (sélectionnables pour suppression) ── */}
+              {!placingPhoto && !placingCachets && !placingSig && cachetBlobUrl && currentPage === 0 &&
+                appliedCachets.map((c) => {
+                  const isSelected = selectedCachetIdx === c.idx;
+                  const isDeleting = deletingCachetIdx === c.idx;
+                  return (
+                    <div
+                      key={c.idx}
+                      onClick={(e) => { e.stopPropagation(); setSelectedCachetIdx(isSelected ? null : c.idx); setConfirmDelete(null); }}
+                      style={{
+                        position: "absolute",
+                        left:   `${c.x_pct}%`,
+                        top:    `${c.y_pct}%`,
+                        width:  `${c.w_pct}%`,
+                        height: `${c.h_pct}%`,
+                        cursor: "pointer",
+                        boxSizing: "border-box",
+                        border: isSelected ? "2px solid #ef4444" : "2px dashed transparent",
+                        borderRadius: "2px",
+                        transition: "border-color 0.15s",
+                      }}
+                      className={isSelected ? "shadow-lg" : "hover:border-dashed hover:border-red-300"}
+                    >
+                      {/* Image cachet semi-transparente pour visualiser */}
+                      <img
+                        src={cachetBlobUrl}
+                        alt="cachet"
+                        style={{ width: "100%", height: "100%", objectFit: "contain", opacity: isSelected ? 0.7 : 0.3, pointerEvents: "none", display: "block" }}
+                        draggable={false}
+                      />
+                      {/* Popup suppression */}
+                      {isSelected && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ position: "absolute", top: "-36px", left: "50%", transform: "translateX(-50%)", zIndex: 30 }}
+                          className="flex items-center gap-1 px-2 py-1 bg-white border border-red-300 rounded-lg shadow-lg text-xs whitespace-nowrap"
+                        >
+                          <Trash2 size={11} className="text-red-500" />
+                          <span className="text-red-600 font-medium">Supprimer ?</span>
+                          <button
+                            onClick={() => handleDeleteCachetIdx(c.idx)}
+                            disabled={isDeleting}
+                            className="px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50 font-medium"
+                          >
+                            {isDeleting ? "…" : "Oui"}
+                          </button>
+                          <button
+                            onClick={() => setSelectedCachetIdx(null)}
+                            className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                          >
+                            Non
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              }
+
+              {/* ── Overlay signature draggable ── */}
+              {placingSig && (
+                <div
+                  onMouseDown={(e) => startSigDrag("move", e)}
+                  style={{
+                    position: "absolute",
+                    left:   `${placingSig.pos.x}%`,
+                    top:    `${placingSig.pos.y}%`,
+                    width:  `${placingSig.pos.w}%`,
+                    height: `${placingSig.pos.h}%`,
+                    cursor: "move",
+                    boxSizing: "border-box",
+                  }}
+                  className="border-2 border-blue-500 shadow-xl"
+                >
+                  <img
+                    src={placingSig.previewUrl}
+                    alt="signature à placer"
+                    style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", pointerEvents: "none" }}
+                    draggable={false}
+                  />
+                  {([
+                    ["tl", "-top-1.5 -left-1.5",   "cursor-nw-resize"],
+                    ["tr", "-top-1.5 -right-1.5",  "cursor-ne-resize"],
+                    ["bl", "-bottom-1.5 -left-1.5", "cursor-sw-resize"],
+                    ["br", "-bottom-1.5 -right-1.5","cursor-se-resize"],
+                  ] as const).map(([mode, pos, cur]) => (
+                    <div
+                      key={mode}
+                      onMouseDown={(e) => startSigDrag(mode, e)}
+                      className={`absolute ${pos} w-3.5 h-3.5 bg-white border-2 border-blue-500 rounded-sm ${cur}`}
+                    />
+                  ))}
+                </div>
+              )}
+
               {/* ── Overlay photo draggable ── */}
               {placingPhoto && (
                 <div
@@ -811,6 +1148,7 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
         </div>
 
         <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
+        <input ref={sigInputRef} type="file" accept="image/*" className="hidden" onChange={handleSigFileSelect} />
       </div>
     </div>
   );

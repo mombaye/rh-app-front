@@ -203,4 +203,49 @@ export const passportService = {
     const res = await api.post(`${API}/${slug}/checkbox-toggle/`, { cb_id });
     return res.data;
   },
+
+  getSignatureUrl: (slug: string): string => `${API}/${slug}/signature/`,
+
+  uploadSignature: async (slug: string, file: File): Promise<void> => {
+    const form = new FormData();
+    form.append("signature", file);
+    await api.post(`${API}/${slug}/signature/`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  embedSignature: async (
+    slug: string,
+    pos: { x: number; y: number; w: number; h: number },
+    page?: number
+  ): Promise<void> => {
+    await api.post(`${API}/${slug}/embed-signature/`, {
+      x_pct: pos.x,
+      y_pct: pos.y,
+      w_pct: pos.w,
+      h_pct: pos.h,
+      page: page ?? 0,
+    });
+  },
+
+  getAppliedCachets: async (slug: string): Promise<{ idx: number; x_pct: number; y_pct: number; w_pct: number; h_pct: number }[]> => {
+    const res = await api.get(`${API}/${slug}/applied-cachets/`);
+    return res.data;
+  },
+
+  deleteCachetIdx: async (slug: string, idx: number): Promise<void> => {
+    await api.delete(`${API}/${slug}/cachet/${idx}/`);
+  },
+
+  deletePhoto: async (slug: string): Promise<void> => {
+    await api.delete(`${API}/${slug}/delete-photo/`);
+  },
+
+  deleteSignature: async (slug: string): Promise<void> => {
+    await api.delete(`${API}/${slug}/delete-signature/`);
+  },
+
+  deleteCachets: async (slug: string): Promise<void> => {
+    await api.delete(`${API}/${slug}/delete-cachets/`);
+  },
 };
