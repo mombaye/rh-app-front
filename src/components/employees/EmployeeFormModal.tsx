@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { createEmployee, updateEmployee, getEmployees } from "@/services/employeeService";
 import { departmentService, employeeHierarchyService, DepartmentManagerMini } from "@/services/hierarchyService";
 import {
-  ContractType, Diplome, Employee, Enfant,
+  Civilite, ContractType, Diplome, Employee, Enfant,
   SexeType, SituationMatrimoniale, TypePiece,
 } from "@/types/employee";
 import { Department } from "@/types/leave";
@@ -20,7 +20,7 @@ import {
 // ── Types ─────────────────────────────────────────────────────────────────────
 type FormData = {
   // Identité
-  matricule: string; nom: string; prenom: string; nom_jeune_fille: string;
+  matricule: string; civilite: Civilite | ""; nom: string; prenom: string; nom_jeune_fille: string;
   sexe: SexeType; date_naissance: string; lieu_naissance: string;
   nationalite: string; adresse: string; email: string; telephone: string;
   numero_securite_sociale: string;
@@ -65,7 +65,7 @@ type FormData = {
 };
 
 const EMPTY: FormData = {
-  matricule: "", nom: "", prenom: "", nom_jeune_fille: "",
+  matricule: "", civilite: "", nom: "", prenom: "", nom_jeune_fille: "",
   sexe: "H", date_naissance: "", lieu_naissance: "",
   nationalite: "", adresse: "", email: "", telephone: "",
   numero_securite_sociale: "",
@@ -560,14 +560,19 @@ export default function EmployeeFormModal({ open, onClose, onSuccess, initialDat
                   <F label="Matricule" req error={hasFieldError("matricule")}>
                     <Input name="matricule" value={form.matricule} onChange={ch} placeholder="Entrez votre matricule" className={inputCls(hasFieldError("matricule"))} />
                   </F>
-                  <F label="Sexe">
-                    <Sel name="sexe" value={form.sexe} onChange={ch} opts={[{v:"H",l:"Homme"},{v:"F",l:"Femme"}]} />
+                  <F label="Civilité">
+                    <Sel name="civilite" value={form.civilite} onChange={ch}
+                      ph="— Sélectionner —"
+                      opts={[{v:"M.",l:"M."},{v:"Mme",l:"Mme"},{v:"Mlle",l:"Mlle"}]} />
                   </F>
                   <F label="Nom" req error={hasFieldError("nom")}>
                     <Input name="nom" value={form.nom} onChange={ch} placeholder="Entrez votre nom" className={inputCls(hasFieldError("nom"))} />
                   </F>
                   <F label="Prénom" req error={hasFieldError("prenom")}>
                     <Input name="prenom" value={form.prenom} onChange={ch} placeholder="Entrez votre prénom" className={inputCls(hasFieldError("prenom"))} />
+                  </F>
+                  <F label="Sexe">
+                    <Sel name="sexe" value={form.sexe} onChange={ch} opts={[{v:"H",l:"Homme"},{v:"F",l:"Femme"}]} />
                   </F>
                   <F label="Date de naissance">
                     <Input type="date" name="date_naissance" value={form.date_naissance} onChange={ch} className={inputCls()} />

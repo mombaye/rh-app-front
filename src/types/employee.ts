@@ -1,6 +1,7 @@
 export type EmployeeStatus = 'ACTIVE' | 'EXITED' | 'SUSPENDED';
 export type ContractType   = 'CDI' | 'CDD' | 'STAGE' | 'INTERIM' | 'CONSULTANCE';
 export type SexeType       = 'H' | 'F';
+export type Civilite       = 'M.' | 'Mme' | 'Mlle';
 export type TypePiece      = 'CNI' | 'PASSEPORT' | 'SEJOUR' | 'AUTRE';
 export type SituationMatrimoniale = 'celibataire' | 'marie' | 'concubinage' | 'divorce' | 'separe' | 'veuf';
 
@@ -29,6 +30,7 @@ export interface Employee {
 
   // ── Identité ─────────────────────────────────────────────
   matricule:               string;
+  civilite?:               Civilite | null;
   nom:                     string;
   prenom:                  string;
   nom_jeune_fille?:        string | null;
