@@ -6,6 +6,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import FirstLoginGuard from "@/components/FirstLoginGuard";
 import AdminProtectedRoute from "@/components/admin/AdminProtectedRoute";
 import { useAuth } from "@/contexts/useAuth";
+import ManagerLayout from "@/layouts/ManagerLayout";
 
 // ── Pages chargées à la demande (code-splitting) ─────────────────────────────
 // Chaque page est découpée dans son propre chunk JS, chargé uniquement
@@ -233,6 +234,11 @@ function App() {
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeQuestionnairePage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/manager/questionnaire" element={
+          <ProtectedRoute><FirstLoginGuard><ManagerOnlyRoute>
+            <EmployeeQuestionnairePage layout={ManagerLayout} />
+          </ManagerOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
         <Route path="/employee/missions" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>

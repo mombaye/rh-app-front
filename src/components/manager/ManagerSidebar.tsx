@@ -2,11 +2,12 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, CalendarDays, BadgeDollarSign,
   FolderOpen, ClipboardCheck, X, Menu, UserCircle2, FileStack, LogOut, Users, FileBadge, Clock,
-  BookUser,
+  BookUser, ClipboardList,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
+import { getMonQuestionnaire } from "@/services/questionnaireService";
 
 interface NavItem {
   label: string;
@@ -24,6 +25,20 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [hasQuestionnaire, setHasQuestionnaire] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      getMonQuestionnaire()
+        .then(res => setHasQuestionnaire(res.statut === "envoye"))
+        .catch(() => {});
+    };
+    check();
+    const id = setInterval(() => {
+      if (!hasQuestionnaire) check();
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [hasQuestionnaire]);
 
   const isHse = user?.is_hse === true;
 
@@ -39,6 +54,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
     { label: "Demande d'attestation",    path: "/manager/attestations", icon: <FileBadge size={20} />                                                          },
     { label: "Documents RH",            path: "/manager/documents",    icon: <FileStack size={20} />                                                          },
     ...(isHse ? [{ label: "Gestion Passeports", path: "/hse/passeports", icon: <BookUser size={20} /> }] : []),
+    ...(hasQuestionnaire ? [{ label: "Questionnaire de sortie", path: "/manager/questionnaire", icon: <ClipboardList size={20} /> }] : []),
   ];
 
   useEffect(() => {

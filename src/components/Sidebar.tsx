@@ -109,8 +109,7 @@ export default function Sidebar() {
         { label: "Intérimaires",          path: "/employees/interims"       },
         { label: "Alertes",               path: "/employees/alertes",  badge: totalCount },
         { label: "Disciplinaire",          path: "/employees/disciplinaire" },
-        // TODO: Questionnaires sortie � à activer quand disponible
-        // { label: "Questionnaires sortie", path: "/employees/questionnaires", badge: questionnaireDoneCount || undefined, badgeRed: true },
+        { label: "Questionnaires sortie", path: "/employees/questionnaires", badge: questionnaireDoneCount || undefined, badgeRed: true },
       ],
     },
     {

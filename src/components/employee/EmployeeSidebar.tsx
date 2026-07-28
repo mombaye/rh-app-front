@@ -23,6 +23,7 @@ import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
 import { leaveRequestService } from "@/services/leaveService";
 import { LeaveRequest } from "@/types/leave";
+import { getMonQuestionnaire } from "@/services/questionnaireService";
 
 const baseNavItems = [
   {
@@ -80,12 +81,6 @@ const baseNavItems = [
     path: "/employee/documents",
     icon: <FileStack size={20} />,
   },
-  // TODO: Questionnaire de sortie — à activer quand disponible
-  // {
-  //   label: "Questionnaire de sortie",
-  //   path: "/employee/questionnaire",
-  //   icon: <ClipboardList size={20} />,
-  // },
 ];
 
 type NavItem = (typeof baseNavItems)[0];
@@ -96,6 +91,28 @@ export default function EmployeeSidebar() {
 
   const isManager =
     availableRoles.includes("manager1") || availableRoles.includes("manager2");
+
+  // Questionnaire de sortie — vérification périodique (pas d'email requis)
+  const [hasQuestionnaire, setHasQuestionnaire] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      getMonQuestionnaire()
+        .then(res => {
+          console.log("[Questionnaire] statut reçu:", res.statut);
+          setHasQuestionnaire(res.statut === "envoye");
+        })
+        .catch(err => {
+          console.log("[Questionnaire] erreur ou aucun questionnaire:", err?.response?.status, err?.response?.data);
+        });
+    };
+    check(); // vérification immédiate au chargement
+    // Poll toutes les 30 secondes tant que pas encore reçu
+    const id = setInterval(() => {
+      if (!hasQuestionnaire) check();
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [hasQuestionnaire]);
 
   // Compteur collègues en congé (badge "Equipe en congés")
   const [serviceLeaveCount, setServiceLeaveCount] = useState(0);
@@ -117,6 +134,15 @@ export default function EmployeeSidebar() {
 
   const navItems: NavItem[] = [
     ...baseNavItems,
+    ...(hasQuestionnaire
+      ? [
+          {
+            label: "Questionnaire de sortie",
+            path: "/employee/questionnaire",
+            icon: <ClipboardList size={20} />,
+          },
+        ]
+      : []),
     ...(isManager
       ? [
           {
