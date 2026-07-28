@@ -284,6 +284,112 @@ function WeekProgressBar({ minutes, maxMinutes }: { minutes: number; maxMinutes:
   );
 }
 
+// ─── Helpers période ─────────────────────────────────────────────────────────
+function isoWeekBounds(ws: string) {
+  const [y, wn] = ws.split("-W").map(Number);
+  const fw = new Date(y, 0, 1);
+  fw.setDate(fw.getDate() + (wn - 1) * 7 - fw.getDay() + 1);
+  const lw = new Date(fw); lw.setDate(lw.getDate() + 6);
+  return { start: fw.toISOString().split("T")[0], end: lw.toISOString().split("T")[0] };
+}
+function isoMonthBounds(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  const start = `${y}-${String(m).padStart(2, "0")}-01`;
+  const end = `${y}-${String(m).padStart(2, "0")}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+  return { start, end };
+}
+
+// ─── ExpandedDayTable — Vue détail par jour (recherche hebdo/mensuel) ─────────
+function ExpandedDayTable({ records, dayDetails, isLoading }: {
+  records: SummaryRecord[];
+  dayDetails: Map<number, DayDetail[]>;
+  isLoading: boolean;
+}) {
+  const headers = ["Nom", "Matricule", "Projet/Dép.", "Date", "Jour", "Entrée", "Sortie", "Statut", "Retard", "H. Travaillées"];
+  const statusLabel: Record<string, { label: string; cls: string }> = {
+    ok:         { label: "Présent",   cls: "bg-emerald-50 text-emerald-700" },
+    absent:     { label: "Absent",    cls: "bg-red-50 text-red-600" },
+    incomplete: { label: "Incomplet", cls: "bg-orange-50 text-orange-600" },
+    anomaly:    { label: "Anomalie",  cls: "bg-violet-50 text-violet-700" },
+    on_leave:   { label: "Congé",     cls: "bg-blue-50 text-blue-600" },
+    on_mission: { label: "Mission",   cls: "bg-sky-50 text-sky-700" },
+  };
+  const rows: { emp: SummaryRecord; day: DayDetail }[] = [];
+  for (const emp of records) {
+    const days = dayDetails.get(emp.employee_id) ?? [];
+    for (const day of [...days].sort((a, b) => a.date.localeCompare(b.date))) {
+      rows.push({ emp, day });
+    }
+  }
+  return (
+    <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto rounded-xl border border-slate-200 shadow-sm">
+      <table className="w-full table-fixed bg-white">
+        <colgroup>
+          <col className="w-[16%]" /><col className="w-[8%]" /><col className="w-[14%]" />
+          <col className="w-[9%]" /><col className="w-[8%]" /><col className="w-[8%]" />
+          <col className="w-[8%]" /><col className="w-[11%]" /><col className="w-[9%]" /><col className="w-[9%]" />
+        </colgroup>
+        <thead className="sticky top-0 z-10 bg-camublue-900 text-white">
+          <tr>
+            {headers.map(h => (
+              <th key={h} className="px-3 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 whitespace-nowrap">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {isLoading ? (
+            [...Array(5)].map((_, i) => (
+              <tr key={i} className="border-b border-slate-100">
+                {headers.map((_, j) => <td key={j} className="px-3 py-3"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>)}
+              </tr>
+            ))
+          ) : rows.length === 0 ? (
+            <tr><td colSpan={headers.length} className="text-center py-16 text-slate-400 text-sm">Aucune donnée disponible</td></tr>
+          ) : rows.map(({ emp, day }, idx) => {
+            const st = statusLabel[day.status] ?? { label: day.status, cls: "bg-slate-50 text-slate-600" };
+            const dateObj = new Date(day.date + "T00:00:00");
+            const dateStr = dateObj.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+            const jourStr = day.weekday_label ?? ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][dateObj.getDay()];
+            const isFirstOfEmp = idx === 0 || rows[idx - 1].emp.employee_id !== emp.employee_id;
+            return (
+              <tr key={`${emp.employee_id}-${day.date}`}
+                className={`border-b border-slate-100 text-sm transition-colors ${isFirstOfEmp ? "border-t-2 border-t-camublue-100" : ""} hover:bg-slate-50`}>
+                <td className="px-3 py-2.5 text-center"><span className="font-semibold text-slate-800 text-xs">{emp.full_name}</span></td>
+                <td className="px-3 py-2.5 text-center font-mono text-xs text-slate-500">{emp.matricule || "—"}</td>
+                <td className="px-3 py-2.5 text-center">
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="font-semibold text-camublue-900 text-xs leading-tight">{emp.project !== "—" ? emp.project : emp.department !== "—" ? emp.department : "—"}</span>
+                    {emp.project !== "—" && emp.department !== "—" && <span className="text-[10px] text-slate-400 leading-tight">{emp.department}</span>}
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 text-center font-mono text-xs text-slate-600 tabular-nums">{dateStr}</td>
+                <td className="px-3 py-2.5 text-center text-xs font-medium text-slate-500 capitalize">{jourStr}</td>
+                <td className="px-3 py-2.5 text-center font-mono text-xs tabular-nums text-slate-700">
+                  {day.in_time ? formatTime(day.in_time) : <span className="text-slate-300">—</span>}
+                </td>
+                <td className="px-3 py-2.5 text-center font-mono text-xs tabular-nums text-slate-700">
+                  {day.out_time ? formatTime(day.out_time) : <span className="text-slate-300">—</span>}
+                </td>
+                <td className="px-3 py-2.5 text-center">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${st.cls}`}>{st.label}</span>
+                </td>
+                <td className="px-3 py-2.5 text-center">
+                  {day.late_minutes > 0 ? <LateBadge minutes={day.late_minutes} /> : <span className="text-slate-300 text-xs">—</span>}
+                </td>
+                <td className="px-3 py-2.5 text-center">
+                  {day.worked_minutes > 0
+                    ? <span className="font-semibold text-emerald-600 text-xs tabular-nums">{formatMinutes(day.worked_minutes)}</span>
+                    : <span className="text-slate-300 text-xs">—</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ─── Tableau synthétique (Hebdo / Mensuel) ────────────────────────────────────
 function SummaryTable({
   rows, mode, isLoading, searchQ = "",
@@ -1304,9 +1410,9 @@ function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
   return (
     <>
       <tr className={`hidden md:table-row border-b border-slate-100 transition-colors text-sm ${isLate ? "bg-orange-50/50 hover:bg-orange-50" : "hover:bg-slate-50"}`}>
-        <td className="px-4 py-3 font-mono text-slate-500 text-xs"><div className="flex justify-center">{r.matricule || "—"}</div></td>
-        <td className="px-4 py-3 font-medium text-slate-800"><div className="flex justify-center">{r.full_name}</div></td>
-        <td className="px-4 py-3 text-xs">
+        <td className="px-3 py-2.5 font-mono text-slate-500 text-xs"><div className="flex justify-center">{r.matricule || "—"}</div></td>
+        <td className="px-3 py-2.5 font-medium text-slate-800"><div className="flex justify-center">{r.full_name}</div></td>
+        <td className="px-3 py-2.5 text-xs">
           <div className="flex flex-col items-center gap-0.5">
             <span className="font-semibold text-camublue-900 text-xs leading-tight tracking-wide">
               {r.project !== "—" ? r.project : r.department}
@@ -1316,20 +1422,16 @@ function TableRow({ r, isLate, viewMode, onAlert, onDetail }: {
             )}
           </div>
         </td>
-        <td className="px-4 py-3">
-          <ServiceBadge service={r.department} />
-        </td>
-        <td className="px-4 py-3"><div className="flex justify-center"><StatusPill status={r.status} /></div></td>
-        <td className="px-4 py-3"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
-        <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.computed_late_minutes > 0 ? "text-red-600 font-semibold" : "text-slate-700"}`}>
+        <td className="px-3 py-2.5"><div className="flex justify-center"><StatusPill status={r.status} /></div></td>
+        <td className="px-3 py-2.5"><div className="flex justify-center"><LateBadge minutes={r.computed_late_minutes} /></div></td>
+        <td className={`px-3 py-2.5 tabular-nums font-mono text-sm ${r.computed_late_minutes > 0 ? "text-red-600 font-semibold" : "text-slate-700"}`}>
           <div className="flex justify-center">{formatTime(r.in_time)}</div>
         </td>
-        <td className={`px-4 py-3 tabular-nums font-mono text-sm ${r.overtime_minutes > 0 ? "text-emerald-600 font-semibold" : "text-slate-700"}`}>
+        <td className={`px-3 py-2.5 tabular-nums font-mono text-sm ${r.overtime_minutes > 0 ? "text-emerald-600 font-semibold" : "text-slate-700"}`}>
           <div className="flex justify-center">{formatTime(r.out_time)}</div>
         </td>
-        <td className="px-4 py-3"><div className="flex justify-center"><WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} /></div></td>
-        <td className="px-4 py-3"><div className="flex justify-center"><OvertimeBadge minutes={r.overtime_minutes} /></div></td>
-        <td className="px-4 py-3"><div className="flex justify-center"><CompensationCell c={r.compensation} viewMode={viewMode} /></div></td>
+        <td className="px-3 py-2.5"><div className="flex justify-center"><WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} /></div></td>
+        <td className="px-3 py-2.5"><div className="flex justify-center"><CompensationCell c={r.compensation} viewMode={viewMode} /></div></td>
         <td className="px-4 py-3">
           <div className="flex gap-2 justify-center">
             <button onClick={onAlert} disabled={r.status !== "absent" || (!r.email && !r.telephone)}
@@ -1464,6 +1566,8 @@ export default function AttendanceNormalesPage() {
   const [showExportDlg,    setShowExportDlg]    = useState(false);
   const [exportDailyCols,  setExportDailyCols]  = useState<NormDailyCol[]>([...NORM_DAILY_COLS]);
   const [exportSummaryCols,setExportSummaryCols]= useState<NormSummCol[]>([...NORM_SUMM_COLS]);
+  const [empDayDetails,    setEmpDayDetails]    = useState<Map<number, DayDetail[]>>(new Map());
+  const [detailsLoading,   setDetailsLoading]   = useState(false);
 
   const [emailMap,      setEmailMap]      = useState<Map<string,string>>(new Map());
   const [phoneMap,      setPhoneMap]      = useState<Map<string,string>>(new Map());
@@ -1712,7 +1816,37 @@ export default function AttendanceNormalesPage() {
     setShowExportDlg(false);
   };
 
-  const tableHeaders = ["Matricule","Nom","Projet/Département","Service","Statut","Retard","Entrée","Sortie","Heure travaillée","HS (>départ)","Compensation","Actions"];
+  // ── Détail journalier par employé (mode recherche hebdo/mensuel) ────────────
+  useEffect(() => {
+    if (!searchQ.trim() || viewMode === "daily") {
+      setEmpDayDetails(new Map());
+      return;
+    }
+    const bounds = viewMode === "weekly" ? isoWeekBounds(week) : isoMonthBounds(month);
+    setDetailsLoading(true);
+    let cancelled = false;
+    (async () => {
+      try {
+        const source = viewMode === "weekly" ? weekly?.by_employee ?? [] : monthly?.by_employee ?? [];
+        const q = searchQ.toLowerCase();
+        const matched = source.filter(r =>
+          (r.full_name ?? "").toLowerCase().includes(q) ||
+          (r.matricule ?? "").toLowerCase().includes(q)
+        );
+        const results = await Promise.all(
+          matched.map(r =>
+            getEmployeePeriodDetail({ employee_id: r.employee_id, start: bounds.start, end: bounds.end })
+              .then(res => [r.employee_id, res.days] as [number, DayDetail[]])
+              .catch(() => [r.employee_id, []] as [number, DayDetail[]])
+          )
+        );
+        if (!cancelled) setEmpDayDetails(new Map(results));
+      } finally { if (!cancelled) setDetailsLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [searchQ, viewMode, week, month, weekly, monthly]);
+
+  const tableHeaders = ["Matricule","Nom","Projet/Département","Statut","Retard","Entrée","Sortie","Heure travaillée","Compensation","Actions"];
   return (
     <AppLayout>
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}
@@ -1799,18 +1933,30 @@ export default function AttendanceNormalesPage() {
             {/* Tableau journalier */}
             <div className="flex-1 min-h-0 flex flex-col gap-2">
               <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
-                <table className="min-w-max w-full bg-white">
+                <table className="w-full table-fixed bg-white">
+                  <colgroup>
+                    <col className="w-[8%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[5%]" />
+                    <col className="w-[8%]" />
+                  </colgroup>
                   <thead className="bg-camublue-900 text-white sticky top-0 z-10">
                     <tr>
                       {tableHeaders.map((h) => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800 whitespace-nowrap">
+                        <th key={h} className="px-3 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 whitespace-nowrap">
                           {h}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <thead className="sticky top-0 z-10 bg-camublue-900 text-white md:hidden">
-                    <tr><th className="px-3 py-3 text-left text-sm font-semibold" colSpan={12}>Employés ({filtered.length})</th></tr>
+                    <tr><th className="px-3 py-3 text-left text-sm font-semibold" colSpan={10}>Employés ({filtered.length})</th></tr>
                   </thead>
                   <tbody>
                     {loading ? (
@@ -1875,8 +2021,19 @@ export default function AttendanceNormalesPage() {
             </div>
           </>
         ) : (
-          /* ── Vue Hebdo / Mensuel : tableau synthétique ── */
-          <SummaryTable rows={summaryRecords} mode={viewMode as "weekly"|"monthly"} isLoading={loading} searchQ={searchQ} />
+          /* ── Vue Hebdo / Mensuel ── */
+          searchQ.trim() ? (
+            <ExpandedDayTable
+              records={summaryRecords.filter(r => {
+                const q = searchQ.toLowerCase();
+                return r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q);
+              })}
+              dayDetails={empDayDetails}
+              isLoading={loading || detailsLoading}
+            />
+          ) : (
+            <SummaryTable rows={summaryRecords} mode={viewMode as "weekly"|"monthly"} isLoading={loading} searchQ={searchQ} />
+          )
         )}
 
         {/* ── Modals ── */}

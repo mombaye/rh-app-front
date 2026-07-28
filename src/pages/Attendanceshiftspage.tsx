@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+﻿import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/AppLayout";
@@ -38,7 +38,7 @@ import { onEmployeesSynced } from "@/utils/employeeSync";
 type StatusFilter = "all" | "ok" | "absent" | "on_leave" | "on_mission" | "incomplete" | "anomaly" | "late" | "deficit";
 type MotifType = "absent" | "not_pointing";
 type AssignmentMap = Record<string, ShiftTeamKey | null>;
-type ViewMode = "daily" | "weekly" | "monthly" | "period";
+type ViewMode = "daily" | "weekly" | "monthly";
 type CycleType = "M" | "S" | "N" | "R";
 
 interface CompensationResult {
@@ -377,9 +377,24 @@ function exportXLSX(filename: string, rows: Record<string, any>[]) {
   XLSX.writeFile(wb, `${filename}_${todayISO()}.xlsx`);
 }
 
+// ─── Helpers période ─────────────────────────────────────────────────────────
+function isoWeekBounds(ws: string) {
+  const [y, wn] = ws.split("-W").map(Number);
+  const fw = new Date(y, 0, 1);
+  fw.setDate(fw.getDate() + (wn - 1) * 7 - fw.getDay() + 1);
+  const lw = new Date(fw); lw.setDate(lw.getDate() + 6);
+  return { start: fw.toISOString().split("T")[0], end: lw.toISOString().split("T")[0] };
+}
+function isoMonthBounds(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  const start = `${y}-${String(m).padStart(2, "0")}-01`;
+  const end = `${y}-${String(m).padStart(2, "0")}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+  return { start, end };
+}
+
 // ─── Colonnes export personnalisé ─────────────────────────────────────────────
-const SHIFT_DAILY_COLS  = ["Matricule","Nom","Projet","Département","Équipe","Statut","Retard","Entrée","Sortie","Heure travaillée","HS","Compensation","Email"] as const;
-const SHIFT_SUMM_COLS   = ["Matricule","Nom","Projet","Département","Équipe","Jours présents","Jours absents","Jours retard","Jours anomalie","Heures travaillées","Heures attendues","Delta","% quota"] as const;
+const SHIFT_DAILY_COLS  = ["Matricule","Nom","Projet","Département","Statut","Retard","Entrée","Sortie","Heure travaillée","Compensation","Email"] as const;
+const SHIFT_SUMM_COLS   = ["Matricule","Nom","Projet","Département","Jours présents","Jours absents","Jours retard","Jours anomalie","Heures travaillées","Heures attendues","Delta","% quota"] as const;
 const SHIFT_PERIOD_COLS = ["Date","Jour","Matricule","Nom","Équipe","Statut","Retard","Entrée","Sortie","Heures travaillées","Remplacé par","Remplaçant de"] as const;
 type ShiftDailyCol  = typeof SHIFT_DAILY_COLS[number];
 type ShiftSummCol   = typeof SHIFT_SUMM_COLS[number];
@@ -1710,15 +1725,11 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
             )}
           </div>
         </td>
-        <td className="px-2 py-2 lg:px-4 lg:py-3 text-xs"><span className="font-semibold text-camublue-900 text-xs">{r.project !== "—" ? r.project : "—"}</span></td>
-        <td className="hidden lg:table-cell px-2 py-2 lg:px-4 lg:py-3 text-xs"><span className="font-semibold text-camublue-900 text-xs">{r.department !== "—" ? r.department : "—"}</span></td>
-        <td className="px-2 py-2 lg:px-4 lg:py-3">
+        <td className="px-2 py-2 lg:px-4 lg:py-3 text-xs">
           <div className="flex flex-col items-center gap-0.5">
-            <ShiftTeamPill teamKey={r.shift_team} />
-            {r.is_scheduled && r.shift_team && (
-              <span className="text-[9px] text-slate-400 font-mono hidden lg:block">
-                {r.shift_team === "jour" ? "08h→16h" : r.shift_team === "soir1" ? "16h→22h" : "22h→08h"}
-              </span>
+            <span className="font-semibold text-camublue-900 text-xs">{r.project !== "—" ? r.project : "—"}</span>
+            {r.department && r.department !== "—" && (
+              <span className="text-[10px] text-slate-400">{r.department}</span>
             )}
           </div>
         </td>
@@ -1765,8 +1776,6 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
                 : <WorkedTimeBadge minutes={r.worked_minutes} expectedMin={r.expected_minutes} />}
           </div>
         </td>
-        <td className="hidden xl:table-cell px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center"><OvertimeBadge minutes={r.overtime_minutes} /></div></td>
-        <td className="hidden xl:table-cell px-2 py-2 lg:px-4 lg:py-3"><div className="flex justify-center"><CompensationCell c={r.compensation} /></div></td>
         <td className="px-2 py-2 lg:px-4 lg:py-3">
           <div className="flex gap-1 lg:gap-2 justify-center">
             <button onClick={onAlert} disabled={r.status !== "absent" || (!r.email && !r.telephone) || r.not_scheduled_rest}
@@ -1837,6 +1846,118 @@ function TableRow({ r, isLate, onAlert, onDetail, onEdit }: {
 }
 
 // ============================================================================
+// COMPOSANT: ExpandedDayTable — Vue détail par jour (recherche hebdo/mensuel)
+// ============================================================================
+
+function ExpandedDayTable({ records, dayDetails, isLoading }: {
+  records: SummaryRecord[];
+  dayDetails: Map<number, DayDetail[]>;
+  isLoading: boolean;
+}) {
+  const headers = ["Nom", "Matricule", "Projet/Dép.", "Date", "Jour", "Entrée", "Sortie", "Statut", "Retard", "H. Travaillées"];
+  const statusLabel: Record<string, { label: string; cls: string }> = {
+    ok:         { label: "Présent",    cls: "bg-emerald-50 text-emerald-700" },
+    absent:     { label: "Absent",     cls: "bg-red-50 text-red-600" },
+    incomplete: { label: "Incomplet",  cls: "bg-orange-50 text-orange-600" },
+    anomaly:    { label: "Anomalie",   cls: "bg-violet-50 text-violet-700" },
+    on_leave:   { label: "Congé",      cls: "bg-blue-50 text-blue-600" },
+    on_mission: { label: "Mission",    cls: "bg-sky-50 text-sky-700" },
+  };
+
+  const rows: { emp: SummaryRecord; day: DayDetail }[] = [];
+  for (const emp of records) {
+    const days = dayDetails.get(emp.employee_id) ?? [];
+    const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+    for (const day of sorted) {
+      rows.push({ emp, day });
+    }
+  }
+
+  return (
+    <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto rounded-xl border border-slate-200 shadow-sm">
+      <table className="w-full table-fixed bg-white">
+        <colgroup>
+          <col className="w-[16%]" />
+          <col className="w-[8%]" />
+          <col className="w-[14%]" />
+          <col className="w-[9%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[11%]" />
+          <col className="w-[9%]" />
+          <col className="w-[9%]" />
+        </colgroup>
+        <thead className="sticky top-0 z-10 bg-camublue-900 text-white">
+          <tr>
+            {headers.map(h => (
+              <th key={h} className="px-3 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 whitespace-nowrap">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {isLoading ? (
+            [...Array(5)].map((_, i) => (
+              <tr key={i} className="border-b border-slate-100">
+                {headers.map((_, j) => <td key={j} className="px-3 py-3"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>)}
+              </tr>
+            ))
+          ) : rows.length === 0 ? (
+            <tr><td colSpan={headers.length} className="text-center py-16 text-slate-400 text-sm">Aucune donnée disponible</td></tr>
+          ) : (
+            rows.map(({ emp, day }, idx) => {
+              const st = statusLabel[day.status] ?? { label: day.status, cls: "bg-slate-50 text-slate-600" };
+              const dateObj = new Date(day.date + "T00:00:00");
+              const dateStr = dateObj.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+              const jourStr = day.weekday_label ?? ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][dateObj.getDay()];
+              const isFirstOfEmp = idx === 0 || rows[idx - 1].emp.employee_id !== emp.employee_id;
+              return (
+                <tr key={`${emp.employee_id}-${day.date}`}
+                  className={`border-b border-slate-100 text-sm transition-colors ${isFirstOfEmp ? "border-t-2 border-t-camublue-100" : ""} hover:bg-slate-50`}>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className="font-semibold text-slate-800 text-xs">{emp.full_name}</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center font-mono text-xs text-slate-500">{emp.matricule || "—"}</td>
+                  <td className="px-3 py-2.5 text-center">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="font-semibold text-camublue-900 text-xs leading-tight">{emp.project !== "—" ? emp.project : emp.department !== "—" ? emp.department : "—"}</span>
+                      {emp.project !== "—" && emp.department !== "—" && (
+                        <span className="text-[10px] text-slate-400 leading-tight">{emp.department}</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-center font-mono text-xs text-slate-600 tabular-nums">{dateStr}</td>
+                  <td className="px-3 py-2.5 text-center text-xs font-medium text-slate-500 capitalize">{jourStr}</td>
+                  <td className="px-3 py-2.5 text-center font-mono text-xs tabular-nums text-slate-700">
+                    {day.in_time ? formatTime(day.in_time) : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-center font-mono text-xs tabular-nums text-slate-700">
+                    {day.out_time ? formatTime(day.out_time) : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${st.cls}`}>{st.label}</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    {day.late_minutes && day.late_minutes > 0
+                      ? <LateBadge minutes={day.late_minutes} />
+                      : <span className="text-slate-300 text-xs">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    {day.worked_minutes > 0
+                      ? <span className="font-semibold text-emerald-600 text-xs tabular-nums">{formatMinutes(day.worked_minutes)}</span>
+                      : <span className="text-slate-300 text-xs">—</span>}
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ============================================================================
 // ============================================================================
 // COMPOSANT: SummaryTable — Vue hebdomadaire / mensuelle
 // ============================================================================
@@ -1881,7 +2002,7 @@ function SummaryTable({ rows, mode, isLoading, byDay, onDetail }: {
   onDetail?: (employeeId: number) => void;
 }) {
   const MAX_MIN = mode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33);
-  const headers = ["Matricule", "Nom", "Projet/Dép.", "Équipe", "Présent", "Absent", "Retard", "Anomalie", "Heures trav.", "Progression", ""];
+  const headers = ["Matricule", "Nom", "Projet/Dép.", "Présent", "Absent", "Retard", "Anomalie", "Heures trav.", "Progression", ""];
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-2">
       {mode === "weekly" && byDay && byDay.length > 0 && (
@@ -1914,7 +2035,6 @@ function SummaryTable({ rows, mode, isLoading, byDay, onDetail }: {
                           {r.project !== "—" && <span className="text-[10px] text-slate-400 leading-tight">{r.department}</span>}
                         </div>
                       </td>
-                      <td className="px-3 py-2.5"><div className="flex justify-center"><ShiftTeamPill teamKey={r.shift_team} /></div></td>
                       <td className="px-3 py-2.5 text-center">
                         <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold">{r.nb_jours}</span>
                       </td>
@@ -2038,16 +2158,15 @@ function buildWeekendShortcuts(): { label: string; d: string }[] {
 // ============================================================================
 
 function FilterModal({
-  open, onClose, viewMode, setViewMode, date, setDate, periodFrom, setPeriodFrom,
-  periodTo, setPeriodTo, statusFilter, setStatusFilter, onApply,
+  open, onClose, viewMode, setViewMode, date, setDate, week, setWeek,
+  month, setMonth, statusFilter, setStatusFilter, onApply,
 }: {
   open: boolean; onClose: () => void; viewMode: ViewMode; setViewMode: (v: ViewMode) => void;
-  date: string; setDate: (v: string) => void; periodFrom: string; setPeriodFrom: (v: string) => void;
-  periodTo: string; setPeriodTo: (v: string) => void; statusFilter: StatusFilter;
+  date: string; setDate: (v: string) => void; week: string; setWeek: (v: string) => void;
+  month: string; setMonth: (v: string) => void; statusFilter: StatusFilter;
   setStatusFilter: (v: StatusFilter) => void; onApply: () => void;
 }) {
   const weekendShortcuts = buildWeekendShortcuts();
-
   return (
     <AnimatePresence>
       {open && (
@@ -2068,10 +2187,11 @@ function FilterModal({
             <div className="px-4 sm:px-6 py-5 space-y-6 overflow-y-auto flex-1">
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Affichage</p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {[
-                    { k: "daily" as ViewMode, label: "Journalier", icon: "📅" },
-                    { k: "period" as ViewMode, label: "Période", icon: "📊" },
+                    { k: "daily"   as ViewMode, label: "Journalier",   icon: "📅" },
+                    { k: "weekly"  as ViewMode, label: "Hebdomadaire", icon: "📆" },
+                    { k: "monthly" as ViewMode, label: "Mensuel",      icon: "🗓️" },
                   ].map((v) => (
                     <button key={v.k} onClick={() => setViewMode(v.k)}
                       className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl border-2 text-xs font-semibold transition-all ${
@@ -2084,13 +2204,9 @@ function FilterModal({
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Période</p>
-                {viewMode === "daily" && <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
-                {viewMode === "period" && (
-                  <div className="space-y-2">
-                    <input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" placeholder="Début" />
-                    <input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" placeholder="Fin" />
-                  </div>
-                )}
+                {viewMode === "daily"   && <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
+                {viewMode === "weekly"  && <input value={week} onChange={(e) => setWeek(e.target.value)} placeholder="2026-W09" className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
+                {viewMode === "monthly" && <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />}
               </div>
               {viewMode === "daily" && (
                 <div>
@@ -2141,120 +2257,80 @@ function FilterModal({
 // ============================================================================
 
 export default function AttendanceShiftsPage() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-
-  const handlePlanningClick = () => {
-    navigate("/planning");
-  };
-
-  const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("daily");
-  const [date, setDate] = useState(todayISO());
-  const [selectedTeam, setSelectedTeam] = useState<ShiftTeamKey | null>(null);
-  const [shiftData, setShiftData] = useState<ShiftDailyStatsResponse | null>(null);
+  // ── State ────────────────────────────────────────────────────────────────────
+  const [loading,    setLoading]    = useState(false);
+  const [viewMode,   setViewMode]   = useState<ViewMode>("daily");
+  const [date,       setDate]       = useState(todayISO());
+  const [week,       setWeek]       = useState(isoWeekNow());
+  const [month,      setMonth]      = useState(yyyyMmToday());
+  const [shiftData,  setShiftData]  = useState<ShiftDailyStatsResponse | null>(null);
   const [weeklyData, setWeeklyData] = useState<WeeklyStatsResponse | null>(null);
-  const [monthlyData, setMonthlyData] = useState<MonthlyStatsResponse | null>(null);
+  const [monthlyData,setMonthlyData]= useState<MonthlyStatsResponse | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [searchQ, setSearchQ] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [emailMap, setEmailMap] = useState<Map<string, string>>(new Map());
-  const [phoneMap, setPhoneMap] = useState<Map<string, string>>(new Map());
-  const [departmentMap, setDepartmentMap] = useState<Map<string, string>>(new Map());
-  const [projectMap, setProjectMap] = useState<Map<string, string>>(new Map());
-  const [showExportDlg,    setShowExportDlg]    = useState(false);
-  const [exportLoading,    setExportLoading]    = useState(false);
-  const [exportDailyCols,  setExportDailyCols]  = useState<ShiftDailyCol[]>([...SHIFT_DAILY_COLS]);
-  const [exportSummaryCols,setExportSummaryCols]= useState<ShiftSummCol[]>([...SHIFT_SUMM_COLS]);
-  const [exportPeriodCols, setExportPeriodCols] = useState<ShiftPeriodCol[]>([...SHIFT_PERIOD_COLS]);
-
-  // ── Vue période personnalisée ──────────────────────────────────────────────
-  const todayStr = todayISO();
-  const firstDayOfMonth = todayStr.slice(0, 8) + "01";
-  const [periodFrom,       setPeriodFrom]       = useState(firstDayOfMonth);
-  const [periodTo,         setPeriodTo]         = useState(todayStr);
-
-  // ── Export Modal state ──────────────────────────────────────────────────────
-  const [exportFrom,       setExportFrom]       = useState(firstDayOfMonth);
-  const [exportTo,         setExportTo]         = useState(todayStr);
-  const [exportDepts,      setExportDepts]      = useState<string[]>([]);
-  const [exportDeptSearch, setExportDeptSearch] = useState("");
-  const [periodData,       setPeriodData]       = useState<ShiftPeriodStatsResponse | null>(null);
-  const [periodLoading,    setPeriodLoading]    = useState(false);
-  const [periodTeam,       setPeriodTeam]       = useState<ShiftTeamKey | null>(null);
-  const [periodStatus,     setPeriodStatus]     = useState<string>("");
-  const [periodSearch,     setPeriodSearch]     = useState("");
-  const [periodMatricule,  setPeriodMatricule]  = useState<string>("");
-  const [periodPage,       setPeriodPage]       = useState(1);
-  const [periodPageSize,   setPeriodPageSize]   = useState(20);
-
-  const [showPeriodModal, setShowPeriodModal] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [alertModalOpen, setAlertModalOpen] = useState(false);
-  const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editRecord, setEditRecord] = useState<FlatRecord | null>(null);
-  const [selectedEmployee, setSelectedEmployee] = useState<FlatRecord | null>(null);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
-  const [sendingAlert, setSendingAlert] = useState(false);
-  const [showNotScheduled, setShowNotScheduled] = useState(false);
-  const [week, setWeek] = useState(isoWeekNow());
-  const [month, setMonth] = useState(yyyyMmToday());
-  const currentWeek = isoWeekNow();
-  const [employeesList, setEmployeesList] = useState<Employee[]>([]);
-
+  const [searchQ,      setSearchQ]      = useState("");
+  const [page,         setPage]         = useState(1);
+  const [pageSize,     setPageSize]     = useState(10);
+  const [emailMap,     setEmailMap]     = useState<Map<string,string>>(new Map());
+  const [phoneMap,     setPhoneMap]     = useState<Map<string,string>>(new Map());
+  const [departmentMap,setDepartmentMap]= useState<Map<string,string>>(new Map());
+  const [projectMap,   setProjectMap]   = useState<Map<string,string>>(new Map());
+  const [assignments,  setAssignments]  = useState<AssignmentMap>(() => {
+    try { const s = localStorage.getItem(LS_SHIFT_ASSIGNMENTS_KEY); if (s) return JSON.parse(s); } catch {}
+    return {};
+  });
+  const [showExportDlg,    setShowExportDlg]     = useState(false);
+  const [exportDailyCols,  setExportDailyCols]   = useState<ShiftDailyCol[]>([...SHIFT_DAILY_COLS]);
+  const [exportSummaryCols,setExportSummaryCols] = useState<ShiftSummCol[]>([...SHIFT_SUMM_COLS]);
+  const [filterOpen,       setFilterOpen]        = useState(false);
+  const [alertModalOpen,   setAlertModalOpen]    = useState(false);
+  const [detailModalOpen,  setDetailModalOpen]   = useState(false);
+  const [selectedEmployee, setSelectedEmployee]  = useState<FlatRecord | null>(null);
+  const [selectedEmployeeId,setSelectedEmployeeId]=useState<number|null>(null);
+  const [sendingAlert,     setSendingAlert]       = useState(false);
+  const [showScheduleModal,setShowScheduleModal]  = useState(false);
+  const [empDayDetails,   setEmpDayDetails]      = useState<Map<number, DayDetail[]>>(new Map());
+  const [detailsLoading,  setDetailsLoading]      = useState(false);
 
   const [activeSchedule, setActiveSchedule] = useState<ActiveSchedule | null>(() => {
-    try {
-      const stored = localStorage.getItem(LS_SHIFT_ACTIVE_SCHEDULE_KEY);
-      if (stored) return JSON.parse(stored) as ActiveSchedule;
-    } catch { }
-    const d = new Date(), end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-    return { ...DEFAULT_PRESETS[0], dateStart: todayISO(), dateEnd: end.toISOString().slice(0, 10), locked: true };
+    try { const s = localStorage.getItem(LS_SHIFT_ACTIVE_SCHEDULE_KEY); if (s) return JSON.parse(s); } catch {}
+    const d = new Date(), end = new Date(d.getFullYear(), d.getMonth()+1, 0);
+    return { ...DEFAULT_PRESETS[0], dateStart: todayISO(), dateEnd: end.toISOString().slice(0,10), locked: true };
   });
 
   const [presets, setPresets] = useState<WorkSchedulePreset[]>(() => {
-    try {
-      const stored = localStorage.getItem(LS_SHIFT_PRESETS_KEY);
-      if (stored) return JSON.parse(stored) as WorkSchedulePreset[];
-    } catch { }
+    try { const s = localStorage.getItem(LS_SHIFT_PRESETS_KEY); if (s) return JSON.parse(s); } catch {}
     return DEFAULT_PRESETS;
   });
 
-  const [assignments, setAssignments] = useState<AssignmentMap>(() => {
-    try {
-      const stored = localStorage.getItem(LS_SHIFT_ASSIGNMENTS_KEY);
-      if (stored) return JSON.parse(stored) as AssignmentMap;
-    } catch { }
-    return {};
-  });
-
-  const employeeNameToMatricule = useMemo(() => {
-    const map = new Map<string, string>();
-    employeesList.forEach(emp => {
-      if (emp.full_name && emp.matricule) {
-        const normalized = emp.full_name.trim().toLowerCase().replace(/\s+/g, ' ');
-        map.set(normalized, emp.matricule);
-      }
-    });
-    return map;
-  }, [employeesList]);
-
+  // ── Persistence ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    try {
-      if (activeSchedule) localStorage.setItem(LS_SHIFT_ACTIVE_SCHEDULE_KEY, JSON.stringify(activeSchedule));
-      else localStorage.removeItem(LS_SHIFT_ACTIVE_SCHEDULE_KEY);
-    } catch { }
+    try { if (activeSchedule) localStorage.setItem(LS_SHIFT_ACTIVE_SCHEDULE_KEY, JSON.stringify(activeSchedule)); } catch {}
   }, [activeSchedule]);
+  useEffect(() => { try { localStorage.setItem(LS_SHIFT_PRESETS_KEY, JSON.stringify(presets)); } catch {} }, [presets]);
+  useEffect(() => { try { localStorage.setItem(LS_SHIFT_ASSIGNMENTS_KEY, JSON.stringify(assignments)); } catch {} }, [assignments]);
 
-  useEffect(() => {
-    try { localStorage.setItem(LS_SHIFT_PRESETS_KEY, JSON.stringify(presets)); } catch { }
-  }, [presets]);
+  // ── Load employees + schedule ─────────────────────────────────────────────────
+  const loadEmployees = useCallback(() => {
+    getEmployees().then((list: Employee[]) => {
+      const m = new Map<string,string>(), ph = new Map<string,string>();
+      const dm = new Map<string,string>(), pm = new Map<string,string>();
+      const apiAsgn: AssignmentMap = {};
+      list.forEach((e) => {
+        if (e.matricule && e.email) m.set(e.matricule, e.email);
+        if (e.matricule && (e as any).telephone) ph.set(e.matricule, (e as any).telephone);
+        if (e.matricule && (e.department ?? (e as any).service))
+          dm.set(e.matricule, (e.department ?? (e as any).service).toUpperCase());
+        const proj = (e as any).project ?? (e as any).projet ?? (e as any).project_name ?? (e as any).site ?? null;
+        if (e.matricule && proj) pm.set(e.matricule, String(proj).toUpperCase());
+        if (e.matricule && (e as any).shift_team) apiAsgn[e.matricule] = (e as any).shift_team;
+      });
+      setEmailMap(m); setPhoneMap(ph); setDepartmentMap(dm); setProjectMap(pm);
+      setAssignments((prev) => ({ ...apiAsgn, ...prev }));
+    }).catch(console.error);
+  }, []);
 
-  useEffect(() => {
-    try { localStorage.setItem(LS_SHIFT_ASSIGNMENTS_KEY, JSON.stringify(assignments)); } catch { }
-  }, [assignments]);
+  useEffect(() => { loadEmployees(); }, [loadEmployees]);
+  useEffect(() => { return onEmployeesSynced(() => loadEmployees()); }, [loadEmployees]);
 
   useEffect(() => {
     getShiftSchedule().then((remote) => {
@@ -2270,279 +2346,104 @@ export default function AttendanceShiftsPage() {
         if (prev.some((p) => p.context === remote.context)) return prev;
         return [...prev, { context: remote.context, startH: remote.startH, startM: remote.startM, endH: remote.endH, endM: remote.endM, breakMin: remote.breakMin }];
       });
-    }).catch(() => { });
-
+    }).catch(() => {});
   }, []);
-
-  const loadEmployeesList = useCallback(() => {
-    getEmployees().then((list: Employee[]) => {
-      setEmployeesList(list);
-      const m  = new Map<string, string>();
-      const ph = new Map<string, string>();
-      const dm = new Map<string, string>();
-      const pm = new Map<string, string>();
-      const apiAssignments: AssignmentMap = {};
-      list.forEach((e) => {
-        if (e.matricule && e.email) m.set(e.matricule, e.email);
-        if (e.matricule && (e as any).telephone) ph.set(e.matricule, (e as any).telephone);
-        if (e.matricule && (e.department ?? (e as any).service))
-          dm.set(e.matricule, (e.department ?? (e as any).service).toUpperCase());
-        const proj = (e as any).project ?? (e as any).projet ?? (e as any).project_name ?? (e as any).site ?? null;
-        if (e.matricule && proj) pm.set(e.matricule, String(proj).toUpperCase());
-        if (e.matricule && (e as any).shift_team) apiAssignments[e.matricule] = (e as any).shift_team;
-      });
-      setEmailMap(m); setPhoneMap(ph); setDepartmentMap(dm); setProjectMap(pm);
-      setAssignments((prev) => ({ ...apiAssignments, ...prev }));
-    }).catch(console.error);
-  }, []);
-
-  useEffect(() => { loadEmployeesList(); }, [loadEmployeesList]);
-
-  useEffect(() => {
-    return onEmployeesSynced(() => { loadEmployeesList(); });
-  }, [loadEmployeesList]);
 
   const effectiveSchedule: WorkSchedulePreset = useMemo(() => {
     if (activeSchedule && isPeriodActive(activeSchedule)) return activeSchedule;
     return presets[0] ?? DEFAULT_PRESETS[0];
   }, [activeSchedule, presets]);
 
-  const pad2 = (n: number) => String(n).padStart(2, "0");
-  const isActiveLocked = activeSchedule ? isPeriodActive(activeSchedule) : false;
-
+  // ── Fetch ──────────────────────────────────────────────────────────────────────
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      if (viewMode === "daily") setShiftData(await getShiftDailyStats({ date }));
-      if (viewMode === "weekly") setWeeklyData(await getWeeklyStats(week));
+      if (viewMode === "daily")   setShiftData(await getShiftDailyStats({ date }));
+      if (viewMode === "weekly")  setWeeklyData(await getWeeklyStats(week));
       if (viewMode === "monthly") setMonthlyData(await getMonthlyStats(month));
-    } catch (e) {
-      console.error("fetchData error:", e);
-    } finally {
-      if (!silent) setLoading(false);
-    }
+    } catch (e) { console.error(e); } finally { if (!silent) setLoading(false); }
   }, [viewMode, date, week, month]);
 
-  const fetchPeriodData = useCallback(async () => {
-    if (!periodFrom || !periodTo) return;
-    setPeriodLoading(true);
-    try {
-      const res = await getShiftPeriodStats({
-        date_from:  periodFrom,
-        date_to:    periodTo,
-        team:       periodTeam,
-        matricule:  periodMatricule || null,
-        status:     periodStatus || null,
-      });
-      setPeriodData(res);
-      setPeriodPage(1);
-    } catch (e) {
-      console.error("fetchPeriodData error:", e);
-    } finally {
-      setPeriodLoading(false);
-    }
-  }, [periodFrom, periodTo, periodTeam, periodMatricule, periodStatus]);
-
-  // ── Valider période + exporter Excel (format vertical groupé par date/shift) ─
-  const handlePeriodExport = useCallback(async () => {
-    if (!periodFrom || !periodTo) return;
-    setShowPeriodModal(false);
-    setPeriodLoading(true);
-    try {
-      const res = await getShiftPeriodStats({
-        date_from: periodFrom,
-        date_to: periodTo,
-        team: periodTeam,
-        matricule: periodMatricule || null,
-        status: periodStatus || null,
-      });
-      setPeriodData(res);
-      setPeriodPage(1);
-
-      // Mapping shift_team → libellé demandé ("Shift Matin / Midi / Soir")
-      const SHIFT_LABELS: Record<string, string> = {
-        jour:  "Shift Matin",
-        soir1: "Shift Midi",
-        soir2: "Shift Soir",
-      };
-      const SHIFT_ORDER: ShiftTeamKey[] = ["jour", "soir1", "soir2"];
-
-      // Une feuille Excel par date — chaque date est strictement isolée
-      const wb = XLSX.utils.book_new();
-      let hasAny = false;
-      const usedSheetNames = new Set<string>();
-
-      for (const day of res.dates) {
-        if (day.records.length === 0) continue;
-
-        const dateLabel = new Date(day.date + "T00:00:00").toLocaleDateString("fr-FR", {
-          weekday: "long", day: "2-digit", month: "long", year: "numeric",
-        });
-
-        const aoa: (string | number | null)[][] = [];
-        aoa.push([`Date : ${dateLabel}`]);
-        aoa.push([]);
-
-        let sheetHasContent = false;
-        for (const shiftKey of SHIFT_ORDER) {
-          const shiftRecs = day.records.filter((r) => r.shift_team === shiftKey);
-          if (shiftRecs.length === 0) continue;
-
-          sheetHasContent = true;
-          aoa.push([SHIFT_LABELS[shiftKey] ?? shiftKey]);
-          aoa.push(["Matricule", "Nom", "Entrée", "Sortie"]);
-
-          for (const r of shiftRecs) {
-            // Shift nuit (22h-08h) : entrée réelle = out_time, sortie réelle = in_time
-            const entry = r.shift_team === "soir2"
-              ? (r.out_time ? formatTime(r.out_time) : "—")
-              : (r.in_time  ? formatTime(r.in_time)  : "—");
-            const exit  = r.shift_team === "soir2"
-              ? (r.in_time  ? formatTime(r.in_time)  : "—")
-              : (r.out_time ? formatTime(r.out_time) : "—");
-            aoa.push([r.matricule || "—", r.full_name, entry, exit]);
-          }
-          aoa.push([]);
-        }
-
-        if (!sheetHasContent) continue;
-        hasAny = true;
-
-        const ws = XLSX.utils.aoa_to_sheet(aoa);
-        ws["!cols"] = [{ wch: 14 }, { wch: 36 }, { wch: 10 }, { wch: 10 }];
-
-        // Nom de feuille Excel : max 31 char, pas de : \ / ? * [ ]
-        let sheetName = day.date.replace(/[:\\/?*\[\]]/g, "-").slice(0, 31);
-        let idx = 2;
-        while (usedSheetNames.has(sheetName)) {
-          sheetName = `${day.date.slice(0, 28)}_${idx++}`;
-        }
-        usedSheetNames.add(sheetName);
-
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
-      }
-
-      if (!hasAny) {
-        alert("Aucun pointage à exporter sur cette période.");
-        return;
-      }
-
-      XLSX.writeFile(wb, `shift_periode_${periodFrom}_${periodTo}_${todayISO()}.xlsx`);
-    } catch (e) {
-      console.error("handlePeriodExport error:", e);
-      alert("Erreur lors de la récupération des données. Veuillez réessayer.");
-    } finally {
-      setPeriodLoading(false);
-    }
-  }, [periodFrom, periodTo, periodTeam, periodMatricule, periodStatus]);
-
-  // ── Records période aplatis (un enregistrement par ligne) ─────────────────
-  // On inclut TOUS les records (planifiés + pointages sans planning)
-  const flatPeriodRecords = useMemo((): (ShiftRecord & { _date: string })[] => {
-    if (!periodData) return [];
-    return periodData.dates
-      .filter((d) => d.records.length > 0)
-      .flatMap((d) => d.records.map((r) => ({ ...r, _date: d.date })));
-  }, [periodData]);
-
-  // Filter period records by team, status and search
-  const filteredPeriodRecords = useMemo(() => {
-    return flatPeriodRecords.filter((r) => {
-      const matchTeam = !periodTeam ? true : r.shift_team === periodTeam;
-      const matchStatus = !periodStatus ? true
-        : periodStatus === "late" ? (r.status === "ok" || r.status === "incomplete") && r.late_minutes > 0
-        : periodStatus === "deficit" ? r.deficit_minutes > 0
-        : r.status === periodStatus;
-      const matchSearch = !periodSearch
-        ? true
-        : r.full_name?.toLowerCase().includes(periodSearch.toLowerCase())
-          || r.matricule?.toLowerCase().includes(periodSearch.toLowerCase());
-      return matchTeam && matchStatus && matchSearch;
-    });
-  }, [flatPeriodRecords, periodTeam, periodStatus, periodSearch]);
-
-  const periodPageData = useMemo(() => {
-    const start = (periodPage - 1) * periodPageSize;
-    return filteredPeriodRecords.slice(start, start + periodPageSize);
-  }, [filteredPeriodRecords, periodPage, periodPageSize]);
-
-  // Reset page when filters change
-  useEffect(() => { setPeriodPage(1); }, [periodStatus, periodSearch, periodTeam, periodData]);
-
-  // Fetch on mount + view change
   useEffect(() => { fetchData(); }, [viewMode, date, week, month]);
-
-  useEffect(() => {
-    if (viewMode === "period") fetchPeriodData();
-  }, [viewMode]);
-
-  // Auto-refresh every 60s in daily mode (silent = no spinner)
-  useEffect(() => {
-    if (viewMode !== "daily") return;
-    const id = setInterval(() => { fetchData(true); }, 60_000);
-    return () => clearInterval(id);
-  }, [viewMode, fetchData]);
   useEffect(() => { setPage(1); }, [statusFilter, searchQ, shiftData, weeklyData, monthlyData, pageSize]);
 
+  // Auto-refresh silencieux en mode journalier
+  useEffect(() => {
+    if (viewMode !== "daily") return;
+    const id = setInterval(() => fetchData(true), 60_000);
+    return () => clearInterval(id);
+  }, [viewMode, fetchData]);
+
+  // ── Détail journalier par employé (mode recherche hebdo/mensuel) ────────────
+  useEffect(() => {
+    if (!searchQ.trim() || viewMode === "daily") {
+      setEmpDayDetails(new Map());
+      return;
+    }
+    const bounds = viewMode === "weekly" ? isoWeekBounds(week) : isoMonthBounds(month);
+    setDetailsLoading(true);
+    // On attend que filteredSummaryRecords soit non vide pour éviter des appels inutiles
+    // mais ce hook dépend de searchQ/viewMode/week/month donc il se déclenche au bon moment
+    let cancelled = false;
+    (async () => {
+      try {
+        // On relit les records filtrés depuis weeklyData/monthlyData directement
+        const source = viewMode === "weekly" ? weeklyData?.by_employee ?? [] : monthlyData?.by_employee ?? [];
+        const q = searchQ.toLowerCase();
+        const matched = source.filter(r =>
+          (r.full_name ?? "").toLowerCase().includes(q) ||
+          (r.matricule ?? "").toLowerCase().includes(q)
+        );
+        const results = await Promise.all(
+          matched.map(r =>
+            getEmployeePeriodDetail({ employee_id: r.employee_id, start: bounds.start, end: bounds.end })
+              .then(res => [r.employee_id, res.days] as [number, DayDetail[]])
+              .catch(() => [r.employee_id, []] as [number, DayDetail[]])
+          )
+        );
+        if (!cancelled) setEmpDayDetails(new Map(results));
+      } finally { if (!cancelled) setDetailsLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [searchQ, viewMode, week, month, weeklyData, monthlyData]);
+
+  // ── Records journaliers (FlatRecord) ──────────────────────────────────────────
   const allRecords = useMemo((): FlatRecord[] => {
     if (viewMode !== "daily" || !shiftData) return [];
-
-    const shiftOrder: Record<string, number> = { jour: 0, soir1: 1, soir2: 2 };
-
-    // Heure actuelle en minutes depuis minuit
-    const now = new Date();
-    const nowMin = now.getHours() * 60 + now.getMinutes();
-
-    // Fenêtres de pointage selon l'algorithme (heure_debut - 2h … heure_debut + 30min) :
-    //   jour  (08h-16h) → fenêtre s'ouvre à 06h00
-    //   soir1 (16h-22h) → fenêtre s'ouvre à 14h00
-    //   soir2 (22h-08h) → fenêtre s'ouvre à 20h00
-    // "En attente" = heure actuelle AVANT l'ouverture de la fenêtre
+    const now = new Date(), nowMin = now.getHours()*60 + now.getMinutes();
     const shiftNotStarted = (team: ShiftTeamKey | null): boolean => {
       if (!team) return false;
-      if (team === "soir2") {
-        // Fenêtre ouvre à 20h ; entre 0h et 8h le shift nuit est en cours (J+1)
-        return nowMin >= 8 * 60 && nowMin < 20 * 60;
-      }
-      const windowOpenMin: Record<string, number> = { jour: 6 * 60, soir1: 14 * 60 };
-      return nowMin < (windowOpenMin[team] ?? 0);
+      if (team === "soir2") return nowMin >= 8*60 && nowMin < 20*60;
+      const win: Record<string, number> = { jour: 6*60, soir1: 14*60 };
+      return nowMin < (win[team] ?? 0);
     };
-
+    const shiftOrder: Record<string, number> = { jour: 0, soir1: 1, soir2: 2 };
     return shiftData.records.map((r): FlatRecord => {
-      const projVal = (() => {
+      const proj = (() => {
         const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
         return p ? String(p).toUpperCase() : (projectMap.get(r.matricule) ?? "—");
       })();
       const lateMin = r.late_minutes ?? 0;
       const overtimeMin = r.out_time ? computeOvertimeMinutes(r.out_time, 17, 30) : 0;
       return {
-        employee_id: r.employee_id,
-        matricule: r.matricule || "",
-        full_name: r.full_name,
-        department: (r.department ?? departmentMap.get(r.matricule) ?? "—").toUpperCase(),
-        project: projVal,
+        employee_id: r.employee_id, matricule: r.matricule || "", full_name: r.full_name,
+        department: (r.department ?? departmentMap.get(r.matricule) ?? "—").toUpperCase(), project: proj,
         status: (() => {
           if (r.status === "absent" && shiftNotStarted(r.shift_team)) return "pending";
-          // Anomalie avec entrée ≠ sortie → considéré normal (user requirement)
           if (r.status === "anomaly" && r.in_time && r.out_time && r.in_time !== r.out_time) return "ok";
           return r.status as FlatRecord["status"];
         })(),
-        is_late_api: r.is_late,
-        late_label_api: r.late_label,
-        computed_late_minutes: lateMin,
-        overtime_minutes: overtimeMin,
+        is_late_api: r.is_late, late_label_api: r.late_label,
+        computed_late_minutes: lateMin, overtime_minutes: overtimeMin,
         compensation: computeCompensation(lateMin, overtimeMin),
         deficit_minutes: computeDeficitMinutes(r.worked_minutes, r.expected_minutes),
-        in_time: r.in_time,
-        out_time: r.out_time,
-        worked_minutes: r.worked_minutes,
-        expected_minutes: r.expected_minutes,
+        in_time: r.in_time, out_time: r.out_time,
+        worked_minutes: r.worked_minutes, expected_minutes: r.expected_minutes,
         email: emailMap.get(r.matricule) ?? (r as any).email ?? null,
         telephone: phoneMap.get(r.matricule) ?? (r as any).telephone ?? null,
         shift_team: r.shift_team,
         shift_team_label: SHIFT_TEAMS.find(t => t.key === r.shift_team)?.label ?? "",
-        is_scheduled: r.is_planned,
-        is_replacement: (r as any).is_replacement ?? false,
+        is_scheduled: r.is_planned, is_replacement: (r as any).is_replacement ?? false,
         not_scheduled_rest: !r.is_planned && r.status === "not_working",
         is_shift_pending: r.status === "absent" && shiftNotStarted(r.shift_team),
         team_id: (r as any).team_id ?? "",
@@ -2553,468 +2454,156 @@ export default function AttendanceShiftsPage() {
         replaces_employee: (r as any).replaces_employee ?? null,
       };
     }).sort((a, b) => {
-      const sa = shiftOrder[a.shift_team ?? ""] ?? 3;
-      const sb = shiftOrder[b.shift_team ?? ""] ?? 3;
+      const sa = shiftOrder[a.shift_team ?? ""] ?? 3, sb = shiftOrder[b.shift_team ?? ""] ?? 3;
       if (sa !== sb) return sa - sb;
       return a.full_name.localeCompare(b.full_name);
     });
   }, [shiftData, emailMap, phoneMap, viewMode, projectMap, departmentMap]);
 
+  // ── Records synthétiques (hebdo/mensuel) ──────────────────────────────────────
   const summaryRecords = useMemo((): SummaryRecord[] => {
-    const resolveDept = (r: any) => (r.department ?? r.service ?? departmentMap.get(r.matricule ?? "") ?? "—").toUpperCase();
-    const resolveProject = (r: any) => {
+    const dept = (r: any) => (r.department ?? r.service ?? departmentMap.get(r.matricule ?? "") ?? "—").toUpperCase();
+    const proj = (r: any) => {
       const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
       return p ? String(p).toUpperCase() : (projectMap.get(r.matricule ?? "") ?? "—");
     };
-    const mapEmp = (r: any): SummaryRecord => ({
+    const map = (r: any): SummaryRecord => ({
       employee_id: r.employee_id, matricule: r.matricule ?? "", full_name: r.full_name ?? "",
-      department: resolveDept(r), project: resolveProject(r),
+      department: dept(r), project: proj(r),
       shift_team: assignments[r.matricule ?? ""] ?? r.shift_team ?? null,
       nb_jours: r.present_days ?? r.worked_days ?? 0,
       worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
-      absent_days: r.absent_days ?? 0,
-      late_days: r.late_days ?? 0,
-      anomaly_days: r.anomaly_days ?? 0,
-      delta_minutes: r.delta_minutes ?? 0,
-      expected_minutes: r.expected_minutes ?? 0,
+      absent_days: r.absent_days ?? 0, late_days: r.late_days ?? 0, anomaly_days: r.anomaly_days ?? 0,
+      delta_minutes: r.delta_minutes ?? 0, expected_minutes: r.expected_minutes ?? 0,
     });
-    if (viewMode === "weekly" && weeklyData) return weeklyData.by_employee.map(mapEmp);
-    if (viewMode === "monthly" && monthlyData) return monthlyData.by_employee.map(mapEmp);
+    if (viewMode === "weekly"  && weeklyData)  return weeklyData.by_employee.map(map);
+    if (viewMode === "monthly" && monthlyData) return monthlyData.by_employee.map(map);
     return [];
   }, [viewMode, weeklyData, monthlyData, assignments, departmentMap, projectMap]);
 
-  const filteredSummaryRecords = useMemo((): SummaryRecord[] => {
-    let rows = summaryRecords;
-    if (selectedTeam) rows = rows.filter((r) => r.shift_team === selectedTeam);
-    if (searchQ.trim()) {
-      const q = searchQ.toLowerCase();
-      rows = rows.filter((r) =>
-        r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q) ||
-        r.department.toLowerCase().includes(q) || r.project.toLowerCase().includes(q) ||
-        (SHIFT_TEAMS.find((t) => t.key === r.shift_team)?.label ?? "").toLowerCase().includes(q)
-      );
-    }
-    return rows;
-  }, [summaryRecords, selectedTeam, searchQ]);
-
-  const isLateRecord = (r: FlatRecord) => r.computed_late_minutes > 0;
-
-  const matchSearch = (r: FlatRecord, q: string) =>
-    !q || r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q) ||
-    r.department.toLowerCase().includes(q) || (r.shift_team_label ?? "").toLowerCase().includes(q) ||
-    r.project.toLowerCase().includes(q);
-
-  const shiftPlanningBase = useMemo((): FlatRecord[] => {
-    if (!selectedTeam) return [];
-    return allRecords.filter(r => r.shift_team === selectedTeam);
-  }, [selectedTeam, allRecords]);
-
-  const filtered = useMemo(() => {
+  const filteredSummaryRecords = useMemo(() => {
+    if (!searchQ.trim()) return summaryRecords;
     const q = searchQ.toLowerCase();
-    const base: FlatRecord[] = selectedTeam ? shiftPlanningBase : allRecords;
-    return base.filter((r) => {
-      if (!matchSearch(r, q)) return false;
-      // Masquer les repos non planifiés dans la vue "Tous" sauf si filtre explicite
-      if (!selectedTeam && r.not_scheduled_rest && statusFilter === "all") return false;
-      if (statusFilter === "late") return isLateRecord(r);
-      if (statusFilter === "deficit") return r.deficit_minutes > 0;
-      if (statusFilter === "absent") return r.status === "absent" && !r.not_scheduled_rest;
-      if (statusFilter === "on_leave") return r.status === "on_leave";
-      if (statusFilter === "on_mission") return r.status === "on_mission";
-      if (statusFilter === "incomplete") return r.status === "incomplete";
-      if (statusFilter === "anomaly") return r.status === "anomaly";
-      if (statusFilter !== "all") return r.status === statusFilter;
-      return true;
-    });
-  }, [shiftPlanningBase, allRecords, statusFilter, searchQ, selectedTeam]);
+    return summaryRecords.filter((r) =>
+      r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q) ||
+      r.department.toLowerCase().includes(q) || r.project.toLowerCase().includes(q) ||
+      (SHIFT_TEAMS.find(t => t.key === r.shift_team)?.label ?? "").toLowerCase().includes(q)
+    );
+  }, [summaryRecords, searchQ]);
 
-  const planningKpis = useMemo((): Record<ShiftTeamKey, { total: number; present: number; absent: number }> => {
-    const empty = { total: 0, present: 0, absent: 0 };
-    if (!shiftData) return { jour: empty, soir1: empty, soir2: empty };
-    const result = {} as Record<ShiftTeamKey, { total: number; present: number; absent: number }>;
-    for (const key of (["jour", "soir1", "soir2"] as ShiftTeamKey[])) {
-      const byTeam = shiftData.kpis.by_team[key];
-      if (byTeam) {
-        result[key] = { total: byTeam.total, present: byTeam.present, absent: byTeam.absent };
-      } else {
-        result[key] = empty;
-      }
-    }
-    return result;
-  }, [shiftData]);
-
+  // ── KPIs ──────────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     if (viewMode === "daily" && shiftData) {
-      if (selectedTeam) {
-        const byTeam = shiftData.kpis.by_team[selectedTeam];
-        return {
-          total: byTeam?.total ?? 0,
-          absent: byTeam?.absent ?? 0,
-          late: allRecords.filter(r => r.shift_team === selectedTeam && isLateRecord(r)).length,
-          anomaly: byTeam?.anomalies ?? 0,
-        };
-      }
-      return {
-        total: shiftData.kpis.total,
-        absent: shiftData.kpis.absent,
-        late: shiftData.kpis.late,
-        anomaly: shiftData.kpis.anomalies,
-      };
+      return { total: shiftData.kpis.total, absent: shiftData.kpis.absent, late: shiftData.kpis.late, anomaly: shiftData.kpis.anomalies };
     }
-    const teamRows = selectedTeam ? summaryRecords.filter((r) => r.shift_team === selectedTeam) : summaryRecords;
-    return { total: teamRows.length, absent: 0, late: 0, anomaly: 0 };
-  }, [viewMode, shiftData, allRecords, summaryRecords, selectedTeam]);
+    return { total: summaryRecords.length, absent: 0, late: 0, anomaly: 0 };
+  }, [viewMode, shiftData, summaryRecords]);
 
-  const noPlanningToday = viewMode === "daily" && !loading && (
-    selectedTeam
-      ? (shiftData?.kpis.by_team[selectedTeam]?.total ?? 0) === 0
-      : (!shiftData || shiftData.records.filter(r => r.is_planned).length === 0)
-  );
+  // ── Filtrage journalier ───────────────────────────────────────────────────────
+  const isLateRecord = (r: FlatRecord) => r.computed_late_minutes > 0;
 
-  const notScheduledRows = useMemo(() => {
+  const filtered = useMemo((): FlatRecord[] => {
     const q = searchQ.toLowerCase();
-    return allRecords.filter((r) => r.not_scheduled_rest && matchSearch(r, q));
-  }, [allRecords, searchQ]);
-
-  const [showPendingShifts, setShowPendingShifts] = useState(true);
-  const pendingShiftRows = useMemo(() => {
-    return [] as FlatRecord[];
-  }, []);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageData = filtered.slice((page - 1) * pageSize, page * pageSize);
+    return allRecords.filter((r) => {
+      if (q && !(r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q) ||
+        r.department.toLowerCase().includes(q) || (r.shift_team_label ?? "").toLowerCase().includes(q))) return false;
+      if (!r.not_scheduled_rest || statusFilter !== "all") {
+        if (statusFilter === "late")      return isLateRecord(r);
+        if (statusFilter === "deficit")   return r.deficit_minutes > 0;
+        if (statusFilter === "absent")    return r.status === "absent" && !r.not_scheduled_rest;
+        if (statusFilter === "on_leave")  return r.status === "on_leave";
+        if (statusFilter === "on_mission")return r.status === "on_mission";
+        if (statusFilter === "incomplete")return r.status === "incomplete";
+        if (statusFilter === "anomaly")   return r.status === "anomaly";
+        if (statusFilter !== "all")       return r.status === statusFilter;
+        if (r.not_scheduled_rest)         return false; // masquer repos non planifiés en vue "Tous"
+      }
+      return true;
+    });
+  }, [allRecords, statusFilter, searchQ]);
 
   const filterCount = (key: StatusFilter) => {
-    const base: FlatRecord[] = selectedTeam ? shiftPlanningBase : allRecords;
-    if (key === "all") return base.length;
-    if (key === "late") return base.filter(isLateRecord).length;
-    if (key === "deficit") return base.filter((r) => r.deficit_minutes > 0).length;
-    if (key === "absent") return base.filter((r) => r.status === "absent").length;
-    if (key === "on_leave") return base.filter((r) => r.status === "on_leave").length;
-    if (key === "on_mission") return base.filter((r) => r.status === "on_mission").length;
-    if (key === "incomplete") return base.filter((r) => r.status === "incomplete").length;
-    if (key === "anomaly") return base.filter((r) => r.status === "anomaly").length;
-    return base.filter((r) => r.status === key).length;
+    if (key === "all")     return allRecords.filter(r => !r.not_scheduled_rest).length;
+    if (key === "late")    return allRecords.filter(isLateRecord).length;
+    if (key === "deficit") return allRecords.filter(r => r.deficit_minutes > 0).length;
+    if (key === "absent")  return allRecords.filter(r => r.status === "absent").length;
+    if (key === "on_leave") return allRecords.filter(r => r.status === "on_leave").length;
+    if (key === "on_mission") return allRecords.filter(r => r.status === "on_mission").length;
+    if (key === "incomplete") return allRecords.filter(r => r.status === "incomplete").length;
+    if (key === "anomaly") return allRecords.filter(r => r.status === "anomaly").length;
+    return allRecords.filter(r => r.status === key).length;
   };
 
-  const getPageNumbers = (): (number | "...")[] => {
-    const pages: (number | "...")[] = [];
-    if (totalPages <= 7) { for (let i = 1; i <= totalPages; i++) pages.push(i); }
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageData   = filtered.slice((page-1)*pageSize, page*pageSize);
+
+  const getPageNumbers = (): (number|"...")[] => {
+    const pages: (number|"...")[] = [];
+    if (totalPages <= 7) { for (let i=1; i<=totalPages; i++) pages.push(i); }
     else {
       pages.push(1);
       if (page > 3) pages.push("...");
-      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
-      if (page < totalPages - 2) pages.push("...");
+      for (let i=Math.max(2,page-1); i<=Math.min(totalPages-1,page+1); i++) pages.push(i);
+      if (page < totalPages-2) pages.push("...");
       pages.push(totalPages);
     }
     return pages;
   };
 
-  const handleSendAlert = async (motif: MotifType, channel: "email" | "sms") => {
+  // ── Handlers ──────────────────────────────────────────────────────────────────
+  const handleSendAlert = async (motif: MotifType, channel: "email"|"sms") => {
     if (!selectedEmployee) return;
     setSendingAlert(true);
     try {
       const res = await sendAttendanceAlert({ employee_id: selectedEmployee.employee_id, motif, channel });
       if (res.ok) {
-        alert(`Alerte envoyée avec succès via ${channel === "sms" ? "SMS" : "Email"} à ${res.recipient ?? "—"}`);
+        alert(`Alerte envoyée via ${channel === "sms" ? "SMS" : "Email"} à ${res.recipient ?? "—"}`);
         setAlertModalOpen(false); setSelectedEmployee(null);
-      } else {
-        alert(`Échec de l'envoi : ${res.error ?? "Erreur inconnue"}`);
-      }
-    } catch {
-      alert("Erreur lors de l'envoi de l'alerte.");
-    } finally {
-      setSendingAlert(false);
-    }
+      } else alert(`Échec : ${res.error ?? "Erreur inconnue"}`);
+    } catch { alert("Erreur lors de l'envoi de l'alerte."); } finally { setSendingAlert(false); }
   };
 
-  const handleExport = async () => {
-    // En mode Période : produit directement un xlsx structuré
-    // (Date en titre → Shift Matin / Midi / Soir → lignes employés)
-    if (viewMode === "period") {
-      if (!periodFrom || !periodTo) {
-        alert("Sélectionnez d'abord une plage de dates via le filtre.");
-        return;
-      }
-      setExportLoading(true);
-      try {
-        const res = await getShiftPeriodStats({
-          date_from: periodFrom,
-          date_to:   periodTo,
-          team:      periodTeam,
-          matricule: periodMatricule || null,
-          status:    periodStatus || null,
-        });
+  const handleExport = () => setShowExportDlg(true);
 
-        const STATUS_LABELS: Record<string, string> = {
-          ok: "Présent", absent: "Absent", incomplete: "Incomplet",
-          anomaly: "Anomalie", not_working: "Pas de service",
-          on_leave: "En congé", on_mission: "En mission",
-        };
-        const SHIFT_LABELS: Record<string, string> = {
-          jour:  "Shift Matin",
-          soir1: "Shift Midi",
-          soir2: "Shift Soir",
-        };
-        const SHIFT_ORDER: ShiftTeamKey[] = ["jour", "soir1", "soir2"];
-
-        const aoa: (string | number | null)[][] = [];
-        let hasAny = false;
-
-        for (const day of res.dates) {
-          if (day.records.length === 0) continue;
-
-          const dateLabel = new Date(day.date + "T00:00:00").toLocaleDateString("fr-FR", {
-            weekday: "long", day: "2-digit", month: "long", year: "numeric",
-          });
-
-          const sectionStart = aoa.length;
-          aoa.push([`Date : ${dateLabel}`]);
-          aoa.push([]);
-
-          let dayHasContent = false;
-          for (const shiftKey of SHIFT_ORDER) {
-            const shiftRecs = day.records.filter((r) => r.shift_team === shiftKey);
-            if (shiftRecs.length === 0) continue;
-
-            dayHasContent = true;
-            aoa.push([SHIFT_LABELS[shiftKey] ?? shiftKey]);
-            aoa.push(["Matricule", "Nom", "Entrée", "Sortie", "Statut", "Retard"]);
-
-            for (const r of shiftRecs) {
-              const entry = r.shift_team === "soir2"
-                ? (r.out_time ? formatTime(r.out_time) : "—")
-                : (r.in_time  ? formatTime(r.in_time)  : "—");
-              const exit  = r.shift_team === "soir2"
-                ? (r.in_time  ? formatTime(r.in_time)  : "—")
-                : (r.out_time ? formatTime(r.out_time) : "—");
-              aoa.push([
-                r.matricule || "—",
-                r.full_name,
-                entry,
-                exit,
-                STATUS_LABELS[r.status] ?? r.status,
-                r.late_minutes > 0 ? (r.late_label ?? `${r.late_minutes} min`) : "—",
-              ]);
-            }
-            aoa.push([]);
-          }
-
-          if (!dayHasContent) {
-            aoa.length = sectionStart;
-            continue;
-          }
-          hasAny = true;
-          aoa.push([]);
-        }
-
-        if (!hasAny) {
-          alert("Aucun pointage à exporter sur cette période.");
-          return;
-        }
-
-        const ws = XLSX.utils.aoa_to_sheet(aoa);
-        ws["!cols"] = [{ wch: 14 }, { wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Pointages");
-        XLSX.writeFile(wb, `shift_periode_${periodFrom}_${periodTo}_${todayISO()}.xlsx`);
-      } catch (e) {
-        console.error("handleExport period error:", e);
-        alert(`Erreur lors de l'export : ${e instanceof Error ? e.message : String(e)}`);
-      } finally {
-        setExportLoading(false);
-      }
-      return;
-    }
-
-    // Mode journalier : pré-remplir la plage avec la date du jour sélectionné
-    if (viewMode === "daily") {
-      setExportFrom(date);
-      setExportTo(date);
-    }
-    setShowExportDlg(true);
-  };
-
-  const doExport = async () => {
-    if (viewMode === "daily" && exportFrom !== exportTo) {
-      // Date range export in daily mode: fetch period data then export
-      setExportLoading(true);
-      try {
-        const rangeData = await getShiftPeriodStats({
-          date_from: exportFrom,
-          date_to:   exportTo,
-          team:      selectedTeam ?? null,
-          matricule: null,
-          status:    null,
-        });
-        const WEEKDAYS = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
-        const STATUS_LABELS: Record<string, string> = {
-          ok: "Présent", absent: "Absent", incomplete: "Incomplet",
-          anomaly: "Anomalie", not_working: "Pas de service",
-          on_leave: "En congé", on_mission: "En mission",
-        };
-        const RANGE_ALL: Record<ShiftPeriodCol, (r: ShiftRecord, d: { date: string; weekday: number; weekday_label: string }) => any> = {
-          "Date":              (_r, d) => new Date(d.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
-          "Jour":              (_r, d) => d.weekday_label,
-          "Matricule":         (r)     => r.matricule || "—",
-          "Nom":               (r)     => r.full_name,
-          "Équipe":            (r)     => r.shift_team_label || r.shift_team || "—",
-          "Statut":            (r)     => STATUS_LABELS[r.status] ?? r.status,
-          "Retard":            (r)     => r.late_minutes > 0 ? `${r.late_label ?? r.late_minutes + " min"}` : "—",
-          "Entrée":            (r)     => r.shift_team === "soir2" ? (r.out_time ? formatTime(r.out_time) : "—") : (r.in_time ? formatTime(r.in_time) : "—"),
-          "Sortie":            (r)     => r.shift_team === "soir2" ? (r.in_time ? formatTime(r.in_time) : "—") : (r.out_time ? formatTime(r.out_time) : "—"),
-          "Heures travaillées":(r)     => r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
-          "Remplacé par":      (r)     => r.replaced_by ?? "—",
-          "Remplaçant de":     (r)     => r.replaces_employee ?? "—",
-        };
-        const rangeRows: Record<string, any>[] = [];
-        for (const day of rangeData.dates) {
-          // On n'exclut plus les jours sans planning : on garde toute journée ayant au moins un pointage
-          const baseRecs = day.records ?? [];
-          if (baseRecs.length === 0) continue;
-          const dayRecs = exportDepts.length > 0
-            ? baseRecs.filter(rec => {
-                const dept = (rec.department ?? departmentMap.get(rec.matricule ?? "") ?? "").toUpperCase();
-                return exportDepts.includes(dept);
-              })
-            : baseRecs;
-          for (const rec of dayRecs) {
-            rangeRows.push(Object.fromEntries(
-              exportPeriodCols.map((k) => [k, RANGE_ALL[k](rec, day)])
-            ));
-          }
-          if (dayRecs.length > 0) rangeRows.push({});
-        }
-        if (rangeRows.length === 0) {
-          alert(
-            `Aucun pointage trouvé pour la période ${exportFrom} → ${exportTo}` +
-            (exportDepts.length ? ` (département(s) : ${exportDepts.join(", ")})` : "") +
-            "."
-          );
-          return;
-        }
-        exportXLSX(`shift_periode_${exportFrom}_${exportTo}`, rangeRows);
-        setShowExportDlg(false);
-      } catch (e) {
-        console.error("Export range error:", e);
-        alert("Erreur lors de la récupération des données. Veuillez réessayer.");
-      } finally {
-        setExportLoading(false);
-      }
-      return;
-    }
+  const doExport = () => {
     if (viewMode === "daily") {
       const ALL: Record<ShiftDailyCol, (r: FlatRecord) => any> = {
         "Matricule":        (r) => r.matricule,
         "Nom":              (r) => r.full_name,
         "Projet":           (r) => r.project !== "—" ? r.project : "—",
         "Département":      (r) => r.department !== "—" ? r.department : "—",
-        "Équipe":           (r) => r.shift_team_label || SHIFT_TEAMS.find((t) => t.key === r.shift_team)?.short || r.shift_team || "—",
         "Statut":           (r) => r.status,
         "Retard":           (r) => r.computed_late_minutes > 0 ? `RETARD · ${formatMinutes(r.computed_late_minutes)}` : "Non",
         "Entrée":           (r) => r.shift_team === "soir2" ? formatTime(r.out_time) : formatTime(r.in_time),
         "Sortie":           (r) => r.shift_team === "soir2" ? formatTime(r.in_time) : formatTime(r.out_time),
         "Heure travaillée": (r) => r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
-        "HS":               (r) => r.overtime_minutes > 0 ? formatMinutes(r.overtime_minutes) : "—",
         "Compensation":     (r) => r.compensation.is_compensated ? "Oui" : r.compensation.late_min > 0 ? "Non" : "—",
         "Email":            (r) => r.email ?? "Manquant",
       };
-      exportXLSX(`shift_${selectedTeam ?? "all"}_journalier`,
-        filtered.map((r) => Object.fromEntries(exportDailyCols.map((k) => [k, ALL[k](r)])))
-      );
-    } else if (viewMode === "period" && periodData) {
-      // Export période : une ligne par date × employé avec info remplacement
-      const WEEKDAYS = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
-      const STATUS_LABELS: Record<string, string> = {
-        ok: "Présent", absent: "Absent", incomplete: "Incomplet",
-        anomaly: "Anomalie", not_working: "Pas de service",
-        on_leave: "En congé", on_mission: "En mission",
-      };
-      const ALL: Record<ShiftPeriodCol, (r: ShiftRecord, d: { date: string; weekday: number; weekday_label: string }) => any> = {
-        "Date":              (_r, d) => new Date(d.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
-        "Jour":              (_r, d) => d.weekday_label,
-        "Matricule":         (r)     => r.matricule || "—",
-        "Nom":               (r)     => r.full_name,
-        "Équipe":            (r)     => r.shift_team_label || r.shift_team || "—",
-        "Statut":            (r)     => STATUS_LABELS[r.status] ?? r.status,
-        "Retard":            (r)     => r.late_minutes > 0 ? `${r.late_label ?? r.late_minutes + " min"}` : "—",
-        "Entrée":            (r)     => r.shift_team === "soir2" ? (r.out_time ? formatTime(r.out_time) : "—") : (r.in_time ? formatTime(r.in_time) : "—"),
-        "Sortie":            (r)     => r.shift_team === "soir2" ? (r.in_time ? formatTime(r.in_time) : "—") : (r.out_time ? formatTime(r.out_time) : "—"),
-        "Heures travaillées":(r)     => r.worked_minutes > 0 ? formatMinutes(r.worked_minutes) : "—",
-        "Remplacé par":      (r)     => r.replaced_by ?? "—",
-        "Remplaçant de":     (r)     => r.replaces_employee ?? "—",
-      };
-      const rows: Record<string, any>[] = [];
-      for (const day of periodData.dates) {
-        // On n'exclut plus les jours sans planning : on garde toute journée ayant au moins un pointage
-        const baseRecs = day.records ?? [];
-        if (baseRecs.length === 0) continue;
-        const dayRecs = exportDepts.length > 0
-          ? baseRecs.filter(rec => {
-              const dept = (rec.department ?? departmentMap.get(rec.matricule ?? "") ?? "").toUpperCase();
-              return exportDepts.includes(dept);
-            })
-          : baseRecs;
-        for (const rec of dayRecs) {
-          rows.push(Object.fromEntries(
-            exportPeriodCols.map((k) => [k, ALL[k](rec, day)])
-          ));
-        }
-        // Séparateur visuel entre les dates
-        if (dayRecs.length > 0) {
-          rows.push({});
-        }
-      }
-      if (rows.length === 0) {
-        alert(
-          `Aucun pointage trouvé pour la période ${exportFrom} → ${exportTo}` +
-          (exportDepts.length ? ` (département(s) : ${exportDepts.join(", ")})` : "") +
-          "."
-        );
-        return;
-      }
-      exportXLSX(`shift_periode_${exportFrom}_${exportTo}`, rows);
+      exportXLSX(`shift_journalier_${date}`, filtered.map(r => Object.fromEntries(exportDailyCols.map(k => [k, ALL[k](r)]))));
     } else {
       const MAX_MIN = viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33);
-      const ALL: Record<ShiftSummCol, (r: any) => any> = {
+      const ALL: Record<ShiftSummCol, (r: SummaryRecord) => any> = {
         "Matricule":          (r) => r.matricule,
         "Nom":                (r) => r.full_name,
         "Projet":             (r) => r.project !== "—" ? r.project : "—",
-        "Département":        (r) => r.department !== "—" ? r.department : "—",
-        "Équipe":             (r) => SHIFT_TEAMS.find((t) => t.key === r.shift_team)?.short || r.shift_team || "—",
+        "Département":        (r) => r.department,
         "Jours présents":     (r) => r.nb_jours,
         "Jours absents":      (r) => r.absent_days,
         "Jours retard":       (r) => r.late_days,
         "Jours anomalie":     (r) => r.anomaly_days,
         "Heures travaillées": (r) => formatMinutes(r.worked_minutes) || "0h",
-        "Heures attendues":   (r) => formatMinutes(r.expected_minutes) || "0h",
-        "Delta":              (r) => r.delta_minutes >= 0 ? `+${formatMinutes(r.delta_minutes)}` : `-${formatMinutes(Math.abs(r.delta_minutes))}`,
+        "Heures attendues":   (r) => r.expected_minutes > 0 ? formatMinutes(r.expected_minutes) : "—",
+        "Delta":              (r) => r.delta_minutes !== 0 ? formatMinutes(Math.abs(r.delta_minutes)) : "0h",
         "% quota":            (r) => `${Math.min(100, Math.round((r.worked_minutes / MAX_MIN) * 100))}%`,
       };
-      exportXLSX(`shift_${viewMode === "weekly" ? "hebdo" : "mensuel"}`,
-        filteredSummaryRecords.map((r) => Object.fromEntries(exportSummaryCols.map((k) => [k, ALL[k](r)])))
-      );
+      exportXLSX(`shift_${viewMode === "weekly" ? "hebdo" : "mensuel"}`, filteredSummaryRecords.map(r => Object.fromEntries(exportSummaryCols.map(k => [k, ALL[k](r)]))));
     }
     setShowExportDlg(false);
   };
 
-  const activeTeamCfg = SHIFT_TEAMS.find((t) => t.key === selectedTeam);
-  // label + classes responsive (hidden sur certains breakpoints)
-  const tableHeaders: { label: string; cls?: string }[] = [
-    { label: "Matricule" },
-    { label: "Nom" },
-    { label: "Projet/Dép." },
-    { label: "Service",        cls: "hidden lg:table-cell" },
-    { label: "Équipe" },
-    { label: "Statut" },
-    { label: "Retard" },
-    { label: "Entrée" },
-    { label: "Sortie" },
-    { label: "H. Travaillée" },
-    { label: "HS (>dép.)",     cls: "hidden xl:table-cell" },
-    { label: "Compensation",   cls: "hidden xl:table-cell" },
-    { label: "Actions" },
-  ];
+  // ── JSX ──────────────────────────────────────────────────────────────────────
+  const tableHeaders = ["Matricule","Nom","Projet/Dép.","Statut","Retard","Entrée","Sortie","H. Travaillées","Actions"];
 
   return (
     <AppLayout>
@@ -3022,106 +2611,55 @@ export default function AttendanceShiftsPage() {
         className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden gap-3 p-3 sm:p-4 md:p-6">
 
         {/* ── En-tête ── */}
-        <div className="flex flex-col sm:flex-row justify-between gap-2 sm:items-center shrink-0">
-          <div className="shrink-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-camublue-900">Pointages Shifts</h1>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${isActiveLocked ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-slate-50 text-slate-500 ring-slate-200"}`}>
-                {isActiveLocked ? <Lock className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-                {effectiveSchedule.context} · {pad2(effectiveSchedule.startH)}h{pad2(effectiveSchedule.startM)} – {pad2(effectiveSchedule.endH)}h{pad2(effectiveSchedule.endM)}
-                {effectiveSchedule.breakMin > 0 && ` · Pause ${effectiveSchedule.breakMin}min`}
-              </span>
-              {activeTeamCfg && <span className="text-indigo-500 font-semibold text-xs">{activeTeamCfg.label} · {activeTeamCfg.horaire}</span>}
-              {allRecords.filter(r => r.is_scheduled).length > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full ring-1 ring-green-200">
-                  <CalendarRange className="h-3 w-3" />
-                  Planning actif · {allRecords.filter(r => r.is_scheduled).length} assignés
-                </span>
-              )}
-            </div>
+        <div className="flex flex-col sm:flex-row justify-between gap-3 sm:items-start shrink-0">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-camublue-900">Pointages Shifts</h1>
           </div>
-
-          <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
-            {/* ── Search ── */}
+          <div className="flex items-center gap-2 flex-wrap">
             <div className="relative w-full sm:w-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input value={viewMode === "period" ? periodSearch : searchQ}
-                onChange={(e) => { if (viewMode === "period") { setPeriodSearch(e.target.value); setPeriodPage(1); } else { setSearchQ(e.target.value); setPage(1); } }}
-                placeholder="Nom, matricule…"
+              <input value={searchQ} onChange={(e) => { setSearchQ(e.target.value); setPage(1); }} placeholder="Nom, matricule, équipe…"
                 className="pl-9 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-camublue-900 text-sm px-3 py-2 w-full sm:w-80 md:w-96 focus:outline-none" />
             </div>
-
+            <select value={viewMode} onChange={(e) => setViewMode(e.target.value as ViewMode)}
+              className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-camublue-900 focus:outline-none flex-1 sm:flex-none">
+              <option value="daily">Journalier</option>
+              <option value="weekly">Hebdomadaire</option>
+              <option value="monthly">Mensuel</option>
+            </select>
             <button onClick={() => setFilterOpen(true)}
               className={`border px-3 py-2 rounded-lg text-sm transition flex items-center gap-1.5 ${statusFilter !== "all" ? "bg-orange-50 border-orange-300 text-orange-700" : "bg-white border-slate-300 hover:bg-slate-50"}`}>
               <Filter className="h-4 w-4" /><span className="hidden sm:inline">Filtrer</span>
               {statusFilter !== "all" && <span className="bg-orange-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold leading-none">1</span>}
             </button>
-
-            <button onClick={handlePlanningClick}
-              className={`border px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${allRecords.filter(r => r.is_scheduled).length > 0 ? "bg-green-50 border-green-400 text-green-700 hover:bg-green-100" : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
-              <CalendarRange className="h-4 w-4" /><span className="hidden sm:inline">Planning</span>
-              {allRecords.filter(r => r.is_scheduled).length > 0 && (
-                <span className="text-[10px] font-bold bg-green-200 text-green-800 px-1.5 py-0.5 rounded-full hidden sm:inline">Actif</span>
-              )}
-            </button>
             <button onClick={handleExport}
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
             </button>
-            <button onClick={() => viewMode === "period" ? fetchPeriodData() : fetchData(false)}
+            <button onClick={() => setShowScheduleModal(true)}
+              className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
+              <Settings className="h-4 w-4 text-slate-500" /><span className="hidden sm:inline">Horaires</span>
+            </button>
+            <button onClick={() => fetchData(false)}
               className="bg-camublue-900 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-camublue-800 transition">
-              <RefreshCw className={`h-4 w-4 ${loading || periodLoading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Rafraîchir</span>
             </button>
           </div>
         </div>
 
-        {/* ── Sélecteur équipe (masqué en mode période) ── */}
-        {viewMode !== "period" && <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
-          <button onClick={() => setSelectedTeam(null)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${selectedTeam === null ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
-            <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" /><span className="truncate text-xs sm:text-sm">Infomation Journalière</span>
-          </button>
-          {SHIFT_TEAMS.map((team) => {
-            const isActive = selectedTeam === team.key;
-            const pkpi = planningKpis[team.key];
-            const hasPlanning = pkpi && pkpi.total > 0;
-            return (
-              <button key={team.key} onClick={() => setSelectedTeam(isActive ? null : team.key)}
-                className={`flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${isActive ? `${team.activeBg} ${team.activeText} ${team.activeBorder}` : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
-                <div className="flex flex-col items-start min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full shrink-0 ${team.dot}`} />
-                    <span className="truncate text-xs sm:text-sm">{team.short}</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400 pl-3.5 leading-tight">{team.horaire}</span>
-                </div>
-                {hasPlanning ? (
-                  <div className="flex flex-col items-end shrink-0 gap-0.5">
-                    <span className={`text-xs font-bold tabular-nums ${isActive ? team.activeText : "text-slate-600"}`}>
-                      {pkpi.present}/{pkpi.total}
-                    </span>
-                    {pkpi.absent > 0 && <span className="text-[9px] font-bold text-red-500 tabular-nums leading-none">{pkpi.absent} abs</span>}
-                  </div>
-                ) : (
-                  <span className="text-xs text-slate-300 shrink-0">0/0</span>
-                )}
-              </button>
-            );
-          })}
-        </div>}
-
-        {/* ── KPI Cards (masquées en mode période) ── */}
-        {viewMode !== "period" && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 shrink-0">
+        {/* ── KPI Cards ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
           <AbsentsCard total={kpis.total} absent={kpis.absent} loading={loading} delay={0.05} />
           <StatCard icon={Clock} label="Retards" value={kpis.late} color="orange" delay={0.1} loading={loading}
             active={statusFilter === "late"} sub="Cliquer pour filtrer"
-            onClick={() => setStatusFilter((f) => f === "late" ? "all" : "late")} />
+            onClick={() => setStatusFilter(f => f === "late" ? "all" : "late")} />
           <StatCard icon={AlertTriangle} label="Anomalies" value={kpis.anomaly} color="violet" delay={0.15} loading={loading} />
-        </div>}
+        </div>
 
         {/* ── Contenu principal ── */}
         {viewMode === "daily" ? (
           <>
+            {/* Filtres rapides */}
             <div className="shrink-0 w-full overflow-x-auto">
               <div className="flex items-center gap-1 bg-slate-100/80 rounded-xl p-1 border border-camublue-900/20 shadow-sm min-w-max">
                 {QUICK_FILTERS.map((f) => {
@@ -3150,496 +2688,143 @@ export default function AttendanceShiftsPage() {
               </div>
             </div>
 
+            {/* Tableau journalier */}
             <div className="flex-1 min-h-0 flex flex-col gap-2">
-              <div className="flex-1 min-h-0 flex flex-col gap-2">
-                <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
-                  <table className="min-w-full bg-white">
-                    <thead className={`sticky top-0 z-10 text-white hidden md:table-header-group ${activeTeamCfg?.headerBg ?? "bg-camublue-900"}`}>
-                      <tr>{tableHeaders.map((h) => <th key={h.label} className={`px-2 py-2 lg:px-4 lg:py-3 text-center border-b border-white/20 text-xs lg:text-sm font-semibold whitespace-nowrap ${h.cls ?? ""}`}>{h.label}</th>)}</tr>
-                    </thead>
-                    <thead className={`sticky top-0 z-10 text-white md:hidden ${activeTeamCfg?.headerBg ?? "bg-camublue-900"}`}>
-                      <tr><th className="px-3 py-3 text-left text-sm font-semibold" colSpan={12}>{activeTeamCfg ? activeTeamCfg.short : "Toutes les équipes"} — {filtered.length} employé{filtered.length > 1 ? "s" : ""}</th></tr>
-                    </thead>
-                    <tbody>
-                      {loading
-                        ? [...Array(5)].map((_, i) => (
-                          <tr key={i} className="border-b border-slate-100">
-                            {tableHeaders.map((h, j) => <td key={j} className={`px-2 py-2 lg:px-4 lg:py-3 ${h.cls ?? ""}`}><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>)}
-                          </tr>
-                        ))
-                        : pageData.length
-                          ? pageData.map((r) => (
-                            <TableRow key={r.employee_id} r={r} isLate={isLateRecord(r)}
-                              onAlert={() => { setSelectedEmployee(r); setAlertModalOpen(true); }}
-                              onDetail={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
-                              onEdit={() => { setEditRecord(r); setEditModalOpen(true); }} />
-                          ))
-                          : <tr><td colSpan={13} className="text-center py-16 text-slate-400 text-sm">
-                            {noPlanningToday && statusFilter === "all" && !selectedTeam ? (
-                              <div className="flex flex-col items-center gap-3">
-                                <CalendarRange className="h-12 w-12 text-slate-200" />
-                                <p className="font-medium text-slate-500">Pas de planning disponible pour aujourd'hui</p>
-                                <button onClick={handlePlanningClick}
-                                  className="mt-1 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition">
-                                  <CalendarRange className="h-4 w-4" /> Gérer le planning
-                                </button>
-                              </div>
-                            ) : statusFilter === "late" ? "Aucun retard." : statusFilter === "deficit" ? "Aucune heure manquante." : "Aucun enregistrement trouvé."}
-                          </td></tr>
-                      }
-                    </tbody>
-                  </table>
-                </div>
-
-                {filtered.length > 0 && (
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-1 shrink-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs sm:text-sm text-slate-500">
-                        {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} / <strong className="text-slate-700">{filtered.length}</strong>
-                      </span>
-                      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
-                        <span className="text-xs text-slate-400">Lignes :</span>
-                        <div className="flex items-center gap-0.5">
-                          {PAGE_SIZE_OPTIONS.map((size) => (
-                            <button key={size} onClick={() => { setPageSize(size); setPage(1); }}
-                              className={`min-w-[28px] h-6 rounded text-xs font-semibold transition-all ${pageSize === size ? "bg-camublue-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}>{size}</button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setPage(1)} disabled={page === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleLeft size={12} /></button>
-                      <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-4 w-4" /></button>
-                      <div className="flex items-center gap-0.5 mx-1">
-                        {getPageNumbers().map((p, i) =>
-                          p === "..."
-                            ? <span key={`e-${i}`} className="px-1 text-slate-400 text-sm">…</span>
-                            : <button key={p} onClick={() => setPage(p as number)}
-                              className={`min-w-[28px] sm:min-w-[32px] h-7 sm:h-8 rounded-md text-xs sm:text-sm font-medium transition-colors ${page === p ? "bg-camublue-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}>{p}</button>
-                        )}
-                      </div>
-                      <button onClick={() => setPage((p) => Math.min(p + 1, totalPages))} disabled={page === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-4 w-4" /></button>
-                      <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleRight size={12} /></button>
-                    </div>
-                  </div>
-                )}
-
-                {!selectedTeam && pendingShiftRows.length > 0 && (
-                  <div className="shrink-0 rounded-xl border border-blue-200 overflow-hidden shadow-sm">
-                    <button onClick={() => setShowPendingShifts((v) => !v)}
-                      className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors text-sm text-blue-700">
-                      <div className="flex items-center gap-2">
-                        <ChevronDown className={`h-4 w-4 text-blue-400 transition-transform ${showPendingShifts ? "rotate-180" : ""}`} />
-                        <Clock className="h-4 w-4 text-blue-400" />
-                        <span className="font-semibold text-blue-800">Shifts à venir — En attente de pointage</span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-200 text-blue-700">{pendingShiftRows.length}</span>
-                      </div>
-                    </button>
-                    {showPendingShifts && (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full bg-white">
-                          <tbody className="divide-y divide-blue-50">
-                            {pendingShiftRows.map((r) => (
-                              <tr key={r.employee_id} className="bg-blue-50/30 text-sm">
-                                <td className="px-4 py-2.5 font-mono text-xs text-slate-400 w-24">{r.matricule || "—"}</td>
-                                <td className="px-4 py-2.5 font-medium text-slate-700">{r.full_name}</td>
-                                <td className="px-4 py-2.5 text-xs text-slate-500">{r.department !== "—" ? r.department : "—"}</td>
-                                <td className="px-4 py-2.5"><ShiftTeamPill teamKey={r.shift_team} /></td>
-                                <td className="px-4 py-2.5">
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 ring-1 ring-blue-200 whitespace-nowrap">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />En attente
-                                  </span>
-                                </td>
-                                <td className="px-4 py-2.5">
-                                  <button onClick={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
-                                    Détail
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {notScheduledRows.length > 0 && (
-                  <div className="shrink-0 rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                    <button onClick={() => setShowNotScheduled((v) => !v)}
-                      className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-sm text-slate-600">
-                      <div className="flex items-center gap-2">
-                        <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showNotScheduled ? "rotate-180" : ""}`} />
-                        <span className="font-semibold text-slate-700">Non planifiés ce jour</span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-600">{notScheduledRows.length}</span>
-                        <span className="text-xs text-slate-400">— Pas de service · non comptés dans les absences</span>
-                      </div>
-                    </button>
-                    {showNotScheduled && (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full bg-white">
-                          <tbody className="divide-y divide-slate-100">
-                            {notScheduledRows.map((r) => (
-                              <tr key={r.employee_id} className="bg-slate-50/60 text-sm">
-                                <td className="px-4 py-2.5 font-mono text-xs text-slate-400 w-24">{r.matricule || "—"}</td>
-                                <td className="px-4 py-2.5 font-medium text-slate-700">{r.full_name}</td>
-                                <td className="px-4 py-2.5 text-xs text-slate-500">{r.department !== "—" ? r.department : "—"}</td>
-                                <td className="px-4 py-2.5"><ShiftTeamPill teamKey={r.shift_team} /></td>
-                                <td className="px-4 py-2.5"><RestDayBadge /></td>
-                                <td className="px-4 py-2.5">
-                                  <button onClick={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-camublue-50 text-camublue-900 hover:bg-camublue-100 ring-1 ring-camublue-200 transition">
-                                    Détail
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        ) : viewMode === "period" ? (
-          // ── Vue Période personnalisée ──────────────────────────────────────
-          <div className="flex-1 min-h-0 flex flex-col gap-4">
-            {/* Sélecteur équipe période */}
-            <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
-              <button onClick={() => { setPeriodTeam(null); }}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${periodTeam === null ? "border-camublue-900 bg-camublue-900/10 text-camublue-900" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
-                <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" /><span className="truncate text-xs sm:text-sm">Toutes équipes</span>
-              </button>
-              {SHIFT_TEAMS.map((team) => {
-                const isActive = periodTeam === team.key;
-                const teamCount = flatPeriodRecords.filter(r => r.shift_team === team.key).length;
-                return (
-                  <button key={team.key} onClick={() => { setPeriodTeam(isActive ? null : team.key); }}
-                    className={`flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl border-2 transition-all text-sm font-semibold ${isActive ? `${team.activeBg} ${team.activeText} ${team.activeBorder}` : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}>
-                    <div className="flex flex-col items-start min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full shrink-0 ${team.dot}`} />
-                        <span className="truncate text-xs sm:text-sm">{team.short}</span>
-                      </div>
-                      <span className="text-[10px] opacity-70 pl-3.5 hidden sm:block">{team.horaire}</span>
-                    </div>
-                    {teamCount > 0 && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? "bg-white/30" : "bg-slate-100 text-slate-500"}`}>{teamCount}</span>}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Filtres statut pour la vue période */}
-            <div className="shrink-0 w-full overflow-x-auto">
-              <div className="flex items-center gap-1 bg-slate-100/80 rounded-xl p-1 border border-camublue-900/20 shadow-sm min-w-max">
-                {QUICK_FILTERS.map((f) => {
-                  const cnt = flatPeriodRecords.filter((r) => {
-                    const matchStatus = f.key === "all" ? true
-                      : f.key === "late" ? r.status === "ok" && r.late_minutes > 0
-                      : f.key === "deficit" ? r.deficit_minutes > 0
-                      : f.key === "incomplete" ? r.status === "incomplete"
-                      : f.key === "anomaly" ? r.status === "anomaly"
-                      : f.key === "absent" ? r.status === "absent"
-                      : f.key === "on_leave" ? r.status === "on_leave"
-                      : f.key === "on_mission" ? r.status === "on_mission"
-                      : r.status === f.key;
-                    const matchSearch = !periodSearch || r.full_name?.toLowerCase().includes(periodSearch.toLowerCase()) || r.matricule?.toLowerCase().includes(periodSearch.toLowerCase());
-                    return matchStatus && matchSearch;
-                  }).length;
-                  const isActive = periodStatus === f.key || (f.key === "all" && !periodStatus);
-                  return (
-                    <button key={f.key}
-                      onClick={() => { setPeriodStatus(f.key === "all" ? "" : f.key); setPeriodPage(1); }}
-                      className={`relative inline-flex flex-col items-center justify-center gap-0.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 whitespace-nowrap shrink-0 ${isActive ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-white/60"}`}>
-                      <span className="inline-flex items-center gap-1">
-                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActive ? f.activeDot : f.dotColor}`} />
-                        <span className="hidden sm:inline">{f.label}</span>
-                        <span className="sm:hidden">{f.label.split(" ")[0]}</span>
-                      </span>
-                      <span className={`tabular-nums font-bold leading-none ${isActive ? "text-camublue-900" : "text-slate-400/70"}`}>{cnt}</span>
-                    </button>
-                  );
-                })}
-                {periodStatus && (
-                  <>
-                    <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
-                    <button onClick={() => { setPeriodStatus(""); setPeriodPage(1); }} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500 hover:bg-white/60 transition-all shrink-0">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Table période — affichage plat identique à la vue Journalier */}
-            <div className="flex-1 min-h-0 flex flex-col gap-2">
-              {periodLoading ? (
-                <div className="flex items-center justify-center py-20 text-slate-400">
-                  <Loader2 className="h-8 w-8 animate-spin mr-3" />
-                  <span className="text-sm font-medium">Chargement des données...</span>
-                </div>
-              ) : !periodData ? (
-                <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
-                  <CalendarRange className="h-12 w-12 text-slate-200" />
-                  <p className="text-sm font-medium">Définissez une <strong>date de début</strong> et une <strong>date de fin</strong>, puis cliquez sur <strong>Afficher</strong></p>
-                </div>
-              ) : filteredPeriodRecords.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
-                  <CalendarDays className="h-12 w-12 text-slate-200" />
-                  <p className="text-sm font-medium">Aucun pointage trouvé sur cette période</p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
-                    <table className="min-w-full bg-white">
-                      <thead className="sticky top-0 z-10 bg-camublue-900 text-white">
-                        <tr>
-                          {["Date", "Matricule", "Nom", "Projet/Dép.", "Équipe", "Statut", "Retard", "Entrée", "Sortie", "H. Travaillées"].map((h) => (
-                            <th key={h} className="px-4 py-3 text-center text-xs font-semibold whitespace-nowrap border-b border-white/20">{h}</th>
+              <div className="flex-1 overflow-auto rounded-xl border border-slate-200 shadow-sm min-h-0">
+                <table className="w-full table-fixed bg-white">
+                  <colgroup>
+                    <col className="w-[8%]" />
+                    <col className="w-[18%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[8%]" />
+                  </colgroup>
+                  <thead className="bg-camublue-900 text-white sticky top-0 z-10">
+                    <tr>
+                      {tableHeaders.map(h => (
+                        <th key={h} className="px-3 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      [...Array(5)].map((_, i) => (
+                        <tr key={i} className="border-b border-slate-100">
+                          {[...Array(tableHeaders.length)].map((_, j) => (
+                            <td key={j} className="px-4 py-3"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>
                           ))}
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {periodPageData.map((row, idx) => {
-                          const STATUS_STYLES: Record<string, string> = {
-                            ok: "bg-emerald-100 text-emerald-700 ring-emerald-200",
-                            absent: "bg-red-100 text-red-700 ring-red-200",
-                            incomplete: "bg-amber-100 text-amber-700 ring-amber-200",
-                            anomaly: "bg-violet-100 text-violet-700 ring-violet-200",
-                            not_working: "bg-slate-100 text-slate-500 ring-slate-200",
-                            on_leave: "bg-sky-100 text-sky-700 ring-sky-200",
-                            on_mission: "bg-indigo-100 text-indigo-700 ring-indigo-200",
-                          };
-                          const STATUS_LABELS: Record<string, string> = {
-                            ok: "Présent", absent: "Absent", incomplete: "Incomplet",
-                            anomaly: "Anomalie", not_working: "Repos",
-                            on_leave: "En congé", on_mission: "En mission",
-                          };
-                          const dateLabel = new Date(row._date + "T00:00:00").toLocaleDateString("fr-FR", {
-                            weekday: "short", day: "2-digit", month: "short",
-                          });
-                          const isReplaced = !!row.replaced_by;
-                          const isReplacer = !!row.replaces_employee;
-                          const rowBg = isReplaced
-                            ? "bg-red-50/50"
-                            : isReplacer
-                            ? "bg-purple-50/50"
-                            : "hover:bg-slate-50/70";
-                          return (
-                            <tr key={`${row._date}-${row.employee_id}-${idx}`}
-                              className={`text-sm transition-colors ${rowBg}`}>
-                              <td className="px-4 py-2.5 text-center whitespace-nowrap">
-                                <span className="text-xs font-semibold text-camublue-900 bg-camublue-50 px-2 py-0.5 rounded-lg capitalize">{dateLabel}</span>
-                              </td>
-                              <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-400">{row.matricule || "—"}</td>
-                              <td className="px-4 py-2.5">
-                                {isReplaced ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="line-through text-red-400 text-xs">{row.full_name}</span>
-                                    <ArrowRight className="h-3 w-3 text-slate-300 shrink-0" />
-                                    <span className="text-purple-600 font-bold text-xs">{row.replaced_by}</span>
-                                  </div>
-                                ) : isReplacer ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-purple-700 text-xs">{row.full_name}</span>
-                                    <span className="text-[10px] font-bold bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded-full ring-1 ring-purple-200">Remplacement</span>
-                                  </div>
-                                ) : (
-                                  <span className="text-xs font-medium text-slate-700">{row.full_name}</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-2.5 text-center">
-                                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
-                                  {(row.department ?? departmentMap.get(row.matricule ?? "") ?? "—").toUpperCase()}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2.5 text-center">
-                                <ShiftTeamPill teamKey={row.shift_team} />
-                              </td>
-                              <td className="px-4 py-2.5 text-center">
-                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1 ${STATUS_STYLES[row.status] ?? STATUS_STYLES.anomaly}`}>
-                                  {STATUS_LABELS[row.status] ?? row.status}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2.5 text-center">
-                                {row.is_late && row.late_label
-                                  ? <span className="text-orange-600 font-semibold text-xs">{row.late_label}</span>
-                                  : <span className="text-slate-300 text-xs">—</span>}
-                              </td>
-                              <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-600">
-                                {/* Shift 22h-08h : entrée réelle = out_time */}
-                                {row.shift_team === "soir2"
-                                  ? row.out_time ? formatTime(row.out_time)
-                                    : row.replacement_out_time ? <span className="text-purple-600">{formatTime(row.replacement_out_time)}</span>
-                                    : <span className="text-slate-300">—</span>
-                                  : row.in_time ? formatTime(row.in_time)
-                                    : row.replacement_in_time ? <span className="text-purple-600">{formatTime(row.replacement_in_time)}</span>
-                                    : <span className="text-slate-300">—</span>}
-                              </td>
-                              <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-600">
-                                {/* Shift 22h-08h : sortie réelle = in_time */}
-                                {row.shift_team === "soir2"
-                                  ? row.in_time ? formatTime(row.in_time)
-                                    : row.replacement_in_time ? <span className="text-purple-600">{formatTime(row.replacement_in_time)}</span>
-                                    : <span className="text-slate-300">—</span>
-                                  : row.out_time ? formatTime(row.out_time)
-                                    : row.replacement_out_time ? <span className="text-purple-600">{formatTime(row.replacement_out_time)}</span>
-                                    : <span className="text-slate-300">—</span>}
-                              </td>
-                              <td className="px-4 py-2.5 text-center">
-                                {(row.worked_minutes > 0 || (row.replacement_worked_minutes ?? 0) > 0)
-                                  ? <WorkedTimeBadge minutes={row.worked_minutes > 0 ? row.worked_minutes : (row.replacement_worked_minutes ?? 0)} />
-                                  : <span className="text-slate-300 text-xs">—</span>}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  {/* Pagination */}
-                  {filteredPeriodRecords.length > periodPageSize && (
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 shrink-0">
-                      <span className="text-xs text-slate-500">
-                        {(periodPage - 1) * periodPageSize + 1}–{Math.min(periodPage * periodPageSize, filteredPeriodRecords.length)} / <strong className="text-slate-700">{filteredPeriodRecords.length}</strong> enregistrements
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => setPeriodPage(1)} disabled={periodPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleLeft size={12} /></button>
-                        <button onClick={() => setPeriodPage((p) => Math.max(p - 1, 1))} disabled={periodPage === 1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-4 w-4" /></button>
-                        <span className="text-xs text-slate-600 px-2 font-medium">Page {periodPage} / {Math.ceil(filteredPeriodRecords.length / periodPageSize)}</span>
-                        <button onClick={() => setPeriodPage((p) => Math.min(p + 1, Math.ceil(filteredPeriodRecords.length / periodPageSize)))} disabled={periodPage >= Math.ceil(filteredPeriodRecords.length / periodPageSize)} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-4 w-4" /></button>
-                        <button onClick={() => setPeriodPage(Math.ceil(filteredPeriodRecords.length / periodPageSize))} disabled={periodPage >= Math.ceil(filteredPeriodRecords.length / periodPageSize)} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleRight size={12} /></button>
+                      ))
+                    ) : pageData.length ? (
+                      pageData.map(r => (
+                        <TableRow key={`${r.employee_id}-${r.shift_team}`} r={r} isLate={isLateRecord(r)}
+                          onAlert={() => { setSelectedEmployee(r); setAlertModalOpen(true); }}
+                          onDetail={() => { setSelectedEmployeeId(r.employee_id); setDetailModalOpen(true); }}
+                          onEdit={() => {}} />
+                      ))
+                    ) : (
+                      <tr><td colSpan={tableHeaders.length} className="text-center py-12 text-slate-400 text-sm">
+                        {statusFilter === "late" ? "Aucun retard." : statusFilter === "deficit" ? "Aucune heure manquante." : "Aucun enregistrement trouvé."}
+                      </td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {filtered.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-1 shrink-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs sm:text-sm text-slate-500">
+                      {(page-1)*pageSize+1}–{Math.min(page*pageSize, filtered.length)} / <strong className="text-slate-700">{filtered.length}</strong>
+                    </span>
+                    <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
+                      <span className="text-xs text-slate-400">Lignes :</span>
+                      <div className="flex items-center gap-0.5">
+                        {PAGE_SIZE_OPTIONS.map(size => (
+                          <button key={size} onClick={() => { setPageSize(size); setPage(1); }}
+                            className={`min-w-[28px] h-6 rounded text-xs font-semibold transition-all ${pageSize === size ? "bg-camublue-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}>
+                            {size}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                  )}
-                </>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button onClick={() => setPage(1)} disabled={page===1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleLeft size={12} /></button>
+                    <button onClick={() => setPage(p => Math.max(p-1,1))} disabled={page===1} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-4 w-4" /></button>
+                    <div className="flex flex-wrap items-center gap-0.5 mx-1">
+                      {getPageNumbers().map((p, i) =>
+                        p === "..." ? <span key={`e-${i}`} className="px-1 text-slate-400 text-sm">…</span>
+                          : <button key={p} onClick={() => setPage(p as number)}
+                              className={`min-w-[28px] sm:min-w-[32px] h-7 sm:h-8 rounded-md text-xs sm:text-sm font-medium transition-colors ${page===p ? "bg-camublue-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}>
+                              {p}
+                            </button>
+                      )}
+                    </div>
+                    <button onClick={() => setPage(p => Math.min(p+1,totalPages))} disabled={page===totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-4 w-4" /></button>
+                    <button onClick={() => setPage(totalPages)} disabled={page===totalPages} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"><FaAngleDoubleRight size={12} /></button>
+                  </div>
+                </div>
               )}
             </div>
-          </div>        ) : (
-          <SummaryTable
-            rows={filteredSummaryRecords}
-            mode={viewMode as "weekly" | "monthly"}
-            isLoading={loading}
-            byDay={viewMode === "weekly" ? weeklyData?.by_day : undefined}
-            onDetail={(id) => { setSelectedEmployeeId(id); setDetailModalOpen(true); }}
-          />
+          </>
+        ) : (
+          /* ── Vue Hebdo / Mensuel ── */
+          searchQ.trim() ? (
+            /* Recherche active : vue détail par jour, nom répété sur chaque ligne */
+            <ExpandedDayTable
+              records={filteredSummaryRecords}
+              dayDetails={empDayDetails}
+              isLoading={loading || detailsLoading}
+            />
+          ) : (
+            /* Vue résumé normale */
+            <SummaryTable
+              rows={filteredSummaryRecords}
+              mode={viewMode as "weekly"|"monthly"}
+              isLoading={loading}
+              byDay={viewMode === "weekly" ? (weeklyData as any)?.by_day : undefined}
+              onDetail={(id) => { setSelectedEmployeeId(id); setDetailModalOpen(true); }}
+            />
+          )
         )}
 
         {/* ── Modals ── */}
-        <DetailModal
-          open={detailModalOpen} onClose={() => setDetailModalOpen(false)}
-          employeeId={selectedEmployeeId}
-          initialWeek={viewMode === "weekly" ? week : currentWeek} />
+        <FilterModal
+          open={filterOpen} onClose={() => setFilterOpen(false)}
+          viewMode={viewMode} setViewMode={setViewMode}
+          date={date} setDate={setDate}
+          week={week} setWeek={setWeek}
+          month={month} setMonth={setMonth}
+          statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+          onApply={() => fetchData(false)} />
 
-        <AlertModal
-          open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
+        <DetailModal open={detailModalOpen} onClose={() => setDetailModalOpen(false)}
+          employeeId={selectedEmployeeId} initialWeek={week} />
+
+        <AlertModal open={alertModalOpen} onClose={() => setAlertModalOpen(false)}
           employee={selectedEmployee} onConfirm={handleSendAlert} sending={sendingAlert} />
 
-        {editModalOpen && editRecord && (
-          <EditPointageModal
-            record={editRecord}
-            date={date}
-            onClose={() => { setEditModalOpen(false); setEditRecord(null); }}
-            onSaved={() => fetchData(true)} />
-        )}
-
-        {/* ── Period Filter Modal ── */}
-        <AnimatePresence>
-          {showPeriodModal && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4"
-              onClick={(e) => { if (e.target === e.currentTarget) setShowPeriodModal(false); }}>
-              <motion.div
-                initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-                  <div>
-                    <h2 className="font-black text-camublue-900 text-base flex items-center gap-2">
-                      <CalendarRange className="h-5 w-5" />Filtrer par période
-                    </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Sélectionnez la date de début et de fin</p>
-                  </div>
-                  <button onClick={() => setShowPeriodModal(false)}
-                    className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <div className="px-5 py-5 space-y-4">
-                  <div className="flex gap-3">
-                    <div className="flex-1">
-                      <label className="text-xs font-semibold text-slate-500 block mb-1.5">Date de début</label>
-                      <input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs font-semibold text-slate-500 block mb-1.5">Date de fin</label>
-                      <input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)}
-                        max={todayISO()}
-                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
-                    </div>
-                  </div>
-                  {periodFrom && periodTo && periodFrom <= periodTo && (
-                    <div className="flex items-center gap-2 p-3 rounded-xl bg-indigo-50 border border-indigo-100">
-                      <CalendarDays className="h-4 w-4 text-indigo-500 shrink-0" />
-                      <span className="text-xs font-medium text-indigo-700">
-                        {Math.ceil((new Date(periodTo + "T00:00:00").getTime() - new Date(periodFrom + "T00:00:00").getTime()) / (1000 * 60 * 60 * 24)) + 1} jours sélectionnés
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                  <button onClick={() => setShowPeriodModal(false)}
-                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
-                    Annuler
-                  </button>
-                  <button
-                    onClick={() => { setShowPeriodModal(false); fetchPeriodData(); }}
-                    disabled={!periodFrom || !periodTo || periodFrom > periodTo}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-camublue-900 text-camublue-900 text-sm font-bold hover:bg-camublue-50 disabled:opacity-50 transition">
-                    <Table2 className="h-4 w-4" />Afficher
-                  </button>
-                  <button
-                    onClick={handlePeriodExport}
-                    disabled={!periodFrom || !periodTo || periodFrom > periodTo || periodLoading}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
-                    {periodLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-                    {periodLoading ? "Chargement…" : "Exporter"}
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <WorkScheduleModal
+          open={showScheduleModal} onClose={() => setShowScheduleModal(false)}
+          active={activeSchedule} presets={presets}
+          onSave={(s) => { setActiveSchedule(s); saveShiftSchedule(s).catch(console.error); }}
+          onPresetsChange={setPresets} />
 
         {/* ── Export Dialog ── */}
         <AnimatePresence>
           {showExportDlg && (() => {
-            const isDailyMode  = viewMode === "daily";
-            const isPeriodMode = viewMode === "period";
-            const availCols   = isPeriodMode ? SHIFT_PERIOD_COLS : isDailyMode ? SHIFT_DAILY_COLS : SHIFT_SUMM_COLS;
-            const selCols     = isPeriodMode ? exportPeriodCols  : isDailyMode ? exportDailyCols  : exportSummaryCols;
-            const setSelCols  = isPeriodMode
-              ? (v: ShiftPeriodCol[]) => setExportPeriodCols(v)
-              : isDailyMode
+            const isDailyMode = viewMode === "daily";
+            const availCols = isDailyMode ? SHIFT_DAILY_COLS : SHIFT_SUMM_COLS;
+            const selCols   = isDailyMode ? exportDailyCols  : exportSummaryCols;
+            const setSelCols = isDailyMode
               ? (v: ShiftDailyCol[]) => setExportDailyCols(v)
               : (v: ShiftSummCol[])  => setExportSummaryCols(v);
-            // Only show departments present in shift records (not all company departments)
-            const shiftDeptSet = new Set<string>();
-            allRecords.forEach(r => { if (r.department && r.department !== "—") shiftDeptSet.add(r.department.toUpperCase()); });
-            flatPeriodRecords.forEach(r => { if (r.department) shiftDeptSet.add(r.department.toUpperCase()); });
-            // Fallback: use departmentMap for records that have shift team assignments
-            allRecords.forEach(r => {
-              const d = departmentMap.get(r.matricule ?? "");
-              if (d) shiftDeptSet.add(d.toUpperCase());
-            });
-            const allDepts = Array.from(shiftDeptSet).sort();
-            const filteredDepts = exportDeptSearch.trim()
-              ? allDepts.filter(d => d.toLowerCase().includes(exportDeptSearch.toLowerCase()))
-              : allDepts;
             return (
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -3651,109 +2836,43 @@ export default function AttendanceShiftsPage() {
                     <div>
                       <h2 className="font-black text-camublue-900 text-base">Export personnalisé</h2>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        {isDailyMode
-                          ? (exportFrom === exportTo ? `Journalier · ${exportFrom}` : `Plage · ${exportFrom} → ${exportTo}`)
-                          : isPeriodMode
-                          ? `Période · ${exportFrom} → ${exportTo}`
-                          : viewMode === "weekly" ? "Vue hebdomadaire" : "Vue mensuelle"}
+                        {isDailyMode ? `Journalier · ${date}` : viewMode === "weekly" ? `Semaine · ${week}` : `Mensuel · ${month}`}
                         {" · "}Sélectionnez les colonnes à inclure
                       </p>
                     </div>
-                    <button onClick={() => setShowExportDlg(false)}
-                      className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
+                    <button onClick={() => setShowExportDlg(false)} className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
-                    {/* Date range */}
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500 mb-2">Période d'export</p>
-                      <div className="flex gap-3">
-                        <div className="flex-1">
-                          <label className="text-xs text-slate-400 block mb-1">Du</label>
-                          <input type="date" value={exportFrom} onChange={(e) => setExportFrom(e.target.value)}
-                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
-                        </div>
-                        <div className="flex-1">
-                          <label className="text-xs text-slate-400 block mb-1">Au</label>
-                          <input type="date" value={exportTo} onChange={(e) => setExportTo(e.target.value)}
-                            min={exportFrom}
-                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
-                        </div>
+                  <div className="px-5 py-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <p className="text-xs font-semibold text-slate-500">{selCols.length}/{availCols.length} colonnes</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => setSelCols([...availCols] as any)} className="text-xs text-camublue-700 hover:underline font-medium">Tout</button>
+                        <span className="text-slate-300">|</span>
+                        <button onClick={() => setSelCols([] as any)} className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
                       </div>
                     </div>
-                    {/* Department filter */}
-                    {allDepts.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 mb-2">
-                          Département <span className="text-slate-400 font-normal">(optionnel — laisser vide pour tous)</span>
-                        </p>
-                        <div className="relative mb-2">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                          <input type="text" value={exportDeptSearch} onChange={(e) => setExportDeptSearch(e.target.value)}
-                            placeholder="Rechercher un département…"
-                            className="w-full rounded-xl border border-slate-200 pl-8 pr-3 py-2 text-sm focus:border-camublue-900 focus:ring-2 focus:outline-none" />
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                          {filteredDepts.map(dept => {
-                            const sel = exportDepts.includes(dept);
-                            return (
-                              <button key={dept} onClick={() => setExportDepts(sel ? exportDepts.filter(d => d !== dept) : [...exportDepts, dept])}
-                                className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${sel ? "bg-camublue-900 text-white border-transparent" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"}`}>
-                                {dept}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {exportDepts.length > 0 && (
-                          <button onClick={() => setExportDepts([])} className="text-xs text-red-500 hover:underline mt-1">Effacer la sélection</button>
-                        )}
-                      </div>
-                    )}
-                    {/* Column selection */}
-                    <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <p className="text-xs font-semibold text-slate-500">
-                          {selCols.length}/{availCols.length} colonnes sélectionnées
-                        </p>
-                        <div className="flex gap-2">
-                          <button onClick={() => setSelCols([...availCols] as any)}
-                            className="text-xs text-camublue-700 hover:underline font-medium">Tout</button>
-                          <span className="text-slate-300">|</span>
-                          <button onClick={() => setSelCols([] as any)}
-                            className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                        {availCols.map((col) => {
-                          const checked = (selCols as string[]).includes(col);
-                          return (
-                            <label key={col}
-                              className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer border transition text-sm ${
-                                checked ? "bg-camublue-50 border-camublue-200 text-camublue-800" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                              }`}>
-                              <input type="checkbox" checked={checked} onChange={() => {
-                                const next = checked
-                                  ? (selCols as string[]).filter((k) => k !== col)
-                                  : [...(selCols as string[]), col];
-                                setSelCols(next as any);
-                              }} className="accent-camublue-700 w-3.5 h-3.5" />
-                              <span className="font-medium">{col}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
+                    <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                      {availCols.map(col => {
+                        const checked = (selCols as string[]).includes(col);
+                        return (
+                          <label key={col} className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer border transition text-sm ${checked ? "bg-camublue-50 border-camublue-200 text-camublue-800" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"}`}>
+                            <input type="checkbox" checked={checked} onChange={() => {
+                              const next = checked ? (selCols as string[]).filter(k => k !== col) : [...(selCols as string[]), col];
+                              setSelCols(next as any);
+                            }} className="accent-camublue-700 w-3.5 h-3.5" />
+                            <span className="font-medium">{col}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                    <button onClick={() => setShowExportDlg(false)}
-                      className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
-                      Annuler
-                    </button>
-                    <button onClick={doExport} disabled={selCols.length === 0 || exportLoading}
+                    <button onClick={() => setShowExportDlg(false)} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">Annuler</button>
+                    <button onClick={doExport} disabled={selCols.length === 0}
                       className="flex items-center gap-2 px-5 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
-                      <FileSpreadsheet className="h-4 w-4" />
-                      {exportLoading ? "Chargement…" : "Télécharger"}
+                      <FileSpreadsheet className="h-4 w-4" />Télécharger
                     </button>
                   </div>
                 </motion.div>
@@ -3761,22 +2880,6 @@ export default function AttendanceShiftsPage() {
             );
           })()}
         </AnimatePresence>
-
-        {/* Modal de filtre */}
-        <FilterModal
-          open={filterOpen}
-          onClose={() => setFilterOpen(false)}
-          viewMode={viewMode}
-          setViewMode={setViewMode}
-          date={date}
-          setDate={setDate}
-          periodFrom={periodFrom}
-          setPeriodFrom={setPeriodFrom}
-          periodTo={periodTo}
-          setPeriodTo={setPeriodTo}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          onApply={() => { viewMode === "period" ? fetchPeriodData() : fetchData(false); }} />
       </motion.div>
     </AppLayout>
   );
