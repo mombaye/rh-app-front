@@ -126,6 +126,8 @@ export type RepondrePayload = {
   recommande_camusat: "oui" | "non" | "peut_etre";
   nouveau_poste_entreprise?: string;
   suggestions_commentaires?: string;
+  // Formulaire dynamique (généré depuis DOCX uploadé)
+  reponses_json?: Record<string, unknown>;
 };
 
 export type MonQuestionnaire = {
@@ -201,6 +203,53 @@ export const repondreQuestionnaire = async (
     `${BASE_URL}/api/questionnaires-sortie/public/${token}/repondre/`,
     payload
   );
+  return res.data;
+};
+
+// ── Template DOCX ────────────────────────────────────────────────────────────
+
+export type QuestionType = "text" | "checkbox_list" | "scale4" | "scale5" | "oui_non";
+
+export type QuestionDef = {
+  key: string;
+  num: string | null;
+  label: string;
+  type: QuestionType;
+  options?: string[];         // pour checkbox_list
+  scale_labels?: string[];    // pour scale4 / scale5
+};
+
+export type SectionDef = {
+  num: string;
+  title: string;
+  subtitle: string;
+  questions: QuestionDef[];
+};
+
+export type QuestionnaireStructure = {
+  sections: SectionDef[];
+};
+
+export type QuestionnaireTemplateInfo = {
+  id: number;
+  file_name: string;
+  uploaded_at: string;
+  structure: QuestionnaireStructure;
+};
+
+export const uploadQuestionnaireTemplate = async (
+  file: File
+): Promise<QuestionnaireTemplateInfo & { sections: number; questions: number }> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post("/api/questionnaires-sortie/template/upload/", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+};
+
+export const getQuestionnaireTemplate = async (): Promise<QuestionnaireTemplateInfo> => {
+  const res = await api.get("/api/questionnaires-sortie/template/");
   return res.data;
 };
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";
 import {
@@ -17,6 +17,8 @@ import {
   UserX,
   UserCheck,
   AlertTriangle,
+  Upload,
+  FileText,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -24,6 +26,8 @@ import {
   getQuestionnaireDetail,
   envoyerQuestionnaire,
   toggleCompteQuestionnaire,
+  uploadQuestionnaireTemplate,
+  getQuestionnaireTemplate,
   RAISONS_DEPART,
   SAT4_LABELS, SAT4_EMOJIS,
   REL5_LABELS, REL5_EMOJIS,
@@ -31,6 +35,7 @@ import {
   type QuestionnaireSortieItem,
   type QuestionnaireSortieDetail,
   type StatutQuestionnaire,
+  type QuestionnaireTemplateInfo,
 } from "@/services/questionnaireService";
 import { getEmployees } from "@/services/employeeService";
 import type { Employee } from "@/types/employee";
@@ -178,6 +183,39 @@ function DetailModal({ id, onClose }: { id: number; onClose: () => void }) {
             </div>
 
             {detail.statut === "complete" ? (<>
+
+              {/* Réponses dynamiques (formulaire généré depuis DOCX) */}
+              {(detail as any).reponses_json && Object.keys((detail as any).reponses_json).length > 0 && (
+                <div className="space-y-3">
+                  <SectionTitle num="≡" title="Réponses au formulaire" />
+                  {Object.entries((detail as any).reponses_json as Record<string, unknown>).map(([key, val]) => {
+                    const displayKey = key.replace(/^q_/, "").replace(/_/g, ".");
+                    if (Array.isArray(val)) {
+                      return (
+                        <div key={key}>
+                          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{displayKey}</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {val.map((v) => (
+                              <span key={String(v)} className="text-xs px-2.5 py-1 bg-[#003c71]/10 text-[#003c71] rounded-full font-medium">
+                                {String(v)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (typeof val === "number") {
+                      return (
+                        <div key={key} className="flex items-center justify-between py-1 border-b border-slate-50">
+                          <span className="text-sm text-slate-600">{displayKey}</span>
+                          <span className="text-xs font-bold bg-camublue-900 text-white px-2.5 py-0.5 rounded-full">{val}</span>
+                        </div>
+                      );
+                    }
+                    return <TextField key={key} label={displayKey} value={String(val || "")} />;
+                  })}
+                </div>
+              )}
 
               {isV2 ? (<>
                 {/* ── Section 2 ── */}
@@ -555,16 +593,196 @@ function EnvoiModal({
   );
 }
 
+// ── Modal Upload Template ──────────────────────────────────────────────────────
+function UploadTemplateModal({
+  currentTemplate,
+  onClose,
+  onUploaded,
+}: {
+  currentTemplate: QuestionnaireTemplateInfo | null;
+  onClose: () => void;
+  onUploaded: (t: QuestionnaireTemplateInfo) => void;
+}) {
+  const [file, setFile]           = useState<File | null>(null);
+  const [dragging, setDragging]   = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult]       = useState<{ sections: number; questions: number } | null>(null);
+  const inputRef                  = useRef<HTMLInputElement>(null);
+
+  const handleFile = (f: File) => {
+    const ext = f.name.toLowerCase().split(".").pop();
+    if (ext !== "docx" && ext !== "doc") {
+      toast.error("Seuls les fichiers .docx sont acceptés.");
+      return;
+    }
+    setFile(f);
+    setResult(null);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const res = await uploadQuestionnaireTemplate(file);
+      setResult({ sections: res.sections, questions: res.questions });
+      onUploaded(res);
+      toast.success(`Questionnaire analysé : ${res.sections} sections, ${res.questions} questions`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail ?? "Erreur lors de l'upload.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-xl w-full max-w-lg"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-lg font-bold text-camublue-900">
+              Importer le formulaire questionnaire
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Le programme analysera le fichier .docx et générera le formulaire dynamiquement
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100">
+            <X size={18} className="text-slate-500" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {/* Template actuel */}
+          {currentTemplate && !result && (
+            <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+              <FileText size={15} className="text-blue-600 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-blue-700">Template actuel</p>
+                <p className="text-xs text-blue-500 truncate">{currentTemplate.file_name}</p>
+              </div>
+              <span className="text-xs text-blue-400 shrink-0 ml-auto">
+                {new Date(currentTemplate.uploaded_at).toLocaleDateString("fr-FR")}
+              </span>
+            </div>
+          )}
+
+          {/* Résultat parsing */}
+          {result && (
+            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+              <CheckCircle size={15} className="text-green-600 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-green-700">Analyse réussie !</p>
+                <p className="text-xs text-green-500">
+                  {result.sections} sections · {result.questions} questions détectées
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Zone de dépôt */}
+          <div
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => inputRef.current?.click()}
+            className={`relative border-2 border-dashed rounded-xl p-8 flex flex-col items-center gap-3 cursor-pointer transition-colors ${
+              dragging
+                ? "border-camublue-900 bg-camublue-900/5"
+                : file
+                ? "border-green-400 bg-green-50"
+                : "border-slate-200 hover:border-slate-300 bg-slate-50"
+            }`}
+          >
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".docx,.doc"
+              className="hidden"
+              onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
+            />
+            {file ? (
+              <>
+                <FileText size={32} className="text-green-500" />
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-slate-800 break-all">{file.name}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {(file.size / 1024).toFixed(1)} Ko — cliquez pour changer
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-12 h-12 rounded-xl bg-slate-200 flex items-center justify-center">
+                  <Upload size={20} className="text-slate-500" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-slate-700">
+                    Glissez-déposez votre fichier ici
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">ou cliquez pour parcourir — .docx uniquement</p>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 border border-slate-200 text-slate-600 text-sm font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition"
+            >
+              {result ? "Fermer" : "Annuler"}
+            </button>
+            {!result && (
+              <button
+                onClick={handleUpload}
+                disabled={!file || uploading}
+                className="flex-1 flex items-center justify-center gap-2 bg-camublue-900 hover:bg-camublue-800 text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50"
+              >
+                {uploading
+                  ? <><Loader2 size={15} className="animate-spin" /> Analyse en cours…</>
+                  : <><Upload size={15} /> Importer et analyser</>
+                }
+              </button>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ── Page principale ────────────────────────────────────────────────────────────
 export default function GestionQuestionnairesPage() {
-  const [items, setItems]               = useState<QuestionnaireSortieItem[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [refreshing, setRefreshing]     = useState(false);
-  const [filtre, setFiltre]             = useState<"tous" | "envoye" | "complete">("tous");
-  const [showEnvoi, setShowEnvoi]       = useState(false);
-  const [selectedId, setSelectedId]     = useState<number | null>(null);
-  const [toggleTarget, setToggleTarget] = useState<QuestionnaireSortieItem | null>(null);
-  const [toggling, setToggling]         = useState(false);
+  const [items, setItems]                   = useState<QuestionnaireSortieItem[]>([]);
+  const [loading, setLoading]               = useState(true);
+  const [refreshing, setRefreshing]         = useState(false);
+  const [filtre, setFiltre]                 = useState<"tous" | "envoye" | "complete">("tous");
+  const [showEnvoi, setShowEnvoi]           = useState(false);
+  const [showUpload, setShowUpload]         = useState(false);
+  const [currentTemplate, setCurrentTemplate] = useState<QuestionnaireTemplateInfo | null>(null);
+  const [selectedId, setSelectedId]         = useState<number | null>(null);
+  const [toggleTarget, setToggleTarget]     = useState<QuestionnaireSortieItem | null>(null);
+  const [toggling, setToggling]             = useState(false);
+
+  // Charge le template existant au montage
+  useEffect(() => {
+    getQuestionnaireTemplate().then(setCurrentTemplate).catch(() => {});
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -632,6 +850,16 @@ export default function GestionQuestionnairesPage() {
             >
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">Actualiser</span>
+            </button>
+            <button
+              onClick={() => setShowUpload(true)}
+              className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition shadow-sm"
+              title="Importer le formulaire .docx"
+            >
+              <Upload size={14} />
+              <span className="hidden sm:inline">
+                {currentTemplate ? "Mettre à jour le formulaire" : "Importer le formulaire"}
+              </span>
             </button>
             <button
               onClick={() => setShowEnvoi(true)}
@@ -754,6 +982,13 @@ export default function GestionQuestionnairesPage() {
 
       {/* Modals */}
       <AnimatePresence>
+        {showUpload && (
+          <UploadTemplateModal
+            currentTemplate={currentTemplate}
+            onClose={() => setShowUpload(false)}
+            onUploaded={(t) => { setCurrentTemplate(t); }}
+          />
+        )}
         {showEnvoi && (
           <EnvoiModal
             onClose={() => setShowEnvoi(false)}
