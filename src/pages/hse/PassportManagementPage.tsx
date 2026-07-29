@@ -6,7 +6,7 @@ import { ImSpinner2 } from "react-icons/im";
 import { QRCodeCanvas } from "qrcode.react";
 import toast from "react-hot-toast";
 import ManagerLayout from "@/layouts/ManagerLayout";
-import { passportService, PassportFile, PassportCheckbox } from "@/services/passportService";
+import { passportService, PassportFile, PassportCheckbox, PassportDateField } from "@/services/passportService";
 
 const PAGE_SIZE = 10;
 
@@ -341,6 +341,11 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   const [checkboxes, setCheckboxes] = useState<PassportCheckbox[]>([]);
   const [togglingCb, setTogglingCb] = useState<string | null>(null);
 
+  // Champs de date interactifs
+  const [dateFields, setDateFields] = useState<PassportDateField[]>([]);
+  const [editingDate, setEditingDate] = useState<{ id: string; value: string } | null>(null);
+  const [savingDate, setSavingDate] = useState(false);
+
   // Charger le cachet au montage
   useEffect(() => {
     _ensureCachetLoaded().then(setCachetBlobUrl);
@@ -349,6 +354,11 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   // Charger les checkboxes au montage
   useEffect(() => {
     passportService.getCheckboxes(file.slug).then(setCheckboxes).catch(() => {});
+  }, [file.slug]);
+
+  // Charger les champs de date au montage
+  useEffect(() => {
+    passportService.getDateFields(file.slug).then(setDateFields).catch(() => {});
   }, [file.slug]);
 
   // Charger les cachets intégrés
@@ -373,6 +383,31 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
       toast.error("Impossible de mettre à jour la case.");
     } finally {
       setTogglingCb(null);
+    }
+  };
+
+  const handleDateSave = async () => {
+    if (!editingDate || savingDate) return;
+    // Convertir AAAA-MM-JJ (format input[type=date]) → MM/JJ/AAAA
+    const parts = editingDate.value.split("-");
+    const formatted = parts.length === 3 ? `${parts[1]}/${parts[2]}/${parts[0]}` : editingDate.value;
+    setSavingDate(true);
+    try {
+      await passportService.updateDateField(file.slug, editingDate.id, formatted);
+      setDateFields((prev) =>
+        prev.map((d) => d.id === editingDate.id ? { ...d, value: formatted, overridden: true } : d)
+      );
+      setEditingDate(null);
+      // Recharger l'image PDF
+      _page0Cache.delete(file.slug);
+      const newKey = cacheKey + 1;
+      setCacheKey(newKey);
+      setPages([]);
+      await loadPage(0, newKey);
+    } catch {
+      toast.error("Impossible de mettre à jour la date.");
+    } finally {
+      setSavingDate(false);
     }
   };
 
@@ -1009,6 +1044,119 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                         : "rgba(59,130,246,0.04)",
                     }}
                   />
+                );
+              })}
+
+              {/* ── Overlays champs de date ── */}
+              {currentPage === 0 && !placingPhoto && !placingCachets && !placingSig && dateFields.map((df) => {
+                const isEditing = editingDate?.id === df.id;
+                return (
+                  <div
+                    key={df.id}
+                    style={{
+                      position: "absolute",
+                      left:   `${df.x_pct}%`,
+                      top:    `${df.y_pct}%`,
+                      width:  `${df.w_pct}%`,
+                      height: `${df.h_pct}%`,
+                      zIndex: 25,
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    {/* Zone cliquable */}
+                    {!isEditing && (
+                      <div
+                        onClick={() => {
+                          // Convertir MM/JJ/AAAA → AAAA-MM-JJ pour l'input[type=date]
+                          const p = df.value.split("/");
+                          const iso = p.length === 3 ? `${p[2]}-${p[0].padStart(2,"0")}-${p[1].padStart(2,"0")}` : "";
+                          setEditingDate({ id: df.id, value: iso });
+                        }}
+                        title={`Date : ${df.value} — cliquer pour modifier`}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          cursor: "pointer",
+                          border: df.overridden
+                            ? "2px solid rgba(22,163,74,0.6)"
+                            : "2px dashed rgba(234,179,8,0.5)",
+                          borderRadius: "2px",
+                          backgroundColor: df.overridden
+                            ? "rgba(22,163,74,0.08)"
+                            : "rgba(234,179,8,0.05)",
+                        }}
+                      />
+                    )}
+
+                    {/* Popup d'édition */}
+                    {isEditing && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "120%",
+                          left: "0",
+                          zIndex: 50,
+                          background: "white",
+                          border: "1px solid #d1d5db",
+                          borderRadius: "8px",
+                          boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+                          padding: "10px 12px",
+                          minWidth: "200px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "8px",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div style={{ fontSize: "11px", color: "#6b7280", marginBottom: "2px" }}>
+                          Modifier la date
+                        </div>
+                        <input
+                          type="date"
+                          value={editingDate.value}
+                          onChange={(e) => setEditingDate({ id: df.id, value: e.target.value })}
+                          style={{
+                            border: "1px solid #d1d5db",
+                            borderRadius: "4px",
+                            padding: "4px 8px",
+                            fontSize: "13px",
+                            width: "100%",
+                          }}
+                          autoFocus
+                        />
+                        <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                          <button
+                            onClick={() => setEditingDate(null)}
+                            style={{
+                              padding: "3px 10px",
+                              fontSize: "12px",
+                              border: "1px solid #d1d5db",
+                              borderRadius: "4px",
+                              background: "white",
+                              cursor: "pointer",
+                            }}
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            onClick={handleDateSave}
+                            disabled={savingDate || !editingDate.value}
+                            style={{
+                              padding: "3px 10px",
+                              fontSize: "12px",
+                              border: "none",
+                              borderRadius: "4px",
+                              background: savingDate ? "#9ca3af" : "#2563eb",
+                              color: "white",
+                              cursor: savingDate ? "wait" : "pointer",
+                            }}
+                          >
+                            {savingDate ? "…" : "Valider"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
 

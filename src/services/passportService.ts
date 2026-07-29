@@ -66,6 +66,17 @@ export interface PassportCheckbox {
   checked: boolean;
 }
 
+export interface PassportDateField {
+  id: string;
+  value: string;
+  font_size: number;
+  x_pct: number;
+  y_pct: number;
+  w_pct: number;
+  h_pct: number;
+  overridden: boolean;
+}
+
 export const passportService = {
   getAll: async (): Promise<PassportFile[]> => {
     const res = await api.get<PassportFile[]>(`${API}/`);
@@ -243,6 +254,15 @@ export const passportService = {
 
   deleteSignature: async (slug: string): Promise<void> => {
     await api.delete(`${API}/${slug}/delete-signature/`);
+  },
+
+  getDateFields: async (slug: string): Promise<PassportDateField[]> => {
+    const res = await api.get<{ dates: PassportDateField[] }>(`${API}/${slug}/dates/`);
+    return res.data.dates;
+  },
+
+  updateDateField: async (slug: string, dateId: string, newValue: string): Promise<void> => {
+    await api.post(`${API}/${slug}/update-date/`, { date_id: dateId, new_value: newValue });
   },
 
   deleteCachets: async (slug: string): Promise<void> => {
