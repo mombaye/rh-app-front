@@ -74,7 +74,10 @@ function useDocumentPreview(attestationId: number) {
   const loadPreview = async () => {
     setLoading(true);
     try {
-      const data = await attestationService.getPreviewImage(attestationId, false);
+      // no_stamp=true : le PDF prévisualisé n'intègre PAS le cachet — c'est
+      // l'overlay React draggable qui le représente. Cela évite le doublon quand
+      // _apply_company_stamp a déjà bakeé le cachet dans generated_pdf.
+      const data = await attestationService.getPreviewImage(attestationId, true);
       const bust = Date.now();
       const image = data.image && !data.image.startsWith("data:")
         ? `${data.image}${data.image.includes("?") ? "&" : "?"}_t=${bust}`
