@@ -9,6 +9,9 @@ import {
   Stethoscope,
   ClipboardList,
   ClipboardCheck,
+  FileStack,
+  FileBadge,
+  Plane,
   X,
   Menu,
   UserCircle2,
@@ -16,6 +19,7 @@ import {
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
+import { getMonQuestionnaire } from "@/services/questionnaireService";
 
 const managerItem = {
   label: "Approbation",
@@ -23,16 +27,24 @@ const managerItem = {
   icon: <ClipboardCheck size={18} />,
 };
 
-const navItems = [
-  { label: "Demande de congé",      path: "/rh/my-leaves",         icon: <CalendarDays size={18} /> },
-  { label: "Bulletins de salaires", path: "/rh/my-payslips",       icon: <BadgeDollarSign size={18} /> },
+const baseNavItems = [
   { label: "Mes Dossiers RH",       path: "/rh/my-dossier",        icon: <FolderOpen size={18} /> },
   { label: "Mes Pointages",         path: "/rh/my-attendance",     icon: <Clock size={18} /> },
-  { label: "Équipe en congés",      path: "/rh/my-service-leaves", icon: <Users size={18} /> },
+  { label: "Bulletins de salaires", path: "/rh/my-payslips",       icon: <BadgeDollarSign size={18} /> },
+  { label: "Demande de congé",      path: "/rh/my-leaves",         icon: <CalendarDays size={18} /> },
   { label: "Demande de sortie",     path: "/rh/my-exits",          icon: <LogOut size={18} /> },
+  { label: "Équipe en congés",      path: "/rh/my-service-leaves", icon: <Users size={18} /> },
+  { label: "Demandes Attestations", path: "/rh/my-attestations",   icon: <FileBadge size={18} /> },
+  { label: "Demandes de mission",   path: "/rh/my-missions",       icon: <Plane size={18} /> },
   { label: "Infirmerie",            path: "/rh/my-infirmerie",     icon: <Stethoscope size={18} /> },
-  { label: "Questionnaire sortie",  path: "/rh/my-questionnaire",  icon: <ClipboardList size={18} /> },
+  { label: "Document RH",           path: "/rh/my-documents",      icon: <FileStack size={18} /> },
 ];
+
+const questionnaireItem = {
+  label: "Questionnaire sortie",
+  path: "/rh/my-questionnaire",
+  icon: <ClipboardList size={18} />,
+};
 
 type NavItemType = { label: string; path: string; icon: React.ReactNode };
 
@@ -41,6 +53,26 @@ export default function RhMySpaceSidebar() {
   const { user, logout, availableRoles } = useAuth();
   const isRhManager =
     availableRoles.includes("manager1") || availableRoles.includes("manager2");
+
+  const [hasQuestionnaire, setHasQuestionnaire] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      getMonQuestionnaire()
+        .then(res => setHasQuestionnaire(res.statut === "envoye"))
+        .catch(() => {});
+    };
+    check();
+    const id = setInterval(() => {
+      if (!hasQuestionnaire) check();
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [hasQuestionnaire]);
+
+  const navItems: NavItemType[] = [
+    ...baseNavItems,
+    ...(hasQuestionnaire ? [questionnaireItem] : []),
+  ];
 
   const items: NavItemType[] = isRhManager
     ? [managerItem, ...navItems]

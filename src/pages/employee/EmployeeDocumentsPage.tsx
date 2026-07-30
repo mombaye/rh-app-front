@@ -29,7 +29,9 @@ const CATEGORIES = [
 const fmt = (d: string) =>
   new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
 
-export default function EmployeeDocumentsPage() {
+type LayoutComponent = React.ComponentType<{ children: React.ReactNode }>;
+
+export default function EmployeeDocumentsPage({ layout: Layout = EmployeeLayout }: { layout?: LayoutComponent }) {
   const [docs,      setDocs]      = useState<HRDocument[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [search,    setSearch]    = useState("");
@@ -59,7 +61,7 @@ export default function EmployeeDocumentsPage() {
   });
 
   return (
-    <EmployeeLayout>
+    <Layout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -185,6 +187,6 @@ export default function EmployeeDocumentsPage() {
           accentClass="camublue-900"
         />
       )}
-    </EmployeeLayout>
+    </Layout>
   );
 }

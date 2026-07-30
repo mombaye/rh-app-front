@@ -8,6 +8,7 @@ import {
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
+import { useAuth } from "@/contexts/useAuth";
 
 type LayoutComponent = React.ComponentType<{ children: React.ReactNode }>;
 import { attestationService, getAttestationProfile, AttestationProfile } from "@/services/attestationService";
@@ -35,7 +36,8 @@ const fmt = (d: string) => {
   return `${dt.getDate()} ${MONTHS_FR[dt.getMonth()]} ${dt.getFullYear()}`;
 };
 
-export default function EmployeeAttestationsPage({ layout: Layout = EmployeeLayout }: { layout?: LayoutComponent }) {
+export default function EmployeeAttestationsPage({ layout: Layout = EmployeeLayout, selfOnly = false }: { layout?: LayoutComponent; selfOnly?: boolean }) {
+  const { user } = useAuth();
   const [requests,    setRequests]    = useState<AttestationRequest[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [showModal,   setShowModal]   = useState(false);
@@ -48,12 +50,15 @@ export default function EmployeeAttestationsPage({ layout: Layout = EmployeeLayo
 
   const load = async () => {
     setLoading(true);
-    try { setRequests(await attestationService.getMine()); }
+    try {
+      const params = selfOnly && user?.employee_id ? { employee_id: user.employee_id } : undefined;
+      setRequests(await attestationService.getMine(params));
+    }
     catch { toast.error("Erreur lors du chargement"); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [selfOnly, user?.employee_id]);
 
   const openModal = async () => {
     setStep("type"); setSelectedType(null); setExtraData({}); setShowModal(true);

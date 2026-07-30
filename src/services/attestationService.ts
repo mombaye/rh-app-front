@@ -11,7 +11,7 @@ const authHeaders = () => ({
 
 export const attestationService = {
   // ── Lecture ─────────────────────────────────────────────────────────────────
-  getAll: async (params?: { status?: string }): Promise<AttestationRequest[]> => {
+  getAll: async (params?: { status?: string; employee_id?: number }): Promise<AttestationRequest[]> => {
     const res = await axios.get<AttestationRequest[]>(API + "/", {
       headers: authHeaders(),
       params,
@@ -19,9 +19,10 @@ export const attestationService = {
     return res.data;
   },
 
-  getMine: async (): Promise<AttestationRequest[]> => {
+  getMine: async (params?: { employee_id?: number }): Promise<AttestationRequest[]> => {
     const res = await axios.get<AttestationRequest[]>(API + "/", {
       headers: authHeaders(),
+      params,
     });
     return res.data;
   },

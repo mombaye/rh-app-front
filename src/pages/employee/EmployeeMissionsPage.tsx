@@ -552,9 +552,10 @@ function MissionCard({ mission, onView, onCancel, compact = false }: MissionCard
 
 interface EmployeeMissionsPageProps {
   layout?: React.ComponentType<{ children: React.ReactNode }>;
+  selfOnly?: boolean;
 }
 
-export default function EmployeeMissionsPage({ layout: Layout = EmployeeLayout }: EmployeeMissionsPageProps) {
+export default function EmployeeMissionsPage({ layout: Layout = EmployeeLayout, selfOnly = false }: EmployeeMissionsPageProps) {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
 
@@ -572,11 +573,11 @@ export default function EmployeeMissionsPage({ layout: Layout = EmployeeLayout }
   const refresh = useCallback(() => {
     if (!employeeId) return;
     setLoading(true);
-    missionService.list()
+    missionService.list(selfOnly ? { employee_id: employeeId } : undefined)
       .then(data => setMissions(data))
       .catch(() => toast.error("Erreur lors du chargement des missions."))
       .finally(() => setLoading(false));
-  }, [employeeId]);
+  }, [employeeId, selfOnly]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
