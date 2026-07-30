@@ -1,6 +1,6 @@
-import EmployeeExitAuthorizationPage from "@/pages/employee/EmployeeExitAuthorizationPage";
-import AppLayout from "@/layouts/AppLayout";
+﻿import EmployeeExitAuthorizationPage from "@/pages/employee/EmployeeExitAuthorizationPage";
+import RhMySpaceLayout from "@/layouts/RhMySpaceLayout";
 
 export default function RhMyExitAuthorizationPage() {
-  return <EmployeeExitAuthorizationPage layout={AppLayout} />;
+  return <EmployeeExitAuthorizationPage layout={RhMySpaceLayout} />;
 }

@@ -1,6 +1,6 @@
-import EmployeeLeavesPage from "@/pages/employee/EmployeeLeavesPage";
-import AppLayout from "@/layouts/AppLayout";
+﻿import EmployeeLeavesPage from "@/pages/employee/EmployeeLeavesPage";
+import RhMySpaceLayout from "@/layouts/RhMySpaceLayout";
 
 export default function RhLeavesPage() {
-  return <EmployeeLeavesPage layout={AppLayout} />;
+  return <EmployeeLeavesPage layout={RhMySpaceLayout} />;
 }

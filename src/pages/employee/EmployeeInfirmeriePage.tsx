@@ -320,7 +320,9 @@ function AppointmentCard({ appt, onCancel }: { appt: InfirmerieAppointment; onCa
 
 // ── Page principale ───────────────────────────────────────────────────────────
 
-export default function EmployeeInfirmeriePage() {
+type LayoutComponent = React.ComponentType<{ children: React.ReactNode }>;
+
+export default function EmployeeInfirmeriePage({ layout: Layout = EmployeeLayout }: { layout?: LayoutComponent }) {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
 
@@ -379,7 +381,7 @@ export default function EmployeeInfirmeriePage() {
     .sort((a, b) => a.date.localeCompare(b.date) || a.creneau.localeCompare(b.creneau))[0];
 
   return (
-    <EmployeeLayout>
+    <Layout>
       <div className="px-4 md:px-6 pb-10">
 
         {/* Header */}
@@ -624,6 +626,6 @@ export default function EmployeeInfirmeriePage() {
           </motion.div>
         </div>
       )}
-    </EmployeeLayout>
+    </Layout>
   );
 }

@@ -72,6 +72,7 @@ const RhDocumentsPage           = lazy(() => import("@/pages/rh/RhDocumentsPage"
 const RhExitAuthorizationPage   = lazy(() => import("@/pages/rh/RhExitAuthorizationPage"));
 const RhMyExitAuthorizationPage = lazy(() => import("@/pages/rh/RhMyExitAuthorizationPage"));
 const RhQuestionnairePage       = lazy(() => import("@/pages/rh/RhQuestionnairePage"));
+const RhInfirmeriePage          = lazy(() => import("@/pages/rh/RhInfirmeriePage"));
 const RhServiceLeavesPage       = lazy(() => import("@/pages/rh/RhServiceLeavesPage"));
 const RhAnticipationPage        = lazy(() => import("@/pages/rh/RhAnticipationPage"));
 const RhAttestationsPage        = lazy(() => import("@/pages/rh/RhAttestationsPage"));
@@ -279,6 +280,8 @@ function App() {
         <Route path="/rh/my-exits"        element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMyExitAuthorizationPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-questionnaire"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhQuestionnairePage        /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-service-leaves" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhServiceLeavesPage        /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-infirmerie"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhInfirmeriePage    /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/my-space"       element={<Navigate to="/rh/my-leaves" replace />} />
         <Route path="/rh/documents"      element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDocumentsPage      /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/attestations"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttestationsPage   /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/missions"        element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMissionsPage         /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />

@@ -309,7 +309,9 @@ function MemberCard({
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
-export default function EmployeeServiceLeavesPage() {
+type LayoutComponent = React.ComponentType<{ children: React.ReactNode }>;
+
+export default function EmployeeServiceLeavesPage({ layout: Layout = EmployeeLayout }: { layout?: LayoutComponent }) {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
   const service    = user?.employee_service ?? "";
@@ -377,7 +379,7 @@ export default function EmployeeServiceLeavesPage() {
   const onLeaveCount = members.filter(m => inProgressMap.has(m.id)).length;
 
   return (
-    <EmployeeLayout>
+    <Layout>
       <div className="px-4 md:px-6 pb-10">
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
@@ -533,6 +535,6 @@ export default function EmployeeServiceLeavesPage() {
           />
         )}
       </AnimatePresence>
-    </EmployeeLayout>
+    </Layout>
   );
 }

@@ -1,6 +1,6 @@
-import EmployeeAttendancePage from "@/pages/employee/EmployeeAttendancePage";
-import AppLayout from "@/layouts/AppLayout";
+﻿import EmployeeAttendancePage from "@/pages/employee/EmployeeAttendancePage";
+import RhMySpaceLayout from "@/layouts/RhMySpaceLayout";
 
 export default function RhAttendancePage() {
-  return <EmployeeAttendancePage layout={AppLayout} />;
+  return <EmployeeAttendancePage layout={RhMySpaceLayout} />;
 }

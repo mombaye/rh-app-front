@@ -1,6 +1,6 @@
-import ManagerDossierPage from "@/pages/manager/ManagerDossierPage";
-import AppLayout from "@/layouts/AppLayout";
+﻿import ManagerDossierPage from "@/pages/manager/ManagerDossierPage";
+import RhMySpaceLayout from "@/layouts/RhMySpaceLayout";
 
 export default function RhDossierPage() {
-  return <ManagerDossierPage layout={AppLayout} />;
+  return <ManagerDossierPage layout={RhMySpaceLayout} />;
 }

@@ -1,4 +1,4 @@
-// src/components/layout/Sidebar.tsx
+﻿// src/components/layout/Sidebar.tsx
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -17,6 +17,8 @@ import {
   FileBadge,
   Plane,
   BookUser,
+  Stethoscope,
+  ClipboardList,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -163,23 +165,8 @@ export default function Sidebar() {
     }] : []),
     {
       label: "Mon espace",
-      path: "/rh/my",
+      path: "/rh/my-space",
       icon: <UserCircle size={20} />,
-      subItems: [
-        { label: "Demande de congé",     path: "/rh/my-leaves"         },
-        { label: "Bulletins de salaires", path: "/rh/my-payslips"       },
-        { label: "Mes Dossiers RH",       path: "/rh/my-dossier"        },
-        { label: "Equipe en congés",       path: "/rh/my-service-leaves" },
-        { label: "Demande de sortie",    path: "/rh/my-exits"          },
-        // TODO: Questionnaire sortie � à activer quand disponible
-        // { label: "Questionnaire sortie", path: "/rh/my-questionnaire"  },
-        ...(isRhManager
-          ? [
-              { label: "Mes Pointages", path: "/rh/my-attendance" },
-              { label: "Approbation",   path: "/rh/my-approvals",  badge: approvalPendingCount, badgeRed: true },
-            ]
-          : []),
-      ],
     },
   ];
 

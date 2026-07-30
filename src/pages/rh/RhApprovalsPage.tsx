@@ -1,6 +1,6 @@
-import ManagerApprovalsPage from "@/pages/manager/ManagerApprovalsPage";
-import AppLayout from "@/layouts/AppLayout";
+﻿import ManagerApprovalsPage from "@/pages/manager/ManagerApprovalsPage";
+import RhMySpaceLayout from "@/layouts/RhMySpaceLayout";
 
 export default function RhApprovalsPage() {
-  return <ManagerApprovalsPage layout={AppLayout} isRh />;
+  return <ManagerApprovalsPage layout={RhMySpaceLayout} isRh />;
 }
