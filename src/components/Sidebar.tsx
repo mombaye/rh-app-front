@@ -20,7 +20,6 @@ import {
   Stethoscope,
   ClipboardList,
   Ticket,
-  FileText,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -159,11 +158,6 @@ export default function Sidebar() {
       label: "Demandes de mission",
       path: "/rh/missions",
       icon: <Plane size={20} />,
-    },
-    {
-      label: "Contrats employés",
-      path: "/rh/contracts",
-      icon: <FileText size={20} />,
     },
     {
       label: "Signalements",
