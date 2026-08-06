@@ -119,15 +119,18 @@ export const passportService = {
     });
   },
 
-  getCachet: async (): Promise<Blob> => {
-    const res = await api.get(`${API}/cachet/`, { responseType: "blob" });
+  getCachet: async (cachetType: "entreprise" | "conduite_defensive" = "entreprise"): Promise<Blob> => {
+    const res = await api.get(`${API}/cachet/${cachetType}/`, { responseType: "blob" });
     return res.data as Blob;
   },
 
-  uploadCachet: async (file: File): Promise<{ ok: boolean; auto_task_id?: string; auto_total?: number }> => {
+  uploadCachet: async (
+    file: File,
+    cachetType: "entreprise" | "conduite_defensive" = "entreprise"
+  ): Promise<{ ok: boolean; auto_task_id?: string; auto_total?: number }> => {
     const form = new FormData();
     form.append("cachet", file);
-    const res = await api.post(`${API}/cachet/upload/`, form, {
+    const res = await api.post(`${API}/cachet/${cachetType}/upload/`, form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;
@@ -146,9 +149,10 @@ export const passportService = {
 
   applyCachetMulti: async (
     slug: string,
-    positions: { x_pct: number; y_pct: number; w_pct: number; h_pct: number }[]
+    positions: { x_pct: number; y_pct: number; w_pct: number; h_pct: number }[],
+    cachetType: "entreprise" | "conduite_defensive" = "entreprise"
   ): Promise<void> => {
-    await api.post(`${API}/${slug}/apply-cachet-multi/`, { positions });
+    await api.post(`${API}/${slug}/apply-cachet-multi/`, { positions, cachet_type: cachetType });
   },
 
   deleteFile: async (slug: string): Promise<void> => {

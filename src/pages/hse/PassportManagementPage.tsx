@@ -307,12 +307,16 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   } | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Mode placement cachets
-  const [cachetBlobUrl, setCachetBlobUrl] = useState<string | null>(null);
+  // Mode placement cachets (deux types)
+  type CachetType = "entreprise" | "conduite_defensive";
+  const [cachetEntrepriseUrl, setCachetEntrepriseUrl] = useState<string | null>(null);
+  const [cachetConduiteUrl, setCachetConduiteUrl]     = useState<string | null>(null);
+  const [activeCachetType, setActiveCachetType]       = useState<CachetType | null>(null);
   const [cachetItems, setCachetItems]     = useState<CachetItem[]>([]);
   const [savingCachets, setSavingCachets] = useState(false);
   const cachetDragRef = useRef<{ id: string; mode: DragMode; sx: number; sy: number; sp: PhotoPos } | null>(null);
   const placingCachets = cachetItems.length > 0;
+  const cachetBlobUrl = activeCachetType === "conduite_defensive" ? cachetConduiteUrl : cachetEntrepriseUrl;
 
   // Confirmations de suppression globale
   const [confirmDelete, setConfirmDelete] = useState<"photo" | "signature" | "cachets" | null>(null);
@@ -346,9 +350,14 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   const [editingDate, setEditingDate] = useState<{ id: string; value: string } | null>(null);
   const [savingDate, setSavingDate] = useState(false);
 
-  // Charger le cachet au montage
+  // Charger les deux cachets au montage
   useEffect(() => {
-    _ensureCachetLoaded().then(setCachetBlobUrl);
+    passportService.getCachet("entreprise")
+      .then((blob) => setCachetEntrepriseUrl(URL.createObjectURL(blob)))
+      .catch(() => {});
+    passportService.getCachet("conduite_defensive")
+      .then((blob) => setCachetConduiteUrl(URL.createObjectURL(blob)))
+      .catch(() => {});
   }, []);
 
   // Charger les checkboxes au montage
@@ -660,7 +669,8 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
     }
   };
 
-  const addCachet = () => {
+  const addCachet = (type: CachetType) => {
+    setActiveCachetType(type);
     setCachetItems((prev) => [
       ...prev,
       { id: Math.random().toString(36).slice(2), pos: { x: 5, y: 68, w: 20, h: 14 } },
@@ -668,18 +678,20 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   };
 
   const handleValidateCachets = async () => {
-    if (cachetItems.length === 0) return;
+    if (cachetItems.length === 0 || !activeCachetType) return;
     setSavingCachets(true);
     try {
       await passportService.applyCachetMulti(
         file.slug,
-        cachetItems.map(({ pos }) => ({ x_pct: pos.x, y_pct: pos.y, w_pct: pos.w, h_pct: pos.h }))
+        cachetItems.map(({ pos }) => ({ x_pct: pos.x, y_pct: pos.y, w_pct: pos.w, h_pct: pos.h })),
+        activeCachetType
       );
       _page0Cache.delete(file.slug);
       const newKey = cacheKey + 1;
       setCacheKey(newKey);
       setPages([]);
       setCachetItems([]);
+      setActiveCachetType(null);
       reloadAppliedCachets();
       await loadPage(0, newKey);
       toast.success("Cachets intégrés dans le passeport !");
@@ -746,7 +758,7 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                 {placingPhoto
                   ? "Glissez la photo au bon endroit, redimensionnez via les coins, puis validez"
                   : placingCachets
-                  ? "Glissez les cachets, redimensionnez via les coins, supprimez avec ×, puis validez"
+                  ? `Cachet ${activeCachetType === "conduite_defensive" ? "conduite défensive" : "entreprise"} — glissez, redimensionnez, supprimez avec ×, puis validez`
                   : placingSig
                   ? "Glissez la signature au bon endroit, redimensionnez via les coins, puis validez"
                   : "Passeport Sécurité CAMUSAT"}
@@ -831,19 +843,20 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                   )}
                 </div>
 
-                {/* Cachet + supprimer */}
-                {cachetBlobUrl && (
+                {/* Cachet Entreprise */}
+                {cachetEntrepriseUrl && (
                   <div className="flex items-center gap-0.5">
                     <button
-                      onClick={() => { setConfirmDelete(null); addCachet(); }}
+                      onClick={() => { setConfirmDelete(null); addCachet("entreprise"); }}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg border border-amber-200 text-amber-700 bg-amber-50 text-xs font-medium hover:bg-amber-100 transition"
+                      title="Cachet entreprise"
                     >
                       <Stamp size={13} />
-                      Cachet
+                      Cachet Entr.
                     </button>
                     {confirmDelete === "cachets" ? (
                       <span className="flex items-center gap-1 px-2 py-1.5 border border-red-300 bg-red-50 rounded-r-lg text-xs">
-                        <span className="text-red-600 font-medium">Supprimer ?</span>
+                        <span className="text-red-600 font-medium">Supprimer tous ?</span>
                         <button onClick={() => handleDelete("cachets")} disabled={deleting}
                           className="px-1.5 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:opacity-50">
                           {deleting ? "…" : "Oui"}
@@ -860,6 +873,18 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                       </button>
                     )}
                   </div>
+                )}
+
+                {/* Cachet Conduite Défensive */}
+                {cachetConduiteUrl && (
+                  <button
+                    onClick={() => { setConfirmDelete(null); addCachet("conduite_defensive"); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-orange-200 text-orange-700 bg-orange-50 text-xs font-medium hover:bg-orange-100 transition"
+                    title="Cachet conduite défensive"
+                  >
+                    <Stamp size={13} />
+                    Conduite Déf.
+                  </button>
                 )}
               </>
             )}
@@ -896,7 +921,7 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                   <Plus size={13} /> Ajouter
                 </button>
                 <button
-                  onClick={() => setCachetItems([])}
+                  onClick={() => { setCachetItems([]); setActiveCachetType(null); }}
                   disabled={savingCachets}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-100 transition disabled:opacity-50"
                 >
