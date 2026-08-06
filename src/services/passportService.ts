@@ -243,7 +243,7 @@ export const passportService = {
     });
   },
 
-  getAppliedCachets: async (slug: string): Promise<{ idx: number; x_pct: number; y_pct: number; w_pct: number; h_pct: number }[]> => {
+  getAppliedCachets: async (slug: string): Promise<{ idx: number; x_pct: number; y_pct: number; w_pct: number; h_pct: number; cachet_type?: string }[]> => {
     const res = await api.get(`${API}/${slug}/applied-cachets/`);
     return res.data;
   },

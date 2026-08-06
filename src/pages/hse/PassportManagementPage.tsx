@@ -843,49 +843,47 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                   )}
                 </div>
 
-                {/* Cachet Entreprise */}
-                {cachetEntrepriseUrl && (
-                  <div className="flex items-center gap-0.5">
-                    <button
-                      onClick={() => { setConfirmDelete(null); addCachet("entreprise"); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg border border-amber-200 text-amber-700 bg-amber-50 text-xs font-medium hover:bg-amber-100 transition"
-                      title="Cachet entreprise"
-                    >
-                      <Stamp size={13} />
-                      Cachet Entr.
-                    </button>
-                    {confirmDelete === "cachets" ? (
-                      <span className="flex items-center gap-1 px-2 py-1.5 border border-red-300 bg-red-50 rounded-r-lg text-xs">
-                        <span className="text-red-600 font-medium">Supprimer tous ?</span>
-                        <button onClick={() => handleDelete("cachets")} disabled={deleting}
-                          className="px-1.5 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:opacity-50">
-                          {deleting ? "…" : "Oui"}
-                        </button>
-                        <button onClick={() => setConfirmDelete(null)}
-                          className="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300">
-                          Non
-                        </button>
-                      </span>
-                    ) : (
-                      <button onClick={() => setConfirmDelete("cachets")}
-                        className="px-2 py-1.5 rounded-r-lg border border-amber-200 text-amber-400 bg-amber-50 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition">
-                        <Trash2 size={12} />
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Cachet Conduite Défensive */}
-                {cachetConduiteUrl && (
+                {/* Cachet Entreprise — toujours visible */}
+                <div className="flex items-center gap-0.5">
                   <button
-                    onClick={() => { setConfirmDelete(null); addCachet("conduite_defensive"); }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-orange-200 text-orange-700 bg-orange-50 text-xs font-medium hover:bg-orange-100 transition"
-                    title="Cachet conduite défensive"
+                    onClick={() => { setConfirmDelete(null); addCachet("entreprise"); }}
+                    disabled={!cachetEntrepriseUrl}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg border border-amber-200 text-amber-700 bg-amber-50 text-xs font-medium hover:bg-amber-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={cachetEntrepriseUrl ? "Cachet entreprise" : "Aucun cachet entreprise configuré"}
                   >
                     <Stamp size={13} />
-                    Conduite Déf.
+                    Cachet Entr.
                   </button>
-                )}
+                  {confirmDelete === "cachets" ? (
+                    <span className="flex items-center gap-1 px-2 py-1.5 border border-red-300 bg-red-50 rounded-r-lg text-xs">
+                      <span className="text-red-600 font-medium">Supprimer tous ?</span>
+                      <button onClick={() => handleDelete("cachets")} disabled={deleting}
+                        className="px-1.5 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:opacity-50">
+                        {deleting ? "…" : "Oui"}
+                      </button>
+                      <button onClick={() => setConfirmDelete(null)}
+                        className="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300">
+                        Non
+                      </button>
+                    </span>
+                  ) : (
+                    <button onClick={() => setConfirmDelete("cachets")}
+                      className="px-2 py-1.5 rounded-r-lg border border-amber-200 text-amber-400 bg-amber-50 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition">
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Cachet Conduite Défensive — toujours visible */}
+                <button
+                  onClick={() => { setConfirmDelete(null); addCachet("conduite_defensive"); }}
+                  disabled={!cachetConduiteUrl}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-orange-200 text-orange-700 bg-orange-50 text-xs font-medium hover:bg-orange-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={cachetConduiteUrl ? "Cachet conduite défensive" : "Aucun cachet conduite défensive configuré"}
+                >
+                  <Stamp size={13} />
+                  Conduite Déf.
+                </button>
               </>
             )}
 
@@ -1186,10 +1184,11 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
               })}
 
               {/* ── Overlays cachets déjà intégrés (sélectionnables pour suppression) ── */}
-              {!placingPhoto && !placingCachets && !placingSig && cachetBlobUrl && currentPage === 0 &&
+              {!placingPhoto && !placingCachets && !placingSig && currentPage === 0 &&
                 appliedCachets.map((c) => {
                   const isSelected = selectedCachetIdx === c.idx;
                   const isDeleting = deletingCachetIdx === c.idx;
+                  const imgUrl = c.cachet_type === "conduite_defensive" ? cachetConduiteUrl : cachetEntrepriseUrl;
                   return (
                     <div
                       key={c.idx}
@@ -1209,12 +1208,14 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                       className={isSelected ? "shadow-lg" : "hover:border-dashed hover:border-red-300"}
                     >
                       {/* Image cachet semi-transparente pour visualiser */}
-                      <img
-                        src={cachetBlobUrl}
-                        alt="cachet"
-                        style={{ width: "100%", height: "100%", objectFit: "contain", opacity: isSelected ? 0.7 : 0.3, pointerEvents: "none", display: "block" }}
-                        draggable={false}
-                      />
+                      {imgUrl && (
+                        <img
+                          src={imgUrl}
+                          alt="cachet"
+                          style={{ width: "100%", height: "100%", objectFit: "contain", opacity: isSelected ? 0.7 : 0.3, pointerEvents: "none", display: "block" }}
+                          draggable={false}
+                        />
+                      )}
                       {/* Popup suppression */}
                       {isSelected && (
                         <div
@@ -1682,55 +1683,34 @@ export default function PassportManagementPage() {
   const [showResetConfirm, setShowResetConfirm]   = useState(false);
   const [resetting, setResetting]                 = useState(false);
   const [uploadingCachet, setUploadingCachet]     = useState(false);
+  const [uploadingCachetType, setUploadingCachetType] = useState<"entreprise" | "conduite_defensive" | null>(null);
+  const [showCachetUploadModal, setShowCachetUploadModal] = useState(false);
+  const [previewEntrepriseUrl, setPreviewEntrepriseUrl] = useState<string | null>(null);
+  const [previewConduiteUrl, setPreviewConduiteUrl]     = useState<string | null>(null);
   const [sigFilter, setSigFilter] = useState<"all" | "complete" | "incomplete">("all");
   const cachetInputRef = useRef<HTMLInputElement>(null);
+  const cachetConduiteInputRef = useRef<HTMLInputElement>(null);
 
-  const handleCachetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCachetUpload = async (e: React.ChangeEvent<HTMLInputElement>, cachetType: "entreprise" | "conduite_defensive" = "entreprise") => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingCachet(true);
+    setUploadingCachetType(cachetType);
+    // Prévisualiser immédiatement le fichier choisi
+    const localUrl = URL.createObjectURL(file);
+    if (cachetType === "entreprise") setPreviewEntrepriseUrl(localUrl);
+    else setPreviewConduiteUrl(localUrl);
     e.target.value = "";
     try {
-      const res = await passportService.uploadCachet(file);
+      await passportService.uploadCachet(file, cachetType);
       _invalidateCachetCache();
-
-      const taskId   = res.auto_task_id;
-      const total    = res.auto_total ?? 0;
-
-      if (!taskId || total === 0) {
-        toast.success("Cachet uploadé. Aucun passeport avec 4 signatures trouvé.");
-        return;
-      }
-
-      // Toast dynamique de progression
-      const toastId = toast.loading(`Application automatique sur ${total} passeport(s)…`);
-
-      const poll = async () => {
-        try {
-          const progress = await passportService.getCachetTaskProgress(taskId);
-          if (progress.state === "PROGRESS" || progress.state === "PENDING") {
-            const pct = total > 0 ? Math.round((progress.current / total) * 100) : 0;
-            toast.loading(`Cachets en cours… ${progress.current}/${total} (${pct}%)`, { id: toastId });
-            setTimeout(poll, 1500);
-          } else if (progress.state === "SUCCESS") {
-            toast.success(
-              `Cachet appliqué sur ${progress.ok ?? total} passeport(s) avec 4 signatures !`,
-              { id: toastId, duration: 5000 }
-            );
-            // Invalider le cache page0 pour forcer le rechargement des aperçus
-            _page0Cache.clear();
-          } else {
-            toast.success("Cachet uploadé et appliqué.", { id: toastId });
-          }
-        } catch {
-          toast.success("Cachet uploadé.", { id: toastId });
-        }
-      };
-      setTimeout(poll, 1000);
+      const label = cachetType === "conduite_defensive" ? "Conduite Défensive" : "Entreprise";
+      toast.success(`Cachet ${label} uploadé avec succès.`);
     } catch {
       toast.error("Erreur lors de l'upload du cachet");
     } finally {
       setUploadingCachet(false);
+      setUploadingCachetType(null);
     }
   };
 
@@ -1766,6 +1746,16 @@ export default function PassportManagementPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [search, sigFilter]);
 
+  // Charger les previews des cachets au montage
+  useEffect(() => {
+    passportService.getCachet("entreprise")
+      .then((blob) => setPreviewEntrepriseUrl(URL.createObjectURL(blob)))
+      .catch(() => {});
+    passportService.getCachet("conduite_defensive")
+      .then((blob) => setPreviewConduiteUrl(URL.createObjectURL(blob)))
+      .catch(() => {});
+  }, []);
+
   const filtered = files.filter((f) => {
     if (search) {
       const q = search.toLowerCase();
@@ -1797,14 +1787,17 @@ export default function PassportManagementPage() {
           <div className="ml-auto flex items-center gap-2">
             {/* Upload cachet global */}
             <button
-              onClick={() => cachetInputRef.current?.click()}
+              onClick={() => setShowCachetUploadModal(true)}
               disabled={uploadingCachet}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#003c71] text-white text-sm font-medium hover:bg-[#003c71]/90 transition disabled:opacity-60"
             >
               {uploadingCachet ? <ImSpinner2 className="animate-spin" size={15} /> : <Stamp size={15} />}
-              Upload cachet
+              {uploadingCachet
+                ? uploadingCachetType === "conduite_defensive" ? "Conduite Déf…" : "Entreprise…"
+                : "Upload cachet"}
             </button>
-            <input ref={cachetInputRef} type="file" accept="image/*" className="hidden" onChange={handleCachetUpload} />
+            <input ref={cachetInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleCachetUpload(e, "entreprise")} />
+            <input ref={cachetConduiteInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleCachetUpload(e, "conduite_defensive")} />
 
             {files.length > 0 && (
               <button
@@ -2050,6 +2043,97 @@ export default function PassportManagementPage() {
       {/* Modal Détail */}
       {detailFile && (
         <PassportDetailModal file={detailFile} onClose={() => setDetailFile(null)} />
+      )}
+
+      {/* ── Modal Upload Cachet ──────────────────────────────────────────── */}
+      {showCachetUploadModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+          onClick={() => !uploadingCachet && setShowCachetUploadModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[#003c71]">
+                <Stamp size={20} />
+                <h2 className="text-lg font-bold">Upload du cachet</h2>
+              </div>
+              <button
+                onClick={() => setShowCachetUploadModal(false)}
+                disabled={uploadingCachet}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-500">
+              Choisissez le type de cachet à uploader. Il sera automatiquement appliqué sur les passeports ayant 4 signatures.
+            </p>
+
+            {/* Cachet Entreprise */}
+            {/* Cachet Entreprise */}
+            <div className="border border-amber-200 rounded-xl p-4 flex gap-4 bg-amber-50 items-center">
+              {/* Prévisualisation */}
+              <div className="shrink-0 w-20 h-20 rounded-lg border border-amber-200 bg-white flex items-center justify-center overflow-hidden">
+                {uploadingCachet && uploadingCachetType === "entreprise"
+                  ? <ImSpinner2 className="animate-spin text-amber-400" size={24} />
+                  : previewEntrepriseUrl
+                    ? <img src={previewEntrepriseUrl} alt="Cachet entreprise" className="w-full h-full object-contain p-1" />
+                    : <Stamp size={28} className="text-amber-200" />}
+              </div>
+              {/* Infos + bouton */}
+              <div className="flex flex-col gap-2 flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <Stamp size={15} className="text-amber-600" />
+                  <span className="font-semibold text-amber-800 text-sm">Cachet Entreprise</span>
+                  {previewEntrepriseUrl && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">Configuré</span>}
+                </div>
+                <p className="text-xs text-amber-700">Cachet officiel de la société, appliqué sur les passeports validés.</p>
+                <button
+                  onClick={() => cachetInputRef.current?.click()}
+                  disabled={uploadingCachet}
+                  className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition disabled:opacity-60"
+                >
+                  <Upload size={13} />
+                  {previewEntrepriseUrl ? "Remplacer" : "Choisir un fichier"}
+                </button>
+              </div>
+            </div>
+
+            {/* Cachet Conduite Défensive */}
+            <div className="border border-orange-200 rounded-xl p-4 flex gap-4 bg-orange-50 items-center">
+              {/* Prévisualisation */}
+              <div className="shrink-0 w-20 h-20 rounded-lg border border-orange-200 bg-white flex items-center justify-center overflow-hidden">
+                {uploadingCachet && uploadingCachetType === "conduite_defensive"
+                  ? <ImSpinner2 className="animate-spin text-orange-400" size={24} />
+                  : previewConduiteUrl
+                    ? <img src={previewConduiteUrl} alt="Cachet conduite" className="w-full h-full object-contain p-1" />
+                    : <Stamp size={28} className="text-orange-200" />}
+              </div>
+              {/* Infos + bouton */}
+              <div className="flex flex-col gap-2 flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <Stamp size={15} className="text-orange-600" />
+                  <span className="font-semibold text-orange-800 text-sm">Conduite Défensive</span>
+                  {previewConduiteUrl && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">Configuré</span>}
+                </div>
+                <p className="text-xs text-orange-700">Cachet spécifique à la formation conduite défensive.</p>
+                <button
+                  onClick={() => cachetConduiteInputRef.current?.click()}
+                  disabled={uploadingCachet}
+                  className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-orange-500 text-white text-xs font-medium hover:bg-orange-600 transition disabled:opacity-60"
+                >
+                  <Upload size={13} />
+                  {previewConduiteUrl ? "Remplacer" : "Choisir un fichier"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Modal Réinitialiser tout ─────────────────────────────────────── */}
