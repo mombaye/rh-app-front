@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, CalendarDays, BadgeDollarSign,
   FolderOpen, ClipboardCheck, X, Menu, UserCircle2, FileStack, LogOut, Users, FileBadge, Clock,
-  BookUser, ClipboardList,
+  BookUser, ClipboardList, FileText, Ticket,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -44,8 +44,9 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
 
   const navItems: NavItem[] = [
     { label: "Tableau de bord",          path: "/manager/dashboard",    icon: <LayoutDashboard size={20} />                                                    },
-    { label: "Validation demande",       path: "/manager/approvals",    icon: <ClipboardCheck size={20} />, badge: pendingCount > 0 ? pendingCount : undefined },
-    { label: "Equipe de service",         path: "/manager/team-leaves",  icon: <Users size={20} />                                                              },
+    { label: "Validation demande",       path: "/manager/approvals",       icon: <ClipboardCheck size={20} />, badge: pendingCount > 0 ? pendingCount : undefined },
+    { label: "Equipe de service",        path: "/manager/team-leaves",    icon: <Users size={20} />                                                              },
+    { label: "Contrats équipe",          path: "/manager/team-contracts", icon: <FileText size={20} />                                                           },
     { label: "Mes Dossiers",             path: "/manager/dossier",      icon: <FolderOpen size={20} />                                                         },
     { label: "Bulletins de salaires",    path: "/manager/payslips",     icon: <BadgeDollarSign size={20} />                                                    },
     { label: "Mes Pointages",            path: "/manager/attendance",   icon: <Clock size={20} />                                                              },
@@ -53,6 +54,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
     { label: "Demande de sortie",        path: "/manager/exits",        icon: <LogOut size={20} />                                                             },
     { label: "Demande d'attestation",    path: "/manager/attestations", icon: <FileBadge size={20} />                                                          },
     { label: "Documents RH",            path: "/manager/documents",    icon: <FileStack size={20} />                                                          },
+    { label: "Signalements",            path: "/manager/tickets",      icon: <Ticket size={20} />                                                                 },
     ...(isHse ? [{ label: "Gestion Passeports", path: "/hse/passeports", icon: <BookUser size={20} /> }] : []),
     ...(hasQuestionnaire ? [{ label: "Questionnaire de sortie", path: "/manager/questionnaire", icon: <ClipboardList size={20} /> }] : []),
   ];

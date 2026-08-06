@@ -14,7 +14,8 @@ import type { Employee } from "@/types/employee";
 import { Input } from "@/components/ui/input"; // conservé pour la barre de recherche
 import { FaPlus } from "react-icons/fa";
 import { FiChevronDown, FiX } from "react-icons/fi";
-import { Pencil, Trash2, RefreshCw, Search, User } from "lucide-react";
+import { Pencil, Trash2, RefreshCw, Search, User, FileText } from "lucide-react";
+import DisciplinaryDocPanel from "@/components/disciplinary/DisciplinaryDocPanel";
 import { TbFileExcel } from "react-icons/tb";
 
 // ── KpiCard — identique à AlertesEmployesPage ─────────────────────────────
@@ -448,6 +449,7 @@ export default function EmployeesDisciplinaryPage() {
 
   const [deleteId, setDeleteId]   = useState<number | null>(null);
   const [deleting, setDeleting]   = useState(false);
+  const [docRecord, setDocRecord] = useState<DisciplinaryRecord | null>(null);
 
   const [statutDropdownOpen, setStatutDropdownOpen] = useState(false);
   const statutDropdownRef = useRef<HTMLDivElement>(null);
@@ -818,6 +820,13 @@ export default function EmployeesDisciplinaryPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <button
+                            onClick={() => setDocRecord(rec)}
+                            className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500 hover:text-blue-700 transition"
+                            title="Documents disciplinaires"
+                          >
+                            <FileText size={14} />
+                          </button>
+                          <button
                             onClick={() => openEdit(rec)}
                             className="p-1.5 rounded-lg hover:bg-camublue-900/10 text-camublue-900 transition"
                             title="Modifier"
@@ -869,6 +878,11 @@ export default function EmployeesDisciplinaryPage() {
           />
         )}
       </AnimatePresence>
+
+      <DisciplinaryDocPanel
+        record={docRecord}
+        onClose={() => setDocRecord(null)}
+      />
     </AppLayout>
   );
 }

@@ -198,6 +198,7 @@ export interface MigrationImportRow {
   solde_anterieur?:  number;
   acquired?:         number;
   taken?:            number;
+  taken_override?:   number | null;
   message?:          string;
 }
 export interface MigrationImportResult {
@@ -394,6 +395,10 @@ export interface EmployeeHierarchy {
   manages_n2_count:     number;
   status:               string;
   is_hse_responsible?:  boolean;
+  // Informations contractuelles
+  type_contrat?:        string | null;
+  date_embauche?:       string | null;
+  date_fin_cdd?:        string | null;
 }
 
 // ── ManagerDelegation ── mirrors ManagerDelegationSerializer ──────────────────

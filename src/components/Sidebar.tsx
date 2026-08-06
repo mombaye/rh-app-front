@@ -19,6 +19,8 @@ import {
   BookUser,
   Stethoscope,
   ClipboardList,
+  Ticket,
+  FileText,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -157,6 +159,16 @@ export default function Sidebar() {
       label: "Demandes de mission",
       path: "/rh/missions",
       icon: <Plane size={20} />,
+    },
+    {
+      label: "Contrats employés",
+      path: "/rh/contracts",
+      icon: <FileText size={20} />,
+    },
+    {
+      label: "Signalements",
+      path: "/rh/all-tickets",
+      icon: <Ticket size={20} />,
     },
     ...(isHse ? [{
       label: "Gestion Passeports",
@@ -307,7 +319,7 @@ export default function Sidebar() {
           Gestionnaire de Planning
         </div>
       )}
-      <nav className="flex-1 px-4 py-6 space-y-1">
+      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
         {visibleNavItems.map((item) => (
           <NavLink key={item.path} item={item} onClose={onClose} />
         ))}

@@ -58,9 +58,15 @@ const ManagerPayslipPage      = lazy(() => import("@/pages/manager/ManagerPaysli
 const ManagerDossierPage      = lazy(() => import("@/pages/manager/ManagerDossierPage"));
 const ManagerApprovalsPage    = lazy(() => import("@/pages/manager/ManagerApprovalsPage"));
 const ManagerDocumentsPage    = lazy(() => import("@/pages/manager/ManagerDocumentsPage"));
-const ManagerTeamLeavesPage   = lazy(() => import("@/pages/manager/ManagerTeamLeavesPage"));
+const ManagerTeamLeavesPage     = lazy(() => import("@/pages/manager/ManagerTeamLeavesPage"));
+const ManagerTeamContractsPage  = lazy(() => import("@/pages/manager/ManagerTeamContractsPage"));
 const ManagerAttestationsPage = lazy(() => import("@/pages/manager/ManagerAttestationsPage"));
 const ManagerAttendancePage   = lazy(() => import("@/pages/manager/ManagerAttendancePage"));
+const ManagerTicketsPage      = lazy(() => import("@/pages/manager/ManagerTicketsPage"));
+const EmployeeTicketsPage     = lazy(() => import("@/pages/employee/EmployeeTicketsPage"));
+const RhTicketsPage           = lazy(() => import("@/pages/rh/RhTicketsPage"));
+const RhMyTicketsPage         = lazy(() => import("@/pages/rh/RhMyTicketsPage"));
+const RhContractsPage         = lazy(() => import("@/pages/rh/RhContractsPage"));
 
 // Espace RH — espace employé
 const RhLeavesPage              = lazy(() => import("@/pages/rh/RhLeavesPage"));
@@ -254,6 +260,11 @@ function App() {
             <EmployeeInfirmeriePage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
+        <Route path="/employee/tickets" element={
+          <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
+            <EmployeeTicketsPage />
+          </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />
 
         {/* ── Espace Manager ───────────────────────────────────── */}
         <Route path="/manager/dashboard"  element={<MgrRoute><ManagerDashboardPage         /></MgrRoute>} />
@@ -265,7 +276,9 @@ function App() {
         <Route path="/manager/approvals"   element={<MgrRoute><ManagerApprovalsPage         /></MgrRoute>} />
         <Route path="/manager/documents"    element={<MgrRoute><ManagerDocumentsPage          /></MgrRoute>} />
         <Route path="/manager/attestations" element={<MgrRoute><ManagerAttestationsPage       /></MgrRoute>} />
-        <Route path="/manager/team-leaves" element={<MgrRoute><ManagerTeamLeavesPage        /></MgrRoute>} />
+        <Route path="/manager/team-leaves"     element={<MgrRoute><ManagerTeamLeavesPage    /></MgrRoute>} />
+        <Route path="/manager/team-contracts" element={<MgrRoute><ManagerTeamContractsPage /></MgrRoute>} />
+        <Route path="/manager/tickets"        element={<MgrRoute><ManagerTicketsPage       /></MgrRoute>} />
 
         {/* ── Planning Manager ─────────────────────────────────── */}
         <Route path="/planning" element={
@@ -287,6 +300,9 @@ function App() {
         <Route path="/rh/my-documents"    element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMyDocumentsPage      /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-attestations" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMyAttestationsPage   /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-missions"     element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMyMissionsPage       /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/tickets"         element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMyTicketsPage          /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/all-tickets"     element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhTicketsPage             /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/contracts"       element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhContractsPage           /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-space"       element={<Navigate to="/rh/my-leaves" replace />} />
         <Route path="/rh/documents"      element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDocumentsPage      /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/attestations"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttestationsPage   /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />

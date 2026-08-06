@@ -15,6 +15,8 @@ import {
   X,
   Menu,
   UserCircle2,
+  FileText,
+  Ticket,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
@@ -38,6 +40,8 @@ const baseNavItems = [
   { label: "Demandes de mission",   path: "/rh/my-missions",       icon: <Plane size={18} /> },
   { label: "Infirmerie",            path: "/rh/my-infirmerie",     icon: <Stethoscope size={18} /> },
   { label: "Document RH",           path: "/rh/my-documents",      icon: <FileStack size={18} /> },
+  { label: "Contrats employés",     path: "/rh/contracts",         icon: <FileText size={18} /> },
+  { label: "Signalements",          path: "/rh/tickets",           icon: <Ticket size={18} /> },
 ];
 
 const questionnaireItem = {

@@ -17,8 +17,7 @@ import { MigrationImportResult, MigrationImportRow } from "@/types/leave";
 // ─── Types locaux ─────────────────────────────────────────────────────────────
 interface EditableRow extends MigrationImportRow {
   edited: number;
-  acquired_override?: number | null;  // null = utiliser calcul auto
-  taken_override?: number | null;     // null = utiliser somme DB
+  taken_override?: number | null;
 }
 
 // ─── Export Excel ─────────────────────────────────────────────────────────────
@@ -175,12 +174,44 @@ export default function LeavesMigrationPage() {
   const [showExportDlg, setShowExportDlg] = useState(false);
   const [exportCols,    setExportCols]    = useState<MigrationExportCol[]>([...MIGRATION_EXPORT_COLS]);
 
-  // ── Chargement de la session au montage (serveur en priorité, localStorage en fallback) ──
+  // ── Chargement snapshot (depuis la base) ────────────────────────────────────
+  const loadSnapshot = async (silent = false) => {
+    if (!silent) setLoadingSnap(true);
+    try {
+      const res = await leaveBalanceService.migrationSnapshot(currentYear);
+      const newRows = res.results.map((r: any) => {
+        const solde_anterieur   = r.solde_anterieur ?? 0;
+        const acquired          = r.acquired ?? 0;
+        const taken             = r.taken ?? 0;
+        const current_remaining = solde_anterieur + acquired;
+        const edited            = current_remaining - taken;
+        return { ...r, solde_anterieur, current_remaining, edited };
+      });
+      const snapName = `Soldes ${currentYear} — base de données (${res.processed} employés)`;
+      setRows(newRows);
+      setFileName(snapName);
+      setSynced(true);
+      setSearch("");
+      migrationSessionService.save({
+        year: currentYear,
+        filename: snapName,
+        synced: true,
+        rows: newRows,
+      }).catch(() => {});
+      return newRows;
+    } catch {
+      return null;
+    } finally {
+      if (!silent) setLoadingSnap(false);
+    }
+  };
+
+  // ── Chargement de la session au montage ──────────────────────────────────────
+  // Priorité : session serveur → localStorage → snapshot DB automatique
   useEffect(() => {
     migrationSessionService.get(currentYear)
-      .then(session => {
+      .then(async session => {
         if (session && session.rows.length > 0) {
-          // Données serveur → les utiliser
           setFileName(session.filename);
           setSynced(session.synced);
           setRows(session.rows.map((r: any) => ({
@@ -188,7 +219,8 @@ export default function LeavesMigrationPage() {
             edited: r.edited ?? r.new_remaining ?? r.current_remaining ?? 0,
           })));
         } else {
-          // Pas de session serveur → tenter de récupérer le localStorage existant et le migrer
+          // Tenter localStorage (migration ancienne version)
+          let restored = false;
           try {
             const lsRows   = localStorage.getItem("migration_rows");
             const lsFname  = localStorage.getItem("migration_filename");
@@ -199,7 +231,7 @@ export default function LeavesMigrationPage() {
               setFileName(lsFname);
               setSynced(syncedVal);
               setRows(parsed);
-              // Migrer vers le serveur et nettoyer localStorage
+              restored = true;
               migrationSessionService.save({
                 year: currentYear,
                 filename: lsFname,
@@ -211,7 +243,12 @@ export default function LeavesMigrationPage() {
                 localStorage.removeItem("migration_synced");
               }).catch(() => {});
             }
-          } catch { /* localStorage invalide, on ignore */ }
+          } catch { /* localStorage invalide */ }
+
+          // Aucune session → charger automatiquement depuis la DB
+          if (!restored) {
+            await loadSnapshot(true);
+          }
         }
       })
       .catch(() => {})
@@ -237,18 +274,13 @@ export default function LeavesMigrationPage() {
         taken_override: r.taken_override ?? null,
       }));
       setRows(newRows);
-      // Sauvegarder la session sur le serveur (visible pour tous les utilisateurs)
-      migrationSessionService.save({
-        year: currentYear,
-        filename: f.name,
-        synced: false,
-        rows: newRows,
-      }).catch(() => {});
       if (res.errors_count > 0) {
         toast(`${res.processed} employé(s) détecté(s) · ${res.errors_count} ligne(s) non reconnue(s)`, { icon: "⚠️" });
       } else {
-        toast.success(`${res.processed} employé(s) chargé(s) avec succès.`);
+        toast.success(`${res.processed} employé(s) chargé(s).`);
       }
+      // Auto-synchroniser immédiatement après l'import
+      await doSyncRows(newRows, f.name);
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors du chargement du fichier.");
       setFileName("");
@@ -288,50 +320,7 @@ export default function LeavesMigrationPage() {
     setPendingFile(null);
   };
 
-  // ── Modifier le solde antérieur (seule saisie manuelle) ─────────────────────
-  // Règles (calcul automatique) :
-  //   Congés acquis      = mois de présence écoulés depuis la date d'embauche
-  //                         × incrément mensuel (incrément du mois en cours
-  //                         crédité seulement en fin de mois)
-  //   Congé pris         = somme des demandes de congé validées de l'année
-  //   Solde congé actuel = Solde antérieur + Congés acquis
-  //   Congé restant      = Solde congé actuel - Congé pris
-  const recomputeRow = (
-    r: EditableRow,
-    overrides: Partial<{ solde_anterieur: number; acquired: number; taken: number }>,
-  ): EditableRow => {
-    const solde_anterieur  = overrides.solde_anterieur  ?? r.solde_anterieur  ?? 0;
-    const acquired         = overrides.acquired         ?? r.acquired_override ?? r.acquired ?? 0;
-    const taken            = overrides.taken            ?? r.taken_override    ?? r.taken    ?? 0;
-    const current_remaining = solde_anterieur + acquired;
-    const edited            = current_remaining - taken;
-
-    return {
-      ...r,
-      solde_anterieur,
-      acquired_override: "acquired" in overrides ? overrides.acquired! : r.acquired_override ?? null,
-      taken_override:    "taken"    in overrides ? overrides.taken!    : r.taken_override    ?? null,
-      current_remaining,
-      edited,
-    };
-  };
-
-  const updateField = (
-    rowIndex: number,
-    field: "solde_anterieur" | "acquired" | "taken",
-    value: string,
-  ) => {
-    const num = parseFloat(value);
-    const val = isNaN(num) ? 0 : num;
-    setRows(prev => prev.map((r, i) =>
-      i === rowIndex ? recomputeRow(r, { [field]: val }) : r
-    ));
-    if (synced) setSynced(false);
-  };
-
-  // ── Synchroniser ─────────────────────────────────────────────────────────────
-  // Fonction centrale : accepte les rows en paramètre pour pouvoir être appelée
-  // directement après doSnapshot sans attendre la mise à jour du state.
+  // ── Synchroniser → stocker en DB → recharger depuis DB ──────────────────────
   const doSyncRows = async (targetRows: EditableRow[], targetFileName?: string) => {
     setLoadingSync(true);
     try {
@@ -342,25 +331,21 @@ export default function LeavesMigrationPage() {
       }
       await leaveBalanceService.migrationApply(
         okRows.map(r => ({
-          matricule:         r.matricule!,
-          poste:             r.poste,
-          date_embauche:     r.date_embauche,
-          solde_anterieur:   r.solde_anterieur ?? 0,
-          ...(r.acquired_override != null ? { acquired_override: r.acquired_override } : {}),
-          ...(r.taken_override    != null ? { taken_override:    r.taken_override    } : {}),
+          matricule:       r.matricule!,
+          poste:           r.poste,
+          date_embauche:   r.date_embauche,
+          solde_anterieur: r.solde_anterieur ?? 0,
+          ...(r.taken_override != null ? { taken_override: r.taken_override } : {}),
         })),
         { year: currentYear }
       );
+      toast.success("Données enregistrées — rechargement depuis la base…");
+      // Recharger depuis la DB : c'est la source de vérité pour les calculs
+      await loadSnapshot(true);
       setSynced(true);
       setShowSyncBanner(true);
       setTimeout(() => setShowSyncBanner(false), 3000);
-      toast.success("Synchronisation réussie — soldes mis à jour.");
-      migrationSessionService.save({
-        year: currentYear,
-        filename: targetFileName ?? fileName,
-        synced: true,
-        rows: targetRows,
-      }).catch(() => {});
+      if (targetFileName) setFileName(targetFileName);
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Erreur lors de la synchronisation.");
     } finally {
@@ -370,68 +355,25 @@ export default function LeavesMigrationPage() {
 
   const handleSync = () => doSyncRows(rows);
 
-  // ── Générer depuis la base (tous les employés non-intérimaires) ─────────────
-  // Fusionne les données DB avec les soldes_anterieur déjà saisis dans la session.
-  // Les employés du fichier conservent leur solde_anterieur.
-  // Les nouveaux (basculements, nouvelles intégrations) apparaissent avec leur solde calculé.
-  const handleSnapshot = () => doSnapshot();
-
-  const doSnapshot = async () => {
-    setLoadingSnap(true);
-    try {
-      const res = await leaveBalanceService.migrationSnapshot(currentYear);
-
-      // Index des soldes_anterieur déjà saisis dans la session courante (par matricule)
-      const existingSoldes: Record<string, number> = {};
-      for (const r of rows) {
-        if (r.matricule && r.status === "ok") {
-          existingSoldes[r.matricule.toUpperCase()] = r.solde_anterieur ?? 0;
-        }
-      }
-
-      const newRows = res.results.map((r: any) => {
-        // Préserver le solde_anterieur saisi manuellement dans la session (depuis fichier)
-        const mat = (r.matricule || "").toUpperCase();
-        const solde_anterieur = mat in existingSoldes ? existingSoldes[mat] : (r.solde_anterieur ?? 0);
-        const acquired = r.acquired ?? 0;
-        const taken    = r.taken ?? 0;
-        const current_remaining = solde_anterieur + acquired;
-        const edited = current_remaining - taken;
-        return { ...r, solde_anterieur, current_remaining, edited };
-      });
-
-      const newFileName = fileName && !fileName.startsWith("Employés base")
-        ? fileName  // Conserver le nom du fichier original
-        : `Employés base de données (${res.processed})`;
-
-      setRows(newRows);
-      setFileName(newFileName);
-      setSynced(false);
-      setSearch("");
-
-      migrationSessionService.save({
-        year: currentYear,
-        filename: newFileName,
-        synced: false,
-        rows: newRows,
-      }).catch(() => {});
-
-      const newCount = newRows.filter(
-        (r: any) => !(r.matricule?.toUpperCase() in existingSoldes)
-      ).length;
-      if (newCount > 0) {
-        toast(`${res.processed} employé(s) chargé(s) · ${newCount} nouveau(x). Synchronisation…`, { icon: "⏳" });
-      } else {
-        toast(`${res.processed} employé(s) chargé(s). Synchronisation en cours…`, { icon: "⏳" });
-      }
-
-      // Auto-synchroniser immédiatement après la génération
-      await doSyncRows(newRows, newFileName);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error || "Erreur lors du chargement.");
-    } finally {
-      setLoadingSnap(false);
+  // ── Exporter le gabarit (données actuelles → Excel à remplir) ───────────────
+  const exportGabarit = async () => {
+    let source = rows.filter(r => r.status === "ok");
+    // Si pas de données, charger depuis la DB d'abord
+    if (!source.length) {
+      const snap = await loadSnapshot(false);
+      if (!snap) { toast.error("Impossible de charger les données."); return; }
+      source = snap.filter((r: EditableRow) => r.status === "ok");
     }
+    const data = source.map(r => ({
+      "MATRICULE":          r.matricule || "",
+      "NOM":                r.nom ?? r.employee.split(" ")[0] ?? "",
+      "PRENOM":             r.prenom ?? r.employee.split(" ").slice(1).join(" ") ?? "",
+      "SOLDE_ANTERIEUR":    r.solde_anterieur ?? 0,
+      "SOLDE_CONGE_ACTUEL": (r.solde_anterieur ?? 0) + (r.acquired ?? 0),
+      "CONGE_PRIS":         r.taken ?? 0,
+    }));
+    exportMigrationXLSX(`soldes_conges_${currentYear}`, data);
+    toast.success(`Export réussi — ${data.length} employé(s).`);
   };
 
   // ── Réinitialiser ───────────────────────────────────────────────────────────
@@ -527,23 +469,6 @@ export default function LeavesMigrationPage() {
     setShowExportDlg(false);
   };
 
-  // Export modèle "solde antérieur + congé pris" (à remplir et réimporter)
-  const exportSoldeAnterieurTemplate = () => {
-    const okRows = rows.filter(r => r.status === "ok");
-    if (!okRows.length) {
-      toast.error("Générez d'abord les données depuis la base.");
-      return;
-    }
-    const data = okRows.map(r => ({
-      "MATRICULE":        r.matricule || "",
-      "NOM":              r.nom ?? r.employee.split(" ")[0] ?? "",
-      "PRENOM":           r.prenom ?? r.employee.split(" ").slice(1).join(" ") ?? "",
-      "SOLDE_ANTERIEUR":  r.solde_anterieur ?? 0,
-      "CONGE_PRIS":       r.taken_override ?? r.taken ?? 0,
-    }));
-    exportMigrationXLSX("solde_anterieur_a_remplir", data);
-  };
-
   // Pagination dérivée
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage   = Math.min(page, totalPages);
@@ -603,49 +528,40 @@ export default function LeavesMigrationPage() {
               </button>
             )}
 
+            {/* Actualiser depuis la base */}
+            <button
+              onClick={() => loadSnapshot()}
+              disabled={loadingSnap || loadingPrev || loadingSync}
+              title="Recharger les soldes depuis la base de données"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 text-sm font-bold transition shadow-sm disabled:opacity-50"
+            >
+              {loadingSnap
+                ? <ImSpinner2 className="animate-spin" size={14} />
+                : <RefreshCw size={14} />}
+              Actualiser
+            </button>
+
+            {/* Exporter le gabarit */}
+            <button
+              onClick={exportGabarit}
+              disabled={loadingSnap || loadingPrev || loadingSync}
+              title="Exporter les données actuelles en Excel"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[#003c71] text-[#003c71] bg-white hover:bg-[#003c71]/5 text-sm font-bold transition shadow-sm disabled:opacity-50"
+            >
+              <Download size={14} /> Exporter données actuelles
+            </button>
+
             {/* Synchroniser */}
-            {rows.length > 0 && !loadingPrev && (
+            {rows.length > 0 && !loadingPrev && !synced && (
               <button
                 onClick={handleSync}
-                disabled={loadingSync || okCount === 0 || synced}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition shadow-sm disabled:opacity-50 ${
-                  synced
-                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-default"
-                    : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                }`}
+                disabled={loadingSync || okCount === 0}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition shadow-sm disabled:opacity-50"
               >
                 {loadingSync
                   ? <ImSpinner2 className="animate-spin" size={14} />
                   : <CheckCircle size={15} />}
-                {loadingSync
-                  ? "Synchronisation…"
-                  : synced
-                    ? `Synchronisé (${okCount})`
-                    : `Synchroniser (${okCount} employé(s))`}
-              </button>
-            )}
-
-            {/* Générer depuis la base */}
-            <button
-              onClick={handleSnapshot}
-              disabled={loadingSnap || loadingPrev}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[#003c71] text-[#003c71] bg-white hover:bg-[#003c71]/5 text-sm font-bold transition shadow-sm disabled:opacity-60"
-            >
-              {loadingSnap
-                ? <ImSpinner2 className="animate-spin" size={15} />
-                : <RefreshCw size={15} />}
-              Générer depuis la base
-            </button>
-
-            {/* Export modèle solde antérieur */}
-            {rows.length > 0 && (
-              <button
-                onClick={exportSoldeAnterieurTemplate}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 text-sm font-bold transition shadow-sm"
-                title="Exporter un fichier à remplir avec les soldes antérieurs"
-              >
-                <Download size={15} />
-                Modèle solde antérieur
+                {loadingSync ? "Synchronisation…" : `Synchroniser (${okCount})`}
               </button>
             )}
 
@@ -659,7 +575,7 @@ export default function LeavesMigrationPage() {
             />
             <button
               onClick={() => inputRef.current?.click()}
-              disabled={loadingPrev || loadingSnap}
+              disabled={loadingPrev || loadingSync || loadingSnap}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#003c71] hover:bg-[#003c71]/90 text-white text-sm font-bold transition shadow-sm disabled:opacity-60"
             >
               {loadingPrev
@@ -673,8 +589,17 @@ export default function LeavesMigrationPage() {
         {/* ── Contenu ─────────────────────────────────────────────────────── */}
         <AnimatePresence mode="wait">
 
-          {/* État initial — aucune donnée */}
-          {!hasData && !loadingPrev && (
+          {/* État initial — chargement auto depuis la base */}
+          {!hasData && !loadingPrev && loadingSnap && (
+            <motion.div key="snap-loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex flex-col items-center justify-center py-24 gap-3">
+              <ImSpinner2 className="animate-spin text-[#003c71]" size={30} />
+              <p className="text-gray-500 text-sm font-medium">Chargement des soldes depuis la base…</p>
+            </motion.div>
+          )}
+
+          {/* Zone de dépôt si vraiment vide */}
+          {!hasData && !loadingPrev && !loadingSnap && (
             <motion.div
               key="empty"
               initial={{ opacity: 0, y: 8 }}
@@ -691,7 +616,7 @@ export default function LeavesMigrationPage() {
                 <p className="font-semibold text-gray-500">Glissez votre fichier ici</p>
                 <p className="text-sm text-gray-400 mt-1">.xlsx · .xls · .csv</p>
                 <p className="text-xs text-gray-300 mt-3">
-                  Colonnes détectées automatiquement : NOM · MATRICULE · SOLDE_ANTERIEUR (POSTE et DATE_EMBAUCHE optionnels)
+                  Colonnes détectées automatiquement : MATRICULE · SOLDE_ANTERIEUR (POSTE et DATE_EMBAUCHE optionnels)
                 </p>
               </div>
             </motion.div>
@@ -856,11 +781,12 @@ export default function LeavesMigrationPage() {
                         </tr>
                       )}
                       {paginated.map((row, idx) => {
-                        const globalIdx = rows.indexOf(row);
-                        const isOk      = row.status === "ok";
-                        const acquired  = row.acquired_override ?? row.acquired ?? 0;
-                        const taken     = row.taken_override    ?? row.taken    ?? 0;
+                        const isOk           = row.status === "ok";
+                        const acquired       = row.acquired ?? 0;
+                        const taken          = row.taken    ?? 0;
                         const soldeAnterieur = row.solde_anterieur ?? 0;
+                        const soldeActuel    = soldeAnterieur + acquired;   // DB
+                        const congeRestant   = soldeActuel - taken;         // DB
                         const nom    = row.nom    ?? row.employee.split(" ")[0] ?? "";
                         const prenom = row.prenom ?? row.employee.split(" ").slice(1).join(" ");
                         return (
@@ -879,49 +805,20 @@ export default function LeavesMigrationPage() {
                             <td className="px-4 py-3 text-gray-700">{prenom || "—"}</td>
                             <td className="px-4 py-3 text-gray-600 text-xs">{row.poste || "—"}</td>
                             <td className="px-4 py-3 text-gray-600 text-xs">{formatDateEmbauche(row.date_embauche)}</td>
-                            <td className="px-4 py-3 text-center">
-                              {isOk ? (
-                                <input
-                                  type="number"
-                                  step="0.5"
-                                  value={soldeAnterieur}
-                                  onChange={(e) => updateField(globalIdx, "solde_anterieur", e.target.value)}
-                                  className="w-20 text-center font-mono text-gray-600 border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
-                                />
-                              ) : (
-                                <span className="text-gray-300 text-sm">—</span>
-                              )}
+                            <td className="px-4 py-3 text-center font-mono text-gray-600 text-sm">
+                              {isOk ? soldeAnterieur.toFixed(2) : <span className="text-gray-300">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-center"
-                              title="Modifiable : remplace le calcul automatique si vous saisissez une valeur">
-                              {isOk ? (
-                                <input
-                                  type="number"
-                                  step="0.5"
-                                  value={acquired.toFixed(2)}
-                                  onChange={(e) => updateField(globalIdx, "acquired", e.target.value)}
-                                  className="w-20 text-center font-mono border border-gray-200 text-gray-600 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
-                                />
-                              ) : <span className="text-gray-300">—</span>}
+                            <td className="px-4 py-3 text-center font-mono text-gray-600 text-sm">
+                              {isOk ? acquired.toFixed(2) : <span className="text-gray-300">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-center font-mono font-semibold text-gray-700 text-sm" title="Calculé : Solde antérieur + Congés acquis">
-                              {isOk && row.current_remaining !== null ? row.current_remaining.toFixed(2) : "—"}
+                            <td className="px-4 py-3 text-center font-mono font-semibold text-gray-700 text-sm">
+                              {isOk ? soldeActuel.toFixed(2) : <span className="text-gray-300">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-center"
-                              title="Modifiable : remplace la somme automatique des demandes validées si vous saisissez une valeur">
-                              {isOk ? (
-                                <input
-                                  type="number"
-                                  step="0.5"
-                                  value={taken.toFixed(2)}
-                                  onChange={(e) => updateField(globalIdx, "taken", e.target.value)}
-                                  className="w-20 text-center font-mono border border-gray-200 text-gray-600 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/20 transition mx-auto block"
-                                />
-                              ) : <span className="text-gray-300">—</span>}
+                            <td className="px-4 py-3 text-center font-mono text-gray-600 text-sm">
+                              {isOk ? taken.toFixed(2) : <span className="text-gray-300">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-center font-mono font-bold text-[#003c71] text-sm"
-                              title="Calculé automatiquement : Solde congé actuel - Congé pris">
-                              {isOk ? row.edited.toFixed(2) : <span className="text-gray-300">—</span>}
+                            <td className="px-4 py-3 text-center font-mono font-bold text-[#003c71] text-sm">
+                              {isOk ? congeRestant.toFixed(2) : <span className="text-gray-300">—</span>}
                             </td>
                           </motion.tr>
                         );
