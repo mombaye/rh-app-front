@@ -214,8 +214,39 @@ export const passportService = {
     return res.data.checkboxes;
   },
 
-  toggleCheckbox: async (slug: string, cb_id: string): Promise<{ ok: boolean; cb_id: string; checked: boolean }> => {
-    const res = await api.post(`${API}/${slug}/checkbox-toggle/`, { cb_id });
+  toggleCheckbox: async (slug: string, cb_id: string, date?: string): Promise<{ ok: boolean; cb_id: string; checked: boolean }> => {
+    const res = await api.post(`${API}/${slug}/checkbox-toggle/`, { cb_id, date: date ?? "" });
+    return res.data;
+  },
+
+  getAutorisationSig: async (): Promise<Blob> => {
+    const res = await api.get(`${API}/signature-autorisation/`, { responseType: "blob" });
+    return res.data as Blob;
+  },
+
+  uploadAutorisationSig: async (file: File): Promise<{ ok: boolean }> => {
+    const form = new FormData();
+    form.append("signature", file);
+    const res = await api.post(`${API}/signature-autorisation/upload/`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
+  applyAutorisation: async (
+    slug: string,
+    column: "th" | "el",
+    date: string,
+    pos: { x: number; y: number; w: number; h: number }
+  ): Promise<{ ok: boolean }> => {
+    const res = await api.post(`${API}/${slug}/apply-autorisation/`, {
+      column,
+      date,
+      x_pct: pos.x,
+      y_pct: pos.y,
+      w_pct: pos.w,
+      h_pct: pos.h,
+    });
     return res.data;
   },
 

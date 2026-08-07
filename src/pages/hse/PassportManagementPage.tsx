@@ -345,18 +345,34 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   const [checkboxes, setCheckboxes] = useState<PassportCheckbox[]>([]);
   const [togglingCb, setTogglingCb] = useState<string | null>(null);
 
+  // Autorisation employeur
+  const [autorisationDate, setAutorisationDate] = useState("");
+  const [autorisationSigUrl, setAutorisationSigUrl] = useState<string | null>(null);
+
+  // Mode placement autorisation (drag & drop date + sig)
+  const [placingAutorisation, setPlacingAutorisation] = useState<{
+    column: "th" | "el";
+    date: string;
+    pos: PhotoPos;
+  } | null>(null);
+  const [savingAutorisation, setSavingAutorisation] = useState(false);
+  const autorisationDragRef = useRef<{ mode: DragMode; sx: number; sy: number; sp: PhotoPos } | null>(null);
+
   // Champs de date interactifs
   const [dateFields, setDateFields] = useState<PassportDateField[]>([]);
   const [editingDate, setEditingDate] = useState<{ id: string; value: string } | null>(null);
   const [savingDate, setSavingDate] = useState(false);
 
-  // Charger les deux cachets au montage
+  // Charger les deux cachets + signature autorisation au montage
   useEffect(() => {
     passportService.getCachet("entreprise")
       .then((blob) => setCachetEntrepriseUrl(URL.createObjectURL(blob)))
       .catch(() => {});
     passportService.getCachet("conduite_defensive")
       .then((blob) => setCachetConduiteUrl(URL.createObjectURL(blob)))
+      .catch(() => {});
+    passportService.getAutorisationSig()
+      .then((blob) => setAutorisationSigUrl(URL.createObjectURL(blob)))
       .catch(() => {});
   }, []);
 
@@ -377,12 +393,21 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
   useEffect(() => { reloadAppliedCachets(); }, [file.slug]);
 
   const handleCheckboxClick = async (cb: PassportCheckbox) => {
-    if (togglingCb || placingPhoto || placingCachets || placingSig) return;
+    if (togglingCb || placingPhoto || placingCachets || placingSig || placingAutorisation) return;
+    const isAutorise = cb.id === "th_oui" || cb.id === "el_oui";
+
+    // Cocher une case autorisation → entrer en mode placement drag & drop
+    if (isAutorise && !cb.checked) {
+      const column = cb.id === "th_oui" ? "th" : "el";
+      setPlacingAutorisation({ column, date: autorisationDate, pos: { x: 5, y: 75, w: 28, h: 12 } });
+      return;
+    }
+
+    // Décocher ou case normale → appel backend direct
     setTogglingCb(cb.id);
     try {
       const res = await passportService.toggleCheckbox(file.slug, cb.id);
       setCheckboxes((prev) => prev.map((c) => c.id === cb.id ? { ...c, checked: res.checked } : c));
-      // Recharger l'image PDF pour refléter la case cochée/décochée
       _page0Cache.delete(file.slug);
       const newKey = cacheKey + 1;
       setCacheKey(newKey);
@@ -599,6 +624,93 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
     sigDragRef.current = { mode, sx: e.clientX, sy: e.clientY, sp: { ...placingSig.pos } };
   };
 
+  // ── Drag & resize autorisation ──────────────────────────────────────────────
+  const onAutorisationMouseMove = useCallback((e: MouseEvent) => {
+    const d = autorisationDragRef.current;
+    if (!d || !containerRef.current) return;
+    const cr  = containerRef.current.getBoundingClientRect();
+    const dx  = (e.clientX - d.sx) / cr.width  * 100;
+    const dy  = (e.clientY - d.sy) / cr.height * 100;
+    const p   = d.sp;
+    const MIN = 4;
+    setPlacingAutorisation((prev) => {
+      if (!prev) return prev;
+      let { x, y, w, h } = p;
+      if (d.mode === "move") {
+        x = Math.max(0, Math.min(100 - w, p.x + dx));
+        y = Math.max(0, Math.min(100 - h, p.y + dy));
+      } else if (d.mode === "br") {
+        w = Math.max(MIN, Math.min(100 - p.x, p.w + dx));
+        h = Math.max(MIN, Math.min(100 - p.y, p.h + dy));
+      } else if (d.mode === "bl") {
+        const nw = Math.max(MIN, p.w - dx); x = p.x + p.w - nw; w = nw;
+        h = Math.max(MIN, Math.min(100 - p.y, p.h + dy));
+      } else if (d.mode === "tr") {
+        w = Math.max(MIN, Math.min(100 - p.x, p.w + dx));
+        const nh = Math.max(MIN, p.h - dy); y = p.y + p.h - nh; h = nh;
+      } else if (d.mode === "tl") {
+        const nw = Math.max(MIN, p.w - dx); x = p.x + p.w - nw; w = nw;
+        const nh = Math.max(MIN, p.h - dy); y = p.y + p.h - nh; h = nh;
+      }
+      return { ...prev, pos: { x, y, w, h } };
+    });
+  }, []);
+
+  const onAutorisationMouseUp = useCallback(() => { autorisationDragRef.current = null; }, []);
+
+  useEffect(() => {
+    if (!placingAutorisation) return;
+    window.addEventListener("mousemove", onAutorisationMouseMove);
+    window.addEventListener("mouseup",  onAutorisationMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onAutorisationMouseMove);
+      window.removeEventListener("mouseup",  onAutorisationMouseUp);
+    };
+  }, [placingAutorisation, onAutorisationMouseMove, onAutorisationMouseUp]);
+
+  const startAutorisationDrag = (mode: DragMode, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!placingAutorisation) return;
+    autorisationDragRef.current = { mode, sx: e.clientX, sy: e.clientY, sp: { ...placingAutorisation.pos } };
+  };
+
+  const handleValidateAutorisation = async () => {
+    if (!placingAutorisation) return;
+    setSavingAutorisation(true);
+    try {
+      await passportService.toggleCheckbox(
+        file.slug,
+        placingAutorisation.column === "th" ? "th_oui" : "el_oui",
+        placingAutorisation.date
+      );
+      await passportService.applyAutorisation(
+        file.slug,
+        placingAutorisation.column,
+        placingAutorisation.date,
+        placingAutorisation.pos
+      );
+      setCheckboxes((prev) =>
+        prev.map((c) =>
+          c.id === (placingAutorisation.column === "th" ? "th_oui" : "el_oui")
+            ? { ...c, checked: true }
+            : c
+        )
+      );
+      _page0Cache.delete(file.slug);
+      const newKey = cacheKey + 1;
+      setCacheKey(newKey);
+      setPages([]);
+      setPlacingAutorisation(null);
+      await loadPage(0, newKey);
+      toast.success("Autorisation appliquée !");
+    } catch {
+      toast.error("Erreur lors de l'application de l'autorisation.");
+    } finally {
+      setSavingAutorisation(false);
+    }
+  };
+
   const handleSigFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -761,6 +873,8 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                   ? `Cachet ${activeCachetType === "conduite_defensive" ? "conduite défensive" : "entreprise"} — glissez, redimensionnez, supprimez avec ×, puis validez`
                   : placingSig
                   ? "Glissez la signature au bon endroit, redimensionnez via les coins, puis validez"
+                  : placingAutorisation
+                  ? `Autorisation ${placingAutorisation.column.toUpperCase()} — glissez la zone date+signature au bon endroit, puis validez`
                   : "Passeport Sécurité CAMUSAT"}
               </p>
             </div>
@@ -768,7 +882,7 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
 
           <div className="flex items-center gap-2">
             {/* Navigation pages — masquée en mode placement */}
-            {!placingPhoto && !placingCachets && !placingSig && pageCount > 1 && (
+            {!placingPhoto && !placingCachets && !placingSig && !placingAutorisation && pageCount > 1 && (
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <button onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} disabled={currentPage === 0}
                   className="p-1 rounded hover:bg-gray-100 disabled:opacity-40">
@@ -783,8 +897,19 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
             )}
 
             {/* Boutons normaux — hors mode placement */}
-            {!placingPhoto && !placingCachets && !placingSig && (
+            {!placingPhoto && !placingCachets && !placingSig && !placingAutorisation && (
               <>
+                {/* Date autorisation */}
+                <div className="flex items-center gap-1.5">
+                  <label className="text-[10px] text-gray-400 font-medium whitespace-nowrap">Date autor.</label>
+                  <input
+                    type="date"
+                    value={autorisationDate}
+                    onChange={(e) => setAutorisationDate(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#003c71]/40 w-32"
+                  />
+                </div>
+
                 {/* Photo + supprimer */}
                 <div className="flex items-center gap-0.5">
                   <button
@@ -957,7 +1082,28 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
               </>
             )}
 
-            {!placingPhoto && !placingCachets && !placingSig && (
+            {/* Actions mode placement autorisation */}
+            {placingAutorisation && (
+              <>
+                <button
+                  onClick={() => setPlacingAutorisation(null)}
+                  disabled={savingAutorisation}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-100 transition disabled:opacity-50"
+                >
+                  <X size={13} /> Annuler
+                </button>
+                <button
+                  onClick={handleValidateAutorisation}
+                  disabled={savingAutorisation}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 transition disabled:opacity-60"
+                >
+                  {savingAutorisation ? <ImSpinner2 className="animate-spin" size={13} /> : <Check size={13} />}
+                  Valider l'autorisation
+                </button>
+              </>
+            )}
+
+            {!placingPhoto && !placingCachets && !placingSig && !placingAutorisation && (
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
                 <X size={16} />
               </button>
@@ -1037,7 +1183,7 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
               ))}
 
               {/* ── Overlays cases à cocher (page 0) ── */}
-              {currentPage === 0 && !placingPhoto && !placingCachets && checkboxes.map((cb) => {
+              {currentPage === 0 && !placingPhoto && !placingCachets && !placingAutorisation && checkboxes.map((cb) => {
                 const cx = cb.x_pct + cb.w_pct / 2;
                 const cy = cb.y_pct + cb.h_pct / 2;
                 const isToggling = togglingCb === cb.id;
@@ -1071,7 +1217,7 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
               })}
 
               {/* ── Overlays champs de date ── */}
-              {currentPage === 0 && !placingPhoto && !placingCachets && !placingSig && dateFields.map((df) => {
+              {currentPage === 0 && !placingPhoto && !placingCachets && !placingSig && !placingAutorisation && dateFields.map((df) => {
                 const isEditing = editingDate?.id === df.id;
                 return (
                   <div
@@ -1184,7 +1330,7 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
               })}
 
               {/* ── Overlays cachets déjà intégrés (sélectionnables pour suppression) ── */}
-              {!placingPhoto && !placingCachets && !placingSig && currentPage === 0 &&
+              {!placingPhoto && !placingCachets && !placingSig && !placingAutorisation && currentPage === 0 &&
                 appliedCachets.map((c) => {
                   const isSelected = selectedCachetIdx === c.idx;
                   const isDeleting = deletingCachetIdx === c.idx;
@@ -1276,6 +1422,66 @@ function PassportDetailModal({ file, onClose }: { file: PassportFile; onClose: (
                       key={mode}
                       onMouseDown={(e) => startSigDrag(mode, e)}
                       className={`absolute ${pos} w-3.5 h-3.5 bg-white border-2 border-blue-500 rounded-sm ${cur}`}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* ── Overlay autorisation draggable (date + sig employeur) ── */}
+              {placingAutorisation && (
+                <div
+                  onMouseDown={(e) => startAutorisationDrag("move", e)}
+                  style={{
+                    position: "absolute",
+                    left:   `${placingAutorisation.pos.x}%`,
+                    top:    `${placingAutorisation.pos.y}%`,
+                    width:  `${placingAutorisation.pos.w}%`,
+                    height: `${placingAutorisation.pos.h}%`,
+                    cursor: "move",
+                    boxSizing: "border-box",
+                    zIndex: 30,
+                  }}
+                  className="border-2 border-indigo-500 shadow-xl rounded-sm"
+                >
+                  {/* Aperçu : date en haut, sig en dessous */}
+                  <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", pointerEvents: "none", overflow: "hidden" }}>
+                    {placingAutorisation.date && (
+                      <div style={{
+                        fontSize: "min(1.8vh, 9px)",
+                        color: "#14228c",
+                        padding: "1px 3px",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        flexShrink: 0,
+                      }}>
+                        {placingAutorisation.date}
+                      </div>
+                    )}
+                    {autorisationSigUrl && (
+                      <img
+                        src={autorisationSigUrl}
+                        alt="sig autorisation"
+                        style={{ flex: 1, objectFit: "contain", display: "block", minHeight: 0 }}
+                        draggable={false}
+                      />
+                    )}
+                    {!autorisationSigUrl && (
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.4, fontSize: "min(1.5vh, 8px)", color: "#6366f1" }}>
+                        sig. autorisation
+                      </div>
+                    )}
+                  </div>
+                  {/* Poignées */}
+                  {([
+                    ["tl", "-top-1.5 -left-1.5",    "cursor-nw-resize"],
+                    ["tr", "-top-1.5 -right-1.5",   "cursor-ne-resize"],
+                    ["bl", "-bottom-1.5 -left-1.5",  "cursor-sw-resize"],
+                    ["br", "-bottom-1.5 -right-1.5", "cursor-se-resize"],
+                  ] as const).map(([mode, pos, cur]) => (
+                    <div
+                      key={mode}
+                      onMouseDown={(e) => startAutorisationDrag(mode, e)}
+                      className={`absolute ${pos} w-3.5 h-3.5 bg-white border-2 border-indigo-500 rounded-sm ${cur}`}
                     />
                   ))}
                 </div>
@@ -1688,6 +1894,8 @@ export default function PassportManagementPage() {
   const [previewEntrepriseUrl, setPreviewEntrepriseUrl] = useState<string | null>(null);
   const [previewConduiteUrl, setPreviewConduiteUrl]     = useState<string | null>(null);
   const [sigFilter, setSigFilter] = useState<"all" | "complete" | "incomplete">("all");
+  const [uploadingAutorisationSig, setUploadingAutorisationSig] = useState(false);
+  const autorisationSigInputRef = useRef<HTMLInputElement>(null);
   const cachetInputRef = useRef<HTMLInputElement>(null);
   const cachetConduiteInputRef = useRef<HTMLInputElement>(null);
 
@@ -1711,6 +1919,21 @@ export default function PassportManagementPage() {
     } finally {
       setUploadingCachet(false);
       setUploadingCachetType(null);
+    }
+  };
+
+  const handleAutorisationSigUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadingAutorisationSig(true);
+    try {
+      await passportService.uploadAutorisationSig(file);
+      toast.success("Signature autorisation uploadée.");
+    } catch {
+      toast.error("Erreur lors de l'upload de la signature autorisation.");
+    } finally {
+      setUploadingAutorisationSig(false);
     }
   };
 
@@ -1796,6 +2019,18 @@ export default function PassportManagementPage() {
                 ? uploadingCachetType === "conduite_defensive" ? "Conduite Déf…" : "Entreprise…"
                 : "Upload cachet"}
             </button>
+            {/* Upload signature autorisation employeur */}
+            <button
+              onClick={() => autorisationSigInputRef.current?.click()}
+              disabled={uploadingAutorisationSig}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#003c71]/30 bg-[#003c71]/10 text-[#003c71] text-sm font-medium hover:bg-[#003c71]/20 transition disabled:opacity-60"
+              title="Uploader la signature autorisation employeur"
+            >
+              {uploadingAutorisationSig ? <ImSpinner2 className="animate-spin" size={15} /> : <PenLine size={15} />}
+              Sig. Autorisation
+            </button>
+            <input ref={autorisationSigInputRef} type="file" accept="image/*" className="hidden" onChange={handleAutorisationSigUpload} />
+
             <input ref={cachetInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleCachetUpload(e, "entreprise")} />
             <input ref={cachetConduiteInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleCachetUpload(e, "conduite_defensive")} />
 

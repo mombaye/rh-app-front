@@ -1,14 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, FileText, Download, Save, CheckCircle2, Loader2 } from "lucide-react";
+import { X, FileText, Download, Loader2, Upload, Trash2, FilePlus } from "lucide-react";
 import toast from "react-hot-toast";
-import { disciplinaryDocService } from "@/services/disciplinaryDocService";
-import {
-  DisciplinaryDocument,
-  DisciplinaryDocType,
-  DOC_TYPE_CONFIG,
-  DOC_TYPES,
-} from "@/types/disciplinaryDoc";
+import { disciplinaryDocService, UploadedPdf } from "@/services/disciplinaryDocService";
 import type { DisciplinaryRecord } from "@/services/employeeService";
 
 interface Props {
@@ -16,141 +10,27 @@ interface Props {
   onClose: () => void;
 }
 
-const PLACEHOLDERS: Record<DisciplinaryDocType, string> = {
-  DEMANDE_EXPLICATION: `Nous avons été informés de faits susceptibles de constituer une faute professionnelle à votre encontre.\n\nNous vous demandons de bien vouloir nous fournir vos explications sur les faits suivants :\n\n[Décrire les faits reprochés]\n\nVeuillez nous faire parvenir votre réponse écrite dans un délai de 48 heures.`,
-  REPONSE_EXPLICATION: `Suite à votre demande d'explications en date du [date], nous avons reçu la réponse de l'employé(e) concerné(e).\n\nRésumé de la réponse :\n\n[Résumer ou coller la réponse de l'employé]`,
-  NOTIFICATION_SANCTION: `Suite à l'examen de votre dossier et après avoir pris connaissance de vos explications, la Direction a décidé de vous notifier la sanction suivante :\n\n[Détailler la sanction décidée]\n\nCette décision prend effet à compter du [date d'effet].\n\nVous disposez d'un délai de [délai] pour contester cette décision.`,
+const SANCTIONS: Record<string, string> = {
+  "SAN-01": "Réprimande",
+  "SAN-02": "Avertissement verbal ou écrit",
+  "SAN-03": "Mise à pied — 1 à 3 jours",
+  "SAN-04": "Mise à pied — 4 à 8 jours",
+  "SAN-05": "Licenciement disciplinaire",
+  "SAN-06": "Licenciement délégué du personnel",
 };
 
-function DocSection({
-  recordId,
-  docType,
-  existing,
-  onSaved,
-}: {
-  recordId: number;
-  docType: DisciplinaryDocType;
-  existing: DisciplinaryDocument | undefined;
-  onSaved: (doc: DisciplinaryDocument) => void;
-}) {
-  const cfg = DOC_TYPE_CONFIG[docType];
-  const [content, setContent] = useState(existing?.content ?? "");
-  const [saving, setSaving]   = useState(false);
-  const [saved,  setSaved]    = useState(false);
-
-  useEffect(() => {
-    setContent(existing?.content ?? "");
-  }, [existing?.content]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const doc = await disciplinaryDocService.save(recordId, docType, content);
-      onSaved(doc);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-      toast.success("Document enregistré et PDF généré.");
-    } catch {
-      toast.error("Erreur lors de l'enregistrement.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDownload = () => {
-    if (!existing) { toast.error("Enregistrez d'abord le document."); return; }
-    const url = disciplinaryDocService.pdfUrl(recordId, existing.id);
-    const token = localStorage.getItem("access_token");
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.blob())
-      .then(blob => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `${docType}_${recordId}.pdf`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      })
-      .catch(() => toast.error("Erreur lors du téléchargement."));
-  };
-
-  const dirty = content !== (existing?.content ?? "");
-
-  return (
-    <div className="border border-gray-100 rounded-2xl overflow-hidden">
-      {/* Header */}
-      <div className={`flex items-center justify-between px-4 py-3 border-b border-gray-100`}>
-        <div className="flex items-center gap-2.5">
-          <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-          <span className="font-semibold text-gray-800 text-sm">{cfg.label}</span>
-          {existing && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
-              Enregistré
-            </span>
-          )}
-        </div>
-        <div className="flex gap-1.5">
-          {existing && (
-            <button
-              onClick={handleDownload}
-              title="Télécharger le PDF"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition"
-            >
-              <Download size={12} /> PDF
-            </button>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={saving || !dirty}
-            title="Enregistrer"
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-              saved
-                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                : dirty
-                ? "bg-[#003c71] text-white hover:bg-[#002d56]"
-                : "bg-gray-50 text-gray-400 border border-gray-200 cursor-not-allowed"
-            }`}
-          >
-            {saving ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : saved ? (
-              <CheckCircle2 size={12} />
-            ) : (
-              <Save size={12} />
-            )}
-            {saved ? "Enregistré" : "Enregistrer"}
-          </button>
-        </div>
-      </div>
-
-      {/* Éditeur */}
-      <div className="p-4 bg-white">
-        <textarea
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          placeholder={PLACEHOLDERS[docType]}
-          rows={8}
-          className="w-full text-sm text-gray-700 leading-relaxed resize-y outline-none border border-gray-200 rounded-xl px-4 py-3 focus:border-[#003c71] focus:ring-2 focus:ring-[#003c71]/15 transition placeholder-gray-300 bg-gray-50 focus:bg-white"
-        />
-        {existing && (
-          <p className="text-[10px] text-gray-400 mt-1.5">
-            Dernière mise à jour : {new Date(existing.updated_at).toLocaleString("fr-FR")}
-            {existing.created_by && ` · par ${existing.created_by}`}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function DisciplinaryDocPanel({ record, onClose }: Props) {
-  const [docs, setDocs]     = useState<DisciplinaryDocument[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [uploadedPdfs, setUploadedPdfs] = useState<UploadedPdf[]>([]);
+  const [loading, setLoading]           = useState(false);
+  const [uploading, setUploading]       = useState(false);
+  const [deletingId, setDeletingId]     = useState<number | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
-  const loadDocs = useCallback(async () => {
+  const loadPdfs = useCallback(async () => {
     if (!record) return;
     setLoading(true);
     try {
-      setDocs(await disciplinaryDocService.list(record.id));
+      setUploadedPdfs(await disciplinaryDocService.listUploadedPdfs(record.id));
     } catch {
       toast.error("Erreur lors du chargement des documents.");
     } finally {
@@ -159,33 +39,64 @@ export default function DisciplinaryDocPanel({ record, onClose }: Props) {
   }, [record?.id]);
 
   useEffect(() => {
-    if (record) loadDocs();
-    else setDocs([]);
-  }, [record, loadDocs]);
+    if (record) loadPdfs();
+    else setUploadedPdfs([]);
+  }, [record, loadPdfs]);
 
-  const handleSaved = (updated: DisciplinaryDocument) => {
-    setDocs(prev => {
-      const exists = prev.find(d => d.doc_type === updated.doc_type);
-      return exists
-        ? prev.map(d => d.doc_type === updated.doc_type ? updated : d)
-        : [...prev, updated];
-    });
+  const handleUploadPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !record) return;
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("Seuls les fichiers PDF sont acceptés.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const uploaded = await disciplinaryDocService.uploadPdf(record.id, file);
+      setUploadedPdfs(prev => [uploaded, ...prev]);
+      toast.success("Document PDF ajouté.");
+    } catch {
+      toast.error("Erreur lors de l'upload du PDF.");
+    } finally {
+      setUploading(false);
+    }
   };
 
-  const SANCTIONS: Record<string, string> = {
-    "SAN-01": "Réprimande",
-    "SAN-02": "Avertissement verbal ou écrit",
-    "SAN-03": "Mise à pied — 1 à 3 jours",
-    "SAN-04": "Mise à pied — 4 à 8 jours",
-    "SAN-05": "Licenciement disciplinaire",
-    "SAN-06": "Licenciement délégué du personnel",
+  const handleDelete = async (pdfId: number) => {
+    if (!record) return;
+    setDeletingId(pdfId);
+    try {
+      await disciplinaryDocService.deleteUploadedPdf(record.id, pdfId);
+      setUploadedPdfs(prev => prev.filter(p => p.id !== pdfId));
+      toast.success("Document supprimé.");
+    } catch {
+      toast.error("Erreur lors de la suppression.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleDownload = (pdfId: number, filename: string) => {
+    if (!record) return;
+    const url = disciplinaryDocService.downloadUploadedPdf(record.id, pdfId);
+    const token = localStorage.getItem("access_token");
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.blob())
+      .then(blob => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      })
+      .catch(() => toast.error("Erreur lors du téléchargement."));
   };
 
   return (
     <AnimatePresence>
       {record && (
         <>
-          {/* Overlay */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -194,16 +105,15 @@ export default function DisciplinaryDocPanel({ record, onClose }: Props) {
             onClick={onClose}
           />
 
-          {/* Panneau */}
           <motion.aside
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", stiffness: 320, damping: 32 }}
-            className="fixed right-0 top-0 h-full w-full max-w-xl bg-gray-50 z-50 shadow-2xl flex flex-col"
+            className="fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl flex flex-col"
           >
-            {/* Header panneau */}
-            <div className="flex items-start justify-between px-6 py-5 bg-white border-b border-gray-100 shrink-0">
+            {/* Header */}
+            <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-[#003c71]/10">
                   <FileText size={18} className="text-[#003c71]" />
@@ -221,23 +131,93 @@ export default function DisciplinaryDocPanel({ record, onClose }: Props) {
             </div>
 
             {/* Corps */}
-            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+            <div className="flex-1 overflow-y-auto px-5 py-5">
               {loading ? (
-                <div className="flex justify-center py-16">
+                <div className="flex justify-center py-20">
                   <Loader2 className="animate-spin text-[#003c71]" size={28} />
                 </div>
+              ) : uploadedPdfs.length === 0 ? (
+                /* ── État vide : zone d'upload centrale ── */
+                <div className="flex flex-col items-center justify-center h-full gap-5 py-16">
+                  <div className="p-5 rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200">
+                    <FilePlus size={36} className="text-gray-300" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-gray-700">Aucun document pour ce dossier</p>
+                    <p className="text-xs text-gray-400 mt-1">Importez un PDF pour l'associer à ce dossier disciplinaire.</p>
+                  </div>
+                  <button
+                    onClick={() => pdfInputRef.current?.click()}
+                    disabled={uploading}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#003c71] text-white text-sm font-semibold hover:bg-[#002d56] transition disabled:opacity-60"
+                  >
+                    {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                    {uploading ? "Import en cours…" : "Importer un PDF"}
+                  </button>
+                </div>
               ) : (
-                DOC_TYPES.map(docType => (
-                  <DocSection
-                    key={docType}
-                    recordId={record.id}
-                    docType={docType}
-                    existing={docs.find(d => d.doc_type === docType)}
-                    onSaved={handleSaved}
-                  />
-                ))
+                /* ── Liste des PDFs ── */
+                <div className="flex flex-col gap-3">
+                  {/* Bouton ajouter */}
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      {uploadedPdfs.length} document{uploadedPdfs.length > 1 ? "s" : ""}
+                    </span>
+                    <button
+                      onClick={() => pdfInputRef.current?.click()}
+                      disabled={uploading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#003c71] text-white text-xs font-semibold hover:bg-[#002d56] transition disabled:opacity-60"
+                    >
+                      {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                      {uploading ? "Import…" : "Ajouter un PDF"}
+                    </button>
+                  </div>
+
+                  {uploadedPdfs.map(pdf => (
+                    <div
+                      key={pdf.id}
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition"
+                    >
+                      <div className="p-2 rounded-lg bg-[#003c71]/10 shrink-0">
+                        <FileText size={16} className="text-[#003c71]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{pdf.filename}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {new Date(pdf.uploaded_at).toLocaleString("fr-FR")}
+                          {pdf.uploaded_by && ` · ${pdf.uploaded_by}`}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDownload(pdf.id, pdf.filename)}
+                        className="p-1.5 rounded-lg hover:bg-white text-gray-400 hover:text-[#003c71] transition"
+                        title="Télécharger"
+                      >
+                        <Download size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(pdf.id)}
+                        disabled={deletingId === pdf.id}
+                        className="p-1.5 rounded-lg hover:bg-white text-gray-400 hover:text-red-500 transition disabled:opacity-50"
+                        title="Supprimer"
+                      >
+                        {deletingId === pdf.id
+                          ? <Loader2 size={15} className="animate-spin" />
+                          : <Trash2 size={15} />}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
+
+            <input
+              ref={pdfInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={handleUploadPdf}
+            />
           </motion.aside>
         </>
       )}
