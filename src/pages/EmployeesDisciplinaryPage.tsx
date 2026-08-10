@@ -653,22 +653,6 @@ export default function EmployeesDisciplinaryPage() {
               </AnimatePresence>
             </div>
 
-            {/* Importer */}
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={handleImport}
-            />
-            <button
-              onClick={() => importInputRef.current?.click()}
-              disabled={importing}
-              className="bg-white border border-gray-300 hover:border-camublue-900 hover:bg-blue-50 text-gray-600 hover:text-camublue-900 text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition disabled:opacity-50"
-            >
-              <TbFileExcel size={16} className={importing ? "animate-pulse" : ""} />
-              {importing ? "Import en cours…" : "Importer"}
-            </button>
 
             {/* Actualiser */}
             <button

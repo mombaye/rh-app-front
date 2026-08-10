@@ -11,8 +11,12 @@ const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("access_token")}`,
 });
 
+export type DiscDocCategory = "DEMANDE" | "REPONSE" | "NOTIFICATION" | "AUTRE";
+
 export interface UploadedPdf {
   id: number;
+  doc_type: DiscDocCategory;
+  doc_type_label: string;
   filename: string;
   uploaded_by: string;
   uploaded_at: string;
@@ -45,9 +49,10 @@ export const disciplinaryDocService = {
     return res.data;
   },
 
-  uploadPdf: async (recordId: number, file: File): Promise<UploadedPdf> => {
+  uploadPdf: async (recordId: number, file: File, docType: DiscDocCategory = "AUTRE"): Promise<UploadedPdf> => {
     const form = new FormData();
     form.append("pdf", file);
+    form.append("doc_type", docType);
     const res = await axios.post<UploadedPdf>(UPLOAD_API(recordId), form, {
       headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
     });
