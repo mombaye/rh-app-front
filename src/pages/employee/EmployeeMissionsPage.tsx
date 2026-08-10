@@ -5,7 +5,7 @@ import {
   AlertCircle, Pencil, Loader2,
   ChevronLeft, ChevronRight, Filter,
   X, Calendar, User, Hash, MessageSquare,
-  Trash2, Eye, LayoutGrid, List, ArrowUpDown,
+  Trash2, Eye, LayoutGrid, List, ArrowUpDown, FileDown,
 } from "lucide-react";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
 import { useAuth } from "@/contexts/useAuth";
@@ -416,13 +416,21 @@ function MissionDetailModal({ mission, onClose }: MissionDetailModalProps) {
           </div>
 
           {/* Footer */}
-          <div className="px-6 pb-6">
+          <div className="px-6 pb-6 flex gap-3">
             <button
               onClick={onClose}
-              className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
             >
               Fermer
             </button>
+            {mission.status === "APPROVED" && (
+              <button
+                onClick={() => missionService.downloadPdf(mission.id).catch(() => toast.error("Erreur lors du téléchargement du PDF."))}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#003c71] text-white text-sm font-semibold hover:bg-[#002d56] transition shadow-sm"
+              >
+                <FileDown size={14} /> Ordre de mission
+              </button>
+            )}
           </div>
         </motion.div>
       </div>
@@ -529,6 +537,17 @@ function MissionCard({ mission, onView, onCancel, compact = false }: MissionCard
             >
               <Eye size={14} />
             </button>
+
+            {/* Télécharger ordre de mission */}
+            {mission.status === "APPROVED" && (
+              <button
+                onClick={e => { e.stopPropagation(); missionService.downloadPdf(mission.id).catch(() => toast.error("Erreur PDF.")); }}
+                title="Télécharger l'ordre de mission"
+                className="p-2 rounded-lg text-[#003c71] hover:bg-[#003c71]/10 border border-[#003c71]/20 hover:border-[#003c71]/40 transition"
+              >
+                <FileDown size={14} />
+              </button>
+            )}
 
             {/* Annuler */}
             {canCancel && (

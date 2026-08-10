@@ -63,5 +63,16 @@ export const missionService = {
     const res = await api.post<MissionRequest>(`${BASE}${id}/reject/`, { reject_reason });
     return res.data;
   },
+
+  downloadPdf: async (id: number): Promise<void> => {
+    const res = await api.get(`${BASE}${id}/pdf/`, { responseType: "blob" });
+    const blob = new Blob([res.data], { type: "application/pdf" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `Ordre_Mission_${id}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };
 

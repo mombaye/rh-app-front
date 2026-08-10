@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, Filter, X,
   Calendar, User, Hash, MessageSquare, MapPin,
   Eye, ArrowUpDown, LayoutGrid, List, Search,
-  ThumbsUp, ThumbsDown,
+  ThumbsUp, ThumbsDown, FileDown,
 } from "lucide-react";
 import AppLayout from "@/layouts/AppLayout";
 import { useAuth } from "@/contexts/useAuth";
@@ -242,13 +242,21 @@ function DetailModal({ mission, onClose, onApprove, onReject, currentEmployeeId 
           </div>
 
           {/* Footer */}
-          <div className="px-6 pb-6 flex gap-3">
+          <div className="px-6 pb-6 flex gap-3 flex-wrap">
             <button
               onClick={onClose}
               className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
             >
               Fermer
             </button>
+            {mission.status === "APPROVED" && (
+              <button
+                onClick={() => missionService.downloadPdf(mission.id).catch(() => toast.error("Erreur lors du téléchargement du PDF."))}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#003c71] text-white text-sm font-semibold hover:bg-[#002d56] transition shadow-sm"
+              >
+                <FileDown size={14} /> Ordre de mission
+              </button>
+            )}
             {mission.status === "PENDING" && mission.employee.n1_manager_id === currentEmployeeId && (
               <>
                 <button
@@ -462,6 +470,16 @@ function MissionCard({ mission, compact = false, onView, onApprove, onReject, cu
             >
               <Eye size={14} />
             </button>
+
+            {mission.status === "APPROVED" && (
+              <button
+                onClick={e => { e.stopPropagation(); missionService.downloadPdf(mission.id).catch(() => toast.error("Erreur PDF.")); }}
+                title="Télécharger l'ordre de mission"
+                className="p-2 rounded-lg text-[#003c71] hover:bg-[#003c71]/10 border border-[#003c71]/20 hover:border-[#003c71]/40 transition"
+              >
+                <FileDown size={14} />
+              </button>
+            )}
 
             {mission.status === "PENDING" && mission.employee.n1_manager_id === currentEmployeeId && (
               <>
