@@ -4,7 +4,8 @@ import { ticketService } from "@/services/ticketService";
 import { TicketCategory, CATEGORY_LABELS } from "@/types/ticket";
 import { useAuth } from "@/contexts/useAuth";
 
-type Step = "welcome" | "describe" | "category" | "submitting" | "done" | "error";
+// Nouveau flux : welcome → category → describe → submitting → done/error
+type Step = "welcome" | "category" | "describe" | "submitting" | "done" | "error";
 
 interface Message {
   id: number;
@@ -27,7 +28,7 @@ export default function AssistantChatWidget() {
   const [step, setStep] = useState<Step>("welcome");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [description, setDescription] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<TicketCategory | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -39,12 +40,10 @@ export default function AssistantChatWidget() {
   useEffect(() => {
     if (!open) return;
     if (step !== "welcome") return;
-    const prenom = user?.prenom || user?.nom || "vous";
     setMessages([]);
     const t = setTimeout(() => {
-      addMsg("bot", `Bonjour ${prenom} 👋\n\nBienvenue dans votre **Assistance eRH-CAMUSAT**.\n\nJe suis ici pour vous aider à signaler un problème rencontré dans l'application. Décrivez votre problème en quelques mots et je m'occupe du reste.`);
-      setStep("describe");
-      setTimeout(() => textareaRef.current?.focus(), 100);
+      addMsg("bot", `Bonjour 👋\n\nBienvenue dans votre **Assistance eRH-CAMUSAT**.\n\nQuel type de problème souhaitez-vous signaler ?`);
+      setStep("category");
     }, 50);
     return () => clearTimeout(t);
   }, [open]);
@@ -58,33 +57,36 @@ export default function AssistantChatWidget() {
     setTimeout(() => {
       setStep("welcome");
       setMessages([]);
-      setDescription("");
+      setSelectedCategory(null);
       setInput("");
     }, 300);
   }
 
-  function handleSendDescription() {
-    const text = input.trim();
-    if (!text) return;
-    addMsg("user", text);
-    setDescription(text);
-    setInput("");
+  // Étape 1 : l'utilisateur choisit une catégorie → on passe à la saisie
+  function handleSelectCategory(cat: TicketCategory) {
+    addMsg("user", `${CATEGORY_ICONS[cat]} ${CATEGORY_LABELS[cat]}`);
+    setSelectedCategory(cat);
     setTimeout(() => {
-      addMsg("bot", "Merci ! Pour mieux orienter votre demande, choisissez la catégorie qui correspond à votre problème :");
-      setStep("category");
-    }, 400);
+      addMsg("bot", "Parfait ! Décrivez votre problème en quelques mots et j'enregistre votre demande :");
+      setStep("describe");
+      setTimeout(() => textareaRef.current?.focus(), 100);
+    }, 350);
   }
 
-  async function handleSelectCategory(cat: TicketCategory) {
-    addMsg("user", `${CATEGORY_ICONS[cat]} ${CATEGORY_LABELS[cat]}`);
+  // Étape 2 : l'utilisateur envoie sa description → on crée le ticket
+  async function handleSendDescription() {
+    const text = input.trim();
+    if (!text || !selectedCategory) return;
+    addMsg("user", text);
+    setInput("");
     setStep("submitting");
     setTimeout(() => addMsg("bot", "Enregistrement en cours, veuillez patienter…"), 150);
 
     try {
       const ticket = await ticketService.create({
-        title: description.slice(0, 120),
-        description,
-        category: cat,
+        title: text.slice(0, 120),
+        description: text,
+        category: selectedCategory,
       });
       setTimeout(() => {
         addMsg("bot",
@@ -103,7 +105,7 @@ export default function AssistantChatWidget() {
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (step === "describe") handleSendDescription();
+      handleSendDescription();
     }
   }
 
@@ -225,11 +227,10 @@ export default function AssistantChatWidget() {
                 <div className="pl-11">
                   <button
                     onClick={() => {
-                      setStep("describe");
-                      setDescription("");
+                      setSelectedCategory(null);
                       setInput("");
-                      addMsg("bot", "D'accord, décrivez votre nouveau problème et je m'en occupe :");
-                      setTimeout(() => textareaRef.current?.focus(), 100);
+                      addMsg("bot", "D'accord ! Quel type de problème souhaitez-vous signaler cette fois ?");
+                      setStep("category");
                     }}
                     className="inline-flex items-center gap-2 text-sm font-medium text-camublue-900 hover:text-camublue-800 bg-white border border-camublue-200 hover:border-camublue-900 rounded-full px-4 py-2 transition-all shadow-sm"
                   >
