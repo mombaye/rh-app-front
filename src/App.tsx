@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import ChangePasswordPage from "@/components/users/ChangePasswordPage";
 import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import AssistantChatWidget from "@/components/AssistantChatWidget";
 import FirstLoginGuard from "@/components/FirstLoginGuard";
 import AdminProtectedRoute from "@/components/admin/AdminProtectedRoute";
 import { useAuth } from "@/contexts/useAuth";
@@ -166,6 +167,7 @@ function App() {
   return (
     <>
       <Toaster position="top-right" reverseOrder={false} />
+      <AssistantChatWidget />
       <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* ── Admin Portal ─────────────────────────────────────── */}
