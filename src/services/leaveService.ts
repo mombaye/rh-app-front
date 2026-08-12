@@ -394,29 +394,14 @@ export const leaveRequestService = {
     return res.data;
   },
 
-  /** POST /api/leaves/requests/<id>/hr_validate/ — Validation RH finale (PENDING_RH → APPROVED) */
-  hrValidate: async (id: number, hrReviewerId?: number): Promise<LeaveRequest> => {
-    const res = await api.post(`${API}/requests/${id}/hr_validate/`, {
-      ...(hrReviewerId ? { hr_reviewer_id: hrReviewerId } : {}),
-    });
-    return res.data;
-  },
-
-  /** POST /api/leaves/requests/<id>/hr_reject/ — Rejet RH */
-  hrReject: async (id: number, rejectReason: string): Promise<LeaveRequest> => {
-    const res = await api.post(`${API}/requests/${id}/hr_reject/`, { reject_reason: rejectReason });
-    return res.data;
-  },
-
   /**
    * POST /api/leaves/requests/<id>/hr_validate/
    * Validation finale RH : PENDING_RH → APPROVED (déclenche déduction solde)
    */
-  hrValidate: async (id: number, hr_reviewer_id?: number): Promise<LeaveRequest> => {
+  hrValidate: async (id: number, hrReviewerId?: number): Promise<LeaveRequest> => {
     const res = await api.post(
       `${API}/requests/${id}/hr_validate/`,
-      hr_reviewer_id ? { hr_reviewer_id } : {},
-      {}
+      hrReviewerId ? { hr_reviewer_id: hrReviewerId } : {},
     );
     return res.data;
   },
@@ -425,11 +410,10 @@ export const leaveRequestService = {
    * POST /api/leaves/requests/<id>/hr_reject/
    * Rejet final RH : PENDING_RH → REJECTED
    */
-  hrReject: async (id: number, reject_reason: string, hr_reviewer_id?: number): Promise<LeaveRequest> => {
+  hrReject: async (id: number, rejectReason: string, hrReviewerId?: number): Promise<LeaveRequest> => {
     const res = await api.post(
       `${API}/requests/${id}/hr_reject/`,
-      { reject_reason, ...(hr_reviewer_id ? { hr_reviewer_id } : {}) },
-      {}
+      { reject_reason: rejectReason, ...(hrReviewerId ? { hr_reviewer_id: hrReviewerId } : {}) },
     );
     return res.data;
   },

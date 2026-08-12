@@ -195,6 +195,8 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   const [reminderTarget,    setReminderTarget]    = useState<LeaveRequest | null>(null);
   const [hrValidateTarget,  setHrValidateTarget]  = useState<LeaveRequest | null>(null);
   const [hrValidateLoading, setHrValidateLoading] = useState(false);
+  const [hrRejectTarget,    setHrRejectTarget]    = useState<LeaveRequest | null>(null);
+  const [hrRejectLoading,   setHrRejectLoading]   = useState(false);
   const [manageTarget,      setManageTarget]      = useState<LeaveRequest | null>(null);
   const [revokeTarget,      setRevokeTarget]      = useState<LeaveRequest | null>(null);
 
@@ -270,6 +272,20 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
       toast.error(err?.response?.data?.error ?? "Erreur lors de la validation RH.");
     } finally {
       setHrValidateLoading(false);
+    }
+  };
+
+  const handleHrReject = async (id: number, reason: string) => {
+    setHrRejectLoading(true);
+    try {
+      await leaveRequestService.hrReject(id, reason);
+      toast.success("Demande rejetée par la RH ✓");
+      setHrRejectTarget(null);
+      await fetchAll();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors du rejet RH.");
+    } finally {
+      setHrRejectLoading(false);
     }
   };
 
@@ -919,6 +935,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
             onEdit={(r)     => { setManageTarget(null); setEditTarget(r); }}
             onReminder={(r)   => { setManageTarget(null); setReminderTarget(r); }}
             onHrValidate={(r) => { setManageTarget(null); setHrValidateTarget(r); }}
+            onHrReject={(r)   => { setManageTarget(null); setHrRejectTarget(r); }}
             onRevoke={(r)     => { setManageTarget(null); setRevokeTarget(r); }}
             onCancel={(r)     => { setManageTarget(null); setCancelInProgressRequest(r); }}
             onRelaunch={(r)   => { setManageTarget(null); setRelaunchRequest(r); }}
@@ -957,6 +974,18 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
             loading={hrValidateLoading}
             onClose={() => setHrValidateTarget(null)}
             onConfirm={() => handleHrValidate(hrValidateTarget.id)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Modal Rejet RH */}
+      <AnimatePresence>
+        {hrRejectTarget && (
+          <HrRejectModal
+            request={hrRejectTarget}
+            loading={hrRejectLoading}
+            onClose={() => setHrRejectTarget(null)}
+            onConfirm={(reason) => handleHrReject(hrRejectTarget.id, reason)}
           />
         )}
       </AnimatePresence>
@@ -2394,6 +2423,7 @@ interface ManageModalProps {
   onEdit:       (r: LeaveRequest)       => void;
   onReminder:   (r: LeaveRequest)       => void;
   onHrValidate: (r: LeaveRequest)       => void;
+  onHrReject:   (r: LeaveRequest)       => void;
   onRevoke:     (r: LeaveRequest)       => void;
   onCancel:     (r: LeaveRequest)       => void;
   onRelaunch:   (r: LeaveRequest)       => void;
@@ -2402,7 +2432,7 @@ interface ManageModalProps {
 
 function ManageModal({
   request: r, reminderLoadingId,
-  onClose, onEdit, onReminder, onHrValidate, onRevoke, onCancel, onRelaunch, onDelete,
+  onClose, onEdit, onReminder, onHrValidate, onHrReject, onRevoke, onCancel, onRelaunch, onDelete,
 }: ManageModalProps) {
   const isPending     = r.status === "PENDING" || r.status === "PENDING_SECOND";
   const isPendingRH   = r.status === "PENDING_RH";
@@ -2543,7 +2573,7 @@ function ManageModal({
                 icon={XCircle}
                 label="Rejeter (RH)"
                 description="Rejeter cette demande depuis la validation RH"
-                onClick={() => onRevoke(r)}
+                onClick={() => onHrReject(r)}
                 variant="danger"
               />
             </>
@@ -2985,6 +3015,92 @@ function HrValidateModal({ request: r, loading, onClose, onConfirm }: {
               ? <ImSpinner2 className="h-4 w-4 animate-spin" />
               : <CheckCircle2 className="h-4 w-4" />}
             Confirmer la validation
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Modal Rejet RH ──────────────────────────────────────────────────────────
+function HrRejectModal({ request: r, loading, onClose, onConfirm }: {
+  request: LeaveRequest; loading: boolean; onClose: () => void; onConfirm: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1,    y: 0 }}
+        exit={{ opacity: 0, scale: 0.95,    y: 16 }}
+        transition={{ duration: 0.2 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+      >
+        {/* Header */}
+        <div className="bg-red-600 px-5 py-4 flex items-center gap-3 relative">
+          <button
+            onClick={onClose}
+            className="absolute top-3.5 right-3.5 w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
+          >
+            <X className="h-3.5 w-3.5 text-white" />
+          </button>
+          <div className="p-2 rounded-xl bg-white/20">
+            <XCircle className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p className="text-white/70 text-[11px] font-semibold uppercase tracking-wide">Rejet RH</p>
+            <p className="text-white font-bold text-sm leading-tight">Rejeter la demande ?</p>
+          </div>
+        </div>
+
+        {/* Corps */}
+        <div className="px-5 py-5 space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-1">
+            <p className="text-xs font-bold text-red-700 uppercase tracking-wide">Demande concernée</p>
+            <p className="text-sm text-red-900 font-semibold">{r.employee?.full_name ?? "—"}</p>
+            <p className="text-sm text-red-800">{r.leave_type?.label ?? "—"}</p>
+            <p className="text-xs text-red-700">
+              {r.start_date ? new Date(r.start_date).toLocaleDateString("fr-FR") : "—"} →{" "}
+              {r.end_date   ? new Date(r.end_date).toLocaleDateString("fr-FR")   : "—"}
+              {" "}&nbsp;·&nbsp; <span className="font-semibold">{r.days ?? r.duration_days ?? "?"}j</span>
+            </p>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5 block">
+              Motif du rejet <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              rows={3}
+              placeholder="Expliquez la raison du rejet…"
+              className="w-full border border-slate-200 rounded-xl p-3 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 resize-none transition"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50 transition"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={() => onConfirm(reason)}
+            disabled={loading || !reason.trim()}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-50 transition shadow-sm"
+          >
+            {loading
+              ? <ImSpinner2 className="h-4 w-4 animate-spin" />
+              : <XCircle className="h-4 w-4" />}
+            Confirmer le rejet
           </button>
         </div>
       </motion.div>
