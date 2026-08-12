@@ -193,6 +193,8 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   const [cancelInProgressRequest, setCancelInProgressRequest] = useState<LeaveRequest | null>(null);
   const [reminderLoadingId, setReminderLoadingId] = useState<number | null>(null);
   const [reminderTarget,    setReminderTarget]    = useState<LeaveRequest | null>(null);
+  const [hrValidateTarget,  setHrValidateTarget]  = useState<LeaveRequest | null>(null);
+  const [hrValidateLoading, setHrValidateLoading] = useState(false);
   const [manageTarget,      setManageTarget]      = useState<LeaveRequest | null>(null);
   const [revokeTarget,      setRevokeTarget]      = useState<LeaveRequest | null>(null);
 
@@ -254,6 +256,20 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
       toast.error("Impossible d'envoyer la relance.");
     } finally {
       setReminderLoadingId(null);
+    }
+  };
+
+  const handleHrValidate = async (id: number) => {
+    setHrValidateLoading(true);
+    try {
+      await leaveRequestService.hrValidate(id, user?.employee_id ?? undefined);
+      toast.success("Congé validé par la RH ✓");
+      setHrValidateTarget(null);
+      await fetchAll();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Erreur lors de la validation RH.");
+    } finally {
+      setHrValidateLoading(false);
     }
   };
 
@@ -901,11 +917,12 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
             reminderLoadingId={reminderLoadingId}
             onClose={() => setManageTarget(null)}
             onEdit={(r)     => { setManageTarget(null); setEditTarget(r); }}
-            onReminder={(r) => { setManageTarget(null); setReminderTarget(r); }}
-            onRevoke={(r)   => { setManageTarget(null); setRevokeTarget(r); }}
-            onCancel={(r)   => { setManageTarget(null); setCancelInProgressRequest(r); }}
-            onRelaunch={(r) => { setManageTarget(null); setRelaunchRequest(r); }}
-            onDelete={(r)   => { setManageTarget(null); setConfirmDeleteId(r.id); }}
+            onReminder={(r)   => { setManageTarget(null); setReminderTarget(r); }}
+            onHrValidate={(r) => { setManageTarget(null); setHrValidateTarget(r); }}
+            onRevoke={(r)     => { setManageTarget(null); setRevokeTarget(r); }}
+            onCancel={(r)     => { setManageTarget(null); setCancelInProgressRequest(r); }}
+            onRelaunch={(r)   => { setManageTarget(null); setRelaunchRequest(r); }}
+            onDelete={(r)     => { setManageTarget(null); setConfirmDeleteId(r.id); }}
           />
         )}
       </AnimatePresence>
@@ -928,6 +945,18 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
             request={relaunchRequest}
             onClose={() => setRelaunchRequest(null)}
             onDone={() => { setRelaunchRequest(null); fetchAll(); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Modal Validation RH */}
+      <AnimatePresence>
+        {hrValidateTarget && (
+          <HrValidateModal
+            request={hrValidateTarget}
+            loading={hrValidateLoading}
+            onClose={() => setHrValidateTarget(null)}
+            onConfirm={() => handleHrValidate(hrValidateTarget.id)}
           />
         )}
       </AnimatePresence>
@@ -2361,20 +2390,22 @@ function LeaveHistoryModal({ employeeId, employeeName, onClose }: {
 interface ManageModalProps {
   request:           LeaveRequest;
   reminderLoadingId: number | null;
-  onClose:    ()                      => void;
-  onEdit:     (r: LeaveRequest)       => void;
-  onReminder: (r: LeaveRequest)       => void;
-  onRevoke:   (r: LeaveRequest)       => void;
-  onCancel:   (r: LeaveRequest)       => void;
-  onRelaunch: (r: LeaveRequest)       => void;
-  onDelete:   (r: LeaveRequest)       => void;
+  onClose:      ()                      => void;
+  onEdit:       (r: LeaveRequest)       => void;
+  onReminder:   (r: LeaveRequest)       => void;
+  onHrValidate: (r: LeaveRequest)       => void;
+  onRevoke:     (r: LeaveRequest)       => void;
+  onCancel:     (r: LeaveRequest)       => void;
+  onRelaunch:   (r: LeaveRequest)       => void;
+  onDelete:     (r: LeaveRequest)       => void;
 }
 
 function ManageModal({
   request: r, reminderLoadingId,
-  onClose, onEdit, onReminder, onRevoke, onCancel, onRelaunch, onDelete,
+  onClose, onEdit, onReminder, onHrValidate, onRevoke, onCancel, onRelaunch, onDelete,
 }: ManageModalProps) {
   const isPending     = r.status === "PENDING" || r.status === "PENDING_SECOND";
+  const isPendingRH   = r.status === "PENDING_RH";
   const isApproved    = r.status === "APPROVED";
   const isRejected    = r.status === "REJECTED";
   const isRevoked     = r.status === "REVOKED";
@@ -2494,6 +2525,26 @@ function ManageModal({
                 onClick={() => onReminder(r)}
                 variant="warning"
                 disabled={isReminderBusy}
+              />
+            </>
+          )}
+
+          {/* ── En attente de validation RH ── */}
+          {isPendingRH && (
+            <>
+              <ActionBtn
+                icon={CheckCircle2}
+                label="Valider (RH)"
+                description="Approuver définitivement ce congé en tant que RH"
+                onClick={() => onHrValidate(r)}
+                variant="success"
+              />
+              <ActionBtn
+                icon={XCircle}
+                label="Rejeter (RH)"
+                description="Rejeter cette demande depuis la validation RH"
+                onClick={() => onRevoke(r)}
+                variant="danger"
               />
             </>
           )}
@@ -2861,6 +2912,83 @@ function QuickApproveBtn({
       }
       {blocked ? "En attente" : label}
     </button>
+  );
+}
+
+// ─── Modal Confirmation Validation RH ────────────────────────────────────────
+function HrValidateModal({ request: r, loading, onClose, onConfirm }: {
+  request: LeaveRequest; loading: boolean; onClose: () => void; onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1,    y: 0 }}
+        exit={{ opacity: 0, scale: 0.95,    y: 16 }}
+        transition={{ duration: 0.2 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+      >
+        {/* Header */}
+        <div className="bg-emerald-600 px-5 py-4 flex items-center gap-3 relative">
+          <button
+            onClick={onClose}
+            className="absolute top-3.5 right-3.5 w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
+          >
+            <X className="h-3.5 w-3.5 text-white" />
+          </button>
+          <div className="p-2 rounded-xl bg-white/20">
+            <CheckCircle2 className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p className="text-white/70 text-[11px] font-semibold uppercase tracking-wide">Validation RH</p>
+            <p className="text-white font-bold text-sm leading-tight">Confirmer la validation ?</p>
+          </div>
+        </div>
+
+        {/* Corps */}
+        <div className="px-5 py-5 space-y-3">
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Vous êtes sur le point de valider définitivement la demande de congé de{" "}
+            <span className="font-semibold text-slate-800">{r.employee?.full_name ?? "cet employé"}</span>.
+            Cette action passera le statut à <span className="font-semibold text-emerald-700">Approuvé</span>.
+          </p>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 space-y-1">
+            <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Détails du congé</p>
+            <p className="text-sm text-emerald-900 font-semibold">{r.leave_type?.label ?? "—"}</p>
+            <p className="text-xs text-emerald-700">
+              {r.start_date ? new Date(r.start_date).toLocaleDateString("fr-FR") : "—"} →{" "}
+              {r.end_date   ? new Date(r.end_date).toLocaleDateString("fr-FR")   : "—"}
+              {" "}&nbsp;·&nbsp; <span className="font-semibold">{r.days ?? r.duration_days ?? "?"}j</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50 transition"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold disabled:opacity-50 transition shadow-sm"
+          >
+            {loading
+              ? <ImSpinner2 className="h-4 w-4 animate-spin" />
+              : <CheckCircle2 className="h-4 w-4" />}
+            Confirmer la validation
+          </button>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 

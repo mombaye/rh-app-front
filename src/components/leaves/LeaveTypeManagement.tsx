@@ -11,15 +11,16 @@ import toast from "react-hot-toast";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 
 const EMPTY_FORM = {
-  code:                     "",
-  label:                    "",
-  is_paid:                  true,
-  requires_justification:   false,
-  justification_grace_days: "7",
-  monthly_accrual:          "0",
-  max_days_per_request:     "0",
-  deducts_from_balance:     false,
-  count_mode:               "WORKABLE",
+  code:                       "",
+  label:                      "",
+  is_paid:                    true,
+  requires_justification:     false,
+  justification_grace_days:   "7",
+  monthly_accrual:            "0",
+  max_days_per_request:       "0",
+  deducts_from_balance:       false,
+  requires_manager_approval:  false,
+  count_mode:                 "WORKABLE",
 };
 
 type FormState = typeof EMPTY_FORM;
@@ -75,12 +76,13 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
       code:                     t.code,
       label:                    t.label,
       is_paid:                  t.is_paid,
-      requires_justification:   t.requires_justification,
-      justification_grace_days: String(t.justification_grace_days ?? 7),
-      monthly_accrual:          t.monthly_accrual ?? "0",
-      max_days_per_request:     String(t.max_days_per_request ?? 0),
-      deducts_from_balance:     t.deducts_from_balance ?? false,
-      count_mode:               t.count_mode ?? "WORKABLE",
+      requires_justification:     t.requires_justification,
+      justification_grace_days:   String(t.justification_grace_days ?? 7),
+      monthly_accrual:            t.monthly_accrual ?? "0",
+      max_days_per_request:       String(t.max_days_per_request ?? 0),
+      deducts_from_balance:       t.deducts_from_balance ?? false,
+      requires_manager_approval:  t.requires_manager_approval ?? false,
+      count_mode:                 t.count_mode ?? "WORKABLE",
     });
     setFormError(null);
     setShowForm(true);
@@ -113,12 +115,13 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
         code:                     form.code.toUpperCase().trim(),
         label:                    form.label.trim(),
         is_paid:                  form.is_paid,
-        requires_justification:   form.requires_justification,
-        justification_grace_days: parseInt(form.justification_grace_days) || 7,
-        monthly_accrual:          parseFloat(form.monthly_accrual) || 0,
-        max_days_per_request:     parseInt(form.max_days_per_request) || 0,
-        deducts_from_balance:     form.deducts_from_balance,
-        count_mode:               form.count_mode,
+        requires_justification:     form.requires_justification,
+        justification_grace_days:   parseInt(form.justification_grace_days) || 7,
+        monthly_accrual:            parseFloat(form.monthly_accrual) || 0,
+        max_days_per_request:       parseInt(form.max_days_per_request) || 0,
+        deducts_from_balance:       form.deducts_from_balance,
+        requires_manager_approval:  form.requires_manager_approval,
+        count_mode:                 form.count_mode,
       };
       if (editTarget) {
         await leaveTypeService.update(editTarget.id, payload);
@@ -352,6 +355,15 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
                       className="w-4 h-4 rounded accent-camublue-900"
                     />
                     <span className="text-sm text-gray-700 font-medium">Déduit du solde de congé</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input type="checkbox" name="requires_manager_approval" checked={form.requires_manager_approval} onChange={handleChange}
+                      className="w-4 h-4 rounded accent-camublue-900"
+                    />
+                    <div>
+                      <span className="text-sm text-gray-700 font-medium">Validation hiérarchique (N+1 / N+2)</span>
+                      <p className="text-xs text-gray-400 mt-0.5">La demande passe par le manager avant d'être approuvée — sans étape RH. Désactivé = va directement en validation RH.</p>
+                    </div>
                   </label>
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <input type="checkbox" name="requires_justification" checked={form.requires_justification} onChange={handleChange}

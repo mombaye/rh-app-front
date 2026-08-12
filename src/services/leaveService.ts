@@ -390,11 +390,21 @@ export const leaveRequestService = {
    * L'employé relance le manager qui n'a pas encore validé.
    */
   sendReminder: async (id: number): Promise<{ message: string }> => {
-    const res = await api.post(
-      `${API}/requests/${id}/reminder/`,
-      {},
-      {}
-    );
+    const res = await api.post(`${API}/requests/${id}/reminder/`, {});
+    return res.data;
+  },
+
+  /** POST /api/leaves/requests/<id>/hr_validate/ — Validation RH finale (PENDING_RH → APPROVED) */
+  hrValidate: async (id: number, hrReviewerId?: number): Promise<LeaveRequest> => {
+    const res = await api.post(`${API}/requests/${id}/hr_validate/`, {
+      ...(hrReviewerId ? { hr_reviewer_id: hrReviewerId } : {}),
+    });
+    return res.data;
+  },
+
+  /** POST /api/leaves/requests/<id>/hr_reject/ — Rejet RH */
+  hrReject: async (id: number, rejectReason: string): Promise<LeaveRequest> => {
+    const res = await api.post(`${API}/requests/${id}/hr_reject/`, { reject_reason: rejectReason });
     return res.data;
   },
 
