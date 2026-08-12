@@ -192,6 +192,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   const [relaunchRequest,  setRelaunchRequest]  = useState<LeaveRequest | null>(null);
   const [cancelInProgressRequest, setCancelInProgressRequest] = useState<LeaveRequest | null>(null);
   const [reminderLoadingId, setReminderLoadingId] = useState<number | null>(null);
+  const [reminderTarget,    setReminderTarget]    = useState<LeaveRequest | null>(null);
   const [manageTarget,      setManageTarget]      = useState<LeaveRequest | null>(null);
   const [revokeTarget,      setRevokeTarget]      = useState<LeaveRequest | null>(null);
 
@@ -900,7 +901,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
             reminderLoadingId={reminderLoadingId}
             onClose={() => setManageTarget(null)}
             onEdit={(r)     => { setManageTarget(null); setEditTarget(r); }}
-            onReminder={(r) => { setManageTarget(null); handleSendReminder(r.id); }}
+            onReminder={(r) => { setManageTarget(null); setReminderTarget(r); }}
             onRevoke={(r)   => { setManageTarget(null); setRevokeTarget(r); }}
             onCancel={(r)   => { setManageTarget(null); setCancelInProgressRequest(r); }}
             onRelaunch={(r) => { setManageTarget(null); setRelaunchRequest(r); }}
@@ -927,6 +928,21 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
             request={relaunchRequest}
             onClose={() => setRelaunchRequest(null)}
             onDone={() => { setRelaunchRequest(null); fetchAll(); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Modal Confirmation Relance Manager */}
+      <AnimatePresence>
+        {reminderTarget && (
+          <ReminderConfirmModal
+            request={reminderTarget}
+            loading={reminderLoadingId === reminderTarget.id}
+            onClose={() => setReminderTarget(null)}
+            onConfirm={async () => {
+              await handleSendReminder(reminderTarget.id);
+              setReminderTarget(null);
+            }}
           />
         )}
       </AnimatePresence>
@@ -2845,6 +2861,91 @@ function QuickApproveBtn({
       }
       {blocked ? "En attente" : label}
     </button>
+  );
+}
+
+// ─── Modal Confirmation Relance Manager ───────────────────────────────────────
+function ReminderConfirmModal({ request: r, loading, onClose, onConfirm }: {
+  request: LeaveRequest; loading: boolean; onClose: () => void; onConfirm: () => void;
+}) {
+  const managerName = r.reviewed_by?.full_name ?? r.employee?.manager ?? null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1,    y: 0 }}
+        exit={{ opacity: 0, scale: 0.95,    y: 16 }}
+        transition={{ duration: 0.2 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+      >
+        {/* Header */}
+        <div className="bg-amber-500 px-5 py-4 flex items-center gap-3 relative">
+          <button
+            onClick={onClose}
+            className="absolute top-3.5 right-3.5 w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
+          >
+            <X className="h-3.5 w-3.5 text-white" />
+          </button>
+          <div className="p-2 rounded-xl bg-white/20">
+            <Mail className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p className="text-white/70 text-[11px] font-semibold uppercase tracking-wide">Relance manager</p>
+            <p className="text-white font-bold text-sm leading-tight">Confirmer l'envoi ?</p>
+          </div>
+        </div>
+
+        {/* Corps */}
+        <div className="px-5 py-5 space-y-3">
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Un email de rappel sera envoyé au manager de{" "}
+            <span className="font-semibold text-slate-800">{r.employee?.full_name ?? "cet employé"}</span>{" "}
+            pour la demande de congé en attente de validation.
+          </p>
+          {managerName && (
+            <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+              <Mail className="h-4 w-4 text-amber-600 shrink-0" />
+              <div>
+                <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wide">Destinataire</p>
+                <p className="text-sm text-amber-900 font-semibold">{managerName}</p>
+              </div>
+            </div>
+          )}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-500 leading-relaxed">
+            Type · <span className="font-semibold text-slate-700">{r.leave_type?.label ?? "—"}</span>
+            {" "}&nbsp;|&nbsp; Période · <span className="font-semibold text-slate-700">
+              {r.start_date ? new Date(r.start_date).toLocaleDateString("fr-FR") : "—"} →{" "}
+              {r.end_date   ? new Date(r.end_date).toLocaleDateString("fr-FR")   : "—"}
+            </span>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50 transition"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold disabled:opacity-50 transition shadow-sm"
+          >
+            {loading
+              ? <ImSpinner2 className="h-4 w-4 animate-spin" />
+              : <Send className="h-4 w-4" />}
+            Envoyer la relance
+          </button>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 
