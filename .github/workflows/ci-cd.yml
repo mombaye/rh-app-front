@@ -50,8 +50,8 @@ jobs:
 
       - name: Build de production
         run: npm run build
-        env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL || 'http://localhost:8030' }}
+        # VITE_API_URL est lu depuis .env.production (committé dans le repo)
+        # Ne pas injecter le secret ici pour que le fichier .env.production fasse foi
 
       - name: Vérification taille du build
         run: |
