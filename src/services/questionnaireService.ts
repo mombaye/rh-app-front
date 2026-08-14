@@ -1,9 +1,7 @@
 import api from "@/api/axios";
 import axios from "axios";
 
-import { API_BASE_URL } from "@/config";
-
-const BASE_URL = API_BASE_URL;
+const BASE_URL = import.meta.env.VITE_API_URL ?? "";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

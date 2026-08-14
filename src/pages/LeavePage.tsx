@@ -1154,7 +1154,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
 }
 
 // ─── Onglet Justificatifs ────────────────────────────────────────────────────
-import { API_BASE_URL as API_BASE } from "@/config";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8030";
 
 type JustifStatus = "missing" | "uploaded" | "validated" | "absent";
 
