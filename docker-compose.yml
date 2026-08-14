@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        VITE_API_URL: http://192.168.1.50:8030
+        VITE_API_URL: ""
         VITE_PUBLIC_URL: https://erh.camusatsn.com
     image: erh-frontend:latest
     container_name: erh-frontend
