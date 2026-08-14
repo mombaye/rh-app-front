@@ -151,9 +151,15 @@ export const toggleCompteQuestionnaire = async (
 };
 
 // ── Employé : son propre questionnaire ───────────────────────────────────────
-export const getMonQuestionnaire = async (): Promise<MonQuestionnaire> => {
-  const res = await api.get("/api/questionnaires-sortie/mon-questionnaire/");
-  return res.data;
+// Retourne null si l'employé n'a pas de questionnaire (404 attendu et silencé)
+export const getMonQuestionnaire = async (): Promise<MonQuestionnaire | null> => {
+  try {
+    const res = await api.get("/api/questionnaires-sortie/mon-questionnaire/");
+    return res.data;
+  } catch (err: any) {
+    if (err?.response?.status === 404) return null;
+    throw err;
+  }
 };
 
 // ── RH : liste ───────────────────────────────────────────────────────────────

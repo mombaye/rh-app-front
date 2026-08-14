@@ -30,7 +30,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
   useEffect(() => {
     const check = () => {
       getMonQuestionnaire()
-        .then(res => setHasQuestionnaire(res.statut === "envoye"))
+        .then(res => setHasQuestionnaire(res !== null && res.statut === "envoye"))
         .catch(() => {});
     };
     check();

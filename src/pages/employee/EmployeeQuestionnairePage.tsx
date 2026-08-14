@@ -286,7 +286,7 @@ export default function EmployeeQuestionnairePage({ layout: Layout = EmployeeLay
   useEffect(() => {
     Promise.all([
       getMonQuestionnaire()
-        .then((d) => { setInfo(d); if (d.statut === "complete") setSubmitted(true); })
+        .then((d) => { if (d) { setInfo(d); if (d.statut === "complete") setSubmitted(true); } else setNotFound(true); })
         .catch(() => setNotFound(true)),
       getQuestionnaireTemplate()
         .then((t) => setDynStructure(t.structure))

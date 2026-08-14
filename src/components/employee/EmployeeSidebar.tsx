@@ -105,12 +105,9 @@ export default function EmployeeSidebar() {
     const check = () => {
       getMonQuestionnaire()
         .then(res => {
-          console.log("[Questionnaire] statut reçu:", res.statut);
-          setHasQuestionnaire(res.statut === "envoye");
+          setHasQuestionnaire(res !== null && res.statut === "envoye");
         })
-        .catch(err => {
-          console.log("[Questionnaire] erreur ou aucun questionnaire:", err?.response?.status, err?.response?.data);
-        });
+        .catch(() => {});
     };
     check(); // vérification immédiate au chargement
     // Poll toutes les 30 secondes tant que pas encore reçu
