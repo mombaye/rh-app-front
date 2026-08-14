@@ -68,9 +68,10 @@ function _invalidateCachetCache() {
 }
 
 declare const __LOCAL_NETWORK_IP__: string;
-const QR_API_BASE = import.meta.env.PROD
-  ? "https://apierh.camusatsn.com"
-  : `http://${__LOCAL_NETWORK_IP__}:${window.location.port || 5173}`;
+const QR_API_BASE = import.meta.env.VITE_API_URL
+  || (import.meta.env.PROD
+    ? ""
+    : `http://${__LOCAL_NETWORK_IP__}:${window.location.port || 5173}`);
 const qrScanUrl = (slug: string) =>
   `${QR_API_BASE}/api/employees/passeports/${slug}/pdf/scan/`;
 
