@@ -168,8 +168,6 @@ function MgrRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
-  if (MAINTENANCE_MODE) return <MaintenancePage />;
-
   return (
     <>
       <Toaster position="top-right" reverseOrder={false} />
@@ -188,7 +186,7 @@ function App() {
         />
 
         {/* ── Welcome / Accueil ────────────────────────────────── */}
-        <Route path="/" element={<WelcomePage />} />
+        <Route path="/" element={MAINTENANCE_MODE ? <MaintenancePage /> : <WelcomePage />} />
 
         {/* ── Auth ─────────────────────────────────────────────── */}
         <Route path="/login" element={<LoginPage />} />

@@ -44,7 +44,7 @@ api.interceptors.response.use(
     if (originalRequest?.url?.includes("/api/auth/token/refresh/")) {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
-      window.location.href = "/login";
+      window.location.href = "/";
       return Promise.reject(error);
     }
 
@@ -85,7 +85,7 @@ api.interceptors.response.use(
         // Échec du refresh (401, 500, ou toute erreur) → logout propre
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");
-        window.location.href = "/login";
+        window.location.href = "/";
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
