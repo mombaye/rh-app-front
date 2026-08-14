@@ -1,5 +1,6 @@
 ﻿﻿﻿﻿﻿﻿import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { BASE_URL } from "@/api/baseUrl";
 import {
   ClipboardCheck, CheckCircle2, Clock, XCircle, AlertCircle,
   Calendar, ChevronLeft, ChevronRight, Filter, User,
@@ -553,8 +554,6 @@ function LeaveDetailModal({
 
   const initials = req.employee.full_name
     .split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
-
-  const BASE_URL = (await import("@/api/baseUrl")).BASE_URL;
 
   return (
     <div
