@@ -10,7 +10,9 @@ import {
   EmployeeHierarchy,
 } from "../types/leave";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
+import { API_BASE_URL } from "@/config";
+
+const BASE_URL = API_BASE_URL;
 const EMP_API  = `${BASE_URL}/api/employees`;
 const LEAVE_API = `${BASE_URL}/api/leaves`;
 

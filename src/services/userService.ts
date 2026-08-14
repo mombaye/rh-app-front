@@ -1,7 +1,9 @@
 import api from "@/api/axios";
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? "";
+import { API_BASE_URL } from "@/config";
+
+const BASE_URL = API_BASE_URL;
 
 
 // Appel l'API login et retourne access/refresh tokens

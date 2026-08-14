@@ -67,11 +67,9 @@ function _invalidateCachetCache() {
   _cachetFetchPromise = null;
 }
 
-declare const __LOCAL_NETWORK_IP__: string;
-const QR_API_BASE = import.meta.env.VITE_API_URL
-  || (import.meta.env.PROD
-    ? ""
-    : `http://${__LOCAL_NETWORK_IP__}:${window.location.port || 5173}`);
+import { API_BASE_URL } from "@/config";
+
+const QR_API_BASE = API_BASE_URL;
 const qrScanUrl = (slug: string) =>
   `${QR_API_BASE}/api/employees/passeports/${slug}/pdf/scan/`;
 

@@ -1,7 +1,9 @@
 // src/services/documentService.ts
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
+import { API_BASE_URL } from "@/config";
+
+const BASE_URL = API_BASE_URL;
 const API = `${BASE_URL}/api/employees/hr-documents`;
 
 const getAuthHeaders = () => {

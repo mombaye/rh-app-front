@@ -4,9 +4,13 @@ services:
       context: .
       args:
         VITE_API_URL: ""
-        VITE_PUBLIC_URL: https://erh.camusatsn.com
+        VITE_PUBLIC_URL: ${VITE_PUBLIC_URL}
     image: erh-frontend:latest
     container_name: erh-frontend
     restart: unless-stopped
     ports:
       - "80:80"
+    environment:
+      # BACKEND_URL est lu depuis .env et injecté dans le container au runtime
+      # nginx l'utilise via envsubst pour le proxy_pass /api/
+      - BACKEND_URL=${BACKEND_URL}
