@@ -98,24 +98,21 @@ export default function EmployeeSidebar() {
   const isManager =
     availableRoles.includes("manager1") || availableRoles.includes("manager2");
 
-  // Questionnaire de sortie — vérification périodique (pas d'email requis)
   const [hasQuestionnaire, setHasQuestionnaire] = useState(false);
 
   useEffect(() => {
-    const check = () => {
-      getMonQuestionnaire()
-        .then(res => {
-          setHasQuestionnaire(res !== null && res.statut === "envoye");
-        })
-        .catch(() => {});
-    };
-    check(); // vérification immédiate au chargement
-    // Poll toutes les 30 secondes tant que pas encore reçu
-    const id = setInterval(() => {
-      if (!hasQuestionnaire) check();
-    }, 30_000);
-    return () => clearInterval(id);
-  }, [hasQuestionnaire]);
+    getMonQuestionnaire().then(res => {
+      const active = res !== null && res.statut === "envoye";
+      setHasQuestionnaire(active);
+      if (!active) return;
+      const id = setInterval(() => {
+        getMonQuestionnaire()
+          .then(r => setHasQuestionnaire(r !== null && r.statut === "envoye"))
+          .catch(() => {});
+      }, 300_000);
+      return () => clearInterval(id);
+    }).catch(() => {});
+  }, []);
 
   // Compteur collègues en congé (badge "Equipe en congés")
   const [serviceLeaveCount, setServiceLeaveCount] = useState(0);

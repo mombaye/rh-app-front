@@ -61,17 +61,18 @@ export default function RhMySpaceSidebar() {
   const [hasQuestionnaire, setHasQuestionnaire] = useState(false);
 
   useEffect(() => {
-    const check = () => {
-      getMonQuestionnaire()
-        .then(res => setHasQuestionnaire(res !== null && res.statut === "envoye"))
-        .catch(() => {});
-    };
-    check();
-    const id = setInterval(() => {
-      if (!hasQuestionnaire) check();
-    }, 30_000);
-    return () => clearInterval(id);
-  }, [hasQuestionnaire]);
+    getMonQuestionnaire().then(res => {
+      const active = res !== null && res.statut === "envoye";
+      setHasQuestionnaire(active);
+      if (!active) return;
+      const id = setInterval(() => {
+        getMonQuestionnaire()
+          .then(r => setHasQuestionnaire(r !== null && r.statut === "envoye"))
+          .catch(() => {});
+      }, 300_000);
+      return () => clearInterval(id);
+    }).catch(() => {});
+  }, []);
 
   const navItems: NavItemType[] = [
     ...baseNavItems,
