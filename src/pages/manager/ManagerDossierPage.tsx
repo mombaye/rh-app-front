@@ -25,7 +25,7 @@ function FileIcon({ size = 20 }: { name?: string; size?: number }) {
 
 async function fetchFileBlob(employeeId: number, filePath: string): Promise<Blob> {
   const token = localStorage.getItem("access_token");
-  const base = (import.meta.env.VITE_API_URL as string) || "http://localhost:8030";
+  const { BASE_URL: base } = await import("@/api/baseUrl");
   const url = `${base}/api/employees/${employeeId}/documents/download/?path=${encodeURIComponent(filePath)}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

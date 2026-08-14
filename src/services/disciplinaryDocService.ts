@@ -1,7 +1,7 @@
 import axios from "axios";
 import { DisciplinaryDocument, DisciplinaryDocType } from "@/types/disciplinaryDoc";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8030";
+import { BASE_URL } from "@/api/baseUrl";
 const API = (recordId: number) =>
   `${BASE_URL}/api/employees/disciplinary/${recordId}/documents/`;
 const UPLOAD_API = (recordId: number) =>

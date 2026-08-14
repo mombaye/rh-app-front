@@ -1,7 +1,7 @@
 import axios from "axios";
 import { Ticket, TicketCategory, TicketStats } from "@/types/ticket";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8030";
+import { BASE_URL } from "@/api/baseUrl";
 const API = `${BASE_URL}/api/employees/tickets`;
 
 const authHeaders = () => ({

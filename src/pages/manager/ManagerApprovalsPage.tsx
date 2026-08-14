@@ -554,7 +554,7 @@ function LeaveDetailModal({
   const initials = req.employee.full_name
     .split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
 
-  const BASE_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8030";
+  const BASE_URL = (await import("@/api/baseUrl")).BASE_URL;
 
   return (
     <div

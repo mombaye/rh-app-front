@@ -1,7 +1,7 @@
 import adminApi from "@/api/adminAxios";
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
+import { BASE_URL } from "@/api/baseUrl";
 
 export type AdminUser = {
   id: number;

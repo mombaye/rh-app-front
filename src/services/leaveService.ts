@@ -29,7 +29,7 @@ import {
   ExitAuthorizationFilters,
 } from "../types/leave";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8030";
+import { BASE_URL } from "@/api/baseUrl";
 const API      = `${BASE_URL}/api/leaves`;
 
 // ─────────────────────────────────────────────────────────────────────────────
