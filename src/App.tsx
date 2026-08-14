@@ -8,6 +8,10 @@ import FirstLoginGuard from "@/components/FirstLoginGuard";
 import AdminProtectedRoute from "@/components/admin/AdminProtectedRoute";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
+import MaintenancePage from "@/components/MaintenancePage";
+
+// ── Mettre à true pour afficher la page de maintenance ───────────────────────
+const MAINTENANCE_MODE = true;
 
 // ── Pages chargées à la demande (code-splitting) ─────────────────────────────
 // Chaque page est découpée dans son propre chunk JS, chargé uniquement
@@ -164,6 +168,8 @@ function MgrRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  if (MAINTENANCE_MODE) return <MaintenancePage />;
+
   return (
     <>
       <Toaster position="top-right" reverseOrder={false} />
