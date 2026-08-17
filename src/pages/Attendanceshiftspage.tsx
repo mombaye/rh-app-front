@@ -15,8 +15,9 @@ import {
   getShiftDailyStats, getShiftPeriodStats, getEmployeePeriodDetail, getWeeklyStats, getMonthlyStats,
   getShiftSchedule, saveShiftSchedule, uploadShiftPlanning,
   getShiftPlanning, deleteSinglePlanningEntry, addSinglePlanningEntry,
-  updateAttendanceRecord, sendAttendanceAlert,
+  updateAttendanceRecord, sendAttendanceAlert, getAttendanceMonthlyDetail,
 } from "@/services/attendanceService";
+import type { MonthlyDetailResponse } from "@/services/attendanceService";
 import type { PlanningEntry } from "@/services/attendanceService";
 import { parseNOCPlanningExcel, cellToDateStr, extractMonthYearFromSheetName } from "@/utils/planningParser";
 import type { ParsedSheet } from "@/utils/planningParser";
@@ -375,6 +376,111 @@ function exportXLSX(filename: string, rows: Record<string, any>[]) {
 
   XLSX.utils.book_append_sheet(wb, ws, "Pointages");
   XLSX.writeFile(wb, `${filename}_${todayISO()}.xlsx`);
+}
+
+// ─── Export mensuel détaillé (2 feuilles) ────────────────────────────────────
+const STATUS_LABELS_FR: Record<string, string> = {
+  ok:          "Présent",
+  absent:      "Absent",
+  on_leave:    "En congé",
+  on_mission:  "En mission",
+  incomplete:  "Incomplet",
+  anomaly:     "Anomalie",
+  not_working: "Repos",
+};
+
+function fmtMin(min: number): string {
+  if (!min) return "—";
+  const h = Math.floor(Math.abs(min) / 60);
+  const m = Math.abs(min) % 60;
+  const sign = min < 0 ? "-" : "";
+  return `${sign}${h}h${m.toString().padStart(2, "0")}`;
+}
+
+function _xlsxApplyTableStyle(
+  ws: XLSX.WorkSheet,
+  rows: Record<string, any>[],
+  headers: string[],
+) {
+  const headerStyle = {
+    font:      { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
+    fill:      { fgColor: { rgb: "003C71" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    border:    { bottom: { style: "thin", color: { rgb: "FFFFFF" } }, right: { style: "thin", color: { rgb: "FFFFFF" } } },
+  };
+  const even = { fill: { fgColor: { rgb: "EBF2FA" } }, font: { sz: 10 } };
+  const odd  = { fill: { fgColor: { rgb: "FFFFFF" } }, font: { sz: 10 } };
+  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cell = XLSX.utils.encode_cell({ r: 0, c });
+    if (ws[cell]) ws[cell].s = headerStyle;
+  }
+  for (let r = 1; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = XLSX.utils.encode_cell({ r, c });
+      if (ws[cell]) ws[cell].s = r % 2 === 0 ? even : odd;
+    }
+  }
+  ws["!cols"] = headers.map((k) => ({
+    wch: Math.max(k.length, ...rows.map((row) => String(row[k] ?? "").length)) + 2,
+  }));
+}
+
+function exportMonthlyDetailXLSX(data: MonthlyDetailResponse, label: string) {
+  const wb = XLSX.utils.book_new();
+
+  // ── Feuille 1 : Récapitulatif ──────────────────────────────────────────────
+  const summHeaders = [
+    "Matricule", "Nom", "Service",
+    "Jours présents", "Jours absents", "Congés", "En mission", "Incomplets", "Anomalies",
+    "H. travaillées", "H. attendues", "Delta", "Jours retard",
+  ];
+  const summRows = data.employees.map((emp) => ({
+    "Matricule":       emp.matricule ?? "—",
+    "Nom":             emp.full_name,
+    "Service":         emp.service ?? "—",
+    "Jours présents":  emp.summary.present_days,
+    "Jours absents":   emp.summary.absent_days,
+    "Congés":          emp.summary.on_leave_days,
+    "En mission":      emp.summary.on_mission_days,
+    "Incomplets":      emp.summary.incomplete_days,
+    "Anomalies":       emp.summary.anomaly_days,
+    "H. travaillées":  fmtMin(emp.summary.worked_minutes),
+    "H. attendues":    fmtMin(emp.summary.expected_minutes),
+    "Delta":           fmtMin(emp.summary.delta_minutes),
+    "Jours retard":    emp.days.filter((d) => d.late_minutes > 0).length,
+  }));
+  const wsSumm = XLSX.utils.json_to_sheet(summRows);
+  _xlsxApplyTableStyle(wsSumm, summRows, summHeaders);
+  XLSX.utils.book_append_sheet(wb, wsSumm, "Récapitulatif");
+
+  // ── Feuille 2 : Détail journalier ──────────────────────────────────────────
+  const detHeaders = [
+    "Nom", "Matricule", "Service",
+    "Date", "Jour", "Entrée", "Sortie", "Durée", "Retard", "Statut",
+  ];
+  const detRows: Record<string, any>[] = [];
+  for (const emp of data.employees) {
+    for (const d of emp.days) {
+      detRows.push({
+        "Nom":       emp.full_name,
+        "Matricule": emp.matricule ?? "—",
+        "Service":   emp.service ?? "—",
+        "Date":      new Date(d.date + "T00:00:00").toLocaleDateString("fr-FR"),
+        "Jour":      d.weekday,
+        "Entrée":    d.in_time  ?? "—",
+        "Sortie":    d.out_time ?? "—",
+        "Durée":     d.worked_minutes > 0 ? fmtMin(d.worked_minutes) : "—",
+        "Retard":    d.late_minutes > 0 ? fmtMin(d.late_minutes) : "—",
+        "Statut":    STATUS_LABELS_FR[d.status] ?? d.status,
+      });
+    }
+  }
+  const wsDet = XLSX.utils.json_to_sheet(detRows);
+  _xlsxApplyTableStyle(wsDet, detRows, detHeaders);
+  XLSX.utils.book_append_sheet(wb, wsDet, "Détail journalier");
+
+  XLSX.writeFile(wb, `pointages_${label}_${todayISO()}.xlsx`);
 }
 
 // ─── Helpers période ─────────────────────────────────────────────────────────
@@ -2278,7 +2384,8 @@ export default function AttendanceShiftsPage() {
     try { const s = localStorage.getItem(LS_SHIFT_ASSIGNMENTS_KEY); if (s) return JSON.parse(s); } catch {}
     return {};
   });
-  const [showExportDlg,    setShowExportDlg]     = useState(false);
+  const [showExportDlg,       setShowExportDlg]       = useState(false);
+  const [exportDetailLoading, setExportDetailLoading] = useState(false);
   const [exportDailyCols,  setExportDailyCols]   = useState<ShiftDailyCol[]>([...SHIFT_DAILY_COLS]);
   const [exportSummaryCols,setExportSummaryCols] = useState<ShiftSummCol[]>([...SHIFT_SUMM_COLS]);
   const [filterOpen,       setFilterOpen]        = useState(false);
@@ -2565,6 +2672,20 @@ export default function AttendanceShiftsPage() {
 
   const handleExport = () => setShowExportDlg(true);
 
+  const handleExportMonthlyDetail = async () => {
+    if (viewMode !== "monthly") return;
+    const { start, end } = isoMonthBounds(month);
+    setExportDetailLoading(true);
+    try {
+      const data = await getAttendanceMonthlyDetail({ start, end });
+      exportMonthlyDetailXLSX(data, month);
+    } catch (e: any) {
+      alert("Erreur lors de l'export : " + (e?.message ?? "inconnue"));
+    } finally {
+      setExportDetailLoading(false);
+    }
+  };
+
   const doExport = () => {
     if (viewMode === "daily") {
       const ALL: Record<ShiftDailyCol, (r: FlatRecord) => any> = {
@@ -2636,6 +2757,15 @@ export default function AttendanceShiftsPage() {
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <FileSpreadsheet className="h-4 w-4 text-green-600" /><span className="hidden sm:inline">Exporter</span>
             </button>
+            {viewMode === "monthly" && (
+              <button onClick={handleExportMonthlyDetail} disabled={exportDetailLoading}
+                className="bg-white border border-green-400 px-3 py-2 rounded-lg text-sm hover:bg-green-50 transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-green-700">
+                {exportDetailLoading
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <FileSpreadsheet className="h-4 w-4" />}
+                <span className="hidden sm:inline">Export Détaillé</span>
+              </button>
+            )}
             <button onClick={() => setShowScheduleModal(true)}
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
               <Settings className="h-4 w-4 text-slate-500" /><span className="hidden sm:inline">Horaires</span>

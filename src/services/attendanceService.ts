@@ -352,3 +352,47 @@ export async function getRhDisputes(status?: string): Promise<RhDispute[]> {
 export async function resolveDispute(id: number, status: "approved" | "rejected", resolution_note: string): Promise<void> {
   await api.patch("/api/attendance/rh-disputes/", { id, status, resolution_note });
 }
+
+// ── Export mensuel détaillé (jour par jour) ────────────────────────────────────
+
+export interface MonthlyDetailDay {
+  date:            string;
+  weekday:         string;
+  in_time:         string | null;
+  out_time:        string | null;
+  worked_minutes:  number;
+  late_minutes:    number;
+  status:          string;
+}
+
+export interface MonthlyDetailEmployee {
+  employee_id: number;
+  full_name:   string;
+  matricule:   string;
+  service:     string | null;
+  days:        MonthlyDetailDay[];
+  summary: {
+    worked_minutes:   number;
+    expected_minutes: number;
+    delta_minutes:    number;
+    present_days:     number;
+    absent_days:      number;
+    on_leave_days:    number;
+    on_mission_days:  number;
+    incomplete_days:  number;
+    anomaly_days:     number;
+  };
+}
+
+export interface MonthlyDetailResponse {
+  start:     string;
+  end:       string;
+  employees: MonthlyDetailEmployee[];
+}
+
+export async function getAttendanceMonthlyDetail(
+  params: { start: string; end: string }
+): Promise<MonthlyDetailResponse> {
+  const { data } = await api.get("/api/attendance/export-monthly-detail/", { params });
+  return data;
+}
