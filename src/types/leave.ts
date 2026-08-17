@@ -115,8 +115,28 @@ export interface LeaveRequest {
   // Congé par anticipation
   is_anticipation: boolean;
 
+  // Chaîne de validation dynamique
+  approval_chain:       ApprovalChainEntry[];
+  current_approval_step: number;
+  pending_approvers:    PendingApprover[];
+
   created_at:    string;
   updated_at:    string;
+}
+
+export interface ApprovalChainEntry {
+  step:           number;
+  approver_id:    number;
+  approver_name:  string;
+  approved_at:    string | null;
+  approved_by_id: number | null;
+}
+
+export interface PendingApprover {
+  approver_id:   number;
+  approver_name: string;
+  step:          number;
+  is_current:    boolean;
 }
 
 // ── LeaveRequestCreate ── mirrors LeaveRequestCreateSerializer ────────────────

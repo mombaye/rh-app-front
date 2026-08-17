@@ -249,10 +249,10 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
     return onEmployeesSynced(() => { fetchAll(); });
   }, [fetchAll]);
 
-  const handleSendReminder = async (id: number) => {
+  const handleSendReminder = async (id: number, approverId?: number) => {
     setReminderLoadingId(id);
     try {
-      await leaveRequestService.sendReminder(id);
+      await leaveRequestService.sendReminder(id, approverId);
       toast.success("Email de relance envoyé au manager.");
     } catch {
       toast.error("Impossible d'envoyer la relance.");
@@ -997,8 +997,8 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
             request={reminderTarget}
             loading={reminderLoadingId === reminderTarget.id}
             onClose={() => setReminderTarget(null)}
-            onConfirm={async () => {
-              await handleSendReminder(reminderTarget.id);
+            onConfirm={async (approverId) => {
+              await handleSendReminder(reminderTarget.id, approverId);
               setReminderTarget(null);
             }}
           />
@@ -3110,9 +3110,20 @@ function HrRejectModal({ request: r, loading, onClose, onConfirm }: {
 
 // ─── Modal Confirmation Relance Manager ───────────────────────────────────────
 function ReminderConfirmModal({ request: r, loading, onClose, onConfirm }: {
-  request: LeaveRequest; loading: boolean; onClose: () => void; onConfirm: () => void;
+  request: LeaveRequest;
+  loading: boolean;
+  onClose: () => void;
+  onConfirm: (approverId: number) => void;
 }) {
-  const managerName = r.reviewed_by?.full_name ?? r.employee?.manager ?? null;
+  // Liste des approbateurs en attente (chaîne dynamique N niveaux)
+  const pendingApprovers = r.pending_approvers ?? [];
+
+  // Pré-sélectionner l'approbateur courant (is_current=true)
+  const defaultId = pendingApprovers.find((a) => a.is_current)?.approver_id
+    ?? pendingApprovers[0]?.approver_id;
+
+  const [selectedId, setSelectedId] = useState<number | undefined>(defaultId);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
@@ -3139,26 +3150,67 @@ function ReminderConfirmModal({ request: r, loading, onClose, onConfirm }: {
           </div>
           <div>
             <p className="text-white/70 text-[11px] font-semibold uppercase tracking-wide">Relance manager</p>
-            <p className="text-white font-bold text-sm leading-tight">Confirmer l'envoi ?</p>
+            <p className="text-white font-bold text-sm leading-tight">Choisir le destinataire</p>
           </div>
         </div>
 
         {/* Corps */}
         <div className="px-5 py-5 space-y-3">
           <p className="text-sm text-slate-600 leading-relaxed">
-            Un email de rappel sera envoyé au manager de{" "}
-            <span className="font-semibold text-slate-800">{r.employee?.full_name ?? "cet employé"}</span>{" "}
-            pour la demande de congé en attente de validation.
+            Un email de rappel sera envoyé au validateur sélectionné pour la demande de{" "}
+            <span className="font-semibold text-slate-800">{r.employee?.full_name ?? "cet employé"}</span>.
           </p>
-          {managerName && (
-            <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-              <Mail className="h-4 w-4 text-amber-600 shrink-0" />
-              <div>
-                <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wide">Destinataire</p>
-                <p className="text-sm text-amber-900 font-semibold">{managerName}</p>
-              </div>
+
+          {/* Liste dynamique des approbateurs en attente */}
+          {pendingApprovers.length > 0 ? (
+            <div className="space-y-2">
+              {pendingApprovers.map((approver) => (
+                <button
+                  key={approver.approver_id}
+                  onClick={() => setSelectedId(approver.approver_id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition ${
+                    selectedId === approver.approver_id
+                      ? "border-amber-500 bg-amber-50"
+                      : "border-slate-200 hover:border-amber-300 hover:bg-amber-50/40"
+                  }`}
+                >
+                  {/* Radio visuel */}
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition ${
+                    selectedId === approver.approver_id
+                      ? "border-amber-500 bg-amber-500"
+                      : "border-slate-300"
+                  }`}>
+                    {selectedId === approver.approver_id && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                    )}
+                  </div>
+
+                  {/* Nom + niveau */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">
+                      {approver.approver_name}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      Niveau {approver.step + 1}
+                    </p>
+                  </div>
+
+                  {/* Badge "En attente" pour l'étape courante */}
+                  {approver.is_current && (
+                    <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap">
+                      En attente
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-500 text-center">
+              Aucun validateur en attente pour cette demande.
             </div>
           )}
+
+          {/* Récapitulatif demande */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-500 leading-relaxed">
             Type · <span className="font-semibold text-slate-700">{r.leave_type?.label ?? "—"}</span>
             {" "}&nbsp;|&nbsp; Période · <span className="font-semibold text-slate-700">
@@ -3178,8 +3230,8 @@ function ReminderConfirmModal({ request: r, loading, onClose, onConfirm }: {
             Annuler
           </button>
           <button
-            onClick={onConfirm}
-            disabled={loading}
+            onClick={() => selectedId != null && onConfirm(selectedId)}
+            disabled={loading || selectedId == null}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold disabled:opacity-50 transition shadow-sm"
           >
             {loading

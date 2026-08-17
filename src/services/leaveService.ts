@@ -389,8 +389,9 @@ export const leaveRequestService = {
    * POST /api/leaves/requests/<id>/reminder/
    * L'employé relance le manager qui n'a pas encore validé.
    */
-  sendReminder: async (id: number): Promise<{ message: string }> => {
-    const res = await api.post(`${API}/requests/${id}/reminder/`, {});
+  sendReminder: async (id: number, approverId?: number): Promise<{ message: string }> => {
+    const body = approverId != null ? { approver_id: approverId } : {};
+    const res = await api.post(`${API}/requests/${id}/reminder/`, body);
     return res.data;
   },
 
