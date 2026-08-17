@@ -2678,7 +2678,7 @@ export default function AttendanceShiftsPage() {
     setExportDetailLoading(true);
     try {
       const raw  = await getAttendanceMonthlyDetail({ start, end });
-      const data = { ...raw, employees: raw.employees.filter(e => e.service === "ESCO - NOC") };
+      const data = { ...raw, employees: raw.employees.filter(e => (e.service ?? "").toLowerCase().includes("esco")) };
       exportMonthlyDetailXLSX(data, month);
     } catch (e: any) {
       alert("Erreur lors de l'export : " + (e?.message ?? "inconnue"));
