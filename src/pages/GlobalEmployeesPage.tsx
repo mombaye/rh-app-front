@@ -18,8 +18,10 @@ import {
   shareMatriculeChanges,
   bulkUpdateMatricules,
   previewMatriculeChanges,
+  getMatriculeChangeHistory,
   MatriculeUpdate,
   MatriculeChange,
+  MatriculeChangeHistory,
 } from "@/services/employeeService";
 import { FaPlus, FaUserCheck, FaUserTimes, FaUsers } from "react-icons/fa";
 import {
@@ -38,6 +40,7 @@ import {
   FiEdit3,
   FiArrowRight,
   FiUploadCloud,
+  FiClock,
 } from "react-icons/fi";
 import { UserPlus } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
@@ -467,12 +470,23 @@ function MatriculeChangedModal({
   onShowInfo: () => void;
   onShare:    (emails: string[], columns: string[]) => Promise<void>;
 }) {
-  type View = "choice" | "columns" | "emails" | "result";
-  const [view,       setView]       = useState<View>("choice");
-  const [selected,   setSelected]   = useState<Set<string>>(new Set(DEFAULT_COLS));
-  const [emails,     setEmails]     = useState<string[]>([""]);
-  const [isSending,  setIsSending]  = useState(false);
-  const [result,     setResult]     = useState<{ sent: string[]; errors: { email: string; error: string }[]; total_employees: number } | null>(null);
+  type View = "choice" | "history" | "columns" | "emails" | "result";
+  const [view,          setView]          = useState<View>("choice");
+  const [selected,      setSelected]      = useState<Set<string>>(new Set(DEFAULT_COLS));
+  const [emails,        setEmails]        = useState<string[]>([""]);
+  const [isSending,     setIsSending]     = useState(false);
+  const [result,        setResult]        = useState<{ sent: string[]; errors: { email: string; error: string }[]; total_employees: number } | null>(null);
+  const [historyData,   setHistoryData]   = useState<MatriculeChangeHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const loadHistory = async () => {
+    setView("history");
+    if (historyData.length > 0) return;
+    setHistoryLoading(true);
+    try { setHistoryData(await getMatriculeChangeHistory()); }
+    catch { /* silently */ }
+    finally { setHistoryLoading(false); }
+  };
 
   const toggleCol = (key: string) => {
     const def = COLUMN_DEFS.find(c => c.key === key);
@@ -511,6 +525,7 @@ function MatriculeChangedModal({
 
   const viewTitle =
     view === "choice"  ? "Que souhaitez-vous faire ?"
+    : view === "history" ? "Historique des changements"
     : view === "columns" ? "Colonnes à exporter"
     : view === "emails"  ? "Destinataires"
     :                      "Résultat de l'envoi";
@@ -556,6 +571,87 @@ function MatriculeChangedModal({
                 <p className="text-xs text-gray-400 mt-0.5">Choisir les colonnes à exporter et envoyer un fichier Excel par email.</p>
               </div>
             </button>
+            <button onClick={loadHistory}
+              className="flex items-start gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-blue-400 hover:bg-blue-50/50 transition-all text-left group">
+              <div className="p-2.5 rounded-xl bg-blue-100 group-hover:bg-blue-200 shrink-0"><FiClock className="text-blue-600" size={16} /></div>
+              <div>
+                <p className="font-semibold text-gray-800 text-sm">Voir l'historique daté</p>
+                <p className="text-xs text-gray-400 mt-0.5">Consulter toutes les modifications de matricule avec leur date et auteur.</p>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* ── Vue historique daté ── */}
+        {view === "history" && (
+          <div className="flex flex-col overflow-hidden flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0">
+              {historyLoading ? (
+                <div className="flex items-center justify-center py-12 text-gray-400 gap-2">
+                  <ImSpinner2 className="animate-spin" size={18} />
+                  <span className="text-sm">Chargement…</span>
+                </div>
+              ) : historyData.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-10">Aucun changement de matricule enregistré.</p>
+              ) : (
+                <div className="space-y-4">
+                  {historyData.map(emp => (
+                    <div key={emp.employee_id} className="border border-gray-200 rounded-xl overflow-hidden">
+                      {/* En-tête employé */}
+                      <div className="bg-gray-50 px-4 py-3 flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-bold text-gray-900">{emp.prenom} {emp.nom}</p>
+                          <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+                            {emp.fonction   && <span className="text-xs text-gray-500">{emp.fonction}</span>}
+                            {emp.service    && <span className="text-xs text-gray-400">· {emp.service}</span>}
+                            {emp.type_contrat && <span className="text-xs text-gray-400 uppercase">· {emp.type_contrat}</span>}
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5">
+                            {emp.email     && <span className="text-xs text-gray-400">{emp.email}</span>}
+                            {emp.telephone && <span className="text-xs text-gray-400">· {emp.telephone}</span>}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-mono bg-gray-200 text-gray-700 px-2 py-0.5 rounded">{emp.matricule_actuel || "—"}</span>
+                          {emp.statut && (
+                            <p className="text-xs mt-1" style={{ color: emp.statut === "ACTIVE" ? "#16a34a" : "#dc2626" }}>
+                              {emp.statut === "ACTIVE" ? "Actif" : emp.statut === "EXITED" ? "Sorti" : emp.statut}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {/* Tableau des changements */}
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-gray-100 text-gray-500 uppercase tracking-wide">
+                            <th className="px-3 py-2 text-left font-medium">Ancien</th>
+                            <th className="px-3 py-2 text-left font-medium">Nouveau</th>
+                            <th className="px-3 py-2 text-left font-medium">Date</th>
+                            <th className="px-3 py-2 text-left font-medium">Modifié par</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {emp.changes.map((c, i) => (
+                            <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
+                              <td className="px-3 py-2 font-mono text-red-600">{c.old || "—"}</td>
+                              <td className="px-3 py-2 font-mono text-green-700 font-semibold">{c.new || "—"}</td>
+                              <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{c.date}</td>
+                              <td className="px-3 py-2 text-gray-500">{c.modified_by || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end shrink-0">
+              <button onClick={() => setView("choice")}
+                className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition">
+                ← Retour
+              </button>
+            </div>
           </div>
         )}
 

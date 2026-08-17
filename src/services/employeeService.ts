@@ -373,6 +373,34 @@ export const previewMatriculeChanges = async (
 };
 
 // ══════════════════════════════════════════════════════
+//  HISTORIQUE DATÉ DES CHANGEMENTS DE MATRICULE
+// ══════════════════════════════════════════════════════
+export interface MatriculeChangeEntry {
+  old:         string;
+  new:         string;
+  date:        string;
+  modified_by: string;
+}
+export interface MatriculeChangeHistory {
+  employee_id:      number;
+  nom:              string;
+  prenom:           string;
+  matricule_actuel: string;
+  fonction:         string;
+  service:          string;
+  type_contrat:     string;
+  email:            string;
+  telephone:        string;
+  statut:           string;
+  changes:          MatriculeChangeEntry[];
+}
+
+export const getMatriculeChangeHistory = async (): Promise<MatriculeChangeHistory[]> => {
+  const res = await api.get("/api/employees/matricule-change-history/");
+  return res.data;
+};
+
+// ══════════════════════════════════════════════════════
 //  BULLETINS / PAYSLIPS
 // ══════════════════════════════════════════════════════
 export type PayslipPreviewResponse = {
