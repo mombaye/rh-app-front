@@ -476,8 +476,9 @@ function MatriculeChangedModal({
   const [emails,        setEmails]        = useState<string[]>([""]);
   const [isSending,     setIsSending]     = useState(false);
   const [result,        setResult]        = useState<{ sent: string[]; errors: { email: string; error: string }[]; total_employees: number } | null>(null);
-  const [historyData,   setHistoryData]   = useState<MatriculeChangeHistory[]>([]);
+  const [historyData,    setHistoryData]    = useState<MatriculeChangeHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyMonth,   setHistoryMonth]   = useState<string>("");  // "YYYY-MM"
 
   const loadHistory = async () => {
     setView("history");
@@ -585,6 +586,23 @@ function MatriculeChangedModal({
         {/* ── Vue historique daté ── */}
         {view === "history" && (
           <div className="flex flex-col overflow-hidden flex-1 min-h-0">
+            {/* Filtre mois */}
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3 shrink-0">
+              <FiClock size={14} className="text-gray-400 shrink-0" />
+              <label className="text-xs text-gray-500 whitespace-nowrap">Filtrer par mois :</label>
+              <input
+                type="month"
+                value={historyMonth}
+                onChange={e => setHistoryMonth(e.target.value)}
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+              {historyMonth && (
+                <button onClick={() => setHistoryMonth("")}
+                  className="text-xs text-gray-400 hover:text-gray-600 underline">
+                  Effacer
+                </button>
+              )}
+            </div>
             <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0">
               {historyLoading ? (
                 <div className="flex items-center justify-center py-12 text-gray-400 gap-2">
@@ -595,8 +613,21 @@ function MatriculeChangedModal({
                 <p className="text-sm text-gray-400 text-center py-10">Aucun changement de matricule enregistré.</p>
               ) : (
                 <div className="space-y-4">
-                  {historyData.map(emp => (
-                    <div key={emp.employee_id} className="border border-gray-200 rounded-xl overflow-hidden">
+                  {historyData.map(emp => {
+                    // filtre les changements selon le mois sélectionné
+                    // date format: "DD/MM/YYYY HH:MM"
+                    const filteredChanges = historyMonth
+                      ? emp.changes.filter(c => {
+                          const parts = c.date.split("/");  // ["DD","MM","YYYY HH:MM"]
+                          if (parts.length < 3) return false;
+                          const [dd, mm, rest] = parts;
+                          const yyyy = rest.split(" ")[0];
+                          return `${yyyy}-${mm}` === historyMonth;
+                        })
+                      : emp.changes;
+                    if (filteredChanges.length === 0) return null;
+                    return (
+                    <div key={emp.employee_id} className="border border-gray-200 rounded-xl overflow-hidden" >
                       {/* En-tête employé */}
                       <div className="bg-gray-50 px-4 py-3 flex flex-wrap items-start justify-between gap-2">
                         <div>
@@ -631,7 +662,7 @@ function MatriculeChangedModal({
                           </tr>
                         </thead>
                         <tbody>
-                          {emp.changes.map((c, i) => (
+                          {filteredChanges.map((c, i) => (
                             <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
                               <td className="px-3 py-2 font-mono text-red-600">{c.old || "—"}</td>
                               <td className="px-3 py-2 font-mono text-green-700 font-semibold">{c.new || "—"}</td>
@@ -642,7 +673,8 @@ function MatriculeChangedModal({
                         </tbody>
                       </table>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               )}
             </div>
