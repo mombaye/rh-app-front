@@ -67,9 +67,10 @@ function _invalidateCachetCache() {
   _cachetFetchPromise = null;
 }
 
-import { BASE_URL as QR_API_BASE } from "@/api/baseUrl";
+// URL publique du frontend (baked au build via VITE_PUBLIC_URL, ou origin courant en dev)
+const _PUBLIC_ORIGIN = import.meta.env.VITE_PUBLIC_URL || window.location.origin;
 const qrScanUrl = (slug: string) =>
-  `${QR_API_BASE}/api/employees/passeports/${slug}/pdf/scan/`;
+  `${_PUBLIC_ORIGIN}/passeports/${slug}/view`;
 
 // ── Modal QR Code ─────────────────────────────────────────────────────────────
 function QrModal({ file, alreadyGenerated, onGenerated, onClose }: {
