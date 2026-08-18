@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageCircle, X, Send, Bot, User, CheckCircle2, Loader2, ChevronRight, Headphones } from "lucide-react";
 import { ticketService } from "@/services/ticketService";
 import { TicketCategory, CATEGORY_LABELS } from "@/types/ticket";
@@ -31,6 +31,79 @@ export default function AssistantChatWidget() {
   const [selectedCategory, setSelectedCategory] = useState<TicketCategory | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Drag du bouton flottant ──────────────────────────────────────────────
+  const BTN_W = 180; const BTN_H = 48;
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const btnRef  = useRef<HTMLButtonElement>(null);
+  const dragged = useRef(false);
+
+  // Initialise en bas à droite au premier rendu
+  useEffect(() => {
+    setPos({ x: window.innerWidth - BTN_W - 32, y: window.innerHeight - BTN_H - 32 });
+  }, []);
+
+  // Garde le bouton dans les limites si la fenêtre est redimensionnée
+  useEffect(() => {
+    const onResize = () => setPos(p => p ? {
+      x: Math.min(p.x, window.innerWidth  - BTN_W - 4),
+      y: Math.min(p.y, window.innerHeight - BTN_H - 4),
+    } : p);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    dragged.current = false;
+    dragRef.current = { startX: e.clientX, startY: e.clientY, origX: pos?.x ?? 0, origY: pos?.y ?? 0 };
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      const dx = ev.clientX - dragRef.current.startX;
+      const dy = ev.clientY - dragRef.current.startY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragged.current = true;
+      setPos({
+        x: clamp(dragRef.current.origX + dx, 0, window.innerWidth  - BTN_W),
+        y: clamp(dragRef.current.origY + dy, 0, window.innerHeight - BTN_H),
+      });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup",   onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup",   onUp);
+  }, [pos]);
+
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    const t = e.touches[0];
+    dragged.current = false;
+    dragRef.current = { startX: t.clientX, startY: t.clientY, origX: pos?.x ?? 0, origY: pos?.y ?? 0 };
+
+    const onMove = (ev: TouchEvent) => {
+      if (!dragRef.current) return;
+      const touch = ev.touches[0];
+      const dx = touch.clientX - dragRef.current.startX;
+      const dy = touch.clientY - dragRef.current.startY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragged.current = true;
+      ev.preventDefault();
+      setPos({
+        x: clamp(dragRef.current.origX + dx, 0, window.innerWidth  - BTN_W),
+        y: clamp(dragRef.current.origY + dy, 0, window.innerHeight - BTN_H),
+      });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend",  onUp);
+    };
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend",  onUp);
+  }, [pos]);
 
   function addMsg(from: "bot" | "user", text: string) {
     const id = Date.now() + Math.random();
@@ -122,22 +195,29 @@ export default function AssistantChatWidget() {
 
   return (
     <>
-      {/* ── Bouton flottant — bien visible avec label ─────────────────── */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        aria-label="Assistance eRH"
-        className={`fixed bottom-8 right-8 z-50 flex items-center gap-2.5 pl-4 pr-5 h-12 rounded-full shadow-lg
-          transition-all duration-200 active:scale-95
-          ${open
-            ? "bg-gray-700 text-white"
-            : "bg-camublue-900 text-white hover:bg-camublue-800 hover:shadow-xl hover:scale-105"
-          }`}
-      >
-        {open ? <X size={18} /> : <Headphones size={18} />}
-        <span className="text-sm font-semibold tracking-wide">
-          {open ? "Fermer" : "Assistance eRH"}
-        </span>
-      </button>
+      {/* ── Bouton flottant draggable ─────────────────────────────────── */}
+      {pos && (
+        <button
+          ref={btnRef}
+          onMouseDown={onMouseDown}
+          onTouchStart={onTouchStart}
+          onClick={() => { if (!dragged.current) setOpen(o => !o); }}
+          aria-label="Assistance eRH"
+          style={{ left: pos.x, top: pos.y, width: BTN_W, height: BTN_H, touchAction: "none" }}
+          className={`fixed z-50 flex items-center gap-2.5 pl-4 pr-5 rounded-full shadow-lg select-none
+            transition-colors duration-200
+            ${open
+              ? "bg-gray-700 text-white"
+              : "bg-camublue-900 text-white hover:bg-camublue-800 hover:shadow-xl"
+            }
+            ${dragRef.current ? "cursor-grabbing" : "cursor-grab"}`}
+        >
+          {open ? <X size={18} /> : <Headphones size={18} />}
+          <span className="text-sm font-semibold tracking-wide pointer-events-none">
+            {open ? "Fermer" : "Assistance eRH"}
+          </span>
+        </button>
+      )}
 
       {/* ── Overlay + Modal centré ────────────────────────────────────── */}
       {open && (
