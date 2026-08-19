@@ -764,8 +764,8 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                   {/* Justificatif */}
                                   <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                                     {r.leave_type?.requires_justification ? (
-                                      <a href={`${API_BASE}/api/leaves/requests/${r.id}/document/`}
-                                        target="_blank" rel="noopener noreferrer"
+                                      <button
+                                        onClick={() => openLeaveDocument(r.id)}
                                         className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition ${
                                           r.justification_document
                                             ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
@@ -775,7 +775,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                           ? <><FileCheck className="h-3.5 w-3.5" /> Voir doc</>
                                           : <><Paperclip className="h-3.5 w-3.5" /> Voir doc</>
                                         }
-                                      </a>
+                                      </button>
                                     ) : (
                                       <span className="text-xs text-slate-300">—</span>
                                     )}
@@ -1176,6 +1176,25 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
 
 // ─── Onglet Justificatifs ────────────────────────────────────────────────────
 import { BASE_URL as API_BASE } from "@/api/baseUrl";
+
+/** Fetch le justificatif avec le token Bearer puis l'ouvre dans un onglet blob. */
+async function openLeaveDocument(leaveId: number) {
+  const token = localStorage.getItem("access_token");
+  try {
+    const res = await fetch(`${API_BASE}/api/leaves/requests/${leaveId}/document/`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      alert("Justificatif introuvable ou non encore uploadé pour cette demande.");
+      return;
+    }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+  } catch {
+    alert("Impossible d'ouvrir le justificatif. Vérifiez votre connexion.");
+  }
+}
 
 type JustifStatus = "missing" | "uploaded" | "validated" | "absent";
 
@@ -3909,10 +3928,9 @@ function DetailModal({ request: r, onClose, onDone, freshLoading = false }: {
 
           {/* ── Section Justificatif ─────────────────────────────────────────── */}
           {r.leave_type?.requires_justification && (
-            /* Bouton direct toujours visible — ouvre le fichier même si le cache UI est obsolète */
-            <a
-              href={`${API_BASE}/api/leaves/requests/${r.id}/document/`}
-              target="_blank" rel="noopener noreferrer"
+            /* Bouton direct toujours visible — fetche avec auth Bearer */
+            <button
+              onClick={() => openLeaveDocument(r.id)}
               className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold transition ${
                 r.justification_document
                   ? "bg-blue-600 hover:bg-blue-700 text-white"
@@ -3923,7 +3941,7 @@ function DetailModal({ request: r, onClose, onDone, freshLoading = false }: {
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Chargement…</>
                 : <><ExternalLink className="h-4 w-4" /> Voir le justificatif</>
               }
-            </a>
+            </button>
           )}
           {r.leave_type?.requires_justification && (
             <div className={`rounded-2xl border-2 p-4 space-y-3 ${
@@ -4006,15 +4024,15 @@ function DetailModal({ request: r, onClose, onDone, freshLoading = false }: {
               {/* Lien vers document */}
               {r.justification_document && (
                 <div className="flex items-center gap-2 flex-wrap">
-                  <a href={`${API_BASE}/api/leaves/requests/${r.id}/document/`}
-                    target="_blank" rel="noopener noreferrer"
+                  <button
+                    onClick={() => openLeaveDocument(r.id)}
                     className={`inline-flex items-center gap-2 px-4 py-2 text-white text-xs font-bold rounded-xl transition ${
                       r.justification_validated
                         ? "bg-emerald-600 hover:bg-emerald-700"
                         : "bg-blue-600 hover:bg-blue-700"
                     }`}>
                     <ExternalLink className="h-3.5 w-3.5" /> Voir le justificatif
-                  </a>
+                  </button>
 
                   {/* Bouton de validation RH */}
                   {!r.justification_validated && !r.marked_as_absent && (

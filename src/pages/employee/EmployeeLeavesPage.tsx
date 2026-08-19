@@ -1,4 +1,16 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { BASE_URL } from "@/api/baseUrl";
+
+async function openLeaveDocument(leaveId: number) {
+  const token = localStorage.getItem("access_token");
+  try {
+    const res = await fetch(`${BASE_URL}/api/leaves/requests/${leaveId}/document/`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) { alert("Justificatif introuvable pour cette demande."); return; }
+    window.open(URL.createObjectURL(await res.blob()), "_blank");
+  } catch { alert("Impossible d'ouvrir le justificatif."); }
+}
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Calendar, CheckCircle2, Clock, XCircle,
@@ -1256,10 +1268,8 @@ function LeaveDetailModal({ req, onClose, onEdit, onRefresh }: LeaveDetailModalP
 
                 {/* Lien vers le document existant */}
                 {localReq.justification_document && (
-                  <a
-                    href={localReq.justification_document}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => openLeaveDocument(localReq.id)}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition hover:opacity-80 bg-white ${
                       localReq.justification_validated
                         ? "border-emerald-300 text-emerald-700"
@@ -1267,12 +1277,12 @@ function LeaveDetailModal({ req, onClose, onEdit, onRefresh }: LeaveDetailModalP
                     }`}
                   >
                     <ExternalLink size={12} /> Voir le document
-                  </a>
+                  </button>
                 )}
 
                 {/* Upload (si pas encore de doc OU doc non validé, et pas marqué absent) */}
                 {!localReq.marked_as_absent &&
-                 (localReq.status === "APPROVED" || localReq.status === "REVOKED") &&
+                 (["APPROVED", "REVOKED", "PENDING", "PENDING_MANAGER", "PENDING_RH"].includes(localReq.status)) &&
                  !localReq.justification_validated && (
                   <div className="space-y-2">
                     {localReq.justification_document && (

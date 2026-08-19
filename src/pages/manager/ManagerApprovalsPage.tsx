@@ -1,6 +1,23 @@
 ﻿﻿﻿﻿﻿﻿import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BASE_URL } from "@/api/baseUrl";
+
+async function openLeaveDocument(leaveId: number) {
+  const token = localStorage.getItem("access_token");
+  try {
+    const res = await fetch(`${BASE_URL}/api/leaves/requests/${leaveId}/document/`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      alert("Justificatif introuvable ou non encore uploadé pour cette demande.");
+      return;
+    }
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), "_blank");
+  } catch {
+    alert("Impossible d'ouvrir le justificatif.");
+  }
+}
 import {
   ClipboardCheck, CheckCircle2, Clock, XCircle, AlertCircle,
   Calendar, ChevronLeft, ChevronRight, Filter, User,
@@ -741,16 +758,13 @@ function LeaveDetailModal({
                       )}
                     </div>
                   </div>
-                  <a
-                    href={`${BASE_URL}/api/leaves/requests/${req.id}/document/`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={e => { e.stopPropagation(); openLeaveDocument(req.id); }}
                     className="flex items-center justify-center gap-2 w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition"
-                    onClick={e => e.stopPropagation()}
                   >
                     <FileText size={13} />
                     Voir le justificatif
-                  </a>
+                  </button>
                 </div>
               ) : req.justification_pending ? (
                 <div className="flex items-center gap-2">
@@ -775,16 +789,13 @@ function LeaveDetailModal({
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-blue-700">Document joint</p>
               </div>
-              <a
-                href={`${BASE_URL}/api/leaves/requests/${req.id}/document/`}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={e => { e.stopPropagation(); openLeaveDocument(req.id); }}
                 className="text-xs text-blue-700 hover:underline flex items-center gap-1 font-medium"
-                onClick={e => e.stopPropagation()}
               >
                 <FileText size={12} />
                 Voir
-              </a>
+              </button>
             </div>
           )}
 
