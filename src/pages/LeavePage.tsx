@@ -765,14 +765,15 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                   <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                                     {r.leave_type?.requires_justification ? (
                                       r.justification_document ? (
-                                        <a href={r.justification_document} target="_blank" rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700">
-                                          <FileCheck className="h-3.5 w-3.5" /> Voir
+                                        <a href={`${API_BASE}/api/leaves/requests/${r.id}/document/`}
+                                          target="_blank" rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition">
+                                          <FileCheck className="h-3.5 w-3.5" /> Voir doc
                                         </a>
                                       ) : (
-                                        <span className={`inline-flex items-center gap-1 text-xs font-semibold ${needsDoc ? "text-amber-600" : "text-slate-400"}`}>
+                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 text-xs font-semibold text-amber-600">
                                           <Paperclip className="h-3.5 w-3.5" />
-                                          {needsDoc ? "Requis" : "—"}
+                                          Non fourni
                                         </span>
                                       )
                                     ) : (
@@ -782,13 +783,24 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
 
                                   {/* Actions */}
                                   <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setManageTarget(r); }}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#003c71] hover:bg-[#003c71]/90 text-white text-xs font-semibold rounded-lg transition shadow-sm whitespace-nowrap"
-                                    >
-                                      <Settings2 className="h-3.5 w-3.5" />
-                                      Gérer
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setManageTarget(r); }}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#003c71] hover:bg-[#003c71]/90 text-white text-xs font-semibold rounded-lg transition shadow-sm whitespace-nowrap"
+                                      >
+                                        <Settings2 className="h-3.5 w-3.5" />
+                                        Gérer
+                                      </button>
+                                      {r.status === "REJECTED" && (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(r.id); }}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition border border-red-200 whitespace-nowrap"
+                                          title="Supprimer ce congé rejeté"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </td>
                                 </motion.tr>
                               );
