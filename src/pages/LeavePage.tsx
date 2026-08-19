@@ -764,18 +764,18 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                                   {/* Justificatif */}
                                   <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                                     {r.leave_type?.requires_justification ? (
-                                      r.justification_document ? (
-                                        <a href={`${API_BASE}/api/leaves/requests/${r.id}/document/`}
-                                          target="_blank" rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition">
-                                          <FileCheck className="h-3.5 w-3.5" /> Voir doc
-                                        </a>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 text-xs font-semibold text-amber-600">
-                                          <Paperclip className="h-3.5 w-3.5" />
-                                          Non fourni
-                                        </span>
-                                      )
+                                      <a href={`${API_BASE}/api/leaves/requests/${r.id}/document/`}
+                                        target="_blank" rel="noopener noreferrer"
+                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition ${
+                                          r.justification_document
+                                            ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                            : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                        }`}>
+                                        {r.justification_document
+                                          ? <><FileCheck className="h-3.5 w-3.5" /> Voir doc</>
+                                          : <><Paperclip className="h-3.5 w-3.5" /> Voir doc</>
+                                        }
+                                      </a>
                                     ) : (
                                       <span className="text-xs text-slate-300">—</span>
                                     )}

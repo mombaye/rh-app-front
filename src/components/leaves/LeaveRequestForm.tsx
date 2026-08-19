@@ -303,8 +303,12 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
       if (optDocFile) {
         try {
           await leaveRequestService.uploadDocument(created.id, optDocFile);
-        } catch {
-          // Upload échoué : la demande est créée, on continue
+        } catch (uploadErr: any) {
+          // La demande est créée mais l'upload a échoué : on informe l'employé
+          const msg = uploadErr?.response?.data?.error ?? "Erreur lors de l'envoi du justificatif.";
+          setError(`Demande créée (#${created.id}) mais le justificatif n'a pas pu être envoyé : ${msg} Vous pouvez le renvoyer depuis votre espace congés.`);
+          setLoading(false);
+          return; // ne pas fermer le formulaire, laisser l'utilisateur voir le message
         }
       }
       onSuccess?.();
