@@ -162,6 +162,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   const [showHierarchy,  setShowHierarchy]  = useState(false);
   const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [selected,       setSelected]       = useState<LeaveRequest | null>(null);
+  const [detailLoading,  setDetailLoading]  = useState(false);
   const [editTarget,     setEditTarget]     = useState<LeaveRequest | null>(null);
   const [filterOpen,     setFilterOpen]     = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -320,8 +321,16 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
     }
   };
 
-  const openDetail  = (r: LeaveRequest) => setSelected(r);
-  const closeDetail = ()                 => setSelected(null);
+  const openDetail = async (r: LeaveRequest) => {
+    setSelected(r);            // afficher immédiatement avec données actuelles
+    setDetailLoading(true);
+    try {
+      const fresh = await leaveRequestService.getById(r.id);
+      setSelected(fresh);      // remplacer par données fraîches (justif_document inclus)
+    } catch { /* garder les données initiales */ }
+    finally { setDetailLoading(false); }
+  };
+  const closeDetail = () => setSelected(null);
   const afterAction = async ()           => { closeDetail(); await fetchAll(); };
   const afterEdit   = async ()           => { setEditTarget(null); await fetchAll(); };
 
@@ -887,7 +896,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
 
       {/* Modals */}
       <AnimatePresence>
-        {selected && <DetailModal request={selected} onClose={closeDetail} onDone={afterAction} />}
+        {selected && <DetailModal request={selected} onClose={closeDetail} onDone={afterAction} freshLoading={detailLoading} />}
       </AnimatePresence>
       <AnimatePresence>
         {editTarget && <EditModal request={editTarget} onClose={() => setEditTarget(null)} onDone={afterEdit} />}
@@ -3684,8 +3693,8 @@ function ValidationChain({ r }: { r: LeaveRequest }) {
 }
 
 // ─── Modal Détail + Actions ───────────────────────────────────────────────────
-function DetailModal({ request: r, onClose, onDone }: {
-  request: LeaveRequest; onClose: () => void; onDone: () => void;
+function DetailModal({ request: r, onClose, onDone, freshLoading = false }: {
+  request: LeaveRequest; onClose: () => void; onDone: () => void; freshLoading?: boolean;
 }) {
   const [actionLoading,    setActionLoading]    = useState(false);
   const [rejectReason,     setRejectReason]     = useState("");
@@ -3887,6 +3896,23 @@ function DetailModal({ request: r, onClose, onDone }: {
           )}
 
           {/* ── Section Justificatif ─────────────────────────────────────────── */}
+          {r.leave_type?.requires_justification && (
+            /* Bouton direct toujours visible — ouvre le fichier même si le cache UI est obsolète */
+            <a
+              href={`${API_BASE}/api/leaves/requests/${r.id}/document/`}
+              target="_blank" rel="noopener noreferrer"
+              className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold transition ${
+                r.justification_document
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  : "bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300"
+              }`}
+            >
+              {freshLoading
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Chargement…</>
+                : <><ExternalLink className="h-4 w-4" /> Voir le justificatif</>
+              }
+            </a>
+          )}
           {r.leave_type?.requires_justification && (
             <div className={`rounded-2xl border-2 p-4 space-y-3 ${
               r.marked_as_absent
