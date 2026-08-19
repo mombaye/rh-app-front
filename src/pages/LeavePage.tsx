@@ -1345,7 +1345,7 @@ function JustificationsTab({ onOpenDetail }: JustificationsTabProps) {
                   const cfg    = JUSTIF_STATUS_CFG[jStatus];
                   const isActing = actionId === r.id;
                   const docUrl = r.justification_document
-                    ? (r.justification_document.startsWith("http") ? r.justification_document : `${API_BASE}${r.justification_document}`)
+                    ? `${API_BASE}/api/leaves/requests/${r.id}/document/`
                     : null;
 
                   return (
@@ -3968,14 +3968,14 @@ function DetailModal({ request: r, onClose, onDone }: {
               {/* Lien vers document */}
               {r.justification_document && (
                 <div className="flex items-center gap-2 flex-wrap">
-                  <a href={r.justification_document.startsWith("http") ? r.justification_document : `${API_BASE}${r.justification_document}`}
+                  <a href={`${API_BASE}/api/leaves/requests/${r.id}/document/`}
                     target="_blank" rel="noopener noreferrer"
                     className={`inline-flex items-center gap-2 px-4 py-2 text-white text-xs font-bold rounded-xl transition ${
                       r.justification_validated
                         ? "bg-emerald-600 hover:bg-emerald-700"
                         : "bg-blue-600 hover:bg-blue-700"
                     }`}>
-                    <ExternalLink className="h-3.5 w-3.5" /> Ouvrir le document
+                    <ExternalLink className="h-3.5 w-3.5" /> Voir le justificatif
                   </a>
 
                   {/* Bouton de validation RH */}

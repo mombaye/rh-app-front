@@ -729,25 +729,27 @@ function LeaveDetailModal({
             }`}>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Justificatif</p>
               {req.justification_document ? (
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-emerald-700">Document soumis</p>
-                    {req.justification_validated && (
-                      <p className="text-[11px] text-emerald-600">
-                        Validé{req.justification_validated_by ? ` par ${req.justification_validated_by.full_name}` : ""}
-                      </p>
-                    )}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-emerald-700">Document soumis</p>
+                      {req.justification_validated && (
+                        <p className="text-[11px] text-emerald-600">
+                          Validé{req.justification_validated_by ? ` par ${req.justification_validated_by.full_name}` : ""}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <a
-                    href={req.justification_document.startsWith("http") ? req.justification_document : `${BASE_URL}${req.justification_document}`}
+                    href={`${BASE_URL}/api/leaves/requests/${req.id}/document/`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-emerald-700 hover:underline flex items-center gap-1 font-medium"
+                    className="flex items-center justify-center gap-2 w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition"
                     onClick={e => e.stopPropagation()}
                   >
-                    <FileText size={12} />
-                    Voir
+                    <FileText size={13} />
+                    Voir le justificatif
                   </a>
                 </div>
               ) : req.justification_pending ? (
@@ -774,7 +776,7 @@ function LeaveDetailModal({
                 <p className="text-xs font-semibold text-blue-700">Document joint</p>
               </div>
               <a
-                href={req.justification_document.startsWith("http") ? req.justification_document : `${BASE_URL}${req.justification_document}`}
+                href={`${BASE_URL}/api/leaves/requests/${req.id}/document/`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-blue-700 hover:underline flex items-center gap-1 font-medium"
