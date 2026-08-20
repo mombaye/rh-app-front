@@ -11,7 +11,7 @@ import ManagerLayout from "@/layouts/ManagerLayout";
 import MaintenancePage from "@/components/MaintenancePage";
 
 // ── Mettre à true pour afficher la page de maintenance ───────────────────────
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = false;
 
 // ── Pages chargées à la demande (code-splitting) ─────────────────────────────
 // Chaque page est découpée dans son propre chunk JS, chargé uniquement

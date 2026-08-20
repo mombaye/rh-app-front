@@ -149,6 +149,7 @@ function KpiCard({ label, value, sub, dot, onClick, active }: {
 
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function LeavePage({ contractFilter }: { contractFilter?: ContractType } = {}) {
+  const { user } = useAuth();
   const [tab,          setTab]          = useState<TabId>("requests");
   const [requests,     setRequests]     = useState<LeaveRequest[]>([]);
   const [summary,      setSummary]      = useState<LeaveSummary | null>(null);

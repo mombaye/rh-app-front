@@ -365,6 +365,41 @@ export default function ExitAuthorizationPanel({
   const [datetimeExit,   setDatetimeExit]   = useState("");
   const [datetimeReturn, setDatetimeReturn] = useState("");
   const [motif,          setMotif]          = useState("");
+  const [durationError,  setDurationError]  = useState<string | null>(null);
+
+  const MAX_HOURS = 3;
+
+  // Calcule le datetime-local max autorisé (exit + 3h)
+  const maxReturn = datetimeExit
+    ? new Date(new Date(datetimeExit).getTime() + MAX_HOURS * 60 * 60 * 1000)
+        .toISOString().slice(0, 16)
+    : undefined;
+
+  const handleExitChange = (val: string) => {
+    setDatetimeExit(val);
+    setDurationError(null);
+    // Si l'heure de rentrée déjà saisie dépasse exit+3h, on la réinitialise
+    if (datetimeReturn && val) {
+      const diff = (new Date(datetimeReturn).getTime() - new Date(val).getTime()) / 3600000;
+      if (diff > MAX_HOURS) { setDatetimeReturn(""); }
+    }
+  };
+
+  const handleReturnChange = (val: string) => {
+    setDurationError(null);
+    if (datetimeExit && val) {
+      const diff = (new Date(val).getTime() - new Date(datetimeExit).getTime()) / 3600000;
+      if (diff > MAX_HOURS) {
+        setDurationError(`La durée de sortie ne peut pas dépasser ${MAX_HOURS}h00.`);
+        return;
+      }
+      if (diff <= 0) {
+        setDurationError("L'heure de rentrée doit être après l'heure de sortie.");
+        return;
+      }
+    }
+    setDatetimeReturn(val);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -387,6 +422,15 @@ export default function ExitAuthorizationPanel({
   const handleCreate = async () => {
     if (!selectedEmpId || !datetimeExit || !datetimeReturn || !motif.trim()) {
       toast.error("Veuillez remplir tous les champs.");
+      return;
+    }
+    const diffH = (new Date(datetimeReturn).getTime() - new Date(datetimeExit).getTime()) / 3600000;
+    if (diffH <= 0) {
+      toast.error("L'heure de rentrée doit être après l'heure de sortie.");
+      return;
+    }
+    if (diffH > MAX_HOURS) {
+      toast.error(`La durée de sortie ne peut pas dépasser ${MAX_HOURS}h00.`);
       return;
     }
     setSubmitting(true);
@@ -508,6 +552,14 @@ export default function ExitAuthorizationPanel({
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 space-y-4">
           <h3 className="font-semibold text-[#003c71] text-sm">Nouvelle demande de sortie</h3>
 
+          {/* Bannière d'erreur durée max — en haut du formulaire */}
+          {durationError && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-300 text-red-700 rounded-xl px-4 py-3 text-sm font-semibold">
+              <span className="text-base">⚠️</span>
+              La durée maximale autorisée est de <strong className="mx-1">3h00</strong>. Veuillez corriger l'heure de rentrée.
+            </div>
+          )}
+
           {!employeeId && employees.length > 0 && (
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Employé *</label>
@@ -533,16 +585,37 @@ export default function ExitAuthorizationPanel({
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Date & heure de sortie *</label>
               <input type="datetime-local" value={datetimeExit}
-                onChange={e => setDatetimeExit(e.target.value)}
+                onChange={e => handleExitChange(e.target.value)}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Date & heure de rentrée *</label>
-              <input type="datetime-local" value={datetimeReturn} min={datetimeExit || undefined}
-                onChange={e => setDatetimeReturn(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white" />
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Date & heure de rentrée *
+                {datetimeExit && (
+                  <span className="ml-2 text-amber-600 font-normal">(max +3h)</span>
+                )}
+              </label>
+              <input type="datetime-local" value={datetimeReturn}
+                min={datetimeExit || undefined}
+                max={maxReturn}
+                onChange={e => handleReturnChange(e.target.value)}
+                className={`w-full border rounded-xl px-3 py-2 text-sm bg-white ${
+                  durationError ? "border-red-400" : "border-slate-200"
+                }`} />
             </div>
           </div>
+
+          {/* Durée calculée + erreur */}
+          {datetimeExit && datetimeReturn && !durationError && (
+            <p className="text-xs text-slate-500">
+              Durée : <strong>
+                {(() => {
+                  const m = Math.round((new Date(datetimeReturn).getTime() - new Date(datetimeExit).getTime()) / 60000);
+                  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+                })()}
+              </strong> / 3h00 max
+            </p>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Motif *</label>
@@ -557,7 +630,7 @@ export default function ExitAuthorizationPanel({
               className="px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">
               Annuler
             </button>
-            <button onClick={handleCreate} disabled={submitting}
+            <button onClick={handleCreate} disabled={submitting || !!durationError}
               className="flex items-center gap-2 px-4 py-2 bg-[#003c71] text-white rounded-xl text-sm font-semibold hover:bg-[#003c71]/90 disabled:opacity-60 transition">
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
               Soumettre

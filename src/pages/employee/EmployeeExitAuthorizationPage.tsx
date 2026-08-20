@@ -57,6 +57,10 @@ function CreateModal({ employeeId, onClose, onSaved }: CreateModalProps) {
     if (!heureDepart) { setFormError("Veuillez renseigner l'heure de départ."); return; }
     if (!heureRetour) { setFormError("Veuillez renseigner l'heure de retour."); return; }
     if (heureRetour <= heureDepart) { setFormError("L'heure de retour doit être après l'heure de départ."); return; }
+    const [dh, dm] = heureDepart.split(":").map(Number);
+    const [rh, rm] = heureRetour.split(":").map(Number);
+    const diffMin = (rh * 60 + rm) - (dh * 60 + dm);
+    if (diffMin > 180) { setFormError("La durée maximale autorisée est de 3h00. Veuillez corriger l'heure de retour."); return; }
     if (!motif.trim()) { setFormError("Veuillez indiquer le motif de la sortie."); return; }
 
     const datetimeExit   = `${date}T${heureDepart}:00`;
@@ -140,19 +144,35 @@ function CreateModal({ employeeId, onClose, onSaved }: CreateModalProps) {
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                 <LogOut size={13} className="inline mr-1.5 rotate-180 text-[#003c71]" />
                 Heure de retour <span className="text-red-400">*</span>
+                {heureDepart && <span className="ml-1 text-amber-600 font-normal text-xs">(max +3h)</span>}
               </label>
               <input
                 type="time"
                 value={heureRetour}
                 min={heureDepart || undefined}
-                onChange={e => { setHeureRetour(e.target.value); setFormError(null); }}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50"
+                onChange={e => {
+                  const val = e.target.value;
+                  setHeureRetour(val);
+                  if (heureDepart && val) {
+                    const [dh2, dm2] = heureDepart.split(":").map(Number);
+                    const [rh2, rm2] = val.split(":").map(Number);
+                    const diff2 = (rh2 * 60 + rm2) - (dh2 * 60 + dm2);
+                    if (diff2 > 180) {
+                      setFormError("La durée maximale autorisée est de 3h00. Veuillez corriger l'heure de retour.");
+                    } else {
+                      setFormError(null);
+                    }
+                  } else { setFormError(null); }
+                }}
+                className={`w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 bg-gray-50 ${
+                  formError?.includes("3h") ? "border-red-400 focus:ring-red-200" : "border-gray-200 focus:ring-[#003c71]/30 focus:border-[#003c71]/50"
+                }`}
               />
             </div>
           </div>
 
           {/* Récap visuel si les deux heures sont renseignées */}
-          {heureDepart && heureRetour && heureRetour > heureDepart && (
+          {heureDepart && heureRetour && heureRetour > heureDepart && !formError && (
             <motion.div
               initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
               className="flex items-center gap-3 bg-[#003c71]/5 border border-[#003c71]/20 rounded-xl px-4 py-2.5"
@@ -192,7 +212,7 @@ function CreateModal({ employeeId, onClose, onSaved }: CreateModalProps) {
               className="flex-1 px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm transition font-medium">
               Annuler
             </button>
-            <button onClick={handleSave} disabled={saving}
+            <button onClick={handleSave} disabled={saving || !!formError}
               className="flex-[2] px-4 py-2.5 rounded-xl bg-[#003c71] text-white text-sm hover:bg-[#003c71]/90 transition flex items-center justify-center gap-2 disabled:opacity-50 font-semibold shadow-sm">
               {saving && <Loader2 size={15} className="animate-spin" />}
               Envoyer la demande

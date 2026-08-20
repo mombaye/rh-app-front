@@ -458,7 +458,8 @@ export const leaveRequestService = {
     const form = new FormData();
     form.append("document", file);
     const res = await api.post(`${API}/requests/${id}/upload_document/`, form, {
-      });
+      headers: { "Content-Type": undefined },
+    });
     return res.data;
   },
 

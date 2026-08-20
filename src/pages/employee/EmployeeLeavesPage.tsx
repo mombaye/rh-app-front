@@ -1282,7 +1282,7 @@ function LeaveDetailModal({ req, onClose, onEdit, onRefresh }: LeaveDetailModalP
 
                 {/* Upload (si pas encore de doc OU doc non validé, et pas marqué absent) */}
                 {!localReq.marked_as_absent &&
-                 (["APPROVED", "REVOKED", "PENDING", "PENDING_MANAGER", "PENDING_RH"].includes(localReq.status)) &&
+                 (["APPROVED", "REVOKED", "PENDING", "PENDING_SECOND", "PENDING_RH"].includes(localReq.status)) &&
                  !localReq.justification_validated && (
                   <div className="space-y-2">
                     {localReq.justification_document && (

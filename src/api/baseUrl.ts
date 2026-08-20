@@ -4,4 +4,4 @@
 // ════════════════════════════════════════════════════════════════
 //  URL de base du backend — modifier UNIQUEMENT ici
 // ════════════════════════════════════════════════════════════════
-export const BASE_URL = "http://192.168.1.50:8030";
+export const BASE_URL = "http://localhost:8030";
