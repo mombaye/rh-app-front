@@ -630,7 +630,6 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                         (statusFilter === "PENDING" || statusFilter === "PENDING_SECOND") ? "ALL" : "PENDING"
                       )} />
                     <KpiCard label="Approuvés"  value={contractSummary.approved}       dot="bg-emerald-500"
-                      sub={`${contractSummary.total_days_approved}j accordés`}
                       active={statusFilter === "APPROVED"}
                       onClick={() => setStatusFilter(statusFilter === "APPROVED" ? "ALL" : "APPROVED")} />
                     <KpiCard label="Rejetés"    value={contractSummary.rejected}       dot="bg-red-500"
