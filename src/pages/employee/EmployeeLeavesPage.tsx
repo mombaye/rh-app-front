@@ -1578,10 +1578,12 @@ export default function EmployeeLeavesPage({
   const [cancelTarget,  setCancelTarget] = useState<LeaveRequest | null>(null);
   const [cancelling,    setCancelling]   = useState(false);
   const [showExport,    setShowExport]   = useState(false);
-  const [filterStatus,  setFilterStatus] = useState("ALL");
+  const [filterStatus,       setFilterStatus]      = useState("ALL");
+  const [filterAnnualTaken,  setFilterAnnualTaken] = useState(false);
   const [viewMode,      setViewMode]     = useState<"compact" | "detailed">("detailed");
   const [sortOrder,     setSortOrder]    = useState<"recent" | "oldest" | "longest">("recent");
   const [currentPage,   setCurrentPage]  = useState(1);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(() => {
     if (!employeeId) return;
@@ -1601,7 +1603,21 @@ export default function EmployeeLeavesPage({
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const filtered = (filterStatus === "ALL" ? requests : requests.filter(r => r.status === filterStatus))
+  // Rafraîchir silencieusement quand l'onglet redevient visible
+  // (ex : l'admin révoque un congé pendant que l'employé est sur la page)
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refresh]);
+
+  const filtered = requests
+    .filter(r => {
+      if (filterAnnualTaken) {
+        return r.status === "APPROVED" && r.leave_type.deducts_from_balance;
+      }
+      return filterStatus === "ALL" || r.status === filterStatus;
+    })
     .slice()
     .sort((a, b) => {
       if (sortOrder === "recent") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -1613,6 +1629,7 @@ export default function EmployeeLeavesPage({
 
   const handleFilterChange = (status: string) => {
     setFilterStatus(status);
+    setFilterAnnualTaken(false);
     setCurrentPage(1);
   };
 
@@ -1706,16 +1723,17 @@ export default function EmployeeLeavesPage({
           </div>
         </motion.div>
 
-        {/* ── Solde disponible — bannière centrée ── */}
+        {/* ── Solde disponible + Congé pris plateforme ── */}
         {!loading && primaryBalance && (
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="mb-6"
+            className="mb-6 grid grid-cols-2 gap-3"
           >
+            {/* Solde disponible */}
             <div
-              className="bg-[#003c71] rounded-2xl shadow-md px-8 py-5 flex flex-col items-center justify-center text-center"
+              className="bg-[#003c71] rounded-2xl shadow-md px-6 py-5 flex flex-col items-center justify-center text-center"
               title={`Solde ${soldeLabel} ${new Date().getFullYear()}`}
             >
               <p className="text-blue-200 text-xs font-semibold uppercase tracking-widest mb-1">
@@ -1726,6 +1744,45 @@ export default function EmployeeLeavesPage({
                 <span className="text-xl ml-2 opacity-70 font-semibold">jours</span>
               </p>
             </div>
+
+            {/* Congé pris sur la plateforme — cliquable pour filtrer */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !filterAnnualTaken;
+                setFilterAnnualTaken(next);
+                setFilterStatus("ALL");
+                setCurrentPage(1);
+                if (next) {
+                  setTimeout(() => listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                }
+              }}
+              title={filterAnnualTaken ? "Retirer le filtre" : "Voir les congés annuels approuvés sur la plateforme"}
+              className={`rounded-2xl shadow-sm px-6 py-5 flex flex-col items-center justify-center text-center w-full transition-all duration-200 ${
+                filterAnnualTaken
+                  ? "bg-blue-50 border-2 border-[#003c71] ring-2 ring-[#003c71]/20"
+                  : "bg-white border border-gray-200 hover:border-[#003c71]/40 hover:shadow-md"
+              }`}
+            >
+              <p className={`text-xs font-semibold uppercase tracking-widest mb-1 flex items-center gap-1.5 ${
+                filterAnnualTaken ? "text-[#003c71]" : "text-gray-500"
+              }`}>
+                {filterAnnualTaken && <Filter size={11} />}
+                Congé pris (plateforme)
+              </p>
+              <p className="font-extrabold leading-none text-[#003c71]">
+                <span className="text-5xl">
+                  {Math.round(parseFloat(primaryBalance.taken || "0"))}
+                </span>
+                <span className="text-xl ml-2 opacity-70 font-semibold">jours</span>
+              </p>
+              {!filterAnnualTaken && (
+                <p className="text-[10px] text-gray-400 mt-1.5">Cliquer pour filtrer</p>
+              )}
+              {filterAnnualTaken && (
+                <p className="text-[10px] text-[#003c71] font-semibold mt-1.5">Filtre actif · cliquer pour retirer</p>
+              )}
+            </button>
           </motion.div>
         )}
 
@@ -1763,6 +1820,7 @@ export default function EmployeeLeavesPage({
 
 
         {/* ── Liste des demandes ── */}
+        <div ref={listRef}>
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1841,9 +1899,22 @@ export default function EmployeeLeavesPage({
           </div>
 
           {/* Chips actifs */}
-          {!loading && (filterStatus !== "ALL" || sortOrder !== "recent") && (
+          {!loading && (filterStatus !== "ALL" || sortOrder !== "recent" || filterAnnualTaken) && (
             <div className="px-5 pt-3 flex items-center gap-2 flex-wrap">
-              {filterStatus !== "ALL" && (
+              {filterAnnualTaken && (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                  <Filter size={9} />
+                  Congés annuels approuvés
+                  <button
+                    onClick={() => { setFilterAnnualTaken(false); setCurrentPage(1); }}
+                    className="hover:bg-blue-100 rounded-full p-0.5 transition"
+                    title="Retirer le filtre"
+                  >
+                    <X size={10} />
+                  </button>
+                </span>
+              )}
+              {!filterAnnualTaken && filterStatus !== "ALL" && (
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
                   {STATUS_CONFIG[filterStatus]?.label ?? filterStatus}
                   <button
@@ -1950,6 +2021,7 @@ export default function EmployeeLeavesPage({
             </>
           )}
         </motion.div>
+        </div>
       </div>
 
       {/* ── Modal compte non lié ── */}

@@ -207,12 +207,22 @@ function MemberDetailModal({
           </div>
 
           {/* Solde congé */}
-          <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
-            <p className="text-sm text-gray-500">Solde congé restant</p>
-            {balance ? (
-              <span className="text-2xl font-bold text-blue-600">{remaining ?? "—"} j</span>
-            ) : (
-              <span className="text-sm text-gray-400 italic">Non renseigné</span>
+          <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-gray-500">Solde restant</p>
+              {balance ? (
+                <span className="text-2xl font-bold text-[#003c71]">{remaining ?? "—"} j</span>
+              ) : (
+                <span className="text-sm text-gray-400 italic">Non renseigné</span>
+              )}
+            </div>
+            {balance && (
+              <div className="flex items-center justify-between border-t border-gray-200 pt-2">
+                <p className="text-xs text-gray-400">Congé pris (plateforme)</p>
+                <span className="text-sm font-bold text-red-500">
+                  {taken !== null ? `${taken} j` : "—"}
+                </span>
+              </div>
             )}
           </div>
 

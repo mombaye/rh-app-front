@@ -160,7 +160,8 @@ export interface LeaveBalance {
   leave_type:      LeaveType;
   year:            number;
   acquired:        string;
-  taken:           string;
+  file_taken:      string;  // congés pris du fichier de migration (historique)
+  taken:           string;  // congés approuvés sur la plateforme (signaux)
   adjusted:        string;
   remaining:       string;
   carried_forward: string;  // jours reportés de l'année précédente
@@ -218,6 +219,8 @@ export interface MigrationImportRow {
   solde_anterieur?:  number;
   acquired?:         number;
   taken?:            number;
+  system_taken?:     number | null;
+  file_taken?:       number | null;
   taken_override?:   number | null;
   message?:          string;
 }

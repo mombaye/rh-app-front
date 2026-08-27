@@ -20,6 +20,25 @@ interface EditableRow extends MigrationImportRow {
   taken_override?: number | null;
 }
 
+// ─── Helpers de calcul (source unique de vérité) ──────────────────────────────
+// fileTaken = congé pris du fichier historique (bleu)
+// sysTaken  = congés validés sur la plateforme (rouge)
+// taken     = fileTaken + sysTaken (total réel)
+// restant   = solde_antérieur + acquis - taken
+function rowFileTaken(r: EditableRow | MigrationImportRow): number {
+  return r.file_taken ?? (r.taken_override ?? 0);
+}
+function rowSysTaken(r: EditableRow | MigrationImportRow): number {
+  const fileTaken = rowFileTaken(r);
+  return r.system_taken ?? Math.max(0, (r.taken ?? 0) - fileTaken);
+}
+function rowTaken(r: EditableRow | MigrationImportRow): number {
+  return rowFileTaken(r) + rowSysTaken(r);
+}
+function rowRestant(r: EditableRow | MigrationImportRow): number {
+  return (r.solde_anterieur ?? 0) + (r.acquired ?? 0) - rowTaken(r);
+}
+
 // ─── Export Excel ─────────────────────────────────────────────────────────────
 function isoToday(): string {
   const d = new Date();
@@ -182,9 +201,8 @@ export default function LeavesMigrationPage() {
       const newRows = res.results.map((r: any) => {
         const solde_anterieur   = r.solde_anterieur ?? 0;
         const acquired          = r.acquired ?? 0;
-        const taken             = r.taken ?? 0;
         const current_remaining = solde_anterieur + acquired;
-        const edited            = current_remaining - taken;
+        const edited            = rowRestant(r as EditableRow);
         return { ...r, solde_anterieur, current_remaining, edited };
       });
       const snapName = `Soldes ${currentYear} — base de données (${res.processed} employés)`;
@@ -214,10 +232,27 @@ export default function LeavesMigrationPage() {
         if (session && session.rows.length > 0) {
           setFileName(session.filename);
           setSynced(session.synced);
-          setRows(session.rows.map((r: any) => ({
+          const restoredRows = session.rows.map((r: any) => ({
             ...r,
             edited: r.edited ?? r.new_remaining ?? r.current_remaining ?? 0,
-          })));
+          }));
+          setRows(restoredRows);
+
+          // Rafraîchir system_taken silencieusement pour refléter les nouveaux
+          // congés approuvés sur la plateforme depuis la dernière session
+          leaveBalanceService.migrationSnapshot(currentYear)
+            .then(snap => {
+              const snapMap = new Map<string, any>(
+                snap.results.map((s: any) => [s.matricule, s])
+              );
+              setRows(prev => prev.map(row => {
+                const fresh = snapMap.get(row.matricule);
+                if (!fresh) return row;
+                const updated = { ...row, system_taken: fresh.system_taken };
+                return { ...updated, edited: rowRestant(updated as EditableRow) };
+              }));
+            })
+            .catch(() => {});
         } else {
           // Tenter localStorage (migration ancienne version)
           let restored = false;
@@ -255,6 +290,29 @@ export default function LeavesMigrationPage() {
       .finally(() => setSessionLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Rafraîchir system_taken quand l'onglet redevient visible (révocations, nouveaux congés…)
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      leaveBalanceService.migrationSnapshot(currentYear)
+        .then(snap => {
+          const snapMap = new Map<string, any>(
+            snap.results.map((s: any) => [s.matricule, s])
+          );
+          setRows(prev => prev.map(row => {
+            const fresh = snapMap.get(row.matricule);
+            if (!fresh) return row;
+            const updated = { ...row, system_taken: fresh.system_taken };
+            return { ...updated, edited: rowRestant(updated as EditableRow) };
+          }));
+        })
+        .catch(() => {});
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentYear]);
 
   // ── Chargement effectif d'un fichier ────────────────────────────────────────
   const loadFile = async (f: File) => {
@@ -457,11 +515,11 @@ export default function LeavesMigrationPage() {
       "Prénom":              (r) => r.prenom ?? r.employee.split(" ").slice(1).join(" "),
       "Poste":               (r) => r.poste || "",
       "Date embauche":       (r) => formatDateEmbauche(r.date_embauche),
-      "Solde antérieur":     (r) => r.solde_anterieur ?? ((r.acquired ?? 0) - (r.taken ?? 0)),
+      "Solde antérieur":     (r) => r.solde_anterieur ?? 0,
       "Congés acquis":       (r) => r.acquired ?? 0,
-      "Solde congé actuel":  (r) => r.current_remaining ?? 0,
-      "Congé pris":          (r) => r.taken ?? 0,
-      "Congé restant":       (r) => r.edited,
+      "Solde congé actuel":  (r) => (r.solde_anterieur ?? 0) + (r.acquired ?? 0),
+      "Congé pris":          (r) => rowTaken(r),
+      "Congé restant":       (r) => rowRestant(r),
     };
     exportMigrationXLSX("migration_soldes",
       okRows.map((r) => Object.fromEntries(exportCols.map((k) => [k, ALL[k](r)])))
@@ -783,10 +841,13 @@ export default function LeavesMigrationPage() {
                       {paginated.map((row, idx) => {
                         const isOk           = row.status === "ok";
                         const acquired       = row.acquired ?? 0;
-                        const taken          = row.taken    ?? 0;
                         const soldeAnterieur = row.solde_anterieur ?? 0;
-                        const soldeActuel    = soldeAnterieur + acquired;   // DB
-                        const congeRestant   = soldeActuel - taken;         // DB
+                        const soldeActuel    = soldeAnterieur + acquired;
+                        // Source unique de vérité : helpers partagés
+                        const fileTaken      = rowFileTaken(row);
+                        const sysTaken       = rowSysTaken(row);
+                        const taken          = rowTaken(row);
+                        const congeRestant   = rowRestant(row);
                         const nom    = row.nom    ?? row.employee.split(" ")[0] ?? "";
                         const prenom = row.prenom ?? row.employee.split(" ").slice(1).join(" ");
                         return (
@@ -814,11 +875,23 @@ export default function LeavesMigrationPage() {
                             <td className="px-4 py-3 text-center font-mono font-semibold text-gray-700 text-sm">
                               {isOk ? soldeActuel.toFixed(2) : <span className="text-gray-300">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-center font-mono text-gray-600 text-sm">
-                              {isOk ? taken.toFixed(2) : <span className="text-gray-300">—</span>}
+                            <td className="px-4 py-3 text-center text-sm">
+                              {isOk ? (
+                                <div className="flex items-center justify-center gap-1 font-mono text-xs">
+                                  <span className="text-blue-600 font-semibold" title="Congé pris (fichier)">{fileTaken.toFixed(0)}j</span>
+                                  <span className="text-gray-400">+</span>
+                                  <span className="text-red-500 font-semibold" title="Congés approuvés sur la plateforme">{sysTaken.toFixed(0)}j</span>
+                                  <span className="text-gray-400">=</span>
+                                  <span className="text-gray-700 font-bold">{taken.toFixed(0)}j</span>
+                                </div>
+                              ) : <span className="text-gray-300">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-center font-mono font-bold text-[#003c71] text-sm">
-                              {isOk ? congeRestant.toFixed(2) : <span className="text-gray-300">—</span>}
+                            <td className="px-4 py-3 text-center font-mono font-bold text-sm">
+                              {isOk ? (
+                                <span className={congeRestant < 0 ? "text-red-600" : "text-[#003c71]"}>
+                                  {congeRestant.toFixed(2)}
+                                </span>
+                              ) : <span className="text-gray-300">—</span>}
                             </td>
                           </motion.tr>
                         );

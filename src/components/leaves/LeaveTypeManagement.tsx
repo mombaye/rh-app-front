@@ -298,6 +298,7 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
                       name="code" value={form.code}
                       onChange={handleChange}
                       placeholder="Ex : CP, RTT, MALADIE"
+                      maxLength={20}
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition uppercase"
                     />
                   </div>
@@ -309,6 +310,7 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
                       name="label" value={form.label}
                       onChange={handleChange}
                       placeholder="Ex : Congés Payés"
+                      maxLength={100}
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-camublue-900 focus:ring-2 focus:ring-camublue-900/20 transition"
                     />
                   </div>
