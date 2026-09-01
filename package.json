@@ -4,7 +4,11 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "vite",
+    "dev:sn": "vite --mode sn",
+    "dev:bf": "vite --mode bf",
     "build": "vite build",
+    "build:sn": "vite build --mode sn",
+    "build:bf": "vite build --mode bf",
     "preview": "vite preview"
   },
   "dependencies": {

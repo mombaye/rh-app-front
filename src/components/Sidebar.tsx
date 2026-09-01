@@ -22,6 +22,7 @@ import {
   Ticket,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
+import { FEATURES, COUNTRY } from "@/config/features";
 import { useAuth } from "@/contexts/useAuth";
 import { useAlertes } from "@/contexts/AlertesContext";
 import { useState, useEffect, useCallback } from "react";
@@ -107,12 +108,12 @@ export default function Sidebar() {
       path: "/employees",
       icon: <Users2 size={20} />,
       subItems: [
-        { label: "Vue Globale",            path: "/employees/global"         },
-        { label: "Internes",              path: "/employees/internes"       },
-        { label: "Intérimaires",          path: "/employees/interims"       },
-        { label: "Alertes",               path: "/employees/alertes",  badge: totalCount },
-        { label: "Disciplinaire",          path: "/employees/disciplinaire" },
-        { label: "Questionnaires sortie", path: "/employees/questionnaires", badge: questionnaireDoneCount || undefined, badgeRed: true },
+        { label: "Vue Globale", path: "/employees/global"    },
+        { label: "Internes",    path: "/employees/internes"  },
+        ...(FEATURES.interim        ? [{ label: "Intérimaires",          path: "/employees/interims"                                                               }] : []),
+        { label: "Alertes",         path: "/employees/alertes", badge: totalCount },
+        ...(FEATURES.disciplinaire  ? [{ label: "Disciplinaire",          path: "/employees/disciplinaire"                                                         }] : []),
+        ...(FEATURES.questionnaires ? [{ label: "Questionnaires sortie", path: "/employees/questionnaires", badge: questionnaireDoneCount || undefined, badgeRed: true }] : []),
       ],
     },
     {
@@ -120,12 +121,12 @@ export default function Sidebar() {
       path: "/leaves",
       icon: <CalendarDays size={20} />,
       subItems: [
-        { label: "Internes",         path: "/leaves/internes"      },
-        { label: "Intérimaires",     path: "/leaves/interimaires"  },
-        { label: "Hiérarchie",       path: "/leaves/hierarchie"    },
-        { label: "Autorisations",    path: "/leaves/autorisations" },
-        { label: "Anticipation",     path: "/leaves/anticipation"  },
-        { label: "Migration Soldes", path: "/leaves/migration"     },
+        { label: "Internes",      path: "/leaves/internes"      },
+        ...(FEATURES.interim     ? [{ label: "Intérimaires",     path: "/leaves/interimaires"  }] : []),
+        { label: "Hiérarchie",    path: "/leaves/hierarchie"    },
+        { label: "Autorisations", path: "/leaves/autorisations" },
+        ...(FEATURES.anticipation ? [{ label: "Anticipation",     path: "/leaves/anticipation"  }] : []),
+        ...(FEATURES.migration    ? [{ label: "Migration Soldes", path: "/leaves/migration"     }] : []),
       ],
     },
     {
@@ -134,7 +135,7 @@ export default function Sidebar() {
       icon: <Clock size={20} />,
       subItems: [
         { label: "Normales",       path: "/attendance/normales"       },
-        { label: "Shifts",         path: "/attendance/shifts"         },
+        ...(FEATURES.shifts ? [{ label: "Shifts", path: "/attendance/shifts" }] : []),
         { label: "Justifications", path: "/attendance/justifications" },
         { label: "Jours fériés",   path: "/attendance/feries"         },
       ],
@@ -149,22 +150,22 @@ export default function Sidebar() {
       path: "/rh/documents",
       icon: <FileStack size={20} />,
     },
-    {
+    ...(FEATURES.attestations ? [{
       label: "Demandes Attestations",
       path: "/rh/attestations",
       icon: <FileBadge size={20} />,
-    },
-    {
+    }] : []),
+    ...(FEATURES.missions ? [{
       label: "Demandes de mission",
       path: "/rh/missions",
       icon: <Plane size={20} />,
-    },
+    }] : []),
     {
       label: "Signalements",
       path: "/rh/all-tickets",
       icon: <Ticket size={20} />,
     },
-    ...(isHse ? [{
+    ...(isHse && FEATURES.hse ? [{
       label: "Gestion Passeports",
       path: "/hse/passeports",
       icon: <BookUser size={20} />,
@@ -349,8 +350,11 @@ export default function Sidebar() {
 
       {/* Sidebar Desktop */}
       <aside className="bg-white shadow-md w-72 min-h-screen hidden md:flex md:flex-col border-r">
-        <div className="py-6 px-4 flex justify-center items-center">
+        <div className="pt-6 pb-2 px-4 flex flex-col items-center gap-2">
           <img src={logo} alt="Camusat" className="w-full max-h-24 object-contain" />
+          <div className="w-full bg-camublue-900/8 border border-camublue-900/15 rounded-full py-1.5 text-center">
+            <span className="text-xs font-bold text-camublue-900 tracking-widest uppercase">{COUNTRY.name}</span>
+          </div>
         </div>
         <SidebarContent />
       </aside>
@@ -361,11 +365,16 @@ export default function Sidebar() {
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:hidden`}
       >
-        <div className="flex items-center justify-between py-6 px-4">
+        <div className="flex items-center justify-between pt-6 pb-2 px-4">
           <img src={logo} alt="Camusat" className="w-full max-h-20 object-contain" />
           <button onClick={() => setMobileOpen(false)}>
             <X size={28} className="text-camublue-900" />
           </button>
+        </div>
+        <div className="flex justify-center pb-3">
+          <div className="w-full bg-camublue-900/8 border border-camublue-900/15 rounded-full py-1.5 text-center">
+            <span className="text-xs font-bold text-camublue-900 tracking-widest uppercase">{COUNTRY.name}</span>
+          </div>
         </div>
         <SidebarContent onClose={() => setMobileOpen(false)} />
       </aside>

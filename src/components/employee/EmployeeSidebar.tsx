@@ -20,6 +20,7 @@ import {
   Ticket,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
+import { COUNTRY } from "@/config/features";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
 import { leaveRequestService } from "@/services/leaveService";
@@ -240,8 +241,11 @@ export default function EmployeeSidebar() {
 
       {/* Sidebar Desktop */}
       <aside className="bg-white shadow-md w-72 min-h-screen hidden md:flex md:flex-col border-r">
-        <div className="py-6 px-4 flex justify-center items-center">
+        <div className="pt-6 pb-2 px-4 flex flex-col items-center gap-2">
           <img src={logo} alt="Camusat" className="w-full max-h-24 object-contain" />
+          <div className="w-full bg-camublue-900/8 border border-camublue-900/15 rounded-full py-1.5 text-center">
+            <span className="text-xs font-bold text-camublue-900 tracking-widest uppercase">{COUNTRY.name}</span>
+          </div>
         </div>
         <SidebarContent />
       </aside>
@@ -252,11 +256,16 @@ export default function EmployeeSidebar() {
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:hidden`}
       >
-        <div className="flex items-center justify-between py-6 px-4">
+        <div className="flex items-center justify-between pt-6 pb-2 px-4">
           <img src={logo} alt="Camusat" className="w-full max-h-20 object-contain" />
           <button onClick={() => setMobileOpen(false)}>
             <X size={28} className="text-camublue-900" />
           </button>
+        </div>
+        <div className="px-4 pb-3">
+          <div className="w-full bg-camublue-900/8 border border-camublue-900/15 rounded-full py-1.5 text-center">
+            <span className="text-xs font-bold text-camublue-900 tracking-widest uppercase">{COUNTRY.name}</span>
+          </div>
         </div>
         <SidebarContent onClose={() => setMobileOpen(false)} />
       </aside>

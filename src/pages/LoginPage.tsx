@@ -9,6 +9,7 @@ import toast, { Toaster } from "react-hot-toast";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth, type UserRole, dashboardForRole } from "@/contexts/useAuth";
 import { ArrowLeft } from "lucide-react";
+import { COUNTRY } from "@/config/features";
 
 // Priorité : rh > manager2 > manager1 > planning > employe
 // Les managers ont déjà toutes les fonctionnalités employé dans leur interface.
@@ -130,7 +131,7 @@ export default function LoginPage() {
             </div>
 
             <footer className="mt-8 text-slate-300 text-xs text-center">
-              © {new Date().getFullYear()} Camusat Sénégal RH
+              © {new Date().getFullYear()} Camusat {COUNTRY.name} RH
             </footer>
 
           </CardContent>

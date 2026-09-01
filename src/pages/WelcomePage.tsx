@@ -1,10 +1,16 @@
 // src/pages/WelcomePage.tsx
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import logo from "@/assets/images/logo-camusat.png";
+import { COUNTRY } from "@/config/features";
 
 export default function WelcomePage() {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.title = COUNTRY.title;
+  }, []);
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -25,8 +31,9 @@ export default function WelcomePage() {
             className="h-28 w-auto mx-auto mb-8"
             draggable={false}
           />
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight whitespace-nowrap">
-            Portail Collaborateur
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
+            Portail Collaborateur{" "}
+            <span className="text-camublue-900">— {COUNTRY.name}</span>
           </h1>
           <p className="mt-4 text-base text-slate-500 max-w-lg mx-auto leading-relaxed">
             Connectez-vous pour accéder à votre espace.

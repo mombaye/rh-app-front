@@ -9,6 +9,7 @@ import AdminProtectedRoute from "@/components/admin/AdminProtectedRoute";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
 import MaintenancePage from "@/components/MaintenancePage";
+import { FEATURES } from "@/config/features";
 
 // ── Mettre à true pour afficher la page de maintenance ───────────────────────
 const MAINTENANCE_MODE = false;
@@ -231,11 +232,11 @@ function App() {
             <EmployeeDocumentsPage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
-        <Route path="/employee/attestations" element={
+        {FEATURES.attestations && <Route path="/employee/attestations" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeAttestationsPage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
-        } />
+        } />}
         <Route path="/employee/exits" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeExitAuthorizationPage />
@@ -246,26 +247,26 @@ function App() {
             <EmployeeServiceLeavesPage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
-        <Route path="/employee/questionnaire" element={
+        {FEATURES.questionnaires && <Route path="/employee/questionnaire" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeQuestionnairePage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
-        } />
+        } />}
         <Route path="/manager/questionnaire" element={
           <ProtectedRoute><FirstLoginGuard><ManagerOnlyRoute>
             <EmployeeQuestionnairePage layout={ManagerLayout} />
           </ManagerOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
-        <Route path="/employee/missions" element={
+        {FEATURES.missions && <Route path="/employee/missions" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeMissionsPage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
-        } />
-        <Route path="/employee/infirmerie" element={
+        } />}
+        {FEATURES.infirmerie && <Route path="/employee/infirmerie" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeInfirmeriePage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
-        } />
+        } />}
         <Route path="/employee/tickets" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeTicketsPage />
@@ -311,8 +312,8 @@ function App() {
         <Route path="/rh/contracts"       element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhContractsPage           /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-space"       element={<Navigate to="/rh/my-leaves" replace />} />
         <Route path="/rh/documents"      element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDocumentsPage      /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
-        <Route path="/rh/attestations"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttestationsPage   /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
-        <Route path="/rh/missions"        element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMissionsPage         /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        {FEATURES.attestations && <Route path="/rh/attestations" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttestationsPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />}
+        {FEATURES.missions     && <Route path="/rh/missions"     element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMissionsPage     /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />}
 
         {/* ── Espace RH ────────────────────────────────────────── */}
         <Route path="/dashboard" element={
@@ -330,26 +331,26 @@ function App() {
             <InterneEmployeesPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
-        <Route path="/employees/interims" element={
+        {FEATURES.interim && <Route path="/employees/interims" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <InterimEmployeesPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
-        } />
+        } />}
         <Route path="/employees/alertes" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <AlertesEmployesPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
-        <Route path="/employees/questionnaires" element={
+        {FEATURES.questionnaires && <Route path="/employees/questionnaires" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <GestionQuestionnairesPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
-        } />
-        <Route path="/employees/disciplinaire" element={
+        } />}
+        {FEATURES.disciplinaire && <Route path="/employees/disciplinaire" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <EmployeesDisciplinaryPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
-        } />
+        } />}
 
         {/* ── Questionnaire de sortie public (sans auth) ───────── */}
         <Route path="/questionnaire-sortie/:token" element={<QuestionnaireSortiePage />} />
@@ -367,11 +368,11 @@ function App() {
             <AttendanceNormalesPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
-        <Route path="/attendance/shifts" element={
+        {FEATURES.shifts && <Route path="/attendance/shifts" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <AttendanceShiftsPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
-        } />
+        } />}
         <Route path="/attendance/feries" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <AttendanceFeriesPage />
@@ -390,11 +391,11 @@ function App() {
             <LeavePage contractFilter="INTERNE" />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
-        <Route path="/leaves/interimaires" element={
+        {FEATURES.interim && <Route path="/leaves/interimaires" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <LeavePage contractFilter="INTERIM" />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
-        } />
+        } />}
         <Route path="/leaves/hierarchie" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <LeavesHierarchiePage />
@@ -405,25 +406,25 @@ function App() {
             <RhExitAuthorizationPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
-        <Route path="/leaves/anticipation" element={
+        {FEATURES.anticipation && <Route path="/leaves/anticipation" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <RhAnticipationPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
-        } />
-        <Route path="/leaves/migration" element={
+        } />}
+        {FEATURES.migration && <Route path="/leaves/migration" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <LeavesMigrationPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
-        } />
+        } />}
 
         {/* ── Espace HSE ───────────────────────────────────────── */}
-        <Route path="/hse/passeports" element={
+        {FEATURES.hse && <Route path="/hse/passeports" element={
           <ProtectedRoute><FirstLoginGuard>
             <HseOnlyRoute>
               <PassportManagementPage />
             </HseOnlyRoute>
           </FirstLoginGuard></ProtectedRoute>
-        } />
+        } />}
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

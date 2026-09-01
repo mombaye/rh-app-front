@@ -1586,7 +1586,7 @@ export default function EmployeeLeavesPage({
   const listRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(() => {
-    if (!employeeId) return;
+    if (!employeeId) { setLoading(false); return; }
     const year = new Date().getFullYear();
     Promise.all([
       leaveBalanceService.getByEmployee(employeeId, year),
@@ -1598,6 +1598,8 @@ export default function EmployeeLeavesPage({
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       ));
       setLeaveTypes(types);
+    }).catch(() => {
+      toast.error("Impossible de charger vos données. Vérifiez votre connexion ou contactez la RH.");
     }).finally(() => setLoading(false));
   }, [employeeId]);
 

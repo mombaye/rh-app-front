@@ -277,6 +277,7 @@ function handleUnknown(): Omit<BotMessage, "id" | "from"> {
 // ── Composant principal ────────────────────────────────────────────────────────
 export default function AssistantChatWidget() {
   const { user, activeRole } = useAuth();
+
   const [open, setOpen]     = useState(false);
   const [tab, setTab]       = useState<Tab>("guide");
 
@@ -502,6 +503,9 @@ export default function AssistantChatWidget() {
   };
 
   const quickChips = getQuickChips(activeRole);
+
+  // N'afficher le widget que si l'utilisateur est connecté
+  if (!user) return null;
 
   return (
     <>
