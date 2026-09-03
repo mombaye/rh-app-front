@@ -93,7 +93,7 @@ interface SummaryRecord {
   employee_id: number; matricule: string; full_name: string; department: string; project: string;
   nb_jours: number; worked_minutes: number;
   absent_days: number; incomplete_days: number; late_days: number;
-  leave_days: number; mission_days: number;
+  leave_days: number; mission_days: number; not_working_days: number;
 }
 
 interface Pointage {
@@ -458,6 +458,7 @@ function SummaryTable({
               <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 bg-orange-900/40">Retards</th>
               <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 bg-sky-900/40">Congés</th>
               <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 bg-indigo-900/40">Missions</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 bg-slate-700/40">N/service</th>
               <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800 min-w-[220px]">
                 <span className="flex items-center gap-1.5">
                   Progression
@@ -468,7 +469,7 @@ function SummaryTable({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {displayed.length === 0 ? (
-              <tr><td colSpan={11} className="text-center py-12 text-slate-400 text-sm">Aucune donnée pour cette période.</td></tr>
+              <tr><td colSpan={12} className="text-center py-12 text-slate-400 text-sm">Aucune donnée pour cette période.</td></tr>
             ) : displayed.map((row, idx) => (
               <motion.tr key={row.employee_id}
                 initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
@@ -524,6 +525,11 @@ function SummaryTable({
                 <td className="px-4 py-2.5 text-center">
                   {row.mission_days > 0
                     ? <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">{row.mission_days}j</span>
+                    : <span className="text-slate-300 text-xs">—</span>}
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  {row.not_working_days > 0
+                    ? <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">{row.not_working_days}j</span>
                     : <span className="text-slate-300 text-xs">—</span>}
                 </td>
                 <td className="px-4 py-2.5">
@@ -1729,27 +1735,29 @@ export default function AttendanceNormalesPage() {
         project:        resolveProject(r),
         nb_jours:       r.present_days ?? r.worked_days ?? 0,
         worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
-        absent_days:    r.absent_days ?? 0,
-        incomplete_days:r.incomplete_days ?? 0,
-        late_days:      r.late_days ?? 0,
-        leave_days:     r.on_leave_days ?? r.leave_days ?? 0,
-        mission_days:   r.on_mission_days ?? r.mission_days ?? 0,
+        absent_days:      r.absent_days ?? 0,
+        incomplete_days:  r.incomplete_days ?? 0,
+        late_days:        r.late_days ?? 0,
+        leave_days:       r.on_leave_days ?? r.leave_days ?? 0,
+        mission_days:     r.on_mission_days ?? r.mission_days ?? 0,
+        not_working_days: r.not_working_days ?? 0,
       }));
     }
     if (viewMode === "monthly" && monthly) {
       return monthly.by_employee.filter(isNormal).map((r: any) => ({
-        employee_id:    r.employee_id,
-        matricule:      r.matricule ?? "",
-        full_name:      r.full_name ?? "",
-        department:     resolveDept(r),
-        project:        resolveProject(r),
-        nb_jours:       r.present_days ?? r.worked_days ?? 0,
-        worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
-        absent_days:    r.absent_days ?? 0,
-        incomplete_days:r.incomplete_days ?? 0,
-        late_days:      r.late_days ?? 0,
-        leave_days:     r.on_leave_days ?? r.leave_days ?? 0,
-        mission_days:   r.on_mission_days ?? r.mission_days ?? 0,
+        employee_id:      r.employee_id,
+        matricule:        r.matricule ?? "",
+        full_name:        r.full_name ?? "",
+        department:       resolveDept(r),
+        project:          resolveProject(r),
+        nb_jours:         r.present_days ?? r.worked_days ?? 0,
+        worked_minutes:   r.total_worked_minutes ?? r.worked_minutes ?? 0,
+        absent_days:      r.absent_days ?? 0,
+        incomplete_days:  r.incomplete_days ?? 0,
+        late_days:        r.late_days ?? 0,
+        leave_days:       r.on_leave_days ?? r.leave_days ?? 0,
+        mission_days:     r.on_mission_days ?? r.mission_days ?? 0,
+        not_working_days: r.not_working_days ?? 0,
       }));
     }
     return [];
@@ -2065,18 +2073,7 @@ export default function AttendanceNormalesPage() {
           </>
         ) : (
           /* ── Vue Hebdo / Mensuel ── */
-          searchQ.trim() ? (
-            <ExpandedDayTable
-              records={summaryRecords.filter(r => {
-                const q = searchQ.toLowerCase();
-                return r.full_name.toLowerCase().includes(q) || r.matricule.toLowerCase().includes(q);
-              })}
-              dayDetails={empDayDetails}
-              isLoading={loading || detailsLoading}
-            />
-          ) : (
-            <SummaryTable rows={summaryRecords} mode={viewMode as "weekly"|"monthly"} isLoading={loading} searchQ={searchQ} />
-          )
+          <SummaryTable rows={summaryRecords} mode={viewMode as "weekly"|"monthly"} isLoading={loading} searchQ={searchQ} />
         )}
 
         {/* ── Modals ── */}
