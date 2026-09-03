@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80" fill="none">
+  <!-- Icône cercle -->
+  <circle cx="40" cy="40" r="36" fill="#003c71"/>
+  <text x="40" y="46" text-anchor="middle" font-family="Georgia, serif" font-size="22" font-weight="700" fill="white" letter-spacing="-0.5">eRH</text>
+
+  <!-- Nom société -->
+  <text x="88" y="32" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#003c71" letter-spacing="1">SOCIÉTÉ</text>
+  <text x="88" y="52" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b" letter-spacing="2">PORTAIL RH</text>
+</svg>

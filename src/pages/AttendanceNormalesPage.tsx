@@ -92,6 +92,8 @@ interface FlatRecord {
 interface SummaryRecord {
   employee_id: number; matricule: string; full_name: string; department: string; project: string;
   nb_jours: number; worked_minutes: number;
+  absent_days: number; incomplete_days: number; late_days: number;
+  leave_days: number; mission_days: number;
 }
 
 interface Pointage {
@@ -451,6 +453,11 @@ function SummaryTable({
               {["Matricule","Nom complet","Projet / Service","Nb jours","Heures trav."].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800">{h}</th>
               ))}
+              <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 bg-red-900/40">Absents</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 bg-amber-900/40">Incomplets</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 bg-orange-900/40">Retards</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 bg-sky-900/40">Congés</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 bg-indigo-900/40">Missions</th>
               <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800 min-w-[220px]">
                 <span className="flex items-center gap-1.5">
                   Progression
@@ -461,7 +468,7 @@ function SummaryTable({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {displayed.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-12 text-slate-400 text-sm">Aucune donnée pour cette période.</td></tr>
+              <tr><td colSpan={11} className="text-center py-12 text-slate-400 text-sm">Aucune donnée pour cette période.</td></tr>
             ) : displayed.map((row, idx) => (
               <motion.tr key={row.employee_id}
                 initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
@@ -492,6 +499,32 @@ function SummaryTable({
                       </span>
                     );
                   })()}
+                </td>
+                {/* ── Nouvelles colonnes stats ── */}
+                <td className="px-4 py-2.5 text-center">
+                  {row.absent_days > 0
+                    ? <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full bg-red-100 text-red-700 text-xs font-bold">{row.absent_days}j</span>
+                    : <span className="text-slate-300 text-xs">—</span>}
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  {row.incomplete_days > 0
+                    ? <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full bg-amber-100 text-amber-800 text-xs font-bold">{row.incomplete_days}j</span>
+                    : <span className="text-slate-300 text-xs">—</span>}
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  {row.late_days > 0
+                    ? <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full bg-orange-100 text-orange-700 text-xs font-bold">{row.late_days}j</span>
+                    : <span className="text-slate-300 text-xs">—</span>}
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  {row.leave_days > 0
+                    ? <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full bg-sky-100 text-sky-700 text-xs font-bold">{row.leave_days}j</span>
+                    : <span className="text-slate-300 text-xs">—</span>}
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  {row.mission_days > 0
+                    ? <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">{row.mission_days}j</span>
+                    : <span className="text-slate-300 text-xs">—</span>}
                 </td>
                 <td className="px-4 py-2.5">
                   <WeekProgressBar minutes={row.worked_minutes} maxMinutes={MAX_MIN} />
@@ -1696,6 +1729,11 @@ export default function AttendanceNormalesPage() {
         project:        resolveProject(r),
         nb_jours:       r.present_days ?? r.worked_days ?? 0,
         worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
+        absent_days:    r.absent_days ?? 0,
+        incomplete_days:r.incomplete_days ?? 0,
+        late_days:      r.late_days ?? 0,
+        leave_days:     r.on_leave_days ?? r.leave_days ?? 0,
+        mission_days:   r.on_mission_days ?? r.mission_days ?? 0,
       }));
     }
     if (viewMode === "monthly" && monthly) {
@@ -1707,6 +1745,11 @@ export default function AttendanceNormalesPage() {
         project:        resolveProject(r),
         nb_jours:       r.present_days ?? r.worked_days ?? 0,
         worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
+        absent_days:    r.absent_days ?? 0,
+        incomplete_days:r.incomplete_days ?? 0,
+        late_days:      r.late_days ?? 0,
+        leave_days:     r.on_leave_days ?? r.leave_days ?? 0,
+        mission_days:   r.on_mission_days ?? r.mission_days ?? 0,
       }));
     }
     return [];
