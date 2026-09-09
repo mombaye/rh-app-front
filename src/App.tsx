@@ -69,6 +69,7 @@ const ManagerTeamContractsPage  = lazy(() => import("@/pages/manager/ManagerTeam
 const ManagerAttestationsPage = lazy(() => import("@/pages/manager/ManagerAttestationsPage"));
 const ManagerAttendancePage   = lazy(() => import("@/pages/manager/ManagerAttendancePage"));
 const ManagerTicketsPage      = lazy(() => import("@/pages/manager/ManagerTicketsPage"));
+const ManagerOmPointagePage   = lazy(() => import("@/pages/manager/ManagerOmPointagePage"));
 const EmployeeTicketsPage     = lazy(() => import("@/pages/employee/EmployeeTicketsPage"));
 const RhTicketsPage           = lazy(() => import("@/pages/rh/RhTicketsPage"));
 const RhMyTicketsPage         = lazy(() => import("@/pages/rh/RhMyTicketsPage"));
@@ -92,6 +93,7 @@ const RhServiceLeavesPage       = lazy(() => import("@/pages/rh/RhServiceLeavesP
 const RhAnticipationPage        = lazy(() => import("@/pages/rh/RhAnticipationPage"));
 const RhAttestationsPage        = lazy(() => import("@/pages/rh/RhAttestationsPage"));
 const RhMissionsPage            = lazy(() => import("@/pages/rh/RhMissionsPage"));
+const RhOmPointagePage          = lazy(() => import("@/pages/rh/RhOmPointagePage"));
 
 // HSE
 const PassportManagementPage    = lazy(() => import("@/pages/hse/PassportManagementPage"));
@@ -286,6 +288,7 @@ function App() {
         <Route path="/manager/team-leaves"     element={<MgrRoute><ManagerTeamLeavesPage    /></MgrRoute>} />
         <Route path="/manager/team-contracts" element={<MgrRoute><ManagerTeamContractsPage /></MgrRoute>} />
         <Route path="/manager/tickets"        element={<MgrRoute><ManagerTicketsPage       /></MgrRoute>} />
+        <Route path="/manager/om-pointage"    element={<MgrRoute><ManagerOmPointagePage    /></MgrRoute>} />
 
         {/* ── Planning Manager ─────────────────────────────────── */}
         <Route path="/planning" element={
@@ -314,6 +317,7 @@ function App() {
         <Route path="/rh/documents"      element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDocumentsPage      /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         {FEATURES.attestations && <Route path="/rh/attestations" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttestationsPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />}
         {FEATURES.missions     && <Route path="/rh/missions"     element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMissionsPage     /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />}
+        <Route path="/rh/om-pointage"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhOmPointagePage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
 
         {/* ── Espace RH ────────────────────────────────────────── */}
         <Route path="/dashboard" element={

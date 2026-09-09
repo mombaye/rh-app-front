@@ -60,7 +60,7 @@ export default function WelcomePage() {
 
       {/* ── Footer ──────────────────────────────────────────────────────────── */}
       <footer className="py-5 text-center text-xs text-slate-900 border-t border-slate-100">
-        © {new Date().getFullYear()} Camusat — Usage interne uniquement
+        © {new Date().getFullYear()} eRH — Usage interne uniquement
       </footer>
 
     </div>
