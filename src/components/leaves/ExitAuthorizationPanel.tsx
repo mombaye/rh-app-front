@@ -14,8 +14,22 @@ import toast from "react-hot-toast";
 import {
   Plus, X, CheckCircle2, XCircle, Ban, Loader2, RefreshCw,
   LogOut, Clock, ChevronDown, User, CalendarDays, MessageSquare,
-  ShieldCheck, Hash, Search,
+  ShieldCheck, Hash, Search, Info, Paperclip, CheckCircle, ExternalLink,
+  Eye, EyeOff, FileText, Image as ImageIcon, Download,
 } from "lucide-react";
+import { BASE_URL } from "@/api/baseUrl";
+
+// ─── Motifs prédéfinis ────────────────────────────────────────────────────────
+const MOTIFS_CONFIG = [
+  { label: "Rendez-vous médical",     justifRequired: true,  descRequired: false, hint: "Un justificatif médical est obligatoire (ordonnance, carnet de rendez-vous, convocation...)." },
+  { label: "Préparation de voyage",   justifRequired: false, descRequired: false, hint: null },
+  { label: "Enterrement",             justifRequired: false, descRequired: false, hint: null },
+  { label: "Rendez-vous à la banque", justifRequired: false, descRequired: false, hint: null },
+  { label: "Rendez-vous à la police", justifRequired: false, descRequired: false, hint: null },
+  { label: "Urgence",                 justifRequired: false, descRequired: true,  hint: "Veuillez décrire l'urgence dans le champ description ci-dessous (obligatoire)." },
+  { label: "Déplacement académique",  justifRequired: true,  descRequired: false, hint: "Un justificatif académique est obligatoire (convocation, attestation d'inscription...)." },
+  { label: "Autre (à préciser)",      justifRequired: false, descRequired: true,  hint: "Veuillez préciser le motif dans la description ci-dessous (obligatoire)." },
+] as const;
 
 // ─── Config statuts ───────────────────────────────────────────────────────────
 const STATUS_CFG: Record<ExitAuthStatus, {
@@ -50,17 +64,136 @@ function fmtDatetime(iso?: string | null) {
   });
 }
 
+// ─── Viewer justificatif ──────────────────────────────────────────────────────
+function buildFileUrl(raw: string): string {
+  if (!raw) return "";
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  const base = (BASE_URL ?? "").replace(/\/$/, "");
+  return raw.startsWith("/") ? `${base}${raw}` : `${base}/media/${raw}`;
+}
+
+function fileExt(url: string): string {
+  return url.split("?")[0].split(".").pop()?.toLowerCase() ?? "";
+}
+
+function JustifViewer({ url }: { url: string }) {
+  const fullUrl = buildFileUrl(url);
+  const ext     = fileExt(fullUrl);
+  const isImage = ["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext);
+  const isPdf   = ext === "pdf";
+  const name    = fullUrl.split("/").pop() ?? "justificatif";
+
+  if (isImage) {
+    return (
+      <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+        <img
+          src={fullUrl}
+          alt="Justificatif"
+          className="w-full max-h-[480px] object-contain"
+          onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+        <a
+          href={fullUrl}
+          download={name}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          className="absolute top-2 right-2 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-white transition shadow-sm"
+        >
+          <Download size={12} />
+          Télécharger
+        </a>
+      </div>
+    );
+  }
+
+  if (isPdf) {
+    return (
+      <div className="rounded-xl overflow-hidden border border-slate-200">
+        <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200 px-3 py-2">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+            <FileText size={13} className="text-red-500" />
+            {name}
+          </span>
+          <div className="flex items-center gap-2">
+            <a
+              href={fullUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+            >
+              <ExternalLink size={11} />
+              Ouvrir
+            </a>
+            <a
+              href={fullUrl}
+              download={name}
+              onClick={e => e.stopPropagation()}
+              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
+            >
+              <Download size={11} />
+              Télécharger
+            </a>
+          </div>
+        </div>
+        <iframe
+          src={`${fullUrl}#toolbar=0&navpanes=0`}
+          title="Justificatif PDF"
+          className="w-full"
+          style={{ height: 480 }}
+        />
+      </div>
+    );
+  }
+
+  // DOC / DOCX ou autre
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <FileText size={20} className="text-blue-500 shrink-0" />
+        <span className="text-sm font-medium text-slate-700 truncate">{name}</span>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <a
+          href={fullUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-medium text-slate-600 hover:border-slate-300 transition"
+        >
+          <ExternalLink size={11} />
+          Ouvrir
+        </a>
+        <a
+          href={fullUrl}
+          download={name}
+          onClick={e => e.stopPropagation()}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#003c71] text-white text-xs font-medium hover:bg-[#003c71]/90 transition"
+        >
+          <Download size={11} />
+          Télécharger
+        </a>
+      </div>
+    </div>
+  );
+}
+
 // ─── Modal détail ─────────────────────────────────────────────────────────────
 function DetailModal({
-  item, onClose, canReview, onApprove, onReject,
+  item, onClose, canReview, onApprove, onReject, onRefresh, managerId,
 }: {
   item: ExitAuthorization;
   onClose: () => void;
   canReview?: boolean;
   onApprove?: () => void;
   onReject?: () => void;
+  onRefresh?: () => void;
+  managerId?: number;
 }) {
   const cfg = STATUS_CFG[item.status] ?? STATUS_CFG.CANCELLED;
+  const [validating,  setValidating]  = useState(false);
+  const [showJustif,  setShowJustif]  = useState(false);
 
   return (
     <AnimatePresence>
@@ -197,6 +330,74 @@ function DetailModal({
               </div>
             )}
 
+            {/* Section justificatif (visible RH) */}
+            {(item.justif_required || !!item.justif_file) && (
+              <div className={`rounded-xl border ${
+                item.justif_validated
+                  ? "bg-green-50 border-green-200"
+                  : item.justif_file
+                  ? "bg-blue-50 border-blue-200"
+                  : "bg-amber-50 border-amber-200"
+              }`}>
+                {/* En-tête */}
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <p className="text-[10px] uppercase font-semibold tracking-wide flex items-center gap-1.5 text-gray-500">
+                    <Paperclip size={12} />
+                    Justificatif obligatoire
+                  </p>
+                  {item.justif_file && (
+                    <button
+                      onClick={e => { e.stopPropagation(); setShowJustif(v => !v); }}
+                      className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 transition"
+                    >
+                      {showJustif ? <EyeOff size={13} /> : <Eye size={13} />}
+                      {showJustif ? "Masquer" : "Visualiser"}
+                    </button>
+                  )}
+                </div>
+
+                {/* Statut + nom fichier */}
+                <div className="px-3 pb-2.5">
+                  {item.justif_validated ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle size={15} className="text-green-600 shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-green-700">Validé</p>
+                        {item.justif_validated_by_name && (
+                          <p className="text-xs text-green-600">Par {item.justif_validated_by_name}</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : item.justif_file ? (
+                    <div className="flex items-center gap-2">
+                      {["jpg","jpeg","png","gif","webp"].includes(fileExt(buildFileUrl(item.justif_file)))
+                        ? <ImageIcon size={14} className="text-blue-500 shrink-0" />
+                        : <FileText size={14} className="text-blue-500 shrink-0" />
+                      }
+                      <div className="min-w-0">
+                        <p className="text-xs text-blue-700 font-medium">Document déposé — à valider</p>
+                        <p className="text-[11px] text-blue-500 truncate">
+                          {buildFileUrl(item.justif_file).split("/").pop()}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} className="text-amber-500 shrink-0 animate-pulse" />
+                      <p className="text-xs text-amber-700">En attente de dépôt par l'employé</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Viewer inline (toggle) */}
+                {item.justif_file && showJustif && (
+                  <div className="border-t border-blue-100 p-2">
+                    <JustifViewer url={item.justif_file} />
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Référence */}
             <div className="flex items-center gap-1.5 text-xs text-gray-400">
               <Hash size={12} />
@@ -205,6 +406,27 @@ function DetailModal({
           </div>
 
           <div className="px-6 pb-6 space-y-3">
+            {/* Bouton validation justif si document déposé et non validé */}
+            {item.justif_required && item.justif_file && !item.justif_validated && (
+              <button
+                onClick={async () => {
+                  setValidating(true);
+                  try {
+                    await exitAuthorizationService.validateJustif(item.id, managerId);
+                    toast.success("Justificatif validé.");
+                    onRefresh?.();
+                    onClose();
+                  } catch {
+                    toast.error("Erreur lors de la validation.");
+                  } finally { setValidating(false); }
+                }}
+                disabled={validating}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-60"
+              >
+                {validating ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                Valider le justificatif
+              </button>
+            )}
             {/* Boutons manager si demande en attente */}
             {canReview && item.status === "PENDING" && (
               <div className="flex gap-3">
@@ -364,7 +586,9 @@ export default function ExitAuthorizationPanel({
   const [selectedEmpId,  setSelectedEmpId]  = useState<number | "">(employeeId ?? currentEmployee?.id ?? "");
   const [datetimeExit,   setDatetimeExit]   = useState("");
   const [datetimeReturn, setDatetimeReturn] = useState("");
-  const [motif,          setMotif]          = useState("");
+  const [motifType,      setMotifType]      = useState("");
+  const [motifDesc,      setMotifDesc]      = useState("");
+  const [justifFile,     setJustifFile]     = useState<File | null>(null);
   const [durationError,  setDurationError]  = useState<string | null>(null);
 
   const MAX_HOURS = 3;
@@ -420,9 +644,16 @@ export default function ExitAuthorizationPanel({
   useEffect(() => { load(); }, [employeeId, managerId]);
 
   const handleCreate = async () => {
-    if (!selectedEmpId || !datetimeExit || !datetimeReturn || !motif.trim()) {
+    if (!selectedEmpId || !datetimeExit || !datetimeReturn || !motifType) {
       toast.error("Veuillez remplir tous les champs.");
       return;
+    }
+    const selectedMotifCfg = MOTIFS_CONFIG.find(m => m.label === motifType) ?? null;
+    if (selectedMotifCfg?.descRequired && !motifDesc.trim()) {
+      toast.error("Une description est obligatoire pour ce motif."); return;
+    }
+    if (selectedMotifCfg?.justifRequired && !justifFile) {
+      toast.error("Un justificatif est obligatoire pour ce motif."); return;
     }
     const diffH = (new Date(datetimeReturn).getTime() - new Date(datetimeExit).getTime()) / 3600000;
     if (diffH <= 0) {
@@ -435,15 +666,18 @@ export default function ExitAuthorizationPanel({
     }
     setSubmitting(true);
     try {
-      await exitAuthorizationService.create({
+      const newRecord = await exitAuthorizationService.create({
         employee_id:     Number(selectedEmpId),
         datetime_exit:   new Date(datetimeExit).toISOString(),
         datetime_return: new Date(datetimeReturn).toISOString(),
-        motif:           motif.trim(),
+        motif:           motifType + (motifDesc.trim() ? ` — ${motifDesc.trim()}` : ""),
       });
+      if (justifFile && newRecord?.id) {
+        await exitAuthorizationService.uploadJustif(newRecord.id, justifFile);
+      }
       toast.success("Demande de sortie soumise — votre manager N+1 va être notifié.");
       setShowForm(false);
-      setDatetimeExit(""); setDatetimeReturn(""); setMotif("");
+      setDatetimeExit(""); setDatetimeReturn(""); setMotifType(""); setMotifDesc(""); setJustifFile(null);
       load();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { datetime_return?: string[] } } })
@@ -617,13 +851,72 @@ export default function ExitAuthorizationPanel({
             </p>
           )}
 
+          {/* Motif — sélecteur */}
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Motif *</label>
-            <textarea rows={3} value={motif}
-              onChange={e => setMotif(e.target.value)}
-              placeholder="Décrivez le motif de la sortie..."
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white resize-none" />
+            <div className="relative">
+              <select value={motifType}
+                onChange={e => { setMotifType(e.target.value); setMotifDesc(""); setJustifFile(null); }}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white appearance-none pr-8">
+                <option value="">-- Sélectionner un motif --</option>
+                {MOTIFS_CONFIG.map(m => (
+                  <option key={m.label} value={m.label}>{m.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            </div>
           </div>
+
+          {/* Hint motif */}
+          {motifType && MOTIFS_CONFIG.find(m => m.label === motifType)?.hint && (
+            <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5">
+              <Info className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-700">{MOTIFS_CONFIG.find(m => m.label === motifType)?.hint}</p>
+            </div>
+          )}
+
+          {/* Description (obligatoire pour Urgence / Autre) */}
+          {motifType && MOTIFS_CONFIG.find(m => m.label === motifType)?.descRequired && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Description *</label>
+              <textarea rows={3} value={motifDesc}
+                onChange={e => setMotifDesc(e.target.value)}
+                placeholder="Précisez le motif de la sortie..."
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white resize-none" />
+            </div>
+          )}
+
+          {/* Justificatif */}
+          {motifType && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1.5">
+                <Paperclip className="w-3.5 h-3.5" />
+                Justificatif {MOTIFS_CONFIG.find(m => m.label === motifType)?.justifRequired
+                  ? <span className="text-red-400">*</span>
+                  : <span className="text-slate-400 font-normal">(optionnel)</span>
+                }
+              </label>
+              <label className={`flex items-center gap-2.5 border rounded-xl px-3 py-2 cursor-pointer transition ${
+                justifFile ? "bg-green-50 border-green-200" : "bg-white border-slate-200 hover:border-slate-300"
+              }`}>
+                <Paperclip className={`w-4 h-4 shrink-0 ${justifFile ? "text-green-600" : "text-slate-400"}`} />
+                <span className={`text-sm truncate flex-1 min-w-0 ${justifFile ? "text-green-700" : "text-slate-400"}`}>
+                  {justifFile ? justifFile.name : "Joindre un document..."}
+                </span>
+                {justifFile && (
+                  <button type="button" onClick={e => { e.preventDefault(); setJustifFile(null); }}
+                    className="text-slate-400 hover:text-red-500 transition shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <input type="file" className="sr-only"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={e => { const f = e.target.files?.[0] ?? null; setJustifFile(f); e.target.value = ""; }}
+                />
+              </label>
+              <p className="text-[11px] text-slate-400 mt-1">Formats : PDF, JPG, PNG, DOC, DOCX</p>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowForm(false)}
@@ -716,6 +1009,26 @@ export default function ExitAuthorizationPanel({
                   </p>
                 )}
 
+                {/* Badges justif */}
+                {item.justif_required && !item.justif_file && (
+                  <div className="flex items-center gap-1.5 mt-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 w-fit">
+                    <Paperclip className="w-3 h-3 text-amber-500" />
+                    <span className="text-[11px] text-amber-700 font-medium">Justif. en attente</span>
+                  </div>
+                )}
+                {item.justif_required && item.justif_file && !item.justif_validated && (
+                  <div className="flex items-center gap-1.5 mt-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1 w-fit">
+                    <Clock className="w-3 h-3 text-blue-500" />
+                    <span className="text-[11px] text-blue-700 font-medium">Justif. à valider</span>
+                  </div>
+                )}
+                {item.justif_required && item.justif_validated && (
+                  <div className="flex items-center gap-1.5 mt-1.5 bg-green-50 border border-green-200 rounded-lg px-2 py-1 w-fit">
+                    <CheckCircle className="w-3 h-3 text-green-600" />
+                    <span className="text-[11px] text-green-700 font-medium">Justif. validé</span>
+                  </div>
+                )}
+
                 {/* Annulation employé */}
                 {item.status === "PENDING" && !canReview && (
                   <div
@@ -743,6 +1056,8 @@ export default function ExitAuthorizationPanel({
           item={detailTarget}
           onClose={() => setDetailTarget(null)}
           canReview={canReview}
+          managerId={managerId}
+          onRefresh={load}
           onApprove={() => {
             handleApprove(detailTarget.id);
             setDetailTarget(null);

@@ -5,12 +5,29 @@ import {
   ChevronLeft, ChevronRight, Filter, X,
   CalendarDays, User, Hash, MessageSquare, ShieldCheck,
   Eye, ArrowUpDown, LayoutGrid, List, LogOut, Search,
-  GitBranch, Mail,
+  GitBranch, Mail, Paperclip, CheckCircle, FileText, Download,
 } from "lucide-react";
 import AppLayout from "@/layouts/AppLayout";
+import { BASE_URL } from "@/api/baseUrl";
 import { exitAuthorizationService } from "@/services/leaveService";
 import { ExitAuthorization, ExitAuthStatus } from "@/types/leave";
 import toast from "react-hot-toast";
+
+async function openJustifDocument(justifFileUrl: string) {
+  const token = localStorage.getItem("access_token");
+  try {
+    const url = justifFileUrl.startsWith("http") ? justifFileUrl
+      : `${(BASE_URL ?? "").replace(/\/$/, "")}${justifFileUrl.startsWith("/") ? "" : "/media/"}${justifFileUrl}`;
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) { toast.error("Impossible d'ouvrir le justificatif."); return; }
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), "_blank");
+  } catch {
+    toast.error("Impossible d'ouvrir le justificatif.");
+  }
+}
 
 const PAGE_SIZE = 10;
 
@@ -152,11 +169,12 @@ function ExitValidationChain({ item }: { item: ExitAuthorization }) {
 }
 
 // ── Modal détail ───────────────────────────────────────────────────────────────
-interface DetailModalProps { item: ExitAuthorization; onClose: () => void; }
+interface DetailModalProps { item: ExitAuthorization; onClose: () => void; onRefresh: () => void; }
 
-function DetailModal({ item, onClose }: DetailModalProps) {
+function DetailModal({ item, onClose, onRefresh }: DetailModalProps) {
   const cfg  = STATUS_CFG[item.status] ?? STATUS_CFG.CANCELLED;
   const Icon = cfg.Icon;
+  const [validating, setValidating] = useState(false);
 
   const fields: { icon: React.ElementType; label: string; value: string }[] = [
     { icon: User,        label: "Employé",       value: item.employee_name },
@@ -221,6 +239,84 @@ function DetailModal({ item, onClose }: DetailModalProps) {
                 </p>
               </div>
             </div>
+
+            {/* Section justificatif */}
+            {(item.justif_required || !!item.justif_file) && (
+              <div className={`rounded-xl border ${
+                item.justif_validated   ? "bg-green-50 border-green-200"
+                : item.justif_file     ? "bg-blue-50 border-blue-200"
+                :                        "bg-amber-50 border-amber-200"
+              }`}>
+                <div className="px-3 py-2.5 flex items-center gap-1.5">
+                  <Paperclip size={13} className="text-gray-400 shrink-0" />
+                  <span className="text-[10px] uppercase font-semibold tracking-wide text-gray-500 flex-1">
+                    Justificatif obligatoire
+                  </span>
+                </div>
+
+                <div className="px-3 pb-3 space-y-2">
+                  {item.justif_validated ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle size={15} className="text-green-600 shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-green-700">Validé</p>
+                        {item.justif_validated_by_name && (
+                          <p className="text-xs text-green-600">Par {item.justif_validated_by_name}</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : item.justif_file ? (
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} className="text-blue-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-blue-700">Document déposé — à valider</p>
+                        <p className="text-[11px] text-blue-500 truncate">
+                          {item.justif_file.split("/").pop()}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} className="text-amber-500 shrink-0 animate-pulse" />
+                      <p className="text-xs text-amber-700">En attente de dépôt par l'employé</p>
+                    </div>
+                  )}
+
+                  {/* Bouton voir le justificatif */}
+                  {item.justif_file && (
+                    <button
+                      onClick={() => openJustifDocument(item.justif_file!)}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition"
+                    >
+                      <FileText size={13} />
+                      Voir le justificatif
+                    </button>
+                  )}
+
+                  {/* Bouton valider le justificatif */}
+                  {item.justif_file && !item.justif_validated && (
+                    <button
+                      disabled={validating}
+                      onClick={async () => {
+                        setValidating(true);
+                        try {
+                          await exitAuthorizationService.validateJustif(item.id);
+                          toast.success("Justificatif validé.");
+                          onRefresh();
+                          onClose();
+                        } catch {
+                          toast.error("Erreur lors de la validation.");
+                        } finally { setValidating(false); }
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-bold transition disabled:opacity-60"
+                    >
+                      {validating ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle size={13} />}
+                      Valider le justificatif
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Circuit de validation */}
             <ExitValidationChain item={item} />
@@ -537,7 +633,7 @@ export default function RhExitAuthorizationPage() {
         </motion.div>
       </div>
 
-      {detailTarget && <DetailModal item={detailTarget} onClose={() => setDetailTarget(null)} />}
+      {detailTarget && <DetailModal item={detailTarget} onClose={() => setDetailTarget(null)} onRefresh={load} />}
     </AppLayout>
   );
 }

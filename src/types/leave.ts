@@ -491,24 +491,32 @@ export interface RevokePayload {
 export type ExitAuthStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 
 export interface ExitAuthorization {
-  id:                   number;
-  employee:             number;
-  employee_name:        string;
-  employee_matricule:   string;
-  employee_service:     string | null;
-  datetime_exit:        string;   // ISO datetime
-  datetime_return:      string;   // ISO datetime
-  motif:                string;
-  status:               ExitAuthStatus;
-  status_label:         string;
-  reviewed_by:          number | null;
-  reviewed_by_name:     string | null;
-  reviewed_at:          string | null;
-  reject_reason:        string;
-  n1_manager_name:      string | null;
-  n1_manager_email:     string | null;
-  created_at:           string;
-  updated_at:           string;
+  id:                       number;
+  employee:                 number;
+  employee_name:            string;
+  employee_matricule:       string;
+  employee_service:         string | null;
+  datetime_exit:            string;   // ISO datetime
+  datetime_return:          string;   // ISO datetime
+  motif:                    string;
+  status:                   ExitAuthStatus;
+  status_label:             string;
+  reviewed_by:              number | null;
+  reviewed_by_name:         string | null;
+  reviewed_at:              string | null;
+  reject_reason:            string;
+  n1_manager_name:          string | null;
+  n1_manager_email:         string | null;
+  // justificatif
+  justif_required:          boolean;
+  justif_file:              string | null;   // URL relative du fichier
+  justif_validated:         boolean;
+  justif_validated_by:      number | null;
+  justif_validated_by_name: string | null;
+  justif_validated_at:      string | null;
+  justif_reminder_sent:     boolean;
+  created_at:               string;
+  updated_at:               string;
 }
 
 export interface ExitAuthorizationCreate {

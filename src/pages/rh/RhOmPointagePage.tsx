@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Search, TableProperties, Users, Clock, TrendingUp, Lock, LockOpen, RefreshCw, FileDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Search, TableProperties, Users, Clock, TrendingUp, Lock, LockOpen, RefreshCw, FileDown, Banknote } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import api from "@/api/axios";
 import toast from "react-hot-toast";
 import AppLayout from "@/layouts/AppLayout";
@@ -48,6 +49,7 @@ interface OmRow {
 }
 
 export default function RhOmPointagePage() {
+  const navigate = useNavigate();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -81,7 +83,6 @@ export default function RhOmPointagePage() {
     }
   }, [year, month]);
 
-  // Chargement initial + polling toutes les 20 secondes
   useEffect(() => {
     fetchData(false);
     pollRef.current = setInterval(() => fetchData(true), 20_000);
@@ -106,16 +107,15 @@ export default function RhOmPointagePage() {
     return data;
   }, [rows, search, filterService]);
 
-  const PAGE_SIZE = 10;
+  const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
-  // Remettre à la page 1 quand les filtres changent
-  useEffect(() => { setPage(1); }, [search, filterService]);
+  useEffect(() => { setPage(1); }, [search, filterService, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = useMemo(
-    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [filtered, page]
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize]
   );
 
   const totals = useMemo(() => filtered.reduce((acc, r) => ({
@@ -157,7 +157,6 @@ export default function RhOmPointagePage() {
   function exportExcel() {
     const nDays = new Date(year, month, 0).getDate();
 
-    // ── Styles réutilisables ────────────────────────────────────────────
     const sHeader = {
       font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
       fill: { fgColor: { rgb: "003C71" } },
@@ -178,64 +177,35 @@ export default function RhOmPointagePage() {
       C: "075985", A: "9A3412", M: "9F1239",
     };
 
-    // ── Ligne 1 : titre ─────────────────────────────────────────────────
     const titleRow = [`POINTAGE O&M — ${MONTHS_FR[month - 1].toUpperCase()} ${year}`];
-
-    // ── Ligne 2 : en-têtes ──────────────────────────────────────────────
     const fixedHeaders = ["N°", "MATRICULE", "NOM", "PRENOM", "SERVICE", "QUALIFICATION", "ZONE", "MANAGER N+1"];
     const dayHeaders = Array.from({ length: nDays }, (_, i) => String(i + 1));
     const sumHeaders = ["JOURS TRAVAILLÉS", "NB H. SUP", "NB J. ASTREINTES", "JOURS NORMAUX", "HEURES NORMALES", "HEURES SUP", "HEURES ASTREINTES", "HEURES TOTALES"];
     const headers = [...fixedHeaders, ...dayHeaders, ...sumHeaders];
 
-    // ── Données ─────────────────────────────────────────────────────────
     const dataRows = filtered.map((row, i) => {
       const days = Array.from({ length: nDays }, (_, d) => row.daily_codes[String(d + 1)] || "");
       return [
-        i + 1,
-        row.matricule,
-        row.nom,
-        row.prenom,
-        row.service,
-        row.qualification,
-        row.zone,
-        row.n1_manager_name || row.manager,
-        ...days,
-        row.jours_travailles,
-        row.nb_heures_sup,
-        row.nb_jours_astreintes,
-        row.jours_normaux,
-        row.heures_normales,
-        row.heures_sup_effectuees,
-        row.heures_astreintes,
-        row.heures_totales,
+        i + 1, row.matricule, row.nom, row.prenom, row.service, row.qualification, row.zone,
+        row.n1_manager_name || row.manager, ...days,
+        row.jours_travailles, row.nb_heures_sup, row.nb_jours_astreintes, row.jours_normaux,
+        row.heures_normales, row.heures_sup_effectuees, row.heures_astreintes, row.heures_totales,
       ];
     });
 
-    // ── Ligne totaux ─────────────────────────────────────────────────────
     const totalsRow = [
       "", "TOTAUX", "", "", "", "", "", "",
       ...Array(nDays).fill(""),
-      totals.jours_travailles,
-      totals.nb_heures_sup,
-      totals.nb_jours_astreintes,
-      0, // jours normaux total (non calculé dans totals — on peut l'ajouter)
-      totals.heures_normales,
-      totals.heures_sup_effectuees,
-      totals.heures_astreintes,
-      totals.heures_totales,
+      totals.jours_travailles, totals.nb_heures_sup, totals.nb_jours_astreintes, 0,
+      totals.heures_normales, totals.heures_sup_effectuees, totals.heures_astreintes, totals.heures_totales,
     ];
 
-    // ── Construction de la feuille ───────────────────────────────────────
     const wsData = [titleRow, headers, ...dataRows, totalsRow];
     const ws = XLSXStyle.utils.aoa_to_sheet(wsData);
-
     const nCols = headers.length;
-    const nRows = wsData.length;
 
-    // Fusionner le titre sur toute la largeur
     ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: nCols - 1 } }];
 
-    // Style titre
     const titleCell = ws["A1"];
     if (titleCell) {
       titleCell.s = {
@@ -244,13 +214,11 @@ export default function RhOmPointagePage() {
       };
     }
 
-    // Style en-têtes (ligne 2, index r=1)
     for (let c = 0; c < nCols; c++) {
       const addr = XLSXStyle.utils.encode_cell({ r: 1, c });
       if (ws[addr]) ws[addr].s = c < fixedHeaders.length ? sHeaderLeft : sHeader;
     }
 
-    // Style cellules données
     for (let r = 2; r < 2 + dataRows.length; r++) {
       for (let c = 0; c < nCols; c++) {
         const addr = XLSXStyle.utils.encode_cell({ r, c });
@@ -266,7 +234,6 @@ export default function RhOmPointagePage() {
       }
     }
 
-    // Style ligne totaux
     const totalsRowIdx = 2 + dataRows.length;
     for (let c = 0; c < nCols; c++) {
       const addr = XLSXStyle.utils.encode_cell({ r: totalsRowIdx, c });
@@ -274,22 +241,11 @@ export default function RhOmPointagePage() {
       ws[addr].s = c === 1 ? sTotalLabel : sTotal;
     }
 
-    // Largeurs de colonnes
     ws["!cols"] = [
-      { wch: 5 },  // N°
-      { wch: 12 }, // MATRICULE
-      { wch: 16 }, // NOM
-      { wch: 14 }, // PRENOM
-      { wch: 18 }, // SERVICE
-      { wch: 18 }, // QUALIFICATION
-      { wch: 14 }, // ZONE
-      { wch: 20 }, // MANAGER
-      ...Array(nDays).fill({ wch: 4 }),  // jours
-      { wch: 14 }, { wch: 10 }, { wch: 14 },
-      { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+      { wch: 5 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 20 },
+      ...Array(nDays).fill({ wch: 4 }),
+      { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
     ];
-
-    // Hauteur titre + header
     ws["!rows"] = [{ hpt: 28 }, { hpt: 36 }];
 
     const wb = XLSXStyle.utils.book_new();
@@ -306,13 +262,13 @@ export default function RhOmPointagePage() {
         <div className="flex flex-col gap-3 mb-6">
           {/* Ligne 1 : titre + actions */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-[#003c71] flex items-center justify-center shadow shrink-0">
                 <TableProperties size={20} className="text-white" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h1 className="text-xl font-bold text-slate-800">Pointage O&M</h1>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-xs text-slate-500">Vue consolidée — {MONTHS_FR[month - 1]} {year}</p>
                   {lastUpdated && (
                     <span className="text-[10px] text-slate-400">
@@ -323,7 +279,14 @@ export default function RhOmPointagePage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-wrap justify-end">
+            <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
+              <button
+                onClick={() => navigate("/rh/om-forfaits")}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-[#003c71] text-white hover:bg-[#003c71]/90 transition shadow-sm"
+              >
+                <Banknote size={14} />
+                <span className="hidden sm:inline">Forfaits</span>
+              </button>
               <button
                 onClick={() => fetchData(false)}
                 disabled={loading || refreshing}
@@ -331,7 +294,7 @@ export default function RhOmPointagePage() {
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition shadow-sm disabled:opacity-50"
               >
                 <RefreshCw size={14} className={refreshing || loading ? "animate-spin" : ""} />
-                Rafraîchir
+                <span className="hidden sm:inline">Rafraîchir</span>
               </button>
               <button
                 onClick={exportExcel}
@@ -340,24 +303,26 @@ export default function RhOmPointagePage() {
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-sm disabled:opacity-50"
               >
                 <FileDown size={14} />
-                Exporter Excel
+                <span className="hidden sm:inline">Exporter Excel</span>
               </button>
               <button
                 onClick={toggleLock}
                 disabled={toggling || pastDeadline}
                 title={pastDeadline ? "Date limite dépassée (verrou automatique)" : rhLocked ? "Réactiver la saisie" : "Désactiver la saisie"}
-                className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition shadow-sm border ${
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition shadow-sm border ${
                   isLocked
                     ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
                     : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
                 } disabled:opacity-60 disabled:cursor-not-allowed`}
               >
                 {toggling ? <Loader2 size={15} className="animate-spin" /> : isLocked ? <Lock size={15} /> : <LockOpen size={15} />}
-                {isLocked ? (pastDeadline && !rhLocked ? "Date limite dépassée" : "Saisie désactivée") : "Saisie active"}
+                <span className="hidden sm:inline">
+                  {isLocked ? (pastDeadline && !rhLocked ? "Date limite dépassée" : "Saisie désactivée") : "Saisie active"}
+                </span>
               </button>
               <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
                 <button onClick={prevMonth} className="p-1 hover:bg-slate-100 rounded-lg transition"><ChevronLeft size={16} /></button>
-                <span className="font-semibold text-slate-700 min-w-[130px] text-center text-sm">{MONTHS_FR[month - 1]} {year}</span>
+                <span className="font-semibold text-slate-700 min-w-[110px] text-center text-sm">{MONTHS_FR[month - 1]} {year}</span>
                 <button onClick={nextMonth} className="p-1 hover:bg-slate-100 rounded-lg transition"><ChevronRight size={16} /></button>
               </div>
             </div>
@@ -374,34 +339,34 @@ export default function RhOmPointagePage() {
         </div>
 
         {/* ── KPI Cards ────────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center"><Users size={18} className="text-slate-500" /></div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+          <div className="bg-white border border-slate-200 rounded-xl p-3 md:p-4 shadow-sm flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0"><Users size={18} className="text-slate-500" /></div>
             <div><p className="text-xs text-slate-500">Effectif</p><p className="text-xl font-bold text-slate-800">{rows.length}</p></div>
           </div>
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center"><TrendingUp size={18} className="text-emerald-600" /></div>
+          <div className="bg-white border border-slate-200 rounded-xl p-3 md:p-4 shadow-sm flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0"><TrendingUp size={18} className="text-emerald-600" /></div>
             <div><p className="text-xs text-slate-500">Remplissage</p><p className="text-xl font-bold text-emerald-600">{remplissage}%</p></div>
           </div>
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center"><Clock size={18} className="text-amber-600" /></div>
+          <div className="bg-white border border-slate-200 rounded-xl p-3 md:p-4 shadow-sm flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0"><Clock size={18} className="text-amber-600" /></div>
             <div><p className="text-xs text-slate-500">Total H. sup.</p><p className="text-xl font-bold text-amber-600">{totals.heures_sup_effectuees}h</p></div>
           </div>
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center"><Clock size={18} className="text-purple-600" /></div>
+          <div className="bg-white border border-slate-200 rounded-xl p-3 md:p-4 shadow-sm flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center shrink-0"><Clock size={18} className="text-purple-600" /></div>
             <div><p className="text-xs text-slate-500">Astreintes (j)</p><p className="text-xl font-bold text-purple-600">{totals.nb_jours_astreintes}j</p></div>
           </div>
         </div>
 
-        {/* ── Barre de recherche + filtre service ───────────────────────────── */}
-        <div className="flex flex-wrap items-center justify-center gap-3 mb-5">
-          <div className="relative">
+        {/* ── Recherche + filtre ───────────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 mb-5">
+          <div className="relative flex-1 sm:flex-none">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Rechercher un employé..."
-              className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#003c71]/20 w-72"
+              className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#003c71]/20 w-full sm:w-72"
             />
           </div>
           <select
@@ -414,87 +379,157 @@ export default function RhOmPointagePage() {
           </select>
         </div>
 
-        {/* ── Table ─────────────────────────────────────────────────────────── */}
+        {/* ── Contenu ──────────────────────────────────────────────────────── */}
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="animate-spin text-slate-400" size={32} /></div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-20 text-slate-400">Aucune donnée.</div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm bg-white">
-            <table className="text-xs border-collapse" style={{ minWidth: `${220 + daysInMonth * 30 + 280}px` }}>
-              <thead>
-                <tr className="bg-[#003c71] text-white select-none">
-                  <th className="sticky left-0 bg-[#003c71] px-3 py-2.5 text-left font-semibold min-w-[160px] z-10 border-r border-white/10">Employé</th>
-                  <th className="px-2 py-2.5 text-left font-semibold min-w-[80px]">Service</th>
-                  <th className="px-2 py-2.5 text-left font-semibold min-w-[110px]">Manager</th>
-                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
-                    <th key={d} className="w-7 py-2.5 text-center text-[10px] text-white/80 font-medium">{d}</th>
-                  ))}
-                  <th className="px-2 py-2.5 text-center font-semibold">Jours</th>
-                  <th className="px-2 py-2.5 text-center font-semibold">HS(j)</th>
-                  <th className="px-2 py-2.5 text-center font-semibold">Astr(j)</th>
-                  <th className="px-2 py-2.5 text-center font-semibold">H.norm</th>
-                  <th className="px-2 py-2.5 text-center font-semibold">H.HS</th>
-                  <th className="px-2 py-2.5 text-center font-semibold">H.Astr</th>
-                  <th className="px-2 py-2.5 text-center font-semibold">H.Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.map((row, idx) => (
-                  <tr key={row.employee_id} className={`border-t border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/30 transition-colors`}>
-                    <td className="sticky left-0 px-3 py-2 font-medium text-slate-800 z-10 border-r border-slate-100" style={{ background: idx % 2 === 0 ? "#fff" : "#f8fafc" }}>
-                      <div className="truncate max-w-[155px]">{row.nom} {row.prenom}</div>
-                      <div className="text-[10px] text-slate-400 font-normal">{row.matricule}</div>
-                    </td>
-                    <td className="px-2 py-2 text-slate-500 text-[11px] truncate max-w-[78px]">{row.service}</td>
-                    <td className="px-2 py-2 text-slate-500 text-[11px] truncate max-w-[108px]">{row.n1_manager_name || row.manager}</td>
-                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
-                      const code = (row.daily_codes[String(d)] as DayCode) || "";
-                      const m = CODE_META[code];
-                      return (
-                        <td key={d} className="p-0.5 text-center">
-                          <div className={`w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center mx-auto ${m.bg} ${m.text}`}>
-                            {code || ""}
+          <>
+            {/* ── Vue carte — mobile (< md) ──────────────────────────────────── */}
+            <div className="block md:hidden space-y-3">
+              {paginated.map(row => (
+                <div key={row.employee_id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                  {/* En-tête de la carte */}
+                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
+                    <p className="font-semibold text-slate-800 text-sm truncate">{row.nom} {row.prenom}</p>
+                    <p className="text-xs text-slate-400">{row.matricule}{row.service ? ` · ${row.service}` : ""}</p>
+                    {(row.n1_manager_name || row.manager) && (
+                      <p className="text-xs text-slate-400">Mgr : {row.n1_manager_name || row.manager}</p>
+                    )}
+                  </div>
+
+                  {/* Grille des jours (7 par ligne) */}
+                  <div className="p-3">
+                    <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
+                      {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
+                        const code = (row.daily_codes[String(d)] as DayCode) || "";
+                        const m = CODE_META[code];
+                        return (
+                          <div key={d} className="flex flex-col items-center gap-0.5">
+                            <span className="text-[9px] text-slate-400 leading-none">{d}</span>
+                            <div className={`w-8 h-8 rounded text-[10px] font-bold flex items-center justify-center ${m.bg} ${m.text}`}>
+                              {code || ""}
+                            </div>
                           </div>
-                        </td>
-                      );
-                    })}
-                    <td className="px-2 py-2 text-center font-semibold text-slate-700">{row.jours_travailles}</td>
-                    <td className="px-2 py-2 text-center font-semibold text-amber-600">{row.nb_heures_sup}</td>
-                    <td className="px-2 py-2 text-center font-semibold text-purple-600">{row.nb_jours_astreintes}</td>
-                    <td className="px-2 py-2 text-center text-slate-600">{row.heures_normales}h</td>
-                    <td className="px-2 py-2 text-center text-amber-600">{row.heures_sup_effectuees}h</td>
-                    <td className="px-2 py-2 text-center text-purple-600">{row.heures_astreintes}h</td>
-                    <td className="px-2 py-2 text-center font-bold text-slate-800">{row.heures_totales}h</td>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Totaux */}
+                  <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                    <span className="font-semibold text-slate-700">{row.jours_travailles}j travaillés</span>
+                    <span className="text-amber-600">{row.nb_heures_sup} H.sup</span>
+                    <span className="text-purple-600">{row.nb_jours_astreintes} Astr.</span>
+                    <span className="text-slate-500">{row.heures_normales}h norm.</span>
+                    <span className="font-bold text-slate-800">{row.heures_totales}h total</span>
+                  </div>
+                </div>
+              ))}
+
+              {/* Totaux globaux sur mobile */}
+              <div className="bg-slate-800 text-white rounded-xl px-4 py-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs font-semibold">
+                <span>TOTAUX</span>
+                <span>{totals.jours_travailles}j</span>
+                <span className="text-amber-300">{totals.nb_heures_sup} HS</span>
+                <span className="text-purple-300">{totals.nb_jours_astreintes} Astr.</span>
+                <span>{totals.heures_normales}h norm.</span>
+                <span className="text-amber-300">{totals.heures_sup_effectuees}h sup.</span>
+                <span className="font-bold">{totals.heures_totales}h total</span>
+              </div>
+            </div>
+
+            {/* ── Vue tableau — desktop (≥ md) ──────────────────────────────── */}
+            <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 shadow-sm bg-white">
+              <table className="text-xs border-collapse w-full" style={{ minWidth: `${220 + daysInMonth * 30 + 280}px` }}>
+                <thead>
+                  <tr className="bg-[#003c71] text-white select-none">
+                    <th className="sticky left-0 bg-[#003c71] px-3 py-2.5 text-left font-semibold min-w-[160px] z-10 border-r border-white/10">Employé</th>
+                    <th className="px-2 py-2.5 text-left font-semibold min-w-[80px]">Service</th>
+                    <th className="px-2 py-2.5 text-left font-semibold min-w-[110px]">Manager</th>
+                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
+                      <th key={d} className="w-7 py-2.5 text-center text-[10px] text-white/80 font-medium">{d}</th>
+                    ))}
+                    <th className="px-2 py-2.5 text-center font-semibold">Jours</th>
+                    <th className="px-2 py-2.5 text-center font-semibold">HS(j)</th>
+                    <th className="px-2 py-2.5 text-center font-semibold">Astr(j)</th>
+                    <th className="px-2 py-2.5 text-center font-semibold">H.norm</th>
+                    <th className="px-2 py-2.5 text-center font-semibold">H.HS</th>
+                    <th className="px-2 py-2.5 text-center font-semibold">H.Astr</th>
+                    <th className="px-2 py-2.5 text-center font-semibold">H.Total</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-slate-800 text-white border-t-2 border-slate-400 font-semibold">
-                  <td className="sticky left-0 bg-slate-800 px-3 py-2 z-10 text-sm">TOTAUX</td>
-                  <td colSpan={2} />
-                  <td colSpan={daysInMonth} />
-                  <td className="px-2 py-2 text-center">{totals.jours_travailles}</td>
-                  <td className="px-2 py-2 text-center text-amber-300">{totals.nb_heures_sup}</td>
-                  <td className="px-2 py-2 text-center text-purple-300">{totals.nb_jours_astreintes}</td>
-                  <td className="px-2 py-2 text-center">{totals.heures_normales}h</td>
-                  <td className="px-2 py-2 text-center text-amber-300">{totals.heures_sup_effectuees}h</td>
-                  <td className="px-2 py-2 text-center text-purple-300">{totals.heures_astreintes}h</td>
-                  <td className="px-2 py-2 text-center">{totals.heures_totales}h</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {paginated.map((row, idx) => (
+                    <tr key={row.employee_id} className={`border-t border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/30 transition-colors`}>
+                      <td className="sticky left-0 px-3 py-2 font-medium text-slate-800 z-10 border-r border-slate-100" style={{ background: idx % 2 === 0 ? "#fff" : "#f8fafc" }}>
+                        <div className="truncate max-w-[155px]">{row.nom} {row.prenom}</div>
+                        <div className="text-[10px] text-slate-400 font-normal">{row.matricule}</div>
+                      </td>
+                      <td className="px-2 py-2 text-slate-500 text-[11px] truncate max-w-[78px]">{row.service}</td>
+                      <td className="px-2 py-2 text-slate-500 text-[11px] truncate max-w-[108px]">{row.n1_manager_name || row.manager}</td>
+                      {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
+                        const code = (row.daily_codes[String(d)] as DayCode) || "";
+                        const m = CODE_META[code];
+                        return (
+                          <td key={d} className="p-0.5 text-center">
+                            <div className={`w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center mx-auto ${m.bg} ${m.text}`}>
+                              {code || ""}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td className="px-2 py-2 text-center font-semibold text-slate-700">{row.jours_travailles}</td>
+                      <td className="px-2 py-2 text-center font-semibold text-amber-600">{row.nb_heures_sup}</td>
+                      <td className="px-2 py-2 text-center font-semibold text-purple-600">{row.nb_jours_astreintes}</td>
+                      <td className="px-2 py-2 text-center text-slate-600">{row.heures_normales}h</td>
+                      <td className="px-2 py-2 text-center text-amber-600">{row.heures_sup_effectuees}h</td>
+                      <td className="px-2 py-2 text-center text-purple-600">{row.heures_astreintes}h</td>
+                      <td className="px-2 py-2 text-center font-bold text-slate-800">{row.heures_totales}h</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-800 text-white border-t-2 border-slate-400 font-semibold">
+                    <td className="sticky left-0 bg-slate-800 px-3 py-2 z-10 text-sm">TOTAUX</td>
+                    <td colSpan={2} />
+                    <td colSpan={daysInMonth} />
+                    <td className="px-2 py-2 text-center">{totals.jours_travailles}</td>
+                    <td className="px-2 py-2 text-center text-amber-300">{totals.nb_heures_sup}</td>
+                    <td className="px-2 py-2 text-center text-purple-300">{totals.nb_jours_astreintes}</td>
+                    <td className="px-2 py-2 text-center">{totals.heures_normales}h</td>
+                    <td className="px-2 py-2 text-center text-amber-300">{totals.heures_sup_effectuees}h</td>
+                    <td className="px-2 py-2 text-center text-purple-300">{totals.heures_astreintes}h</td>
+                    <td className="px-2 py-2 text-center">{totals.heures_totales}h</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
         )}
 
         {/* ── Pagination ────────────────────────────────────────────────────── */}
-        {!loading && filtered.length > PAGE_SIZE && (
-          <div className="flex items-center justify-between mt-4 px-1">
-            <p className="text-xs text-slate-500">
-              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} sur {filtered.length} employé{filtered.length > 1 ? "s" : ""}
-            </p>
-            <div className="flex items-center gap-1">
-              {/* Précédent */}
+        {!loading && filtered.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 px-1">
+            <div className="flex items-center gap-3 order-2 sm:order-1">
+              <p className="text-xs text-slate-500">
+                {filtered.length <= pageSize
+                  ? `${filtered.length} employé${filtered.length > 1 ? "s" : ""}`
+                  : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, filtered.length)} sur ${filtered.length}`}
+              </p>
+              <select
+                value={pageSize}
+                onChange={e => setPageSize(Number(e.target.value))}
+                className="text-xs border border-slate-200 rounded-lg bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#003c71]/20 text-slate-600"
+              >
+                <option value={10}>10 / page</option>
+                <option value={25}>25 / page</option>
+                <option value={50}>50 / page</option>
+                <option value={100}>100 / page</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-1 order-1 sm:order-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
@@ -503,7 +538,6 @@ export default function RhOmPointagePage() {
                 <ChevronLeft size={15} />
               </button>
 
-              {/* Numéros de pages */}
               {Array.from({ length: totalPages }, (_, i) => i + 1)
                 .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
                 .reduce<(number | "…")[]>((acc, p, i, arr) => {
@@ -529,7 +563,6 @@ export default function RhOmPointagePage() {
                   )
                 )}
 
-              {/* Suivant */}
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}

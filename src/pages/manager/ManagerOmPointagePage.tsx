@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Save, Loader2, TableProperties, Lock, Paintbrush, X as XIcon, Search } from "lucide-react";
+import { Save, Loader2, TableProperties, Lock, Paintbrush, X as XIcon, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import api from "@/api/axios";
 import toast from "react-hot-toast";
 import ManagerLayout from "@/layouts/ManagerLayout";
@@ -51,7 +51,6 @@ function computeTotals(codes: Record<string, DayCode>) {
   };
 }
 
-/** Compute current period label and year/month from today's date */
 function getCurrentPeriod() {
   const today = new Date();
   const year = today.getFullYear();
@@ -61,7 +60,6 @@ function getCurrentPeriod() {
   return { year, month, label };
 }
 
-/** Popup flottant pour sélection libre (mode normal) */
 function CodePicker({
   anchorRef,
   onSelect,
@@ -111,7 +109,6 @@ function CodePicker({
   );
 }
 
-/** Cellule individuelle — comportement selon le mode pinceau */
 function CellButton({
   code,
   onChange,
@@ -135,7 +132,6 @@ function CellButton({
     );
   }
 
-  // Mode pinceau actif : un seul clic applique directement le code du pinceau
   if (brushCode !== null) {
     const bm = CODE_META[brushCode];
     return (
@@ -149,7 +145,6 @@ function CellButton({
     );
   }
 
-  // Mode normal : popup au clic
   return (
     <>
       <button
@@ -181,7 +176,6 @@ export default function ManagerOmPointagePage() {
   const [isLocked, setIsLocked] = useState(false);
   const [lockReason, setLockReason] = useState("");
   const [search, setSearch] = useState("");
-  // Mode pinceau : null = désactivé, code = pinceau actif
   const [brushCode, setBrushCode] = useState<DayCode | null>(null);
 
   const daysInMonth = useMemo(() => new Date(year, month, 0).getDate(), [year, month]);
@@ -195,6 +189,17 @@ export default function ManagerOmPointagePage() {
       r.matricule.toLowerCase().includes(q)
     );
   }, [rows, search]);
+
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => { setPage(1); }, [search, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const paginated = useMemo(
+    () => filteredRows.slice((page - 1) * pageSize, page * pageSize),
+    [filteredRows, page, pageSize]
+  );
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -292,7 +297,7 @@ export default function ManagerOmPointagePage() {
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <div className="flex flex-col gap-3 mb-6">
-          {/* Ligne 1 : titre à gauche, recherche + bouton à droite */}
+          {/* Ligne 1 : titre + recherche + bouton */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#003c71] flex items-center justify-center shadow shrink-0">
@@ -305,13 +310,13 @@ export default function ManagerOmPointagePage() {
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               {/* Barre de recherche */}
-              <div className="relative">
+              <div className="relative flex-1 sm:flex-none">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Rechercher un employé..."
-                  className="pl-8 pr-8 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#003c71]/20 w-72"
+                  className="pl-8 pr-8 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#003c71]/20 w-full sm:w-72"
                 />
                 {search && (
                   <button
@@ -351,7 +356,7 @@ export default function ManagerOmPointagePage() {
             </div>
           )}
 
-          {/* Ligne 2 : légende + mode pinceau (seulement si saisie ouverte) */}
+          {/* Ligne 2 : légende + mode pinceau */}
           {!isLocked && (
             <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:justify-end">
               <div className="flex items-center gap-1.5 text-xs text-slate-400 sm:mt-1.5 shrink-0">
@@ -388,7 +393,7 @@ export default function ManagerOmPointagePage() {
           )}
         </div>
 
-        {/* ── Table ─────────────────────────────────────────────────────────── */}
+        {/* ── Contenu ───────────────────────────────────────────────────────── */}
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="animate-spin text-slate-400" size={32} /></div>
         ) : rows.length === 0 ? (
@@ -396,72 +401,204 @@ export default function ManagerOmPointagePage() {
         ) : filteredRows.length === 0 ? (
           <div className="text-center py-20 text-slate-400">Aucun résultat pour « {search} ».</div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm bg-white">
-            <table className="text-xs border-collapse" style={{ minWidth: `${200 + daysInMonth * 30 + 220}px` }}>
-              <thead>
-                <tr className="bg-[#003c71] text-white select-none">
-                  <th className="sticky left-0 bg-[#003c71] px-3 py-2.5 text-left font-semibold min-w-[160px] z-10 border-r border-white/10">Employé</th>
-                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
-                    <th key={d} className="w-7 py-2.5 text-center font-medium text-white/80 text-[10px]">{d}</th>
-                  ))}
-                  <th className="px-2 py-2.5 text-center font-semibold">Jours</th>
-                  <th className="px-2 py-2.5 text-center font-semibold">HS</th>
-                  <th className="px-2 py-2.5 text-center font-semibold">Astr.</th>
-                  <th className="px-2 py-2.5 text-center font-semibold">H.norm</th>
-                  <th className="px-2 py-2.5 text-center font-semibold">H.total</th>
-                  {!isLocked && <th className="px-2 py-2.5 text-center font-semibold">Action</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((row, idx) => {
-                  const codes = localCodes[row.employee_id] || {};
-                  const totals = computeTotals(codes);
-                  const isDirty = dirty.has(row.employee_id);
-                  const isSaving = saving === row.employee_id;
-                  return (
-                    <tr
-                      key={row.employee_id}
-                      className={`border-t border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} ${isDirty ? "ring-1 ring-inset ring-amber-300" : ""}`}
-                    >
-                      <td className="sticky left-0 px-3 py-2 font-medium text-slate-800 z-10 border-r border-slate-100" style={{ background: idx % 2 === 0 ? "#fff" : "#f8fafc" }}>
-                        <div className="truncate max-w-[155px]">{row.nom} {row.prenom}</div>
-                        <div className="text-[10px] text-slate-400 font-normal">{row.matricule}</div>
-                      </td>
-                      {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
-                        const code = (codes[String(d)] as DayCode) || "";
-                        return (
-                          <td key={d} className="p-0.5 text-center">
-                            <CellButton
-                              code={code}
-                              onChange={newCode => setCode(row.employee_id, d, newCode)}
-                              disabled={isLocked}
-                              brushCode={isLocked ? null : brushCode}
-                            />
-                          </td>
-                        );
-                      })}
-                      <td className="px-2 py-2 text-center font-semibold text-slate-700">{totals.jours_travailles}</td>
-                      <td className="px-2 py-2 text-center font-semibold text-amber-600">{totals.nb_heures_sup}</td>
-                      <td className="px-2 py-2 text-center font-semibold text-purple-600">{totals.nb_jours_astreintes}</td>
-                      <td className="px-2 py-2 text-center text-slate-600">{totals.heures_normales}h</td>
-                      <td className="px-2 py-2 text-center font-bold text-slate-800">{totals.heures_totales}h</td>
+          <>
+            {/* ── Vue carte — mobile (< md) ──────────────────────────────────── */}
+            <div className="block md:hidden space-y-3">
+              {paginated.map(row => {
+                const codes = localCodes[row.employee_id] || {};
+                const t = computeTotals(codes);
+                const isDirty = dirty.has(row.employee_id);
+                const isSaving = saving === row.employee_id;
+                return (
+                  <div
+                    key={row.employee_id}
+                    className={`bg-white rounded-xl border shadow-sm overflow-hidden ${isDirty ? "border-amber-300 ring-1 ring-amber-200" : "border-slate-200"}`}
+                  >
+                    {/* En-tête de la carte */}
+                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-800 text-sm truncate">{row.nom} {row.prenom}</p>
+                        <p className="text-xs text-slate-400">{row.matricule}</p>
+                      </div>
                       {!isLocked && (
-                        <td className="px-2 py-2 text-center">
-                          <button
-                            onClick={() => saveRow(row.employee_id)}
-                            disabled={!isDirty || saving !== null}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${isDirty ? "bg-[#003c71] text-white hover:bg-[#003c71]/80 shadow-sm" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
-                          >
-                            {isSaving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
-                            {isSaving ? "..." : "Enreg."}
-                          </button>
-                        </td>
+                        <button
+                          onClick={() => saveRow(row.employee_id)}
+                          disabled={!isDirty || saving !== null}
+                          className={`flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${isDirty ? "bg-[#003c71] text-white hover:bg-[#003c71]/80 shadow-sm" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+                        >
+                          {isSaving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+                          {isSaving ? "..." : "Enreg."}
+                        </button>
                       )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    </div>
+
+                    {/* Grille des jours (7 par ligne) */}
+                    <div className="p-3">
+                      <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
+                        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
+                          const code = (codes[String(d)] as DayCode) || "";
+                          return (
+                            <div key={d} className="flex flex-col items-center gap-0.5">
+                              <span className="text-[9px] text-slate-400 leading-none">{d}</span>
+                              <CellButton
+                                code={code}
+                                onChange={newCode => setCode(row.employee_id, d, newCode)}
+                                disabled={isLocked}
+                                brushCode={isLocked ? null : brushCode}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Totaux */}
+                    <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                      <span className="font-semibold text-slate-700">{t.jours_travailles}j travaillés</span>
+                      <span className="text-amber-600">{t.nb_heures_sup} H.sup</span>
+                      <span className="text-purple-600">{t.nb_jours_astreintes} Astr.</span>
+                      <span className="text-slate-500">{t.heures_totales}h total</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ── Vue tableau — desktop (≥ md) ──────────────────────────────── */}
+            <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 shadow-sm bg-white">
+              <table className="text-xs border-collapse w-full" style={{ minWidth: `${200 + daysInMonth * 30 + 220}px` }}>
+                <thead>
+                  <tr className="bg-[#003c71] text-white select-none">
+                    <th className="sticky left-0 bg-[#003c71] px-3 py-2.5 text-left font-semibold min-w-[160px] z-10 border-r border-white/10">Employé</th>
+                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
+                      <th key={d} className="w-7 py-2.5 text-center font-medium text-white/80 text-[10px]">{d}</th>
+                    ))}
+                    <th className="px-2 py-2.5 text-center font-semibold">Jours</th>
+                    <th className="px-2 py-2.5 text-center font-semibold">HS</th>
+                    <th className="px-2 py-2.5 text-center font-semibold">Astr.</th>
+                    <th className="px-2 py-2.5 text-center font-semibold">H.norm</th>
+                    <th className="px-2 py-2.5 text-center font-semibold">H.total</th>
+                    {!isLocked && <th className="px-2 py-2.5 text-center font-semibold">Action</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.map((row, idx) => {
+                    const codes = localCodes[row.employee_id] || {};
+                    const totals = computeTotals(codes);
+                    const isDirty = dirty.has(row.employee_id);
+                    const isSaving = saving === row.employee_id;
+                    return (
+                      <tr
+                        key={row.employee_id}
+                        className={`border-t border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} ${isDirty ? "ring-1 ring-inset ring-amber-300" : ""}`}
+                      >
+                        <td className="sticky left-0 px-3 py-2 font-medium text-slate-800 z-10 border-r border-slate-100" style={{ background: idx % 2 === 0 ? "#fff" : "#f8fafc" }}>
+                          <div className="truncate max-w-[155px]">{row.nom} {row.prenom}</div>
+                          <div className="text-[10px] text-slate-400 font-normal">{row.matricule}</div>
+                        </td>
+                        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
+                          const code = (codes[String(d)] as DayCode) || "";
+                          return (
+                            <td key={d} className="p-0.5 text-center">
+                              <CellButton
+                                code={code}
+                                onChange={newCode => setCode(row.employee_id, d, newCode)}
+                                disabled={isLocked}
+                                brushCode={isLocked ? null : brushCode}
+                              />
+                            </td>
+                          );
+                        })}
+                        <td className="px-2 py-2 text-center font-semibold text-slate-700">{totals.jours_travailles}</td>
+                        <td className="px-2 py-2 text-center font-semibold text-amber-600">{totals.nb_heures_sup}</td>
+                        <td className="px-2 py-2 text-center font-semibold text-purple-600">{totals.nb_jours_astreintes}</td>
+                        <td className="px-2 py-2 text-center text-slate-600">{totals.heures_normales}h</td>
+                        <td className="px-2 py-2 text-center font-bold text-slate-800">{totals.heures_totales}h</td>
+                        {!isLocked && (
+                          <td className="px-2 py-2 text-center">
+                            <button
+                              onClick={() => saveRow(row.employee_id)}
+                              disabled={!isDirty || saving !== null}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${isDirty ? "bg-[#003c71] text-white hover:bg-[#003c71]/80 shadow-sm" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+                            >
+                              {isSaving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+                              {isSaving ? "..." : "Enreg."}
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* ── Pagination ───────────────────────────────────────────────────── */}
+        {!loading && filteredRows.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 px-1">
+            <div className="flex items-center gap-3 order-2 sm:order-1">
+              <p className="text-xs text-slate-500">
+                {filteredRows.length <= pageSize
+                  ? `${filteredRows.length} employé${filteredRows.length > 1 ? "s" : ""}`
+                  : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, filteredRows.length)} sur ${filteredRows.length}`}
+              </p>
+              <select
+                value={pageSize}
+                onChange={e => setPageSize(Number(e.target.value))}
+                className="text-xs border border-slate-200 rounded-lg bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#003c71]/20 text-slate-600"
+              >
+                <option value={10}>10 / page</option>
+                <option value={25}>25 / page</option>
+                <option value={50}>50 / page</option>
+                <option value={100}>100 / page</option>
+              </select>
+            </div>
+            {filteredRows.length > pageSize && (
+              <div className="flex items-center gap-1 order-1 sm:order-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                  .reduce<(number | "…")[]>((acc, p, i, arr) => {
+                    if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("…");
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, i) =>
+                    p === "…" ? (
+                      <span key={`ellipsis-${i}`} className="px-1 text-slate-400 text-sm">…</span>
+                    ) : (
+                      <button
+                        key={p}
+                        onClick={() => setPage(p as number)}
+                        className={`w-8 h-8 rounded-lg text-sm font-medium transition ${
+                          page === p
+                            ? "bg-[#003c71] text-white shadow-sm"
+                            : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

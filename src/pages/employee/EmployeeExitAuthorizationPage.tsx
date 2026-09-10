@@ -4,10 +4,28 @@ import {
   Plus, CheckCircle2, Clock, XCircle,
   Loader2, ChevronLeft, ChevronRight,
   Filter, X, CalendarDays, User, Hash, MessageSquare, ShieldCheck,
-  Trash2, Eye, ArrowUpDown, LayoutGrid, List, LogOut, AlertTriangle,
-  GitBranch, Mail,
+  Trash2, Eye, EyeOff, ArrowUpDown, LayoutGrid, List, LogOut, AlertTriangle,
+  GitBranch, Mail, ChevronDown, Info, Paperclip, UploadCloud, CheckCircle,
+  FileText, Image as ImageIcon, Download,
 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
+import { BASE_URL } from "@/api/baseUrl";
+
+async function openJustifDocument(justifFileUrl: string) {
+  const token = localStorage.getItem("access_token");
+  try {
+    const url = justifFileUrl.startsWith("http") ? justifFileUrl
+      : `${(BASE_URL ?? "").replace(/\/$/, "")}${justifFileUrl.startsWith("/") ? "" : "/media/"}${justifFileUrl}`;
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) { alert("Justificatif introuvable ou non encore uploadé pour cette demande."); return; }
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), "_blank");
+  } catch {
+    alert("Impossible d'ouvrir le justificatif.");
+  }
+}
 import EmployeeLayout from "@/layouts/EmployeeLayout";
 import { exitAuthorizationService } from "@/services/leaveService";
 import { ExitAuthorization, ExitAuthStatus } from "@/types/leave";
@@ -38,6 +56,18 @@ function fmtDatetime(iso?: string | null) {
   return d.toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+// ── Motifs prédéfinis ─────────────────────────────────────────────────────────
+const MOTIFS_CONFIG = [
+  { label: "Rendez-vous médical",     justifRequired: true,  descRequired: false, hint: "Un justificatif médical est obligatoire (ordonnance, carnet de rendez-vous, convocation...)." },
+  { label: "Préparation de voyage",   justifRequired: false, descRequired: false, hint: null },
+  { label: "Enterrement",             justifRequired: false, descRequired: false, hint: null },
+  { label: "Rendez-vous à la banque", justifRequired: false, descRequired: false, hint: null },
+  { label: "Rendez-vous à la police", justifRequired: false, descRequired: false, hint: null },
+  { label: "Urgence",                 justifRequired: false, descRequired: true,  hint: "Veuillez décrire l'urgence dans le champ description ci-dessous (obligatoire)." },
+  { label: "Déplacement académique",  justifRequired: true,  descRequired: false, hint: "Un justificatif académique est obligatoire (convocation, attestation d'inscription...)." },
+  { label: "Autre (à préciser)",      justifRequired: false, descRequired: true,  hint: "Veuillez préciser le motif dans la description ci-dessous (obligatoire)." },
+] as const;
+
 // ── Modal création ─────────────────────────────────────────────────────────────
 interface CreateModalProps { employeeId: number; onClose: () => void; onSaved: () => void; }
 
@@ -47,7 +77,9 @@ function CreateModal({ employeeId, onClose, onSaved }: CreateModalProps) {
   const [date,        setDate]        = useState(todayIso);
   const [heureDepart, setHeureDepart] = useState("");
   const [heureRetour, setHeureRetour] = useState("");
-  const [motif,       setMotif]       = useState("");
+  const [motifType,   setMotifType]   = useState("");
+  const [motifDesc,   setMotifDesc]   = useState("");
+  const [justifFile,  setJustifFile]  = useState<File | null>(null);
   const [saving,      setSaving]      = useState(false);
   const [formError,   setFormError]   = useState<string | null>(null);
 
@@ -61,19 +93,29 @@ function CreateModal({ employeeId, onClose, onSaved }: CreateModalProps) {
     const [rh, rm] = heureRetour.split(":").map(Number);
     const diffMin = (rh * 60 + rm) - (dh * 60 + dm);
     if (diffMin > 180) { setFormError("La durée maximale autorisée est de 3h00. Veuillez corriger l'heure de retour."); return; }
-    if (!motif.trim()) { setFormError("Veuillez indiquer le motif de la sortie."); return; }
+    if (!motifType) { setFormError("Veuillez sélectionner le motif de la sortie."); return; }
+    const selectedMotifCfg = MOTIFS_CONFIG.find(m => m.label === motifType) ?? null;
+    if (selectedMotifCfg?.descRequired && !motifDesc.trim()) {
+      setFormError("Une description est obligatoire pour ce motif."); return;
+    }
+    if (selectedMotifCfg?.justifRequired && !justifFile) {
+      setFormError("Un justificatif est obligatoire pour ce motif. Veuillez joindre votre document."); return;
+    }
 
     const datetimeExit   = `${date}T${heureDepart}:00`;
     const datetimeReturn = `${date}T${heureRetour}:00`;
 
     setSaving(true);
     try {
-      await exitAuthorizationService.create({
+      const newRecord = await exitAuthorizationService.create({
         employee_id:     employeeId,
         datetime_exit:   new Date(datetimeExit).toISOString(),
         datetime_return: new Date(datetimeReturn).toISOString(),
-        motif:           motif.trim(),
+        motif:           motifType + (motifDesc.trim() ? ` — ${motifDesc.trim()}` : ""),
       });
+      if (justifFile && newRecord?.id) {
+        await exitAuthorizationService.uploadJustif(newRecord.id, justifFile);
+      }
       toast.success("Demande de sortie soumise — votre manager N+1 va être notifié.");
       onSaved();
     } catch (err: any) {
@@ -194,18 +236,78 @@ function CreateModal({ employeeId, onClose, onSaved }: CreateModalProps) {
             </motion.div>
           )}
 
-          {/* Motif */}
+          {/* Motif — sélecteur */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
               <MessageSquare size={13} className="inline mr-1.5 text-[#003c71]" />
               Motif de la sortie <span className="text-red-400">*</span>
             </label>
-            <textarea rows={3} value={motif}
-              onChange={e => { setMotif(e.target.value); setFormError(null); }}
-              placeholder="Décrivez le motif de la sortie..."
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50 resize-none"
-            />
+            <div className="relative">
+              <select value={motifType}
+                onChange={e => { setMotifType(e.target.value); setMotifDesc(""); setJustifFile(null); setFormError(null); }}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50 appearance-none pr-8">
+                <option value="">-- Sélectionner un motif --</option>
+                {MOTIFS_CONFIG.map(m => (
+                  <option key={m.label} value={m.label}>{m.label}</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
           </div>
+
+          {/* Hint motif */}
+          {motifType && MOTIFS_CONFIG.find(m => m.label === motifType)?.hint && (
+            <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5">
+              <Info size={14} className="text-blue-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-700">{MOTIFS_CONFIG.find(m => m.label === motifType)?.hint}</p>
+            </div>
+          )}
+
+          {/* Description (obligatoire pour Urgence / Autre) */}
+          {motifType && MOTIFS_CONFIG.find(m => m.label === motifType)?.descRequired && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                Description <span className="text-red-400">*</span>
+              </label>
+              <textarea rows={3} value={motifDesc}
+                onChange={e => { setMotifDesc(e.target.value); setFormError(null); }}
+                placeholder="Précisez le motif de la sortie..."
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003c71]/30 focus:border-[#003c71]/50 bg-gray-50 resize-none"
+              />
+            </div>
+          )}
+
+          {/* Justificatif */}
+          {motifType && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <Paperclip size={13} className="inline mr-1.5 text-[#003c71]" />
+                Justificatif {MOTIFS_CONFIG.find(m => m.label === motifType)?.justifRequired
+                  ? <span className="text-red-400">*</span>
+                  : <span className="text-gray-400 font-normal text-xs">(optionnel)</span>
+                }
+              </label>
+              <label className={`flex items-center gap-2.5 border rounded-xl px-3 py-2.5 cursor-pointer transition ${
+                justifFile ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200 hover:border-gray-300"
+              }`}>
+                <Paperclip size={14} className={justifFile ? "text-green-600 shrink-0" : "text-gray-400 shrink-0"} />
+                <span className={`text-sm truncate flex-1 min-w-0 ${justifFile ? "text-green-700" : "text-gray-400"}`}>
+                  {justifFile ? justifFile.name : "Joindre un document..."}
+                </span>
+                {justifFile && (
+                  <button type="button" onClick={e => { e.preventDefault(); setJustifFile(null); }}
+                    className="text-gray-400 hover:text-red-500 transition shrink-0">
+                    <X size={14} />
+                  </button>
+                )}
+                <input type="file" className="sr-only"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={e => { const f = e.target.files?.[0] ?? null; setJustifFile(f); setFormError(null); e.target.value = ""; }}
+                />
+              </label>
+              <p className="text-[11px] text-gray-400 mt-1">Formats acceptés : PDF, JPG, PNG, DOC, DOCX</p>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-1">
             <button onClick={onClose}
@@ -340,12 +442,68 @@ function ExitValidationChain({ item }: { item: ExitAuthorization }) {
   );
 }
 
-// ── Modal détail ───────────────────────────────────────────────────────────────
-interface DetailModalProps { item: ExitAuthorization; onClose: () => void; }
+// ── Viewer justificatif ────────────────────────────────────────────────────────
+function buildFileUrl(raw: string): string {
+  if (!raw) return "";
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  const base = (BASE_URL ?? "").replace(/\/$/, "");
+  return raw.startsWith("/") ? `${base}${raw}` : `${base}/media/${raw}`;
+}
+function fileExt(url: string): string {
+  return url.split("?")[0].split(".").pop()?.toLowerCase() ?? "";
+}
+function JustifViewer({ url }: { url: string }) {
+  const fullUrl = buildFileUrl(url);
+  const ext     = fileExt(fullUrl);
+  const isImage = ["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext);
+  const isPdf   = ext === "pdf";
+  const name    = fullUrl.split("/").pop() ?? "document";
+  if (isImage) return (
+    <div className="relative group rounded-lg overflow-hidden border border-gray-200">
+      <img src={fullUrl} alt="justificatif" className="w-full object-contain max-h-80" />
+      <a href={fullUrl} download target="_blank" rel="noopener noreferrer"
+        className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition"
+        title="Télécharger">
+        <Download size={14} />
+      </a>
+    </div>
+  );
+  if (isPdf) return (
+    <div className="rounded-lg overflow-hidden border border-gray-200">
+      <div className="flex items-center justify-between bg-gray-50 px-3 py-1.5 border-b border-gray-200">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+          <FileText size={13} className="text-red-500" />
+          {name}
+        </span>
+        <a href={fullUrl} download target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
+          <Download size={12} /> Télécharger
+        </a>
+      </div>
+      <iframe src={`${fullUrl}#toolbar=0&navpanes=0`} title="justificatif"
+        className="w-full border-0" style={{ height: 420 }} />
+    </div>
+  );
+  return (
+    <div className="flex items-center gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+      <FileText size={20} className="text-blue-500 shrink-0" />
+      <span className="text-sm font-medium text-slate-700 truncate flex-1">{name}</span>
+      <a href={fullUrl} target="_blank" rel="noopener noreferrer"
+        className="text-xs text-blue-600 hover:underline">Ouvrir</a>
+      <a href={fullUrl} download
+        className="text-xs text-slate-500 hover:underline">Télécharger</a>
+    </div>
+  );
+}
 
-function DetailModal({ item, onClose }: DetailModalProps) {
+// ── Modal détail ───────────────────────────────────────────────────────────────
+interface DetailModalProps { item: ExitAuthorization; onClose: () => void; onRefresh: () => void; }
+
+function DetailModal({ item, onClose, onRefresh }: DetailModalProps) {
   const cfg  = STATUS_CFG[item.status] ?? STATUS_CFG.CANCELLED;
   const Icon = cfg.Icon;
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading,  setUploading]  = useState(false);
 
   const fields: { icon: React.ElementType; label: string; value: string }[] = [
     { icon: LogOut,      label: "Sortie le",     value: fmtDatetime(item.datetime_exit)   },
@@ -438,6 +596,97 @@ function DetailModal({ item, onClose }: DetailModalProps) {
               </div>
             )}
 
+            {/* Section justificatif */}
+            {(item.justif_required || !!item.justif_file) && (
+              <div className={`rounded-xl border ${
+                item.justif_validated
+                  ? "bg-green-50 border-green-200"
+                  : item.justif_file
+                  ? "bg-blue-50 border-blue-200"
+                  : "bg-amber-50 border-amber-200"
+              }`}>
+                <div className="px-3 py-2.5 flex items-center gap-1.5">
+                  <Paperclip size={13} className="text-gray-400 shrink-0" />
+                  <span className="text-[10px] uppercase font-semibold tracking-wide text-gray-500 flex-1">
+                    Justificatif
+                  </span>
+                </div>
+
+                <div className="px-3 pb-3 space-y-2">
+                  {item.justif_validated ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle size={15} className="text-green-600 shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-green-700">Validé par la RH</p>
+                        {item.justif_validated_by_name && (
+                          <p className="text-xs text-green-600">{item.justif_validated_by_name}{item.justif_validated_at ? ` — ${fmt(item.justif_validated_at.slice(0,10))}` : ""}</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : item.justif_file ? (
+                    <div className="flex items-center gap-2">
+                      <Clock size={15} className="text-blue-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-blue-700">En attente de validation RH</p>
+                        <p className="text-xs text-blue-600 truncate">{item.justif_file.split("/").pop()}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-amber-700">Ce motif requiert un justificatif. Veuillez déposer votre document ci-dessous.</p>
+                      <label className={`flex items-center gap-2 border rounded-xl px-3 py-2 cursor-pointer transition ${
+                        uploadFile ? "bg-white border-green-300" : "bg-white border-amber-300 hover:border-amber-400"
+                      }`}>
+                        <UploadCloud size={14} className={uploadFile ? "text-green-600" : "text-amber-500"} />
+                        <span className={`text-xs truncate flex-1 ${uploadFile ? "text-green-700" : "text-amber-600"}`}>
+                          {uploadFile ? uploadFile.name : "Choisir un fichier..."}
+                        </span>
+                        {uploadFile && (
+                          <button type="button" onClick={e => { e.preventDefault(); setUploadFile(null); }}
+                            className="text-gray-400 hover:text-red-500 transition">
+                            <X size={12} />
+                          </button>
+                        )}
+                        <input type="file" className="sr-only" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                          onChange={e => { setUploadFile(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+                      </label>
+                      {uploadFile && (
+                        <button
+                          onClick={async () => {
+                            setUploading(true);
+                            try {
+                              await exitAuthorizationService.uploadJustif(item.id, uploadFile);
+                              toast.success("Justificatif déposé — la RH va le valider.");
+                              onRefresh();
+                              onClose();
+                            } catch {
+                              toast.error("Erreur lors du dépôt du justificatif.");
+                            } finally { setUploading(false); }
+                          }}
+                          disabled={uploading}
+                          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition disabled:opacity-60"
+                        >
+                          {uploading ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
+                          Déposer le justificatif
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Bouton voir le justificatif */}
+                  {item.justif_file && (
+                    <button
+                      onClick={() => openJustifDocument(item.justif_file!)}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition"
+                    >
+                      <FileText size={13} />
+                      Voir le justificatif
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Référence */}
             <div className="flex items-center gap-1.5 text-xs text-gray-400">
               <Hash size={12} />
@@ -513,6 +762,27 @@ function ExitCard({ item, onView, onCancel, compact = false }: CardProps) {
                     <CheckCircle2 size={11} />
                     Approuvé par {item.reviewed_by_name}
                   </p>
+                )}
+                {/* Alerte justificatif manquant */}
+                {item.justif_required && !item.justif_file && item.status === "APPROVED" && (
+                  <div className="flex items-center gap-1.5 mt-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+                    <Paperclip size={11} className="text-amber-500 shrink-0" />
+                    <span className="text-[11px] text-amber-700 font-medium">Justificatif requis — cliquez pour déposer</span>
+                  </div>
+                )}
+                {/* Justif déposé, en attente de validation */}
+                {item.justif_required && item.justif_file && !item.justif_validated && (
+                  <div className="flex items-center gap-1.5 mt-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1">
+                    <Clock size={11} className="text-blue-500 shrink-0" />
+                    <span className="text-[11px] text-blue-700 font-medium">Justificatif déposé — en attente de validation RH</span>
+                  </div>
+                )}
+                {/* Justif validé */}
+                {item.justif_required && item.justif_validated && (
+                  <div className="flex items-center gap-1.5 mt-1.5 bg-green-50 border border-green-200 rounded-lg px-2 py-1">
+                    <CheckCircle size={11} className="text-green-600 shrink-0" />
+                    <span className="text-[11px] text-green-700 font-medium">Justificatif validé par la RH</span>
+                  </div>
                 )}
               </>
             )}
@@ -779,7 +1049,7 @@ export default function EmployeeExitAuthorizationPage({ layout: Layout = Employe
         <CreateModal employeeId={employeeId} onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); load(); }} />
       )}
       {detailTarget && (
-        <DetailModal item={detailTarget} onClose={() => setDetailTarget(null)} />
+        <DetailModal item={detailTarget} onClose={() => setDetailTarget(null)} onRefresh={load} />
       )}
       {cancelTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

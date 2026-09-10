@@ -781,5 +781,22 @@ export const exitAuthorizationService = {
       });
     return res.data;
   },
+
+  uploadJustif: async (id: number, file: File): Promise<ExitAuthorization> => {
+    const form = new FormData();
+    form.append("justif_file", file);
+    const res = await api.patch(`${API}/exit-authorizations/${id}/upload-justif/`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
+  validateJustif: async (id: number, reviewerId?: number): Promise<ExitAuthorization> => {
+    const res = await api.post(
+      `${API}/exit-authorizations/${id}/validate-justif/`,
+      reviewerId ? { reviewer_id: reviewerId } : {},
+    );
+    return res.data;
+  },
 };
 

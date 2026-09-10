@@ -45,7 +45,7 @@ export default function Sidebar() {
 
   const isRhManager = availableRoles.includes("manager1") || availableRoles.includes("manager2");
 
-  // ???? Badge questionnaires compl�t�s ??????????????????????????????????????????????????????????????????????????????
+  // ???? Badge questionnaires complétés ??????????????????????????????????????????????????????????????????????????????
   const [questionnaireDoneCount, setQuestionnaireDoneCount] = useState(0);
 
   useEffect(() => {
@@ -91,7 +91,7 @@ export default function Sidebar() {
 
   useEffect(() => {
     fetchApprovalPending();
-    // Rafra�chit toutes les 60 secondes
+    // Rafraîchit toutes les 60 secondes
     const id = setInterval(fetchApprovalPending, 60_000);
     return () => clearInterval(id);
   }, [fetchApprovalPending]);
@@ -104,26 +104,26 @@ export default function Sidebar() {
       icon: <LayoutDashboard size={20} />,
     },
     {
-      label: "Gestion Employ�s",
+      label: "Gestion Employés",
       path: "/employees",
       icon: <Users2 size={20} />,
       subItems: [
         { label: "Vue Globale", path: "/employees/global"    },
         { label: "Internes",    path: "/employees/internes"  },
-        ...(FEATURES.interim        ? [{ label: "Int�rimaires",          path: "/employees/interims"                                                               }] : []),
+        ...(FEATURES.interim        ? [{ label: "Intérimaires",          path: "/employees/interims"                                                               }] : []),
         { label: "Alertes",         path: "/employees/alertes", badge: totalCount },
         ...(FEATURES.disciplinaire  ? [{ label: "Disciplinaire",          path: "/employees/disciplinaire"                                                         }] : []),
         ...(FEATURES.questionnaires ? [{ label: "Questionnaires sortie", path: "/employees/questionnaires", badge: questionnaireDoneCount || undefined, badgeRed: true }] : []),
       ],
     },
     {
-      label: "Gestion Cong�s",
+      label: "Gestion Congés",
       path: "/leaves",
       icon: <CalendarDays size={20} />,
       subItems: [
         { label: "Internes",      path: "/leaves/internes"      },
-        ...(FEATURES.interim     ? [{ label: "Int�rimaires",     path: "/leaves/interimaires"  }] : []),
-        { label: "Hi�rarchie",    path: "/leaves/hierarchie"    },
+        ...(FEATURES.interim     ? [{ label: "Intérimaires",     path: "/leaves/interimaires"  }] : []),
+        { label: "Hiérarchie",    path: "/leaves/hierarchie"    },
         { label: "Autorisations", path: "/leaves/autorisations" },
         ...(FEATURES.anticipation ? [{ label: "Anticipation",     path: "/leaves/anticipation"  }] : []),
         ...(FEATURES.migration    ? [{ label: "Migration Soldes", path: "/leaves/migration"     }] : []),
@@ -137,12 +137,12 @@ export default function Sidebar() {
         { label: "Normales",       path: "/attendance/normales"       },
         ...(FEATURES.shifts ? [{ label: "Shifts", path: "/attendance/shifts" }] : []),
         { label: "Justifications", path: "/attendance/justifications" },
-        { label: "Jours f�ri�s",   path: "/attendance/feries"         },
+        { label: "Jours fériés",   path: "/attendance/feries"         },
         { label: "Pointage O&M",   path: "/rh/om-pointage"           },
       ],
     },
     {
-      label: "Bulletins Salari�s",
+      label: "Bulletins Salariés",
       path: "/payslip",
       icon: <BadgeDollarSign size={20} />,
     },
@@ -212,7 +212,7 @@ export default function Sidebar() {
     const isOpen = openMenus[item.path] ?? false;
     const parentActive = isParentActive(item);
 
-    // Badge agr�g� sur le parent (nombre d'alertes)
+    // Badge agrégé sur le parent (nombre d'alertes)
     const parentBadge = item.subItems?.reduce((sum, s) => sum + (s.badge ?? 0), 0) ?? 0;
     const parentBadgeRed = item.subItems?.some(s => s.badgeRed && (s.badge ?? 0) > 0) ?? false;
 
@@ -232,7 +232,7 @@ export default function Sidebar() {
               <span className="truncate">{item.label}</span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {/* Badge sur le parent quand le menu est ferm� */}
+              {/* Badge sur le parent quand le menu est fermé */}
               {!isOpen && parentBadge > 0 && (
                 <span className={`min-w-[20px] h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center px-1.5 leading-none ${
                   parentBadgeRed || urgentsCount > 0 ? "bg-red-500" : "bg-amber-500"
@@ -383,8 +383,8 @@ export default function Sidebar() {
       {showLogoutModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl shadow-lg p-6 w-80">
-            <h3 className="text-lg font-semibold text-camublue-900 mb-4">D�connexion</h3>
-            <p className="mb-6 text-gray-700">Voulez-vous vraiment vous d�connecter ?</p>
+            <h3 className="text-lg font-semibold text-camublue-900 mb-4">Déconnexion</h3>
+            <p className="mb-6 text-gray-700">Voulez-vous vraiment vous déconnecter ?</p>
             <div className="flex justify-end gap-3">
               <button
                 className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition"
@@ -396,7 +396,7 @@ export default function Sidebar() {
                 className="px-4 py-2 rounded-lg bg-camublue-900 text-white hover:bg-camublue-800 transition"
                 onClick={logout}
               >
-                D�connecter
+                Déconnecter
               </button>
             </div>
           </div>
