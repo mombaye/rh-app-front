@@ -182,8 +182,8 @@ export default function BulkImportModal({ onClose, onImported }: Props) {
                   </button>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {TEMPLATE_COLS.map((col) => (
-                      <span key={col} className="text-[10px] bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded-full font-mono">
-                        {col}
+                      <span key={col.key} className="text-[10px] bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded-full font-mono">
+                        {col.key}
                       </span>
                     ))}
                   </div>
