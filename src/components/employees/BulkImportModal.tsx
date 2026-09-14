@@ -17,73 +17,62 @@ type ImportResult = {
 type View = "upload" | "importing" | "result";
 
 // ── Colonnes du modèle ────────────────────────────────────────────────────────
-const TEMPLATE_COLS = [
-  "MATRICULE",
-  "NOM",
-  "PRENOM",
-  "FONCTION",
-  "SEXE",
-  "CONTRAT",
-  "DATE NAISSANCE",
-  "DATE EMBAUCHE",
-  "BUSINESS LINE",
-  "PROJET",
-  "SERVICE",
-  "LINE MANAGER",
-  "LOCALISATION",
-  "ADRESSE MAIL",
-  "TELEPHONE",
+type ColDef = { key: string; required: boolean; note?: string };
+
+const TEMPLATE_COLS: ColDef[] = [
+  { key: "MATRICULE",      required: true,  note: "Identifiant unique (obligatoire)" },
+  { key: "NOM",            required: false, note: "Nom de famille" },
+  { key: "PRENOM",         required: false, note: "Prénom" },
+  { key: "FONCTION",       required: false, note: "Poste / intitulé du poste" },
+  { key: "SEXE",           required: false, note: "H ou F" },
+  { key: "CONTRAT",        required: false, note: "CDI | CDD | STAGE | INTERIM | CONSULTANCE" },
+  { key: "DATE NAISSANCE", required: false, note: "JJ/MM/AAAA ou AAAA-MM-JJ" },
+  { key: "DATE EMBAUCHE",  required: false, note: "JJ/MM/AAAA ou AAAA-MM-JJ" },
+  { key: "BUSINESS LINE",  required: false },
+  { key: "PROJET",         required: false },
+  { key: "SERVICE",        required: false, note: "Département / service" },
+  { key: "LINE MANAGER",   required: false, note: "Nom complet du manager" },
+  { key: "LOCALISATION",   required: false, note: "Région / site" },
+  { key: "ADRESSE MAIL",   required: false },
+  { key: "TELEPHONE",      required: false },
 ];
 
 const TEMPLATE_EXAMPLE = [
-  "EMP001",
-  "DIALLO",
-  "Amadou",
-  "TECHNICIEN",
-  "H",
-  "CDI",
-  "1990-05-15",
-  "2020-01-10",
-  "BL1",
-  "ESCO",
-  "DEPLOIEMENT",
-  "NOM MANAGER",
-  "Dakar",
-  "amadou.diallo@camusat.com",
-  "771234567",
+  "EMP001", "DIALLO", "Amadou", "TECHNICIEN", "H", "CDI",
+  "1990-05-15", "2020-01-10", "BL1", "ESCO", "DEPLOIEMENT",
+  "PAPA FALL", "Dakar", "amadou.diallo@camusat.com", "771234567",
 ];
-
-const CONTRAT_NOTE = "CDI | CDD | STAGE | INTERIM | CONSULTANCE";
-const SEXE_NOTE    = "H  (Homme)  ou  F  (Femme)";
 
 function downloadTemplate() {
   const wb = XLSX.utils.book_new();
 
-  // ── Feuille principale ────────────────────────────────────────────────────
-  const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_COLS, TEMPLATE_EXAMPLE]);
+  const headers = TEMPLATE_COLS.map((c) => c.key);
 
-  // Largeurs de colonnes
-  ws["!cols"] = TEMPLATE_COLS.map((col) => ({
-    wch: Math.max(col.length + 4, 18),
-  }));
-
+  // ── Feuille principale — 3 lignes : en-têtes, exemple, ligne vide ────────
+  const ws = XLSX.utils.aoa_to_sheet([headers, TEMPLATE_EXAMPLE, []]);
+  ws["!cols"] = headers.map((h) => ({ wch: Math.max(h.length + 6, 20) }));
   XLSX.utils.book_append_sheet(wb, ws, "Employés");
 
   // ── Feuille instructions ──────────────────────────────────────────────────
-  const wsInfo = XLSX.utils.aoa_to_sheet([
-    ["INSTRUCTIONS"],
+  const infoRows: string[][] = [
+    ["INSTRUCTIONS D'IMPORT"],
     [""],
-    ["• La première ligne doit contenir les en-têtes (ne pas la modifier)."],
-    ["• MATRICULE, NOM et PRENOM sont obligatoires."],
-    ["• Si le matricule existe déjà, la ligne met à jour l'employé existant."],
-    ["• Si le matricule est nouveau, un nouvel employé est créé."],
+    ["Règles générales"],
+    ["• Ne pas modifier la première ligne (en-têtes)."],
+    ["• Seul le champ MATRICULE est obligatoire."],
+    ["• Tous les autres champs peuvent être laissés vides."],
+    ["• Si le MATRICULE existe déjà → mise à jour de l'employé."],
+    ["• Si le MATRICULE est nouveau → création d'un nouvel employé."],
     [""],
-    ["Valeurs acceptées"],
-    [`SEXE    : ${SEXE_NOTE}`],
-    [`CONTRAT : ${CONTRAT_NOTE}`],
-    ["DATE    : format JJ/MM/AAAA ou AAAA-MM-JJ"],
-  ]);
-  wsInfo["!cols"] = [{ wch: 70 }];
+    ["Détail des colonnes", "Obligatoire ?", "Valeurs acceptées"],
+    ...TEMPLATE_COLS.map((c) => [
+      c.key,
+      c.required ? "OUI ✓" : "non",
+      c.note ?? "",
+    ]),
+  ];
+  const wsInfo = XLSX.utils.aoa_to_sheet(infoRows);
+  wsInfo["!cols"] = [{ wch: 25 }, { wch: 14 }, { wch: 45 }];
   XLSX.utils.book_append_sheet(wb, wsInfo, "Instructions");
 
   XLSX.writeFile(wb, "modele_import_employes.xlsx");
