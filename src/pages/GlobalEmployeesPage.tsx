@@ -8,6 +8,7 @@ import EmployeeFormModal from "@/components/employees/EmployeeFormModal";
 import ReinstateEmployeeModal from "@/components/employees/ReinstateEmployeeModal";
 import MissionModal from "@/components/employees/MissionModal";
 import BulkCreateAccountsModal from "@/components/employees/BulkCreateAccountsModal";
+import BulkImportModal from "@/components/employees/BulkImportModal";
 import { Employee } from "@/types/employee";
 import {
   getEmployees,
@@ -866,6 +867,7 @@ export default function GlobalEmployeesPage() {
   const [missionTarget,    setMissionTarget]    = useState<Employee | null>(null);
   const [bulkAccountsOpen, setBulkAccountsOpen] = useState(false);
   const [bulkMatOpen,      setBulkMatOpen]      = useState(false);
+  const [bulkImportOpen,   setBulkImportOpen]   = useState(false);
 
   // ── Dropdowns ────────────────────────────────────────────────────────────────
   const [profileDropdownOpen,  setProfileDropdownOpen]  = useState(false);
@@ -1111,6 +1113,12 @@ export default function GlobalEmployeesPage() {
               <UserPlus size={14} /> Créer les comptes
             </button>
 
+            {/* Ajout en masse */}
+            <button onClick={() => setBulkImportOpen(true)}
+              className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition">
+              <FiUploadCloud size={14} className="text-camublue-600" /> Ajout en masse
+            </button>
+
             {/* Ajouter un employé */}
             <button onClick={handleCreate}
               className="bg-camublue-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-camublue-800 transition text-sm">
@@ -1204,6 +1212,16 @@ export default function GlobalEmployeesPage() {
         {/* Import result */}
         <AnimatePresence>
           {importResult && <ImportResultModal result={importResult} onClose={() => setImportResult(null)} />}
+        </AnimatePresence>
+
+        {/* Ajout en masse */}
+        <AnimatePresence>
+          {bulkImportOpen && (
+            <BulkImportModal
+              onClose={() => setBulkImportOpen(false)}
+              onImported={fetchAllEmployees}
+            />
+          )}
         </AnimatePresence>
       </motion.div>
     </AppLayout>
