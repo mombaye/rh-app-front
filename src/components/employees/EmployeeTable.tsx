@@ -3,7 +3,7 @@ import {
   FaEdit, FaFileExcel, FaUserPlus, FaPaperPlane,
   FaSort, FaSortUp, FaSortDown, FaFilePdf, FaHistory, FaBriefcase, FaExchangeAlt,
   FaSearch, FaTimes, FaChevronRight, FaArrowLeft, FaCheck,
-  FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight, FaUsers, FaUserTimes, FaTrash,
+  FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight, FaUsers, FaUserTimes, FaTrash, FaRegSave,
 } from "react-icons/fa";
 import { FiGitCommit } from "react-icons/fi";
 import { TbLogout, TbPlane } from "react-icons/tb";
@@ -39,6 +39,14 @@ interface Props {
 }
 
 type SortKey = "matricule" | "nom" | "prenom" | "fonction" | "service";
+type ExportPreset = {
+  id: string;
+  name: string;
+  status: "ACTIVE" | "EXITED" | "ALL";
+  cols: EmpExportColKey[];
+  createdAt: string;
+};
+const PRESET_STORAGE_KEY = "emp_export_presets";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
@@ -177,6 +185,12 @@ export default function EmployeesTable({
   const [showExportDlg, setShowExportDlg] = useState(false);
   const [exportCols,    setExportCols]    = useState<EmpExportColKey[]>([...EMP_DEFAULT_COLS]);
   const [exportStatus,  setExportStatus]  = useState<"ACTIVE" | "EXITED" | "ALL">("ALL");
+  const [exportPresets, setExportPresets] = useState<ExportPreset[]>(() => {
+    try { const r = localStorage.getItem(PRESET_STORAGE_KEY); return r ? JSON.parse(r) : []; }
+    catch { return []; }
+  });
+  const [savingPreset,  setSavingPreset]  = useState(false);
+  const [presetName,    setPresetName]    = useState("");
   const [payslipOpen, setPayslipOpen] = useState(false);
   const [payslipEmp, setPayslipEmp] = useState<Employee | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -444,6 +458,35 @@ export default function EmployeesTable({
     exportEmployeesXLSX(toExport, exportCols);
     setShowExportDlg(false);
     toast.success(`${toExport.length} employé(s) exporté(s) ✓`);
+  };
+
+  const persistPresets = (list: ExportPreset[]) => {
+    setExportPresets(list);
+    try { localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(list)); } catch {}
+  };
+
+  const saveCurrentPreset = () => {
+    if (!presetName.trim()) return;
+    const preset: ExportPreset = {
+      id: Date.now().toString(),
+      name: presetName.trim(),
+      status: exportStatus,
+      cols: [...exportCols],
+      createdAt: new Date().toISOString(),
+    };
+    persistPresets([...exportPresets, preset]);
+    setPresetName("");
+    setSavingPreset(false);
+    toast.success(`Modèle « ${preset.name} » enregistré`);
+  };
+
+  const loadPreset = (preset: ExportPreset) => {
+    setExportStatus(preset.status);
+    setExportCols(preset.cols);
+  };
+
+  const deletePreset = (id: string) => {
+    persistPresets(exportPresets.filter((p) => p.id !== id));
   };
 
   const StatusBadge = ({ e }: { e: Employee }) => {
@@ -1331,109 +1374,188 @@ export default function EmployeesTable({
             className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4">
             <motion.div
               initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
                 <div>
                   <h2 className="font-black text-camublue-900 text-base">Export personnalisé</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Sélectionnez le périmètre et les colonnes à inclure</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Configurez et enregistrez vos modèles d'extraction</p>
                 </div>
-                <button onClick={() => setShowExportDlg(false)}
+                <button onClick={() => { setShowExportDlg(false); setSavingPreset(false); setPresetName(""); }}
                   className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-500">
                   <FaTimes size={14} />
                 </button>
               </div>
 
-              {/* Périmètre */}
-              <div className="px-5 pt-4 pb-2">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Périmètre</p>
-                <div className="flex gap-2">
-                  {([["ALL","Tous"],["ACTIVE","Actifs"],["EXITED","Sortis"]] as const).map(([s, l]) => (
-                    <button key={s} onClick={() => setExportStatus(s)}
-                      className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
-                        exportStatus === s
-                          ? "bg-camublue-900 text-white border-camublue-900"
-                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Colonnes */}
-              <div className="px-5 py-4">
-                <div className="flex justify-between items-center mb-3">
-                  <p className="text-xs font-semibold text-slate-500">
-                    {exportCols.length}/{EMP_EXPORT_COLS.length} colonnes sélectionnées
-                  </p>
-                  <div className="flex gap-2">
-                    <button onClick={() => setExportCols(EMP_EXPORT_COLS.map((c) => c.key))}
-                      className="text-xs text-camublue-700 hover:underline font-medium">Tout</button>
-                    <span className="text-slate-300">|</span>
-                    <button onClick={() => setExportCols([])}
-                      className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
+              {/* Modèles enregistrés */}
+              {exportPresets.length > 0 && (
+                <div className="px-5 pt-3 pb-2 shrink-0 border-b border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Mes modèles enregistrés</p>
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                    {exportPresets.map((preset) => (
+                      <div key={preset.id}
+                        className="flex items-center gap-1.5 shrink-0 bg-camublue-50 border border-camublue-200 rounded-lg px-3 py-1.5 group">
+                        <button
+                          onClick={() => loadPreset(preset)}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-camublue-800 hover:text-camublue-900 transition"
+                          title="Appliquer ce modèle">
+                          <FaFileExcel size={11} className="text-green-600 shrink-0" />
+                          <span className="max-w-[120px] truncate">{preset.name}</span>
+                          <span className="text-[10px] text-camublue-400 font-normal">
+                            {preset.status === "ALL" ? "Tous" : preset.status === "ACTIVE" ? "Actifs" : "Sortis"}
+                            {" · "}{preset.cols.length} col.
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => deletePreset(preset.id)}
+                          className="opacity-0 group-hover:opacity-100 transition text-slate-400 hover:text-red-500 ml-1"
+                          title="Supprimer ce modèle">
+                          <FaTimes size={9} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <div className="max-h-72 overflow-y-auto pr-1 space-y-4">
-                  {Array.from(new Set(EMP_EXPORT_COLS.map((c) => c.group))).map((group) => {
-                    const groupCols = EMP_EXPORT_COLS.filter((c) => c.group === group);
-                    const allChecked = groupCols.every((c) => exportCols.includes(c.key));
-                    return (
-                      <div key={group}>
-                        {/* En-tête groupe + toggle tout le groupe */}
-                        <div className="flex items-center justify-between mb-1.5">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{group}</p>
-                          <button
-                            onClick={() =>
-                              setExportCols((prev) =>
-                                allChecked
-                                  ? prev.filter((k) => !groupCols.some((c) => c.key === k))
-                                  : [...new Set([...prev, ...groupCols.map((c) => c.key)])]
-                              )
-                            }
-                            className="text-[10px] text-camublue-700 hover:underline font-semibold"
-                          >
-                            {allChecked ? "Désélectionner" : "Tout sélectionner"}
-                          </button>
+              )}
+
+              {/* Scrollable body */}
+              <div className="overflow-y-auto flex-1 min-h-0">
+
+                {/* Périmètre */}
+                <div className="px-5 pt-4 pb-2">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Périmètre</p>
+                  <div className="flex gap-2">
+                    {([["ALL","Tous"],["ACTIVE","Actifs"],["EXITED","Sortis"]] as const).map(([s, l]) => (
+                      <button key={s} onClick={() => setExportStatus(s)}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
+                          exportStatus === s
+                            ? "bg-camublue-900 text-white border-camublue-900"
+                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                        }`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Colonnes */}
+                <div className="px-5 py-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <p className="text-xs font-semibold text-slate-500">
+                      {exportCols.length}/{EMP_EXPORT_COLS.length} colonnes sélectionnées
+                    </p>
+                    <div className="flex gap-2">
+                      <button onClick={() => setExportCols(EMP_EXPORT_COLS.map((c) => c.key))}
+                        className="text-xs text-camublue-700 hover:underline font-medium">Tout</button>
+                      <span className="text-slate-300">|</span>
+                      <button onClick={() => setExportCols([])}
+                        className="text-xs text-slate-500 hover:underline font-medium">Aucun</button>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    {Array.from(new Set(EMP_EXPORT_COLS.map((c) => c.group))).map((group) => {
+                      const groupCols = EMP_EXPORT_COLS.filter((c) => c.group === group);
+                      const allChecked = groupCols.every((c) => exportCols.includes(c.key));
+                      return (
+                        <div key={group}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{group}</p>
+                            <button
+                              onClick={() =>
+                                setExportCols((prev) =>
+                                  allChecked
+                                    ? prev.filter((k) => !groupCols.some((c) => c.key === k))
+                                    : [...new Set([...prev, ...groupCols.map((c) => c.key)])]
+                                )
+                              }
+                              className="text-[10px] text-camublue-700 hover:underline font-semibold"
+                            >
+                              {allChecked ? "Désélectionner" : "Tout sélectionner"}
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {groupCols.map((col) => {
+                              const checked = exportCols.includes(col.key);
+                              return (
+                                <label key={col.key}
+                                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition text-xs ${
+                                    checked
+                                      ? "bg-camublue-50 border-camublue-200 text-camublue-800"
+                                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                                  }`}>
+                                  <input type="checkbox" checked={checked} onChange={() => {
+                                    setExportCols((prev) =>
+                                      prev.includes(col.key) ? prev.filter((k) => k !== col.key) : [...prev, col.key]
+                                    );
+                                  }} className="accent-camublue-700 w-3 h-3 shrink-0" />
+                                  <span className="font-medium leading-tight">{col.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {groupCols.map((col) => {
-                            const checked = exportCols.includes(col.key);
-                            return (
-                              <label key={col.key}
-                                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition text-xs ${
-                                  checked
-                                    ? "bg-camublue-50 border-camublue-200 text-camublue-800"
-                                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                                }`}>
-                                <input type="checkbox" checked={checked} onChange={() => {
-                                  setExportCols((prev) =>
-                                    prev.includes(col.key) ? prev.filter((k) => k !== col.key) : [...prev, col.key]
-                                  );
-                                }} className="accent-camublue-700 w-3 h-3 shrink-0" />
-                                <span className="font-medium leading-tight">{col.label}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
               {/* Footer */}
-              <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                <button onClick={() => setShowExportDlg(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
-                  Annuler
-                </button>
-                <button onClick={doExport} disabled={exportCols.length === 0}
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
-                  <FaFileExcel className="text-green-300" size={13} />
-                  Télécharger
-                </button>
+              <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 shrink-0">
+                {/* Zone d'enregistrement inline */}
+                <AnimatePresence>
+                  {savingPreset && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                      className="mb-3 overflow-hidden">
+                      <div className="flex gap-2 items-center bg-white border border-camublue-200 rounded-xl px-3 py-2">
+                        <FaFileExcel size={13} className="text-green-600 shrink-0" />
+                        <input
+                          autoFocus
+                          value={presetName}
+                          onChange={(e) => setPresetName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") saveCurrentPreset(); if (e.key === "Escape") { setSavingPreset(false); setPresetName(""); } }}
+                          placeholder="Nom du modèle (ex : Extraction RH mensuelle)"
+                          className="flex-1 text-xs outline-none text-slate-700 placeholder-slate-400 bg-transparent"
+                        />
+                        <button
+                          onClick={saveCurrentPreset}
+                          disabled={!presetName.trim()}
+                          className="text-xs font-bold text-camublue-700 hover:text-camublue-900 disabled:opacity-40 transition shrink-0">
+                          Enregistrer
+                        </button>
+                        <button onClick={() => { setSavingPreset(false); setPresetName(""); }}
+                          className="text-slate-400 hover:text-slate-600 transition shrink-0">
+                          <FaTimes size={11} />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowExportDlg(false)}
+                      className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">
+                      Annuler
+                    </button>
+                    {!savingPreset && (
+                      <button
+                        onClick={() => setSavingPreset(true)}
+                        disabled={exportCols.length === 0}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-camublue-700 border border-camublue-200 hover:bg-camublue-50 disabled:opacity-40 transition">
+                        <FaRegSave size={13} />
+                        Enregistrer le modèle
+                      </button>
+                    )}
+                  </div>
+                  <button onClick={doExport} disabled={exportCols.length === 0}
+                    className="flex items-center gap-2 px-5 py-2 rounded-xl bg-camublue-900 text-white text-sm font-bold hover:bg-camublue-800 disabled:opacity-50 transition">
+                    <FaFileExcel className="text-green-300" size={13} />
+                    Télécharger
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
