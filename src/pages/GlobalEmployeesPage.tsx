@@ -9,6 +9,7 @@ import ReinstateEmployeeModal from "@/components/employees/ReinstateEmployeeModa
 import MissionModal from "@/components/employees/MissionModal";
 import BulkCreateAccountsModal from "@/components/employees/BulkCreateAccountsModal";
 import BulkImportModal from "@/components/employees/BulkImportModal";
+import ExportModal from "@/components/employees/ExportModal";
 import { Employee } from "@/types/employee";
 import {
   getEmployees,
@@ -41,6 +42,7 @@ import {
   FiEdit3,
   FiArrowRight,
   FiUploadCloud,
+  FiDownload,
   FiClock,
 } from "react-icons/fi";
 import { UserPlus } from "lucide-react";
@@ -868,6 +870,7 @@ export default function GlobalEmployeesPage() {
   const [bulkAccountsOpen, setBulkAccountsOpen] = useState(false);
   const [bulkMatOpen,      setBulkMatOpen]      = useState(false);
   const [bulkImportOpen,   setBulkImportOpen]   = useState(false);
+  const [exportOpen,       setExportOpen]       = useState(false);
 
   // ── Dropdowns ────────────────────────────────────────────────────────────────
   const [profileDropdownOpen,  setProfileDropdownOpen]  = useState(false);
@@ -1113,6 +1116,12 @@ export default function GlobalEmployeesPage() {
               <UserPlus size={14} /> Créer les comptes
             </button>
 
+            {/* Extraction */}
+            <button onClick={() => setExportOpen(true)} disabled={isLoading || allEmployees.length === 0}
+              className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed">
+              <FiDownload size={14} className="text-emerald-600" /> Extraction
+            </button>
+
             {/* Ajout en masse */}
             <button onClick={() => setBulkImportOpen(true)}
               className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition">
@@ -1222,6 +1231,11 @@ export default function GlobalEmployeesPage() {
               onImported={fetchAllEmployees}
             />
           )}
+        </AnimatePresence>
+
+        {/* Extraction personnalisée */}
+        <AnimatePresence>
+          {exportOpen && <ExportModal onClose={() => setExportOpen(false)} />}
         </AnimatePresence>
       </motion.div>
     </AppLayout>

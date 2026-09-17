@@ -208,18 +208,20 @@ export const interimToInterim = async (
 export const exportEmployeesExcel = async (opts?: {
   status?: "ALL" | "ACTIVE" | "EXITED";
   type_contrat?: ContractType;
+  columns?: string[];
+  filename?: string;
 }) => {
   const params: Record<string, string> = {};
-  if (opts?.status)       params.status       = opts.status;
-  if (opts?.type_contrat) params.type_contrat = opts.type_contrat;
+  if (opts?.status)              params.status       = opts.status;
+  if (opts?.type_contrat)        params.type_contrat = opts.type_contrat;
+  if (opts?.columns?.length)     params.columns      = opts.columns.join(",");
   const res = await api.get("/api/employees/export/", {
     params,
     responseType: "blob",
   });
   const blob = new Blob([res.data], { type: res.headers["content-type"] });
-  const filename = `employees_export_${opts?.type_contrat ?? "all"}_${new Date()
-    .toISOString()
-    .slice(0, 10)}.xlsx`;
+  const filename = opts?.filename
+    ?? `extraction_${new Date().toISOString().slice(0, 10)}.xlsx`;
   const url = window.URL.createObjectURL(blob);
   const a   = document.createElement("a");
   a.href     = url;
