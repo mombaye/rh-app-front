@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback } from "react";
 import ManagerSidebar from "@/components/manager/ManagerSidebar";
+import FeedbackBanner from "@/components/feedback/FeedbackBanner";
 import { useAuth } from "@/contexts/useAuth";
 import { leaveRequestService, exitAuthorizationService } from "@/services/leaveService";
 import { missionService } from "@/services/missionService";
@@ -33,6 +34,7 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
     <div className="min-h-screen bg-gray-50 flex">
       <ManagerSidebar pendingCount={pendingCount} />
       <main className="flex-1 p-4 md:p-8 overflow-auto">{children}</main>
+      <FeedbackBanner />
     </div>
   );
 }

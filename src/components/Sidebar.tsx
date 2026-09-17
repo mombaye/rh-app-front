@@ -20,6 +20,7 @@ import {
   Stethoscope,
   ClipboardList,
   Ticket,
+  MessageSquareHeart,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { FEATURES, COUNTRY } from "@/config/features";
@@ -165,6 +166,11 @@ export default function Sidebar() {
       label: "Signalements",
       path: "/rh/all-tickets",
       icon: <Ticket size={20} />,
+    },
+    {
+      label: "Avis employés",
+      path: "/rh/feedback",
+      icon: <MessageSquareHeart size={20} />,
     },
     ...(isHse && FEATURES.hse ? [{
       label: "Gestion Passeports",

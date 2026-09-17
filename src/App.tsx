@@ -96,6 +96,7 @@ const RhAttestationsPage        = lazy(() => import("@/pages/rh/RhAttestationsPa
 const RhMissionsPage            = lazy(() => import("@/pages/rh/RhMissionsPage"));
 const RhOmPointagePage          = lazy(() => import("@/pages/rh/RhOmPointagePage"));
 const RhOmForfaitsPage          = lazy(() => import("@/pages/rh/RhOmForfaitsPage"));
+const RhFeedbackPage            = lazy(() => import("@/pages/rh/RhFeedbackPage"));
 
 // HSE
 const PassportManagementPage    = lazy(() => import("@/pages/hse/PassportManagementPage"));
@@ -365,6 +366,7 @@ function App() {
         {FEATURES.missions     && <Route path="/rh/missions"     element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMissionsPage     /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />}
         <Route path="/rh/om-pointage"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhOmPointagePage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/om-forfaits"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhOmForfaitsPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        <Route path="/rh/feedback"     element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhFeedbackPage   /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
 
         {/* ── Espace RH ────────────────────────────────────────── */}
         <Route path="/dashboard" element={
