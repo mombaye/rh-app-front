@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/AppLayout";
 import api from "@/api/axios";
 import toast from "react-hot-toast";
-import { FiStar, FiPlus, FiToggleLeft, FiToggleRight, FiMessageSquare, FiUsers, FiChevronDown, FiChevronUp } from "react-icons/fi";
+import { FiStar, FiPlus, FiToggleLeft, FiToggleRight, FiMessageSquare, FiUsers, FiChevronDown, FiChevronUp, FiX } from "react-icons/fi";
 import { ImSpinner2 } from "react-icons/im";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -130,32 +130,48 @@ export default function RhFeedbackPage() {
           </button>
         </div>
 
-        {/* Formulaire création */}
+        {/* Modal création */}
         <AnimatePresence>
           {createOpen && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+              onClick={e => { if (e.target === e.currentTarget) { setCreateOpen(false); setNewTitle(""); setNewDesc(""); } }}
             >
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-sm">
-                <p className="text-sm font-semibold text-slate-700">Nouvelle campagne</p>
+              <motion.div
+                initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 24, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 300, damping: 28 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-base font-bold text-slate-800">Nouvelle campagne</p>
+                  <button
+                    onClick={() => { setCreateOpen(false); setNewTitle(""); setNewDesc(""); }}
+                    className="p-1 text-slate-300 hover:text-slate-500 rounded-lg transition"
+                  >
+                    <FiX size={16} />
+                  </button>
+                </div>
                 <input
                   autoFocus
                   value={newTitle}
                   onChange={e => setNewTitle(e.target.value)}
-                  placeholder="Titre de la campagne (ex: Votre avis compte !)"
+                  placeholder="Titre de la campagne (ex : Votre avis compte !)"
                   className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-camublue-900/20 focus:bg-white transition"
                 />
                 <textarea
                   value={newDesc}
                   onChange={e => setNewDesc(e.target.value)}
-                  rows={2}
+                  rows={3}
                   placeholder="Description / sous-titre (optionnel)"
                   className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 resize-none bg-slate-50 focus:outline-none focus:ring-2 focus:ring-camublue-900/20 focus:bg-white transition"
                 />
                 <p className="text-xs text-slate-400">La campagne sera activée immédiatement et les autres seront désactivées.</p>
                 <div className="flex gap-2 justify-end">
-                  <button onClick={() => setCreateOpen(false)} className="text-sm px-4 py-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition">
+                  <button
+                    onClick={() => { setCreateOpen(false); setNewTitle(""); setNewDesc(""); }}
+                    className="text-sm px-4 py-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition"
+                  >
                     Annuler
                   </button>
                   <button
@@ -167,7 +183,7 @@ export default function RhFeedbackPage() {
                     Créer et activer
                   </button>
                 </div>
-              </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
