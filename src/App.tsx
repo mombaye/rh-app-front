@@ -189,6 +189,9 @@ function App() {
           }
         />
 
+        {/* ── Licence désactivée (503 backend) ────────────────── */}
+        <Route path="/maintenance" element={<MaintenancePage />} />
+
         {/* ── Welcome / Accueil ────────────────────────────────── */}
         <Route path="/" element={MAINTENANCE_MODE ? <MaintenancePage /> : <WelcomePage />} />
 

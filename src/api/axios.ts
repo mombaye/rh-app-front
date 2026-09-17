@@ -41,6 +41,14 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // 503 = plateforme désactivée par l'administrateur (licence expirée / révoquée)
+    if (error.response?.status === 503 && error.response?.data?.code === "LICENSE_INACTIVE") {
+      if (!window.location.pathname.startsWith("/maintenance")) {
+        window.location.href = "/maintenance";
+      }
+      return Promise.reject(error);
+    }
+
     // Si c'est l'endpoint refresh lui-même qui échoue → logout immédiat sans boucle
     if (originalRequest?.url?.includes("/api/auth/token/refresh/")) {
       localStorage.removeItem("access_token");
