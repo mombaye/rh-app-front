@@ -28,6 +28,7 @@ const TEMPLATE_COLS: ColDef[] = [
   { key: "CONTRAT",        required: false, note: "CDI | CDD | STAGE | INTERIM | CONSULTANCE" },
   { key: "DATE NAISSANCE", required: false, note: "JJ/MM/AAAA ou AAAA-MM-JJ" },
   { key: "DATE EMBAUCHE",  required: false, note: "JJ/MM/AAAA ou AAAA-MM-JJ" },
+  { key: "DATE FIN CDD",   required: false, note: "JJ/MM/AAAA ou AAAA-MM-JJ — requis si CONTRAT = CDD" },
   { key: "BUSINESS LINE",  required: false },
   { key: "PROJET",         required: false },
   { key: "SERVICE",        required: false, note: "Département / service" },
@@ -39,7 +40,8 @@ const TEMPLATE_COLS: ColDef[] = [
 
 const TEMPLATE_EXAMPLE = [
   "EMP001", "DIALLO", "Amadou", "TECHNICIEN", "H", "CDI",
-  "1990-05-15", "2020-01-10", "BL1", "ESCO", "DEPLOIEMENT",
+  "1990-05-15", "2020-01-10", "",
+  "BL1", "ESCO", "DEPLOIEMENT",
   "PAPA FALL", "Dakar", "amadou.diallo@camusat.com", "771234567",
 ];
 
