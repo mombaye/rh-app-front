@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Search, TableProperties, ArrowLeft, FileDown, Settings2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Search, TableProperties, ArrowLeft, FileDown, Settings2, AlertTriangle, X, Plus, Trash2, Save } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import api from "@/api/axios";
 import toast from "react-hot-toast";
@@ -28,6 +28,13 @@ interface OmRow {
   heures_totales: number;
 }
 
+interface ServiceRate {
+  id?: number;
+  service: string;
+  forfait_hs: number;       // montant forfait si Y > 0
+  astreinte_per_day: number; // montant par jour Z
+}
+
 const STORAGE_KEY = (year: number, month: number) =>
   `om_forfaits_comments_${year}_${month}`;
 
@@ -41,18 +48,34 @@ export default function RhOmForfaitsPage() {
   const [search, setSearch] = useState("");
   const [filterService, setFilterService] = useState("");
 
-  // Taux configurables
-  const [forfaitHsRate, setForfaitHsRate] = useState(60000);
-  const [astreinteRate, setAstreinteRate] = useState(15000);
-  const [showRates, setShowRates] = useState(false);
+  // Tarifs par service
+  const [serviceRates, setServiceRates] = useState<ServiceRate[]>([]);
+  const [ratesLoading, setRatesLoading] = useState(false);
+  const [showRatesModal, setShowRatesModal] = useState(false);
+  // Edition locale dans le modal
+  const [editRates, setEditRates] = useState<ServiceRate[]>([]);
+  const [savingRates, setSavingRates] = useState(false);
 
-  // Commentaires (sauvegardés localement par employé)
+  // Commentaires
   const [comments, setComments] = useState<Record<number, string>>({});
-
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(1);
 
-  // Charger commentaires depuis localStorage au changement de période
+  // Map service → rate pour lookup rapide
+  const rateByService = useMemo(() => {
+    const m: Record<string, ServiceRate> = {};
+    serviceRates.forEach(r => { m[r.service] = r; });
+    return m;
+  }, [serviceRates]);
+
+  // Services présents dans les données + ceux configurés
+  const allServices = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach(r => { if (r.service) set.add(r.service); });
+    serviceRates.forEach(r => set.add(r.service));
+    return Array.from(set).sort();
+  }, [rows, serviceRates]);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY(year, month));
@@ -80,7 +103,19 @@ export default function RhOmForfaitsPage() {
     }
   }, [year, month]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const fetchRates = useCallback(async () => {
+    setRatesLoading(true);
+    try {
+      const res = await api.get("/api/attendance/om-service-rates/");
+      setServiceRates(res.data || []);
+    } catch {
+      // silencieux
+    } finally {
+      setRatesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); fetchRates(); }, [fetchData, fetchRates]);
 
   const services = useMemo(
     () => Array.from(new Set(rows.map(r => r.service).filter(Boolean))).sort(),
@@ -110,15 +145,13 @@ export default function RhOmForfaitsPage() {
     [filtered, page, pageSize]
   );
 
-  // Calcul forfait par employé
   function calcForfait(row: OmRow) {
-    const forfaitHs = row.nb_heures_sup > 0 ? forfaitHsRate : 0;
-    const montantAstr = row.nb_jours_astreintes * astreinteRate;
-    const total = forfaitHs + montantAstr;
-    return { forfaitHs, montantAstr, total };
+    const rate = rateByService[row.service];
+    const forfaitHs = rate && row.nb_heures_sup > 0 ? rate.forfait_hs : 0;
+    const montantAstr = rate ? rate.astreinte_per_day * row.nb_jours_astreintes : 0;
+    return { forfaitHs, montantAstr, total: forfaitHs + montantAstr, hasRate: !!rate };
   }
 
-  // Totaux généraux (sur filtered)
   const totals = useMemo(() => filtered.reduce((acc, r) => {
     const f = calcForfait(r);
     return {
@@ -127,7 +160,12 @@ export default function RhOmForfaitsPage() {
       montantAstr: acc.montantAstr + f.montantAstr,
       total: acc.total + f.total,
     };
-  }, { forfaitHs: 0, nbJoursAstr: 0, montantAstr: 0, total: 0 }), [filtered, forfaitHsRate, astreinteRate]);
+  }, { forfaitHs: 0, nbJoursAstr: 0, montantAstr: 0, total: 0 }), [filtered, rateByService]);
+
+  const servicesWithoutRate = useMemo(
+    () => services.filter(s => !rateByService[s]),
+    [services, rateByService]
+  );
 
   function fmt(n: number) {
     return n === 0 ? "0" : n.toLocaleString("fr-FR");
@@ -135,6 +173,60 @@ export default function RhOmForfaitsPage() {
 
   function prevMonth() { if (month === 1) { setYear(y => y - 1); setMonth(12); } else setMonth(m => m - 1); }
   function nextMonth() { if (month === 12) { setYear(y => y + 1); setMonth(1); } else setMonth(m => m + 1); }
+
+  // ── Modal tarifs ────────────────────────────────────────────────────────────
+
+  function openRatesModal() {
+    // Initialiser l'édition avec les tarifs existants + les services manquants
+    const existing = serviceRates.map(r => ({ ...r }));
+    const missingServices = allServices.filter(s => !rateByService[s]);
+    const newEntries: ServiceRate[] = missingServices.map(s => ({ service: s, forfait_hs: 0, astreinte_per_day: 0 }));
+    setEditRates([...existing, ...newEntries]);
+    setShowRatesModal(true);
+  }
+
+  function addCustomService() {
+    setEditRates(prev => [...prev, { service: "", forfait_hs: 0, astreinte_per_day: 0 }]);
+  }
+
+  function removeEditRate(idx: number) {
+    setEditRates(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  async function saveRates() {
+    setSavingRates(true);
+    try {
+      // Upsert chaque tarif (ignore les lignes avec service vide)
+      const valid = editRates.filter(r => r.service.trim());
+      for (const r of valid) {
+        await api.post("/api/attendance/om-service-rates/upsert/", {
+          service: r.service.trim(),
+          forfait_hs: r.forfait_hs,
+          astreinte_per_day: r.astreinte_per_day,
+        });
+      }
+      await fetchRates();
+      setShowRatesModal(false);
+      toast.success("Tarifs enregistrés.");
+    } catch {
+      toast.error("Erreur lors de la sauvegarde.");
+    } finally {
+      setSavingRates(false);
+    }
+  }
+
+  async function deleteRate(id: number) {
+    try {
+      await api.delete(`/api/attendance/om-service-rates/${id}/delete/`);
+      setServiceRates(prev => prev.filter(r => r.id !== id));
+      setEditRates(prev => prev.filter(r => r.id !== id));
+      toast.success("Tarif supprimé.");
+    } catch {
+      toast.error("Erreur suppression.");
+    }
+  }
+
+  // ── Export Excel ─────────────────────────────────────────────────────────────
 
   function exportExcel() {
     const sBorderThin = { border: { top: { style: "thin", color: { rgb: "CCCCCC" } }, bottom: { style: "thin", color: { rgb: "CCCCCC" } }, left: { style: "thin", color: { rgb: "CCCCCC" } }, right: { style: "thin", color: { rgb: "CCCCCC" } } } };
@@ -148,7 +240,7 @@ export default function RhOmForfaitsPage() {
     const sTotal = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 }, fill: { fgColor: { rgb: "1E293B" } }, alignment: { horizontal: "center" }, ...sBorderThin };
     const sTotalLabel = { ...sTotal, alignment: { horizontal: "left" } };
 
-    const titleRow = [`FORFAITS O&M — ${MONTHS_FR[month - 1].toUpperCase()} ${year}  |  Forfait HS : ${fmt(forfaitHsRate)} FCFA  |  Taux astreinte : ${fmt(astreinteRate)} FCFA/j`];
+    const titleRow = [`FORFAITS O&M — ${MONTHS_FR[month - 1].toUpperCase()} ${year}`];
     const headers = ["N°", "MATRICULE", "NOM", "PRENOM", "SERVICE", "QUALIFICATION", "ZONE", "MANAGER N+1",
       "FORFAIT HS", "ASTREINTES / NBR JOURS", "MONTANTS ASTREINTES", "MONTANT TOTAL (HS+Astreinte)", "COMMENTAIRES OU OMISSIONS"];
 
@@ -177,7 +269,6 @@ export default function RhOmForfaitsPage() {
       const addr = XLSXStyle.utils.encode_cell({ r: 1, c });
       if (ws[addr]) ws[addr].s = c < 8 ? sHeaderLeft : sHeader;
     }
-
     for (let r = 2; r < 2 + dataRows.length; r++) {
       for (let c = 0; c < nCols; c++) {
         const addr = XLSXStyle.utils.encode_cell({ r, c });
@@ -191,14 +282,12 @@ export default function RhOmForfaitsPage() {
         };
       }
     }
-
     const totR = 2 + dataRows.length;
     for (let c = 0; c < nCols; c++) {
       const addr = XLSXStyle.utils.encode_cell({ r: totR, c });
       if (!ws[addr]) ws[addr] = { v: "", t: "s" };
       ws[addr].s = c === 1 ? sTotalLabel : sTotal;
     }
-
     ws["!cols"] = [
       { wch: 5 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 20 },
       { wch: 14 }, { wch: 22 }, { wch: 20 }, { wch: 28 }, { wch: 30 },
@@ -236,11 +325,17 @@ export default function RhOmForfaitsPage() {
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
               <button
-                onClick={() => setShowRates(v => !v)}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border transition shadow-sm ${showRates ? "bg-[#003c71] text-white border-[#003c71]" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                onClick={openRatesModal}
+                disabled={ratesLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border transition shadow-sm bg-white border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
               >
                 <Settings2 size={14} />
-                <span className="hidden sm:inline">Taux</span>
+                <span className="hidden sm:inline">Tarifs par service</span>
+                {servicesWithoutRate.length > 0 && (
+                  <span className="ml-1 bg-orange-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    {servicesWithoutRate.length}
+                  </span>
+                )}
               </button>
               <button
                 onClick={exportExcel}
@@ -258,31 +353,14 @@ export default function RhOmForfaitsPage() {
             </div>
           </div>
 
-          {/* Panneau taux configurables */}
-          {showRates && (
-            <div className="flex flex-wrap items-center gap-4 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-              <p className="text-xs font-semibold text-slate-600 shrink-0">Taux de calcul :</p>
-              <label className="flex items-center gap-2 text-sm">
-                <span className="text-slate-600 text-xs whitespace-nowrap">Forfait HS (FCFA)</span>
-                <input
-                  type="number"
-                  value={forfaitHsRate}
-                  onChange={e => setForfaitHsRate(Number(e.target.value))}
-                  className="w-28 px-2 py-1 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#003c71]/20"
-                  min={0} step={5000}
-                />
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <span className="text-slate-600 text-xs whitespace-nowrap">Taux astreinte / jour (FCFA)</span>
-                <input
-                  type="number"
-                  value={astreinteRate}
-                  onChange={e => setAstreinteRate(Number(e.target.value))}
-                  className="w-28 px-2 py-1 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#003c71]/20"
-                  min={0} step={1000}
-                />
-              </label>
-              <p className="text-[11px] text-slate-400">Les taux s'appliquent au calcul en temps réel — non enregistrés.</p>
+          {/* Alerte services sans tarif */}
+          {servicesWithoutRate.length > 0 && (
+            <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-xl px-4 py-2.5 text-sm text-orange-700">
+              <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+              <span>
+                <b>{servicesWithoutRate.length} service{servicesWithoutRate.length > 1 ? "s" : ""} sans tarif</b> : {servicesWithoutRate.join(", ")}.
+                {" "}<button onClick={openRatesModal} className="underline font-semibold hover:text-orange-800">Configurer les tarifs</button>
+              </span>
             </div>
           )}
         </div>
@@ -341,9 +419,12 @@ export default function RhOmForfaitsPage() {
                 const f = calcForfait(row);
                 return (
                   <div key={row.employee_id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
-                      <p className="font-semibold text-slate-800 text-sm truncate">{row.nom} {row.prenom}</p>
-                      <p className="text-xs text-slate-400">{row.matricule}{row.service ? ` · ${row.service}` : ""}</p>
+                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-slate-800 text-sm truncate">{row.nom} {row.prenom}</p>
+                        <p className="text-xs text-slate-400">{row.matricule}{row.service ? ` · ${row.service}` : ""}</p>
+                      </div>
+                      {!f.hasRate && <AlertTriangle size={14} className="text-orange-400 shrink-0" title="Pas de tarif pour ce service" />}
                     </div>
                     <div className="px-4 py-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                       <div>
@@ -351,7 +432,7 @@ export default function RhOmForfaitsPage() {
                         <p className={`font-semibold ${f.forfaitHs > 0 ? "text-amber-600" : "text-slate-400"}`}>{fmt(f.forfaitHs)}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-slate-400 uppercase font-medium">Nbr jours astr.</p>
+                        <p className="text-[10px] text-slate-400 uppercase font-medium">Jours astr.</p>
                         <p className={`font-semibold ${row.nb_jours_astreintes > 0 ? "text-purple-600" : "text-slate-400"}`}>{row.nb_jours_astreintes}</p>
                       </div>
                       <div>
@@ -391,17 +472,17 @@ export default function RhOmForfaitsPage() {
                     <th className="sticky left-0 bg-[#003c71] px-3 py-3 text-left font-semibold min-w-[160px] z-10 border-r border-white/10">Employé</th>
                     <th className="px-3 py-3 text-left font-semibold min-w-[90px]">Service</th>
                     <th className="px-3 py-3 text-left font-semibold min-w-[110px]">Manager</th>
-                    <th className="px-3 py-3 text-center font-semibold min-w-[110px]">
+                    <th className="px-3 py-3 text-center font-semibold min-w-[120px]">
                       FORFAIT HS
-                      <div className="text-[10px] font-normal text-white/60">{fmt(forfaitHsRate)} FCFA/ag.</div>
+                      <div className="text-[10px] font-normal text-white/60">si jours Y &gt; 0</div>
                     </th>
                     <th className="px-3 py-3 text-center font-semibold min-w-[100px]">
                       ASTREINTES
-                      <div className="text-[10px] font-normal text-white/60">Nbr jours</div>
+                      <div className="text-[10px] font-normal text-white/60">Nbr jours Z</div>
                     </th>
-                    <th className="px-3 py-3 text-center font-semibold min-w-[120px]">
+                    <th className="px-3 py-3 text-center font-semibold min-w-[130px]">
                       MONTANT ASTR.
-                      <div className="text-[10px] font-normal text-white/60">{fmt(astreinteRate)} FCFA/j</div>
+                      <div className="text-[10px] font-normal text-white/60">tarif/j × nb jours</div>
                     </th>
                     <th className="px-3 py-3 text-center font-semibold min-w-[130px]">
                       TOTAL
@@ -419,7 +500,12 @@ export default function RhOmForfaitsPage() {
                           <div className="truncate max-w-[155px]">{row.nom} {row.prenom}</div>
                           <div className="text-[10px] text-slate-400 font-normal">{row.matricule}</div>
                         </td>
-                        <td className="px-3 py-2 text-slate-500 text-[11px] truncate max-w-[88px]">{row.service}</td>
+                        <td className="px-3 py-2 text-slate-500 text-[11px] truncate max-w-[88px]">
+                          <div className="flex items-center gap-1">
+                            {!f.hasRate && <AlertTriangle size={11} className="text-orange-400 shrink-0" title="Pas de tarif pour ce service" />}
+                            {row.service}
+                          </div>
+                        </td>
                         <td className="px-3 py-2 text-slate-500 text-[11px] truncate max-w-[108px]">{row.n1_manager_name || row.manager}</td>
                         <td className="px-3 py-2 text-center font-semibold">
                           <span className={f.forfaitHs > 0 ? "text-amber-600" : "text-slate-300"}>{fmt(f.forfaitHs)}</span>
@@ -510,6 +596,119 @@ export default function RhOmForfaitsPage() {
           </div>
         )}
       </div>
+
+      {/* ── Modal Tarifs par service ──────────────────────────────────────────── */}
+      {showRatesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            {/* Header modal */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-800">Tarifs par service</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Forfait H.Sup (si jours Y &gt; 0) et tarif Astreinte/jour (jours Z)</p>
+              </div>
+              <button onClick={() => setShowRatesModal(false)} className="p-2 rounded-xl hover:bg-slate-100 transition">
+                <X size={18} className="text-slate-500" />
+              </button>
+            </div>
+
+            {/* Corps du modal */}
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-slate-400 uppercase">
+                    <th className="text-left pb-2 font-semibold">Service</th>
+                    <th className="text-center pb-2 font-semibold px-3">
+                      <span className="text-amber-600">Forfait H.Sup</span>
+                      <div className="text-[10px] text-slate-400 normal-case font-normal">FCFA (si Y &gt; 0)</div>
+                    </th>
+                    <th className="text-center pb-2 font-semibold px-3">
+                      <span className="text-purple-600">Astreinte / jour</span>
+                      <div className="text-[10px] text-slate-400 normal-case font-normal">FCFA × nb jours Z</div>
+                    </th>
+                    <th className="w-8" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {editRates.map((rate, idx) => (
+                    <tr key={idx}>
+                      <td className="py-2 pr-3">
+                        {rate.id ? (
+                          <span className="font-medium text-slate-700">{rate.service}</span>
+                        ) : (
+                          <input
+                            type="text"
+                            value={rate.service}
+                            onChange={e => setEditRates(prev => prev.map((r, i) => i === idx ? { ...r, service: e.target.value } : r))}
+                            placeholder="Nom du service..."
+                            className="w-full px-2 py-1 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#003c71]/20"
+                          />
+                        )}
+                      </td>
+                      <td className="py-2 px-3">
+                        <input
+                          type="number"
+                          value={rate.forfait_hs}
+                          onChange={e => setEditRates(prev => prev.map((r, i) => i === idx ? { ...r, forfait_hs: Number(e.target.value) } : r))}
+                          className="w-full px-2 py-1 text-sm border border-amber-200 rounded-lg bg-amber-50/40 focus:outline-none focus:ring-2 focus:ring-amber-300/40 text-center font-semibold text-amber-700"
+                          min={0} step={5000}
+                        />
+                      </td>
+                      <td className="py-2 px-3">
+                        <input
+                          type="number"
+                          value={rate.astreinte_per_day}
+                          onChange={e => setEditRates(prev => prev.map((r, i) => i === idx ? { ...r, astreinte_per_day: Number(e.target.value) } : r))}
+                          className="w-full px-2 py-1 text-sm border border-purple-200 rounded-lg bg-purple-50/40 focus:outline-none focus:ring-2 focus:ring-purple-300/40 text-center font-semibold text-purple-700"
+                          min={0} step={1000}
+                        />
+                      </td>
+                      <td className="py-2 pl-2">
+                        <button
+                          onClick={() => rate.id ? deleteRate(rate.id) : removeEditRate(idx)}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-slate-300 hover:text-red-500 transition"
+                          title="Supprimer"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {editRates.length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-6">Aucun tarif configuré.</p>
+              )}
+
+              <button
+                onClick={addCustomService}
+                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-dashed border-slate-300 text-slate-500 hover:bg-slate-50 transition"
+              >
+                <Plus size={13} /> Ajouter un service
+              </button>
+            </div>
+
+            {/* Footer modal */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100">
+              <button
+                onClick={() => setShowRatesModal(false)}
+                className="px-4 py-2 rounded-xl text-sm font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={saveRates}
+                disabled={savingRates}
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold bg-[#003c71] text-white hover:bg-[#003c71]/90 transition shadow-sm disabled:opacity-60"
+              >
+                {savingRates ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

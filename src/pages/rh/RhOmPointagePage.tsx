@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Search, TableProperties, Users, Clock, TrendingUp, Lock, LockOpen, RefreshCw, FileDown, Banknote } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Search, TableProperties, Users, Clock, TrendingUp, Lock, LockOpen, RefreshCw, FileDown, Banknote, PlayCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import api from "@/api/axios";
 import toast from "react-hot-toast";
@@ -61,7 +61,9 @@ export default function RhOmPointagePage() {
   const [filterService, setFilterService] = useState("");
   const [rhLocked, setRhLocked] = useState(false);
   const [pastDeadline, setPastDeadline] = useState(false);
+  const [forceUnlock, setForceUnlock] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const [activating, setActivating] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const daysInMonth = useMemo(() => new Date(year, month, 0).getDate(), [year, month]);
@@ -74,6 +76,7 @@ export default function RhOmPointagePage() {
       setRows(res.data.rows || []);
       setRhLocked(res.data.rh_locked ?? false);
       setPastDeadline(res.data.past_deadline ?? false);
+      setForceUnlock(res.data.force_unlock ?? false);
       setLastUpdated(new Date());
     } catch {
       if (!silent) toast.error("Impossible de charger les données.");
@@ -149,6 +152,22 @@ export default function RhOmPointagePage() {
       toast.error(msg || "Erreur lors de la mise à jour du verrou.");
     } finally {
       setToggling(false);
+    }
+  }
+
+  async function activateSession() {
+    setActivating(true);
+    try {
+      const res = await api.post("/api/attendance/om-pointage/activate-session/", { year, month });
+      setRhLocked(res.data.rh_locked ?? false);
+      setPastDeadline(res.data.past_deadline ?? false);
+      setForceUnlock(res.data.force_unlock ?? true);
+      toast.success("Nouvelle session activée — saisie réouverte.");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(msg || "Erreur lors de l'activation.");
+    } finally {
+      setActivating(false);
     }
   }
 
@@ -305,21 +324,36 @@ export default function RhOmPointagePage() {
                 <FileDown size={14} />
                 <span className="hidden sm:inline">Exporter Excel</span>
               </button>
-              <button
-                onClick={toggleLock}
-                disabled={toggling || pastDeadline}
-                title={pastDeadline ? "Date limite dépassée (verrou automatique)" : rhLocked ? "Réactiver la saisie" : "Désactiver la saisie"}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition shadow-sm border ${
-                  isLocked
-                    ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
-                    : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                } disabled:opacity-60 disabled:cursor-not-allowed`}
-              >
-                {toggling ? <Loader2 size={15} className="animate-spin" /> : isLocked ? <Lock size={15} /> : <LockOpen size={15} />}
-                <span className="hidden sm:inline">
-                  {isLocked ? (pastDeadline && !rhLocked ? "Date limite dépassée" : "Saisie désactivée") : "Saisie active"}
-                </span>
-              </button>
+              {/* Bouton "Nouvelle session" si deadline dépassée et non force-unlocked */}
+              {pastDeadline && !forceUnlock && (
+                <button
+                  onClick={activateSession}
+                  disabled={activating}
+                  title="Rouvrir la saisie pour cette période (bypass date limite)"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition shadow-sm border bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {activating ? <Loader2 size={15} className="animate-spin" /> : <PlayCircle size={15} />}
+                  <span className="hidden sm:inline">Nouvelle session</span>
+                </button>
+              )}
+              {/* Bouton verrou normal (caché si pastDeadline sans force_unlock) */}
+              {(!pastDeadline || forceUnlock) && (
+                <button
+                  onClick={toggleLock}
+                  disabled={toggling}
+                  title={rhLocked ? "Réactiver la saisie" : "Désactiver la saisie"}
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition shadow-sm border ${
+                    isLocked
+                      ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+                      : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                  } disabled:opacity-60 disabled:cursor-not-allowed`}
+                >
+                  {toggling ? <Loader2 size={15} className="animate-spin" /> : isLocked ? <Lock size={15} /> : <LockOpen size={15} />}
+                  <span className="hidden sm:inline">
+                    {isLocked ? "Saisie désactivée" : "Saisie active"}
+                  </span>
+                </button>
+              )}
               <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
                 <button onClick={prevMonth} className="p-1 hover:bg-slate-100 rounded-lg transition"><ChevronLeft size={16} /></button>
                 <span className="font-semibold text-slate-700 min-w-[110px] text-center text-sm">{MONTHS_FR[month - 1]} {year}</span>
