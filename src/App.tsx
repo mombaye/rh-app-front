@@ -1,6 +1,5 @@
-import { lazy, Suspense, useEffect, useRef } from "react";
-import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { BASE_URL } from "@/api/baseUrl";
+import { lazy, Suspense } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
 import ChangePasswordPage from "@/components/users/ChangePasswordPage";
 import { Toaster } from "react-hot-toast";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -9,11 +8,7 @@ import FirstLoginGuard from "@/components/FirstLoginGuard";
 import AdminProtectedRoute from "@/components/admin/AdminProtectedRoute";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
-import MaintenancePage from "@/components/MaintenancePage";
 import { FEATURES } from "@/config/features";
-
-// ── Mettre à true pour afficher la page de maintenance ───────────────────────
-const MAINTENANCE_MODE = false;
 
 // ── Pages chargées à la demande (code-splitting) ─────────────────────────────
 // Chaque page est découpée dans son propre chunk JS, chargé uniquement
@@ -173,52 +168,11 @@ function MgrRoute({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Vérifie la licence toutes les 20s — redirige vers /maintenance si désactivée */
-function useLicenseGuard() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    // Pas de polling sur /maintenance (déjà géré là-bas) ni /admin ni /masterkey
-    const skip = ["/maintenance", "/admin"].some(p => location.pathname.startsWith(p));
-    if (skip) return;
-
-    timer.current = setInterval(async () => {
-      try {
-        const res = await fetch(`${BASE_URL}/api/license/status/`);
-        if (res.ok) {
-          const data = await res.json();
-          if (!data.active) {
-            if (timer.current) clearInterval(timer.current);
-            navigate("/maintenance", { replace: true });
-          }
-        } else if (res.status === 503) {
-          if (timer.current) clearInterval(timer.current);
-          navigate("/maintenance", { replace: true });
-        }
-      } catch {
-        // réseau coupé — on ne redirige pas
-      }
-    }, 20_000);
-
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
-  }, [location.pathname, navigate]);
-}
-
-function AppInner() {
-  useLicenseGuard();
-  return null;
-}
-
 function App() {
   return (
     <>
       <Toaster position="top-right" reverseOrder={false} />
       <AssistantChatWidget />
-      <AppInner />
       <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* ── Admin Portal ─────────────────────────────────────── */}
@@ -232,11 +186,8 @@ function App() {
           }
         />
 
-        {/* ── Licence désactivée (503 backend) ────────────────── */}
-        <Route path="/maintenance" element={<MaintenancePage />} />
-
         {/* ── Welcome / Accueil ────────────────────────────────── */}
-        <Route path="/" element={MAINTENANCE_MODE ? <MaintenancePage /> : <WelcomePage />} />
+        <Route path="/" element={<WelcomePage />} />
 
         {/* ── Auth ─────────────────────────────────────────────── */}
         <Route path="/login" element={<LoginPage />} />
