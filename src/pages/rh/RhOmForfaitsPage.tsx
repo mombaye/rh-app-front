@@ -26,6 +26,11 @@ interface OmRow {
   nb_jours_astreintes: number;
   jours_travailles: number;
   heures_totales: number;
+  // Calculé par le backend
+  forfait_hs_amount: number;
+  montant_astreintes: number;
+  montant_a_recevoir: number;
+  has_rate: boolean;
 }
 
 interface ServiceRate {
@@ -145,26 +150,16 @@ export default function RhOmForfaitsPage() {
     [filtered, page, pageSize]
   );
 
-  function calcForfait(row: OmRow) {
-    const rate = rateByService[row.service];
-    const forfaitHs = rate && row.nb_heures_sup > 0 ? rate.forfait_hs : 0;
-    const montantAstr = rate ? rate.astreinte_per_day * row.nb_jours_astreintes : 0;
-    return { forfaitHs, montantAstr, total: forfaitHs + montantAstr, hasRate: !!rate };
-  }
-
-  const totals = useMemo(() => filtered.reduce((acc, r) => {
-    const f = calcForfait(r);
-    return {
-      forfaitHs: acc.forfaitHs + f.forfaitHs,
-      nbJoursAstr: acc.nbJoursAstr + r.nb_jours_astreintes,
-      montantAstr: acc.montantAstr + f.montantAstr,
-      total: acc.total + f.total,
-    };
-  }, { forfaitHs: 0, nbJoursAstr: 0, montantAstr: 0, total: 0 }), [filtered, rateByService]);
+  const totals = useMemo(() => filtered.reduce((acc, r) => ({
+    forfaitHs: acc.forfaitHs + r.forfait_hs_amount,
+    nbJoursAstr: acc.nbJoursAstr + r.nb_jours_astreintes,
+    montantAstr: acc.montantAstr + r.montant_astreintes,
+    total: acc.total + r.montant_a_recevoir,
+  }), { forfaitHs: 0, nbJoursAstr: 0, montantAstr: 0, total: 0 }), [filtered]);
 
   const servicesWithoutRate = useMemo(
-    () => services.filter(s => !rateByService[s]),
-    [services, rateByService]
+    () => services.filter(s => rows.some(r => r.service === s && !r.has_rate)),
+    [services, rows]
   );
 
   function fmt(n: number) {
@@ -244,15 +239,12 @@ export default function RhOmForfaitsPage() {
     const headers = ["N°", "MATRICULE", "NOM", "PRENOM", "SERVICE", "QUALIFICATION", "ZONE", "MANAGER N+1",
       "FORFAIT HS", "ASTREINTES / NBR JOURS", "MONTANTS ASTREINTES", "MONTANT TOTAL (HS+Astreinte)", "COMMENTAIRES OU OMISSIONS"];
 
-    const dataRows = filtered.map((row, i) => {
-      const f = calcForfait(row);
-      return [
-        i + 1, row.matricule, row.nom, row.prenom, row.service, row.qualification, row.zone,
-        row.n1_manager_name || row.manager,
-        f.forfaitHs, row.nb_jours_astreintes, f.montantAstr, f.total,
-        comments[row.employee_id] || "",
-      ];
-    });
+    const dataRows = filtered.map((row, i) => [
+      i + 1, row.matricule, row.nom, row.prenom, row.service, row.qualification, row.zone,
+      row.n1_manager_name || row.manager,
+      row.forfait_hs_amount, row.nb_jours_astreintes, row.montant_astreintes, row.montant_a_recevoir,
+      comments[row.employee_id] || "",
+    ]);
 
     const totalsRow = ["", "TOTAUX", "", "", "", "", "", "",
       totals.forfaitHs, totals.nbJoursAstr, totals.montantAstr, totals.total, ""];
@@ -415,9 +407,7 @@ export default function RhOmForfaitsPage() {
           <>
             {/* Vue carte — mobile */}
             <div className="block md:hidden space-y-3">
-              {paginated.map(row => {
-                const f = calcForfait(row);
-                return (
+              {paginated.map(row => (
                   <div key={row.employee_id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-3">
                       <div className="min-w-0">
@@ -425,11 +415,11 @@ export default function RhOmForfaitsPage() {
                         <p className="text-xs text-slate-400">{row.matricule}{row.service ? ` · ${row.service}` : ""}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {!f.hasRate && <AlertTriangle size={14} className="text-orange-400" title="Pas de tarif pour ce service" />}
+                        {!row.has_rate && <AlertTriangle size={14} className="text-orange-400" title="Pas de tarif pour ce service" />}
                         <div className="text-right">
                           <p className="text-[9px] text-slate-400 uppercase font-semibold leading-tight">À recevoir</p>
-                          <p className={`text-base font-bold leading-tight ${f.total > 0 ? "text-emerald-600" : "text-slate-300"}`}>
-                            {fmt(f.total)} <span className="text-[10px] font-normal">FCFA</span>
+                          <p className={`text-base font-bold leading-tight ${row.montant_a_recevoir > 0 ? "text-emerald-600" : "text-slate-300"}`}>
+                            {fmt(row.montant_a_recevoir)} <span className="text-[10px] font-normal">FCFA</span>
                           </p>
                         </div>
                       </div>
@@ -437,7 +427,7 @@ export default function RhOmForfaitsPage() {
                     <div className="px-4 py-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                       <div>
                         <p className="text-[10px] text-slate-400 uppercase font-medium">Forfait HS</p>
-                        <p className={`font-semibold ${f.forfaitHs > 0 ? "text-amber-600" : "text-slate-400"}`}>{fmt(f.forfaitHs)}</p>
+                        <p className={`font-semibold ${row.forfait_hs_amount > 0 ? "text-amber-600" : "text-slate-400"}`}>{fmt(row.forfait_hs_amount)}</p>
                       </div>
                       <div>
                         <p className="text-[10px] text-slate-400 uppercase font-medium">Jours astr.</p>
@@ -445,7 +435,7 @@ export default function RhOmForfaitsPage() {
                       </div>
                       <div>
                         <p className="text-[10px] text-slate-400 uppercase font-medium">Montant astr.</p>
-                        <p className={`font-semibold ${f.montantAstr > 0 ? "text-purple-600" : "text-slate-400"}`}>{fmt(f.montantAstr)}</p>
+                        <p className={`font-semibold ${row.montant_astreintes > 0 ? "text-purple-600" : "text-slate-400"}`}>{fmt(row.montant_astreintes)}</p>
                       </div>
                     </div>
                     <div className="px-4 pb-3">
@@ -458,8 +448,7 @@ export default function RhOmForfaitsPage() {
                       />
                     </div>
                   </div>
-                );
-              })}
+              ))}
               <div className="bg-slate-800 text-white rounded-xl px-4 py-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs font-semibold">
                 <span>TOTAUX</span>
                 <span className="text-amber-300">{fmt(totals.forfaitHs)} HS</span>
@@ -496,9 +485,7 @@ export default function RhOmForfaitsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginated.map((row, idx) => {
-                    const f = calcForfait(row);
-                    return (
+                  {paginated.map((row, idx) => (
                       <tr key={row.employee_id} className={`border-t border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/20 transition-colors`}>
                         <td className="sticky left-0 px-3 py-2 font-medium text-slate-800 z-10 border-r border-slate-100" style={{ background: idx % 2 === 0 ? "#fff" : "#f8fafc" }}>
                           <div className="truncate max-w-[155px]">{row.nom} {row.prenom}</div>
@@ -506,23 +493,23 @@ export default function RhOmForfaitsPage() {
                         </td>
                         <td className="px-3 py-2 text-slate-500 text-[11px] truncate max-w-[88px]">
                           <div className="flex items-center gap-1">
-                            {!f.hasRate && <AlertTriangle size={11} className="text-orange-400 shrink-0" title="Pas de tarif pour ce service" />}
+                            {!row.has_rate && <AlertTriangle size={11} className="text-orange-400 shrink-0" title="Pas de tarif pour ce service" />}
                             {row.service}
                           </div>
                         </td>
                         <td className="px-3 py-2 text-slate-500 text-[11px] truncate max-w-[108px]">{row.n1_manager_name || row.manager}</td>
                         <td className="px-3 py-2 text-center font-semibold">
-                          <span className={f.forfaitHs > 0 ? "text-amber-600" : "text-slate-300"}>{fmt(f.forfaitHs)}</span>
+                          <span className={row.forfait_hs_amount > 0 ? "text-amber-600" : "text-slate-300"}>{fmt(row.forfait_hs_amount)}</span>
                         </td>
                         <td className="px-3 py-2 text-center font-semibold">
                           <span className={row.nb_jours_astreintes > 0 ? "text-purple-600" : "text-slate-300"}>{row.nb_jours_astreintes}</span>
                         </td>
                         <td className="px-3 py-2 text-center font-semibold">
-                          <span className={f.montantAstr > 0 ? "text-purple-600" : "text-slate-300"}>{fmt(f.montantAstr)}</span>
+                          <span className={row.montant_astreintes > 0 ? "text-purple-600" : "text-slate-300"}>{fmt(row.montant_astreintes)}</span>
                         </td>
                         <td className="px-3 py-2 text-center bg-emerald-50/40">
-                          <span className={`inline-block px-3 py-1 rounded-lg text-sm font-bold ${f.total > 0 ? "bg-emerald-100 text-emerald-700" : "text-slate-300"}`}>
-                            {fmt(f.total)}
+                          <span className={`inline-block px-3 py-1 rounded-lg text-sm font-bold ${row.montant_a_recevoir > 0 ? "bg-emerald-100 text-emerald-700" : "text-slate-300"}`}>
+                            {fmt(row.montant_a_recevoir)}
                           </span>
                         </td>
                         <td className="px-2 py-1.5">
@@ -535,8 +522,7 @@ export default function RhOmForfaitsPage() {
                           />
                         </td>
                       </tr>
-                    );
-                  })}
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-800 text-white border-t-2 border-slate-400 font-semibold">
