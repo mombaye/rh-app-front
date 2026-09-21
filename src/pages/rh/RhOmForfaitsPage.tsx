@@ -419,12 +419,20 @@ export default function RhOmForfaitsPage() {
                 const f = calcForfait(row);
                 return (
                   <div key={row.employee_id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                      <div>
+                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
                         <p className="font-semibold text-slate-800 text-sm truncate">{row.nom} {row.prenom}</p>
                         <p className="text-xs text-slate-400">{row.matricule}{row.service ? ` · ${row.service}` : ""}</p>
                       </div>
-                      {!f.hasRate && <AlertTriangle size={14} className="text-orange-400 shrink-0" title="Pas de tarif pour ce service" />}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {!f.hasRate && <AlertTriangle size={14} className="text-orange-400" title="Pas de tarif pour ce service" />}
+                        <div className="text-right">
+                          <p className="text-[9px] text-slate-400 uppercase font-semibold leading-tight">À recevoir</p>
+                          <p className={`text-base font-bold leading-tight ${f.total > 0 ? "text-emerald-600" : "text-slate-300"}`}>
+                            {fmt(f.total)} <span className="text-[10px] font-normal">FCFA</span>
+                          </p>
+                        </div>
+                      </div>
                     </div>
                     <div className="px-4 py-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                       <div>
@@ -438,10 +446,6 @@ export default function RhOmForfaitsPage() {
                       <div>
                         <p className="text-[10px] text-slate-400 uppercase font-medium">Montant astr.</p>
                         <p className={`font-semibold ${f.montantAstr > 0 ? "text-purple-600" : "text-slate-400"}`}>{fmt(f.montantAstr)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-slate-400 uppercase font-medium">Total</p>
-                        <p className={`font-bold ${f.total > 0 ? "text-slate-800" : "text-slate-400"}`}>{fmt(f.total)}</p>
                       </div>
                     </div>
                     <div className="px-4 pb-3">
@@ -460,7 +464,7 @@ export default function RhOmForfaitsPage() {
                 <span>TOTAUX</span>
                 <span className="text-amber-300">{fmt(totals.forfaitHs)} HS</span>
                 <span className="text-purple-300">{fmt(totals.montantAstr)} Astr.</span>
-                <span>{fmt(totals.total)} total</span>
+                <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-lg">{fmt(totals.total)} FCFA</span>
               </div>
             </div>
 
@@ -484,9 +488,9 @@ export default function RhOmForfaitsPage() {
                       MONTANT ASTR.
                       <div className="text-[10px] font-normal text-white/60">tarif/j × nb jours</div>
                     </th>
-                    <th className="px-3 py-3 text-center font-semibold min-w-[130px]">
-                      TOTAL
-                      <div className="text-[10px] font-normal text-white/60">HS + Astreinte</div>
+                    <th className="px-3 py-3 text-center font-semibold min-w-[160px] bg-emerald-700">
+                      MONTANT À RECEVOIR
+                      <div className="text-[10px] font-normal text-white/70">HS + Astreinte (FCFA)</div>
                     </th>
                     <th className="px-3 py-3 text-left font-semibold min-w-[200px]">COMMENTAIRES / OMISSIONS</th>
                   </tr>
@@ -516,8 +520,10 @@ export default function RhOmForfaitsPage() {
                         <td className="px-3 py-2 text-center font-semibold">
                           <span className={f.montantAstr > 0 ? "text-purple-600" : "text-slate-300"}>{fmt(f.montantAstr)}</span>
                         </td>
-                        <td className="px-3 py-2 text-center font-bold">
-                          <span className={f.total > 0 ? "text-slate-800" : "text-slate-300"}>{fmt(f.total)}</span>
+                        <td className="px-3 py-2 text-center bg-emerald-50/40">
+                          <span className={`inline-block px-3 py-1 rounded-lg text-sm font-bold ${f.total > 0 ? "bg-emerald-100 text-emerald-700" : "text-slate-300"}`}>
+                            {fmt(f.total)}
+                          </span>
                         </td>
                         <td className="px-2 py-1.5">
                           <input
@@ -539,7 +545,7 @@ export default function RhOmForfaitsPage() {
                     <td className="px-3 py-2 text-center text-amber-300">{fmt(totals.forfaitHs)}</td>
                     <td className="px-3 py-2 text-center text-purple-300">{totals.nbJoursAstr}</td>
                     <td className="px-3 py-2 text-center text-purple-300">{fmt(totals.montantAstr)}</td>
-                    <td className="px-3 py-2 text-center">{fmt(totals.total)}</td>
+                    <td className="px-3 py-2 text-center bg-emerald-800 text-emerald-200 font-bold">{fmt(totals.total)}</td>
                     <td />
                   </tr>
                 </tfoot>
