@@ -1,0 +1,12 @@
+# Développement local (Mac/Windows) uniquement — jamais chargé automatiquement.
+# Utilisation : make dev
+#   (= docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build)
+# Le frontend appelle alors le backend LOCAL (http://localhost:8030)
+# au lieu du serveur de production (192.168.1.50).
+services:
+  frontend:
+    build:
+      args:
+        VITE_API_URL: http://localhost:8030
+        VITE_PUBLIC_URL: http://localhost
+    image: erh-frontend:dev
