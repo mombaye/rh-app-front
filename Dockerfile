@@ -11,8 +11,10 @@ COPY . .
 # ARG permet de passer VITE_API_URL au moment du build (docker compose build)
 ARG VITE_API_URL=http://192.168.1.50:8030
 ARG VITE_PUBLIC_URL=https://erh.camusatsn.com
+ARG VITE_APP_TITLE="eRH - Sénégal"
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_PUBLIC_URL=$VITE_PUBLIC_URL
+ENV VITE_APP_TITLE=$VITE_APP_TITLE
 
 RUN npm run build
 
