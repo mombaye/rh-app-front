@@ -424,34 +424,6 @@ export interface EmployeeHierarchy {
   date_fin_cdd?:        string | null;
 }
 
-// ── ManagerDelegation ── mirrors ManagerDelegationSerializer ──────────────────
-export interface ManagerDelegation {
-  id:                  number;
-  delegator:           number;
-  delegator_name:      string;
-  delegate:            number;
-  delegate_name:       string;
-  start_date:          string;
-  end_date:            string;
-  reason:              string;
-  is_active:           boolean;
-  is_currently_active: boolean;
-  created_by:          number | null;
-  created_by_name:     string | null;
-  created_at:          string;
-  updated_at:          string;
-}
-
-export interface ManagerDelegationCreate {
-  delegator_id:  number;
-  delegate_id:   number;
-  start_date:    string;
-  end_date:      string;
-  reason?:       string;
-  is_active?:    boolean;
-  created_by_id?: number;
-}
-
 // ── ApprovalChainStep ─────────────────────────────────────────────────────────
 export interface ApprovalChainStep {
   level:          string;        // "N+1", "N+2", "N+3"…

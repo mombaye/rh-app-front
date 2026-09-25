@@ -22,8 +22,6 @@ import {
   ExportColumnKey,
   PublicHoliday,
   HolidayCheckResult,
-  ManagerDelegation,
-  ManagerDelegationCreate,
   ExitAuthorization,
   ExitAuthorizationCreate,
   ExitAuthorizationFilters,
@@ -654,54 +652,6 @@ export const holidayService = {
   /** DELETE /api/leaves/holidays/<id>/ */
   delete: async (id: number): Promise<void> => {
     await api.delete(`${API}/holidays/${id}/`, {});
-  },
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ManagerDelegation  →  /api/leaves/delegations/
-// ─────────────────────────────────────────────────────────────────────────────
-export const managerDelegationService = {
-  /** GET /api/leaves/delegations/ */
-  getAll: async (params?: { delegator_id?: number; delegate_id?: number; active_only?: boolean }): Promise<ManagerDelegation[]> => {
-    const res = await api.get(`${API}/delegations/`, {
-      params,
-    });
-    return res.data;
-  },
-
-  /** GET /api/leaves/delegations/<id>/ */
-  getById: async (id: number): Promise<ManagerDelegation> => {
-    const res = await api.get(`${API}/delegations/${id}/`, {});
-    return res.data;
-  },
-
-  /** POST /api/leaves/delegations/ */
-  create: async (data: ManagerDelegationCreate): Promise<ManagerDelegation> => {
-    const res = await api.post(`${API}/delegations/`, data, {});
-    return res.data;
-  },
-
-  /** PATCH /api/leaves/delegations/<id>/ */
-  update: async (id: number, data: Partial<ManagerDelegationCreate>): Promise<ManagerDelegation> => {
-    const res = await api.patch(`${API}/delegations/${id}/`, data, {});
-    return res.data;
-  },
-
-  /** DELETE /api/leaves/delegations/<id>/ */
-  delete: async (id: number): Promise<void> => {
-    await api.delete(`${API}/delegations/${id}/`, {});
-  },
-
-  /** POST /api/leaves/delegations/<id>/deactivate/ */
-  deactivate: async (id: number): Promise<ManagerDelegation> => {
-    const res = await api.post(`${API}/delegations/${id}/deactivate/`, {}, {});
-    return res.data;
-  },
-
-  /** GET /api/leaves/delegations/active-for/<managerId>/ */
-  getActiveFor: async (managerId: number): Promise<{ delegate: { id: number; full_name: string; email: string } | null; delegation: ManagerDelegation | null }> => {
-    const res = await api.get(`${API}/delegations/active-for/${managerId}/`, {});
-    return res.data;
   },
 };
 
