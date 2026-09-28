@@ -1,13 +1,14 @@
 .PHONY: dev prod down logs
 
-# Mac / dev local : frontend Docker branché sur le backend local (localhost:8030)
+# Mac / dev local (après : cp docker-compose.dev.yml docker-compose.override.yml)
 dev:
-	git pull --ff-only
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+	git pull origin main
+	docker compose up -d --build
 
-# Serveur de production : build npm (mode sn) dans dist/
+# Serveur de production
 prod:
-	bash scripts/deploy.sh
+	git pull origin main
+	docker compose up -d --build
 
 down:
 	docker compose down

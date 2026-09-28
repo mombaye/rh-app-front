@@ -1,6 +1,7 @@
-# Développement local (Mac/Windows) uniquement — jamais chargé automatiquement.
-# Utilisation : make dev
-#   (= docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build)
+# Développement local (Mac/Windows) — à copier UNE SEULE FOIS sur le poste de dev :
+#   cp docker-compose.dev.yml docker-compose.override.yml
+# Ensuite, comme en prod : git pull origin main && docker compose up -d --build
+# (docker-compose.override.yml est ignoré par git : il n'existe jamais sur le serveur.)
 # Le frontend appelle alors le backend LOCAL (http://localhost:8030)
 # au lieu du serveur de production (192.168.1.50).
 services:

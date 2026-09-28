@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 dist_new
 dist_old
+
+# Surcharge locale Docker (dev Mac) : jamais versionnée, jamais sur le serveur
+docker-compose.override.yml
