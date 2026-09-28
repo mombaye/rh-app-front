@@ -140,6 +140,7 @@ export default function Sidebar() {
         { label: "Justifications", path: "/attendance/justifications" },
         { label: "Jours fériés",   path: "/attendance/feries"         },
         { label: "Pointage O&M",   path: "/rh/om-pointage"           },
+        { label: "Team Planning",  path: "/rh/team-planning"         },
       ],
     },
     {

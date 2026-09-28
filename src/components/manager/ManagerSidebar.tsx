@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, CalendarDays, BadgeDollarSign,
   FolderOpen, ClipboardCheck, X, Menu, UserCircle2, FileStack, LogOut, Users, FileBadge, Clock,
-  BookUser, ClipboardList, FileText, Ticket, TableProperties,
+  BookUser, ClipboardList, FileText, Ticket, TableProperties, CalendarRange,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { COUNTRY } from "@/config/features";
@@ -59,6 +59,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
     { label: "Documents RH",            path: "/manager/documents",    icon: <FileStack size={20} />                                                          },
     { label: "Signalements",            path: "/manager/tickets",      icon: <Ticket size={20} />                                                                 },
     { label: "Pointage O&M",           path: "/manager/om-pointage",  icon: <TableProperties size={20} />                                                        },
+    { label: "Team Planning",          path: "/manager/team-planning", icon: <CalendarRange size={20} />                                                         },
     ...(isHse ? [{ label: "Gestion Passeports", path: "/hse/passeports", icon: <BookUser size={20} /> }] : []),
     ...(hasQuestionnaire ? [{ label: "Questionnaire de sortie", path: "/manager/questionnaire", icon: <ClipboardList size={20} /> }] : []),
   ];
