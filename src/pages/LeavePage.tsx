@@ -98,6 +98,14 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "REVOKED",        label: "Révoquées"       },
 ];
 
+// Intérimaire = type de contrat INTERIM (même règle que la page Employés).
+// Repli sur le statut SHIFT si l'API ne renvoie pas encore type_contrat.
+function isInterimEmployee(emp?: { type_contrat?: string; attendance_status?: string } | null): boolean {
+  if (!emp) return false;
+  if (emp.type_contrat) return emp.type_contrat === "INTERIM";
+  return emp.attendance_status === "SHIFT";
+}
+
 function fmtDate(d?: string | null): string {
   if (!d) return "—";
   const p = d.slice(0, 10).split("-");
@@ -157,6 +165,16 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   const [fetchError,   setFetchError]   = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [contractType, setContractType] = useState<ContractType>(contractFilter ?? "INTERNE");
+  const [employees,    setEmployees]    = useState<Employee[]>([]);
+
+  // Employés proposés dans l'onglet « Autorisations » (même séparation interne / intérimaire)
+  useEffect(() => {
+    if (tab !== "exit_authorizations") return;
+    getEmployees({ status: "ACTIVE" })
+      .then((list) => setEmployees(list.filter((e) =>
+        contractType === "INTERIM" ? e.type_contrat === "INTERIM" : e.type_contrat !== "INTERIM")))
+      .catch(() => setEmployees([]));
+  }, [tab, contractType]);
   const [showForm,       setShowForm]       = useState(false);
   const [showLeaveTypes, setShowLeaveTypes] = useState(false);
   const [newTypeTrigger, setNewTypeTrigger] = useState(0);
@@ -341,10 +359,10 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   const filteredRequests = useMemo(() => {
     const q = searchQ.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return requests.filter((r) => {
-      // Filtre Interne / Intérimaire (attendance_status === "SHIFT" → intérimaire)
-      const isShift = r.employee?.attendance_status === "SHIFT";
-      if (contractType === "INTERIM"  && !isShift) return false;
-      if (contractType === "INTERNE"  &&  isShift) return false;
+      // Filtre Interne / Intérimaire : selon le type de contrat (comme la page Employés)
+      const interim = isInterimEmployee(r.employee);
+      if (contractType === "INTERIM"  && !interim) return false;
+      if (contractType === "INTERNE"  &&  interim) return false;
 
       if (!q) return true;
       const name = (r.employee?.full_name ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -359,9 +377,9 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   const contractSummary = useMemo(() => {
     if (!contractFilter) return summary; // page principale : utiliser le résumé API
     const filtered = requests.filter((r) => {
-      const isShift = r.employee?.attendance_status === "SHIFT";
-      if (contractFilter === "INTERIM" && !isShift) return false;
-      if (contractFilter === "INTERNE" &&  isShift) return false;
+      const interim = isInterimEmployee(r.employee);
+      if (contractFilter === "INTERIM" && !interim) return false;
+      if (contractFilter === "INTERNE" &&  interim) return false;
       return true;
     });
     const approved = filtered.filter((r) => r.status === "APPROVED");
@@ -1548,7 +1566,7 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
       if (parseFloat(b.leave_type.monthly_accrual) <= 0) return false;
       const emp = empMap.get(b.employee);
       if (!emp) return false;
-      if (contractType === "INTERIM" ? emp.attendance_status !== "SHIFT" : emp.attendance_status === "SHIFT") return false;
+      if (contractType === "INTERIM" ? emp.type_contrat !== "INTERIM" : emp.type_contrat === "INTERIM") return false;
       if (!q) return true;
       const name = b.employee_name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const mat  = (emp.matricule ?? "").toLowerCase();

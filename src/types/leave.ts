@@ -40,6 +40,7 @@ export interface EmployeeMini {
   email?:                  string;
   requires_two_approvals?: boolean;
   attendance_status?:      string;
+  type_contrat?:           string;
   n1_manager_id?:          number | null;
   n2_manager_id?:          number | null;
   n1_manager_name?:        string | null;
