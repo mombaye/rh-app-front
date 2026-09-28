@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarRange, ChevronLeft, ChevronRight, FileDown, Loader2, Paintbrush, Search, Upload, X as XIcon } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, FileDown, History, Loader2, Paintbrush, Search, Upload, UserCog, UserPlus, X as XIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   CellKind, PlanningCell, PlanningChange, PlanningGrid, PlanningRow, teamPlanningService,
 } from "@/services/teamPlanningService";
+import MemberDialog from "./MemberDialog";
 
 const MONTHS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -32,6 +33,8 @@ export default function TeamPlanningBoard() {
   const [saving, setSaving]   = useState(false);
   const [picker, setPicker]   = useState<Picker | null>(null);
   const [query, setQuery]     = useState("");
+  const [member, setMember]   = useState<{ row?: PlanningRow } | null>(null);
+  const [copying, setCopying] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const filters = useMemo(() => ({ year, month, business_line: bl, manager }), [year, month, bl, manager]);
@@ -84,6 +87,23 @@ export default function TeamPlanningBoard() {
     }
   };
 
+  const copyPrevious = async () => {
+    const prev = new Date(year, month - 2, 1);
+    if (!window.confirm(`Remplir les jours vides de ${MONTHS_FR[month - 1]} avec le dernier projet de chaque employé en ${MONTHS_FR[prev.getMonth()]} ${prev.getFullYear()} ?\n\nLes jours déjà renseignés, week-ends, fériés et congés ne sont pas modifiés.`)) return;
+    setCopying(true);
+    try {
+      const res = await teamPlanningService.copyPrevious(filters);
+      const updated = new Map(res.rows.map((r) => [r.employee_id, r]));
+      setGrid((g) => g && { ...g, rows: g.rows.map((r) => updated.get(r.employee_id) ?? r) });
+      if (res.filled) toast.success(`${res.filled} jour(s) remplis pour ${res.rows.length} employé(s)`);
+      else toast("Rien à reprendre : aucun projet saisi le mois précédent, ou aucun jour vide.");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail ?? "Opération impossible");
+    } finally {
+      setCopying(false);
+    }
+  };
+
   const openPicker = (mode: Picker["mode"], row: PlanningRow, el: HTMLElement, day?: number) => {
     const rect = el.getBoundingClientRect();
     const x = Math.min(rect.left, window.innerWidth - 260);
@@ -98,6 +118,18 @@ export default function TeamPlanningBoard() {
       return;
     }
     openPicker("cell", row, el, day);
+  };
+
+  const clearRow = () => {
+    if (!picker) return;
+    const { row } = picker;
+    setPicker(null);
+    const changes = row.cells
+      .map((c, i) => ({ c, day: i + 1 }))
+      .filter(({ c }) => !c.auto)
+      .map(({ day }) => ({ employee_id: row.employee_id, day, value: "" }));
+    if (changes.length === 0) toast("Aucune saisie à effacer sur cette ligne.");
+    else if (window.confirm(`Effacer les ${changes.length} saisie(s) de ${row.nom} ${row.prenom} ce mois-ci ?`)) applyChanges(changes);
   };
 
   const choose = (value: string) => {
@@ -164,7 +196,7 @@ export default function TeamPlanningBoard() {
             <CalendarRange size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">Team Planning</h1>
+            <h1 className="text-xl font-bold text-slate-800 whitespace-nowrap">Team Planning</h1>
             <p className="text-xs text-slate-500">Projet (CECO) de chaque employé, jour par jour</p>
           </div>
         </div>
@@ -193,12 +225,23 @@ export default function TeamPlanningBoard() {
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher…"
               className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white w-44" />
           </div>
+          {grid && grid.rows.length > 0 && (
+            <button onClick={copyPrevious} disabled={copying}
+              title="Remplit les jours vides avec le dernier projet du mois précédent"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50">
+              {copying ? <Loader2 size={15} className="animate-spin" /> : <History size={15} />} Reprendre le mois précédent
+            </button>
+          )}
           <button onClick={exportExcel}
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
             <FileDown size={15} /> Exporter
           </button>
           {grid?.is_rh && (
             <>
+              <button onClick={() => setMember({})}
+                className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
+                <UserPlus size={15} /> Ajouter un employé
+              </button>
               <button onClick={() => fileRef.current?.click()}
                 className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl bg-[#003c71] text-white hover:bg-[#002b52]">
                 <Upload size={15} /> Importer le fichier
@@ -282,11 +325,20 @@ export default function TeamPlanningBoard() {
                           <div className="font-semibold text-slate-700 truncate">{row.nom} {row.prenom}</div>
                           <div className="text-slate-400">{row.matricule}{empty > 0 && <span className="ml-1.5 text-rose-500">· {empty} vide(s)</span>}</div>
                         </div>
-                        <button title="Remplir tous les jours vides avec un projet"
-                          onClick={(e) => openPicker("fill", row, e.currentTarget)}
-                          className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-[#003c71] hover:bg-[#003c71]/10">
-                          <Paintbrush size={14} />
-                        </button>
+                        <div className="flex shrink-0">
+                          {grid.is_rh && (
+                            <button title="Business Line, line manager, retirer"
+                              onClick={() => setMember({ row })}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-[#003c71] hover:bg-[#003c71]/10">
+                              <UserCog size={14} />
+                            </button>
+                          )}
+                          <button title="Remplir tous les jours vides avec un projet"
+                            onClick={(e) => openPicker("fill", row, e.currentTarget)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#003c71] hover:bg-[#003c71]/10">
+                            <Paintbrush size={14} />
+                          </button>
+                        </div>
                       </div>
                     </td>
                     {row.cells.map((cell, i) => (
@@ -333,14 +385,29 @@ export default function TeamPlanningBoard() {
               ))}
               {options.length === 0 && <div className="text-xs text-slate-400 px-2 py-2">Aucun code trouvé</div>}
             </div>
-            {picker.mode === "cell" && (
+            {picker.mode === "cell" ? (
               <button onClick={() => choose("")}
                 className="w-full text-left text-xs px-2 py-1.5 mt-1 border-t border-slate-100 text-rose-600 hover:bg-rose-50 rounded-md">
                 Effacer la saisie
               </button>
+            ) : (
+              <button onClick={clearRow}
+                className="w-full text-left text-xs px-2 py-1.5 mt-1 border-t border-slate-100 text-rose-600 hover:bg-rose-50 rounded-md">
+                Vider la ligne (toutes les saisies du mois)
+              </button>
             )}
           </div>
         </>
+      )}
+
+      {member && grid && (
+        <MemberDialog
+          row={member.row}
+          businessLines={grid.all_business_lines}
+          managers={grid.managers}
+          onClose={() => setMember(null)}
+          onSaved={() => { setMember(null); load(); }}
+        />
       )}
     </div>
   );

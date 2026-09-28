@@ -26,6 +26,7 @@ export interface PlanningGrid {
   business_lines: string[];
   managers: string[];
   projects: Record<string, string[]>;
+  all_business_lines: string[];
   special_values: string[];
   rows: PlanningRow[];
   stats: { total: number; filled: number; pct: number };
@@ -53,6 +54,19 @@ export interface ImportSummary {
   ignored_entries: number;
 }
 
+export interface MemberCandidate {
+  id: number;
+  matricule: string;
+  nom: string;
+  prenom: string;
+}
+
+export interface MemberPayload {
+  employee_id: number;
+  business_line: string;
+  line_manager_name: string;
+}
+
 const clean = (f: PlanningFilters) =>
   Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined && v !== ""));
 
@@ -65,6 +79,19 @@ export const teamPlanningService = {
 
   exportExcel: async (filters: PlanningFilters): Promise<Blob> =>
     (await api.get("/api/team-planning/export/", { params: clean(filters), responseType: "blob" })).data,
+
+  copyPrevious: async (filters: PlanningFilters): Promise<{ filled: number; rows: PlanningRow[] }> =>
+    (await api.post("/api/team-planning/copy-previous/", clean(filters))).data,
+
+  candidates: async (q: string): Promise<MemberCandidate[]> =>
+    (await api.get("/api/team-planning/members/candidates/", { params: { q } })).data,
+
+  upsertMember: async (payload: MemberPayload): Promise<{ manager_recognized: boolean }> =>
+    (await api.post("/api/team-planning/members/", payload)).data,
+
+  deleteMember: async (employeeId: number): Promise<void> => {
+    await api.delete(`/api/team-planning/members/${employeeId}/`);
+  },
 
   importFile: async (file: File): Promise<ImportSummary> => {
     const fd = new FormData();
