@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarRange, ChevronLeft, ChevronRight, FileDown, History, Loader2, Paintbrush, Search, Upload, UserCog, UserPlus, X as XIcon } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, FileDown, History, Loader2, Paintbrush, Search, Upload, X as XIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   CellKind, PlanningCell, PlanningChange, PlanningGrid, PlanningRow, teamPlanningService,
 } from "@/services/teamPlanningService";
-import MemberDialog from "./MemberDialog";
 
 const MONTHS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -33,7 +32,6 @@ export default function TeamPlanningBoard() {
   const [saving, setSaving]   = useState(false);
   const [picker, setPicker]   = useState<Picker | null>(null);
   const [query, setQuery]     = useState("");
-  const [member, setMember]   = useState<{ row?: PlanningRow } | null>(null);
   const [copying, setCopying] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -175,9 +173,11 @@ export default function TeamPlanningBoard() {
     try {
       const s = await teamPlanningService.importFile(file);
       const projets = Object.entries(s.projects).map(([k, v]) => `${k} : ${v}`).join(", ");
-      toast.success(`Import terminé — ${s.members} employés, projets ${projets}`, { id: t, duration: 6000 });
-      if (s.unknown_employees.length) toast(`Matricules inconnus : ${s.unknown_employees.slice(0, 10).join(", ")}`, { duration: 8000 });
-      if (s.unknown_managers.length) toast(`Line managers sans compte reconnu : ${s.unknown_managers.join(", ")}`, { duration: 8000 });
+      toast.success(`Codes projets chargés — ${projets}`, { id: t, duration: 6000 });
+      if (s.bl_to_update.length) {
+        toast(`${s.bl_to_update.length} employé(s) ont une Business Line différente du fichier dans leur fiche : ${s.bl_to_update.slice(0, 8).join(", ")}${s.bl_to_update.length > 8 ? "…" : ""}`, { duration: 12000 });
+      }
+      if (s.unknown_employees.length) toast(`Matricules du fichier absents de l'application : ${s.unknown_employees.slice(0, 10).join(", ")}`, { duration: 10000 });
       load();
     } catch (e: any) {
       toast.error(e?.response?.data?.detail ?? "Import impossible", { id: t });
@@ -238,10 +238,6 @@ export default function TeamPlanningBoard() {
           </button>
           {grid?.is_rh && (
             <>
-              <button onClick={() => setMember({})}
-                className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
-                <UserPlus size={15} /> Ajouter un employé
-              </button>
               <button onClick={() => fileRef.current?.click()}
                 className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl bg-[#003c71] text-white hover:bg-[#002b52]">
                 <Upload size={15} /> Importer le fichier
@@ -282,9 +278,13 @@ export default function TeamPlanningBoard() {
         <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#003c71]" /></div>
       ) : !grid || rows.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-sm text-slate-500">
-          {grid?.is_rh
-            ? "Aucun employé dans le Team Planning. Importez le fichier Excel (codes projets et line managers) pour commencer."
-            : "Aucun employé n'est rattaché à votre équipe dans le Team Planning."}
+          {!grid?.has_projects
+            ? (grid?.is_rh
+                ? "Aucun code projet chargé. Cliquez sur « Importer le fichier » (fichier Excel Team planning) pour charger les codes par Business Line."
+                : "Le Team Planning n'est pas encore configuré par les RH.")
+            : grid?.is_rh
+              ? "Aucun employé actif n'a une Business Line correspondant aux codes projets. Renseignez la Business Line (ex. BL1) dans la fiche employé."
+              : "Aucun employé de votre équipe (N+1) n'a de Business Line concernée par le Team Planning."}
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-xl overflow-auto max-h-[calc(100vh-15rem)]">
@@ -326,13 +326,6 @@ export default function TeamPlanningBoard() {
                           <div className="text-slate-400">{row.matricule}{empty > 0 && <span className="ml-1.5 text-rose-500">· {empty} vide(s)</span>}</div>
                         </div>
                         <div className="flex shrink-0">
-                          {grid.is_rh && (
-                            <button title="Business Line, line manager, retirer"
-                              onClick={() => setMember({ row })}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-[#003c71] hover:bg-[#003c71]/10">
-                              <UserCog size={14} />
-                            </button>
-                          )}
                           <button title="Remplir tous les jours vides avec un projet"
                             onClick={(e) => openPicker("fill", row, e.currentTarget)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-[#003c71] hover:bg-[#003c71]/10">
@@ -398,16 +391,6 @@ export default function TeamPlanningBoard() {
             )}
           </div>
         </>
-      )}
-
-      {member && grid && (
-        <MemberDialog
-          row={member.row}
-          businessLines={grid.all_business_lines}
-          managers={grid.managers}
-          onClose={() => setMember(null)}
-          onSaved={() => { setMember(null); load(); }}
-        />
       )}
     </div>
   );

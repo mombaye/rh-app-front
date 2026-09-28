@@ -26,7 +26,7 @@ export interface PlanningGrid {
   business_lines: string[];
   managers: string[];
   projects: Record<string, string[]>;
-  all_business_lines: string[];
+  has_projects: boolean;
   special_values: string[];
   rows: PlanningRow[];
   stats: { total: number; filled: number; pct: number };
@@ -47,24 +47,10 @@ export interface PlanningChange {
 
 export interface ImportSummary {
   projects: Record<string, number>;
-  members: number;
-  unknown_employees: string[];
-  unknown_managers: string[];
   entries: number;
   ignored_entries: number;
-}
-
-export interface MemberCandidate {
-  id: number;
-  matricule: string;
-  nom: string;
-  prenom: string;
-}
-
-export interface MemberPayload {
-  employee_id: number;
-  business_line: string;
-  line_manager_name: string;
+  unknown_employees: string[];
+  bl_to_update: string[];
 }
 
 const clean = (f: PlanningFilters) =>
@@ -82,16 +68,6 @@ export const teamPlanningService = {
 
   copyPrevious: async (filters: PlanningFilters): Promise<{ filled: number; rows: PlanningRow[] }> =>
     (await api.post("/api/team-planning/copy-previous/", clean(filters))).data,
-
-  candidates: async (q: string): Promise<MemberCandidate[]> =>
-    (await api.get("/api/team-planning/members/candidates/", { params: { q } })).data,
-
-  upsertMember: async (payload: MemberPayload): Promise<{ manager_recognized: boolean }> =>
-    (await api.post("/api/team-planning/members/", payload)).data,
-
-  deleteMember: async (employeeId: number): Promise<void> => {
-    await api.delete(`/api/team-planning/members/${employeeId}/`);
-  },
 
   importFile: async (file: File): Promise<ImportSummary> => {
     const fd = new FormData();
