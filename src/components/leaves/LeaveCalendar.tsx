@@ -38,15 +38,15 @@ export default function LeaveCalendar({ contractType = "INTERNE" }: Props) {
   const loadData = useCallback(() => {
     setLoading(true);
     Promise.all([
-      leaveRequestService.getCalendar(month, year),
+      leaveRequestService.getCalendar(month, year, contractType),
       holidayService.getForMonth(month, year),
     ])
       .then(([cal, hols]) => { setEntries(cal); setHolidays(hols); })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [month, year]);
+  }, [month, year, contractType]);
 
-  useEffect(() => { loadData(); }, [loadData, contractType]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const prevMonth = () => {
     if (month === 1) { setMonth(12); setYear((y) => y - 1); }

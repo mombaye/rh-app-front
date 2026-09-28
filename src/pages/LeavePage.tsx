@@ -243,6 +243,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
     try {
       const apiStatus = statusFilter !== "ALL" ? statusFilter as LeaveStatus : undefined;
       const filters: Parameters<typeof leaveRequestService.getAll>[0] = {
+        contract_type: contractType,
         ...(apiStatus ? { status: apiStatus } : {}),
         ...(filterLeaveTypeId ? { leave_type_id: Number(filterLeaveTypeId) } : {}),
         ...(filterStartDate   ? { start_date: filterStartDate }             : {}),
@@ -253,7 +254,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
       };
       const [data, sum] = await Promise.all([
         leaveRequestService.getAll(filters),
-        leaveRequestService.getSummary(),
+        leaveRequestService.getSummary(contractType),
       ]);
       setRequests(Array.isArray(data) ? data : []);
       setSummary(sum);
@@ -261,7 +262,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
       const msg = err?.response?.data?.detail ?? err?.response?.data?.error ?? "Erreur de chargement.";
       setFetchError(msg); setRequests([]);
     } finally { setLoading(false); }
-  }, [statusFilter, filterLeaveTypeId, filterStartDate, filterEndDate, filterDepartment, filterEmployeeName, filterYear]);
+  }, [contractType, statusFilter, filterLeaveTypeId, filterStartDate, filterEndDate, filterDepartment, filterEmployeeName, filterYear]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -319,6 +320,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
       setExportLoading(true);
       const apiStatus = statusFilter !== "ALL" ? statusFilter as LeaveStatus : undefined;
       const filters = {
+        contract_type: contractType,
         ...(apiStatus        ? { status: apiStatus }                        : {}),
         ...(filterLeaveTypeId? { leave_type_id: Number(filterLeaveTypeId) } : {}),
         ...(filterStartDate  ? { start_date: filterStartDate }              : {}),
@@ -887,7 +889,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                   <p className="text-xs text-slate-400 mt-0.5">Visualisez les congés approuvés sur le mois</p>
                 </div>
               </div>
-              <LeaveCalendar />
+              <LeaveCalendar contractType={contractType} />
             </>
           )}
 
@@ -911,7 +913,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
             </>
           )}
 
-          {tab === "justifications" && <JustificationsTab onOpenDetail={openDetail} />}
+          {tab === "justifications" && <JustificationsTab onOpenDetail={openDetail} contractType={contractType} />}
 
           {tab === "exit_authorizations" && (
             <ExitAuthorizationPanel
@@ -1232,9 +1234,10 @@ const JUSTIF_STATUS_CFG: Record<JustifStatus, { label: string; color: string; bg
 
 interface JustificationsTabProps {
   onOpenDetail: (r: LeaveRequest) => void;
+  contractType: ContractType;
 }
 
-function JustificationsTab({ onOpenDetail }: JustificationsTabProps) {
+function JustificationsTab({ onOpenDetail, contractType }: JustificationsTabProps) {
   const { user } = useAuth();
   const [requests,    setRequests]    = useState<LeaveRequest[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -1247,7 +1250,7 @@ function JustificationsTab({ onOpenDetail }: JustificationsTabProps) {
     setLoading(true); setError(null);
     try {
       // Fetch all approved leaves and filter client-side for those requiring justification
-      const all = await leaveRequestService.getAll({ status: "APPROVED" });
+      const all = await leaveRequestService.getAll({ status: "APPROVED", contract_type: contractType });
       const withJustif = (Array.isArray(all) ? all : []).filter(
         (r) => r.leave_type.requires_justification
       );
@@ -1257,7 +1260,7 @@ function JustificationsTab({ onOpenDetail }: JustificationsTabProps) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [contractType]);
 
   useEffect(() => { load(); }, [load]);
 

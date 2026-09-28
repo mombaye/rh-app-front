@@ -25,6 +25,7 @@ import {
   ExitAuthorization,
   ExitAuthorizationCreate,
   ExitAuthorizationFilters,
+  ContractType,
 } from "../types/leave";
 
 import { BASE_URL } from "@/api/baseUrl";
@@ -247,15 +248,11 @@ export const leaveRequestService = {
    * Query params supportés par get_queryset() :
    *   status, employee_id, leave_type_id, start_date, end_date, department
    *
-   * contract_type retiré des params (pas de filtre Django sur ce champ)
+   * contract_type : INTERIM (intérimaires) | INTERNE (tous les autres contrats)
    */
   getAll: async (filters?: LeaveRequestFilters): Promise<LeaveRequest[]> => {
-    // On extrait contract_type pour ne pas l'envoyer à Django
-    const { contract_type, ...apiFilters } = filters ?? {};
-    void contract_type; // utilisé uniquement pour le routing frontend
-
     const res = await api.get(`${API}/requests/`, {
-      params:  apiFilters,
+      params:  filters ?? {},
     });
     return res.data;
   },
@@ -422,9 +419,9 @@ export const leaveRequestService = {
    * Route manuelle dans urls.py : path('calendar/', ...)
    * Retourne les absences APPROVED du mois
    */
-  getCalendar: async (month: number, year: number): Promise<LeaveCalendarEntry[]> => {
+  getCalendar: async (month: number, year: number, contractType?: ContractType): Promise<LeaveCalendarEntry[]> => {
     const res = await api.get(`${API}/requests/calendar/`, {
-      params:  { month, year },
+      params:  { month, year, ...(contractType ? { contract_type: contractType } : {}) },
     });
     return res.data;
   },
@@ -433,9 +430,10 @@ export const leaveRequestService = {
    * GET /api/leaves/requests/stats/summary/
    * Retourne : total, pending, approved, rejected, cancelled, revoked, total_days_approved
    */
-  getSummary: async (): Promise<LeaveSummary> => {
+  getSummary: async (contractType?: ContractType): Promise<LeaveSummary> => {
     const res = await api.get(`${API}/requests/stats/summary/`, {
-      });
+      params: contractType ? { contract_type: contractType } : {},
+    });
     return res.data;
   },
 
@@ -540,7 +538,7 @@ export const leaveRequestService = {
    * @param columns  - Liste des clés de colonnes à inclure (toutes si vide)
    */
   exportExcel: async (
-    filters?: Omit<LeaveRequestFilters, "contract_type">,
+    filters?: LeaveRequestFilters,
     columns?: ExportColumnKey[]
   ): Promise<Blob> => {
     const params: Record<string, string> = {};
