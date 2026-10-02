@@ -20,7 +20,7 @@ import type {
 } from "@/types/attendance";
 import type { ExitAuthorization } from "@/types/leave";
 import type { Employee } from "@/types/employee";
-import * as XLSX from "xlsx";
+import { exportAttendanceXLSX as exportXLSX, periodInfo } from "@/utils/attendanceExport";
 import { onEmployeesSynced } from "@/utils/employeeSync";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -167,41 +167,6 @@ function isoWeekNow(): string {
 function yyyyMmToday(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-}
-
-// ─── Export XLSX ──────────────────────────────────────────────────────────────
-function frDate(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-}
-
-/** Période exportée : ligne de titre + suffixe du nom de fichier. */
-function periodInfo(start: string, end: string): { label: string; slug: string } {
-  const today = isoToday();
-  const arrete = end > today && start <= today ? ` (données arrêtées au ${frDate(today)})` : "";
-  return {
-    label: start === end ? `Date : ${frDate(start)}` : `Période : du ${frDate(start)} au ${frDate(end)}${arrete}`,
-    slug: start === end ? start : `${start}_au_${end}`,
-  };
-}
-
-function exportXLSX(filename: string, rows: Record<string, any>[], period: { label: string; slug: string }) {
-  if (!rows.length) return;
-  const ws = XLSX.utils.aoa_to_sheet([[period.label], []]);
-  XLSX.utils.sheet_add_json(ws, rows, { origin: "A3" });
-  const wb = XLSX.utils.book_new();
-
-  // Largeurs optimisées par contenu
-  const keys = Object.keys(rows[0]);
-  ws["!cols"] = keys.map((k) => ({
-    wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 3,
-  }));
-
-  // Gel jusqu'à la ligne d'en-tête du tableau (ligne 3)
-  (ws as any)["!freeze"] = { xSplit: 0, ySplit: 3 };
-
-  XLSX.utils.book_append_sheet(wb, ws, "Pointages");
-  XLSX.writeFile(wb, `${filename}_${period.slug}.xlsx`);
 }
 
 // ─── Colonnes export personnalisé ─────────────────────────────────────────────
@@ -1859,7 +1824,7 @@ export default function AttendanceNormalesPage() {
         "Nom":              (r) => r.full_name,
         "Projet":           (r) => r.project !== "—" ? r.project : "",
         "Service":          (r) => r.department,
-        "Statut":           (r) => r.status,
+        "Statut":           (r) => STATUS_CFG[r.status as keyof typeof STATUS_CFG]?.label ?? r.status,
         "Retard":           (r) => r.computed_late_minutes > 0 ? `RETARD · ${formatMinutes(r.computed_late_minutes)}` : "Non",
         "Entrée":           (r) => formatTime(r.in_time),
         "Sortie":           (r) => formatTime(r.out_time),

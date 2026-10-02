@@ -28,7 +28,7 @@ import type {
   WeeklyStatsResponse, MonthlyStatsResponse, WeeklyDayEntry,
 } from "@/types/attendance";
 import type { Employee } from "@/types/employee";
-import * as XLSX from "xlsx-js-style";
+import { exportAttendanceXLSX as exportXLSX, exportSheets, periodInfo, PeriodInfo } from "@/utils/attendanceExport";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 import { onEmployeesSynced } from "@/utils/employeeSync";
 
@@ -73,6 +73,7 @@ interface SummaryRecord {
   shift_team: ShiftTeamKey | null;
   nb_jours: number; worked_minutes: number;
   absent_days: number; late_days: number; anomaly_days: number;
+  incomplete_days: number; leave_days: number; mission_days: number; not_working_days: number;
   delta_minutes: number; expected_minutes: number;
 }
 
@@ -332,52 +333,6 @@ function getCycleForDate(baseDate: string, cycleStartDate: string, date: string)
   return "R";
 }
 
-function exportXLSX(filename: string, rows: Record<string, any>[]) {
-  if (!rows.length) {
-    alert("Aucune donnée à exporter.");
-    return;
-  }
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
-  const headers = rows[0] ? Object.keys(rows[0]) : [];
-
-  // ── Style en-têtes : fond bleu Camusat, texte blanc, gras, centré ──────────
-  const headerStyle = {
-    font:      { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
-    fill:      { fgColor: { rgb: "003C71" } },
-    alignment: { horizontal: "center", vertical: "center", wrapText: false },
-    border: {
-      bottom: { style: "thin", color: { rgb: "FFFFFF" } },
-      right:  { style: "thin", color: { rgb: "FFFFFF" } },
-    },
-  };
-
-  for (let c = range.s.c; c <= range.e.c; c++) {
-    const cell = XLSX.utils.encode_cell({ r: 0, c });
-    if (ws[cell]) ws[cell].s = headerStyle;
-  }
-
-  // ── Style lignes de données : alternance blanc / bleu très clair ───────────
-  const rowStyleEven = { fill: { fgColor: { rgb: "EBF2FA" } }, font: { sz: 10 } };
-  const rowStyleOdd  = { fill: { fgColor: { rgb: "FFFFFF" } }, font: { sz: 10 } };
-
-  for (let r = range.s.r + 1; r <= range.e.r; r++) {
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const cell = XLSX.utils.encode_cell({ r, c });
-      if (ws[cell]) ws[cell].s = r % 2 === 0 ? rowStyleEven : rowStyleOdd;
-    }
-  }
-
-  // ── Largeur auto des colonnes ──────────────────────────────────────────────
-  ws["!cols"] = headers.map((k) => ({
-    wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 2,
-  }));
-
-  XLSX.utils.book_append_sheet(wb, ws, "Pointages");
-  XLSX.writeFile(wb, `${filename}_${todayISO()}.xlsx`);
-}
-
 // ─── Export mensuel détaillé (2 feuilles) ────────────────────────────────────
 const STATUS_LABELS_FR: Record<string, string> = {
   ok:          "Présent",
@@ -397,44 +352,8 @@ function fmtMin(min: number): string {
   return `${sign}${h}h${m.toString().padStart(2, "0")}`;
 }
 
-function _xlsxApplyTableStyle(
-  ws: XLSX.WorkSheet,
-  rows: Record<string, any>[],
-  headers: string[],
-) {
-  const headerStyle = {
-    font:      { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
-    fill:      { fgColor: { rgb: "003C71" } },
-    alignment: { horizontal: "center", vertical: "center" },
-    border:    { bottom: { style: "thin", color: { rgb: "FFFFFF" } }, right: { style: "thin", color: { rgb: "FFFFFF" } } },
-  };
-  const even = { fill: { fgColor: { rgb: "EBF2FA" } }, font: { sz: 10 } };
-  const odd  = { fill: { fgColor: { rgb: "FFFFFF" } }, font: { sz: 10 } };
-  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
-  for (let c = range.s.c; c <= range.e.c; c++) {
-    const cell = XLSX.utils.encode_cell({ r: 0, c });
-    if (ws[cell]) ws[cell].s = headerStyle;
-  }
-  for (let r = 1; r <= range.e.r; r++) {
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const cell = XLSX.utils.encode_cell({ r, c });
-      if (ws[cell]) ws[cell].s = r % 2 === 0 ? even : odd;
-    }
-  }
-  ws["!cols"] = headers.map((k) => ({
-    wch: Math.max(k.length, ...rows.map((row) => String(row[k] ?? "").length)) + 2,
-  }));
-}
-
-function exportMonthlyDetailXLSX(data: MonthlyDetailResponse, label: string) {
-  const wb = XLSX.utils.book_new();
-
+function exportMonthlyDetailXLSX(data: MonthlyDetailResponse, period: PeriodInfo) {
   // ── Feuille 1 : Récapitulatif ──────────────────────────────────────────────
-  const summHeaders = [
-    "Matricule", "Nom", "Service",
-    "Jours présents", "Jours absents", "Congés", "En mission", "Incomplets", "Anomalies",
-    "H. travaillées", "H. attendues", "Delta", "Jours retard",
-  ];
   const summRows = data.employees.map((emp) => ({
     "Matricule":       emp.matricule ?? "—",
     "Nom":             emp.full_name,
@@ -450,15 +369,8 @@ function exportMonthlyDetailXLSX(data: MonthlyDetailResponse, label: string) {
     "Delta":           fmtMin(emp.summary.delta_minutes),
     "Jours retard":    emp.days.filter((d) => d.late_minutes > 0).length,
   }));
-  const wsSumm = XLSX.utils.json_to_sheet(summRows);
-  _xlsxApplyTableStyle(wsSumm, summRows, summHeaders);
-  XLSX.utils.book_append_sheet(wb, wsSumm, "Récapitulatif");
 
   // ── Feuille 2 : Détail journalier ──────────────────────────────────────────
-  const detHeaders = [
-    "Nom", "Matricule", "Service",
-    "Date", "Jour", "Entrée", "Sortie", "Durée", "Retard", "Statut",
-  ];
   const detRows: Record<string, any>[] = [];
   for (const emp of data.employees) {
     for (const d of emp.days) {
@@ -476,11 +388,10 @@ function exportMonthlyDetailXLSX(data: MonthlyDetailResponse, label: string) {
       });
     }
   }
-  const wsDet = XLSX.utils.json_to_sheet(detRows);
-  _xlsxApplyTableStyle(wsDet, detRows, detHeaders);
-  XLSX.utils.book_append_sheet(wb, wsDet, "Détail journalier");
-
-  XLSX.writeFile(wb, `pointages_${label}_${todayISO()}.xlsx`);
+  exportSheets("pointages_shift_detail", period, [
+    { name: "Récapitulatif", rows: summRows },
+    { name: "Détail journalier", rows: detRows },
+  ]);
 }
 
 // ─── Helpers période ─────────────────────────────────────────────────────────
@@ -499,8 +410,8 @@ function isoMonthBounds(ym: string) {
 }
 
 // ─── Colonnes export personnalisé ─────────────────────────────────────────────
-const SHIFT_DAILY_COLS  = ["Matricule","Nom","Projet","Département","Statut","Retard","Entrée","Sortie","Heure travaillée","Compensation","Email"] as const;
-const SHIFT_SUMM_COLS   = ["Matricule","Nom","Projet","Département","Jours présents","Jours absents","Jours retard","Jours anomalie","Heures travaillées","Heures attendues","Delta","% quota"] as const;
+const SHIFT_DAILY_COLS  = ["Matricule","Nom","Projet","Service","Équipe","Statut","Retard","Entrée","Sortie","Heure travaillée","Compensation","Email"] as const;
+const SHIFT_SUMM_COLS   = ["Matricule","Nom","Projet","Service","Équipe","Jours présents","Jours absents","Jours incomplets","Jours en retard","Jours de congé","Jours de mission","Jours non en service","Heures travaillées","Heures attendues","% quota"] as const;
 const SHIFT_PERIOD_COLS = ["Date","Jour","Matricule","Nom","Équipe","Statut","Retard","Entrée","Sortie","Heures travaillées","Remplacé par","Remplaçant de"] as const;
 type ShiftDailyCol  = typeof SHIFT_DAILY_COLS[number];
 type ShiftSummCol   = typeof SHIFT_SUMM_COLS[number];
@@ -1195,14 +1106,14 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
 
   const handleExport = () => {
     if (!pointages.length) return;
-    const label = periodType === "weekly" ? selWeek : selMonth;
-    exportXLSX(`pointages_shift_${label}`, pointages.map((p) => ({
+    const bounds = periodType === "weekly" ? weekBounds(selWeek) : monthBounds(selMonth);
+    exportXLSX("pointages_shift", pointages.map((p) => ({
       Jour: p.day,
       Date: new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
       Statut: STATUS_CFG[p.status as keyof typeof STATUS_CFG]?.label ?? p.status,
       Entrée: p.in_time ? formatTime(p.in_time) : "—",
       Sortie: p.out_time ? formatTime(p.out_time) : "—",
-    })));
+    })), periodInfo(bounds.start, bounds.end));
   };
 
   return (
@@ -2466,8 +2377,9 @@ export default function AttendanceShiftsPage() {
     if (!silent) setLoading(true);
     try {
       if (viewMode === "daily")   setShiftData(await getShiftDailyStats({ date }));
-      if (viewMode === "weekly")  setWeeklyData(await getWeeklyStats(week));
-      if (viewMode === "monthly") setMonthlyData(await getMonthlyStats(month));
+      // Seulement les employés SHIFT (sinon l'API renvoie tous les employés)
+      if (viewMode === "weekly")  setWeeklyData(await getWeeklyStats(week, "SHIFT"));
+      if (viewMode === "monthly") setMonthlyData(await getMonthlyStats(month, "SHIFT"));
     } catch (e) { console.error(e); } finally { if (!silent) setLoading(false); }
   }, [viewMode, date, week, month]);
 
@@ -2581,6 +2493,10 @@ export default function AttendanceShiftsPage() {
       nb_jours: r.present_days ?? r.worked_days ?? 0,
       worked_minutes: r.total_worked_minutes ?? r.worked_minutes ?? 0,
       absent_days: r.absent_days ?? 0, late_days: r.late_days ?? 0, anomaly_days: r.anomaly_days ?? 0,
+      incomplete_days: r.incomplete_days ?? 0,
+      leave_days: r.on_leave_days ?? r.leave_days ?? 0,
+      mission_days: r.on_mission_days ?? r.mission_days ?? 0,
+      not_working_days: r.not_working_days ?? 0,
       delta_minutes: r.delta_minutes ?? 0, expected_minutes: r.expected_minutes ?? 0,
     });
     if (viewMode === "weekly"  && weeklyData)  return weeklyData.by_employee.map(map);
@@ -2678,8 +2594,9 @@ export default function AttendanceShiftsPage() {
     setExportDetailLoading(true);
     try {
       const raw  = await getAttendanceMonthlyDetail({ start, end });
-      const data = { ...raw, employees: raw.employees.filter(e => (e.service ?? "").toLowerCase().includes("esco")) };
-      exportMonthlyDetailXLSX(data, month);
+      const shiftIds = new Set((monthlyData?.by_employee ?? []).map((e: any) => e.employee_id));
+      const data = { ...raw, employees: raw.employees.filter((e) => shiftIds.has(e.employee_id)) };
+      exportMonthlyDetailXLSX(data, periodInfo(start, end));
     } catch (e: any) {
       alert("Erreur lors de l'export : " + (e?.message ?? "inconnue"));
     } finally {
@@ -2692,9 +2609,10 @@ export default function AttendanceShiftsPage() {
       const ALL: Record<ShiftDailyCol, (r: FlatRecord) => any> = {
         "Matricule":        (r) => r.matricule,
         "Nom":              (r) => r.full_name,
-        "Projet":           (r) => r.project !== "—" ? r.project : "—",
-        "Département":      (r) => r.department !== "—" ? r.department : "—",
-        "Statut":           (r) => r.status,
+        "Projet":           (r) => r.project !== "—" ? r.project : "",
+        "Service":          (r) => r.department !== "—" ? r.department : "",
+        "Équipe":           (r) => r.shift_team_label || "",
+        "Statut":           (r) => r.is_shift_pending ? "En attente" : (STATUS_LABELS_FR[r.status] ?? r.status),
         "Retard":           (r) => r.computed_late_minutes > 0 ? `RETARD · ${formatMinutes(r.computed_late_minutes)}` : "Non",
         "Entrée":           (r) => r.shift_team === "soir2" ? formatTime(r.out_time) : formatTime(r.in_time),
         "Sortie":           (r) => r.shift_team === "soir2" ? formatTime(r.in_time) : formatTime(r.out_time),
@@ -2702,24 +2620,38 @@ export default function AttendanceShiftsPage() {
         "Compensation":     (r) => r.compensation.is_compensated ? "Oui" : r.compensation.late_min > 0 ? "Non" : "—",
         "Email":            (r) => r.email ?? "Manquant",
       };
-      exportXLSX(`shift_journalier_${date}`, filtered.map(r => Object.fromEntries(exportDailyCols.map(k => [k, ALL[k](r)]))));
+      exportXLSX("pointage_shift_journalier",
+        filtered.map(r => Object.fromEntries(exportDailyCols.map(k => [k, ALL[k](r)]))),
+        periodInfo(date, date)
+      );
     } else {
+      // Même référence que la page Pointages normaux : 40h/semaine, 40h × 4,33 par mois
       const MAX_MIN = viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33);
+      const quotaHeader = `% quota (${viewMode === "weekly" ? "40h/semaine" : `${formatMinutes(MAX_MIN)}/mois`})`;
       const ALL: Record<ShiftSummCol, (r: SummaryRecord) => any> = {
-        "Matricule":          (r) => r.matricule,
-        "Nom":                (r) => r.full_name,
-        "Projet":             (r) => r.project !== "—" ? r.project : "—",
-        "Département":        (r) => r.department,
-        "Jours présents":     (r) => r.nb_jours,
-        "Jours absents":      (r) => r.absent_days,
-        "Jours retard":       (r) => r.late_days,
-        "Jours anomalie":     (r) => r.anomaly_days,
-        "Heures travaillées": (r) => formatMinutes(r.worked_minutes) || "0h",
-        "Heures attendues":   (r) => r.expected_minutes > 0 ? formatMinutes(r.expected_minutes) : "—",
-        "Delta":              (r) => r.delta_minutes !== 0 ? formatMinutes(Math.abs(r.delta_minutes)) : "0h",
-        "% quota":            (r) => `${Math.min(100, Math.round((r.worked_minutes / MAX_MIN) * 100))}%`,
+        "Matricule":            (r) => r.matricule,
+        "Nom":                  (r) => r.full_name,
+        "Projet":               (r) => r.project !== "—" ? r.project : "",
+        "Service":              (r) => r.department !== "—" ? r.department : "",
+        "Équipe":               (r) => SHIFT_TEAMS.find((t) => t.key === r.shift_team)?.label ?? "",
+        "Jours présents":       (r) => r.nb_jours,
+        "Jours absents":        (r) => r.absent_days,
+        "Jours incomplets":     (r) => r.incomplete_days,
+        "Jours en retard":      (r) => r.late_days,
+        "Jours de congé":       (r) => r.leave_days,
+        "Jours de mission":     (r) => r.mission_days,
+        "Jours non en service": (r) => r.not_working_days,
+        "Heures travaillées":   (r) => formatMinutes(r.worked_minutes) || "0h",
+        "Heures attendues":     (r) => r.expected_minutes > 0 ? formatMinutes(r.expected_minutes) : "0h",
+        "% quota":              (r) => `${Math.min(100, Math.round((r.worked_minutes / MAX_MIN) * 100))}%`,
       };
-      exportXLSX(`shift_${viewMode === "weekly" ? "hebdo" : "mensuel"}`, filteredSummaryRecords.map(r => Object.fromEntries(exportSummaryCols.map(k => [k, ALL[k](r)]))));
+      const header = (k: ShiftSummCol) => (k === "% quota" ? quotaHeader : k);
+      const fallback = viewMode === "weekly" ? isoWeekBounds(week) : isoMonthBounds(month);
+      const src = viewMode === "weekly" ? weeklyData : monthlyData;
+      exportXLSX(`pointage_shift_${viewMode === "weekly" ? "hebdo" : "mensuel"}`,
+        filteredSummaryRecords.map(r => Object.fromEntries(exportSummaryCols.map(k => [header(k), ALL[k](r)]))),
+        periodInfo(src?.start ?? fallback.start, src?.end ?? fallback.end)
+      );
     }
     setShowExportDlg(false);
   };
