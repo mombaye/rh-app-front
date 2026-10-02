@@ -206,7 +206,7 @@ function exportXLSX(filename: string, rows: Record<string, any>[], period: { lab
 
 // ─── Colonnes export personnalisé ─────────────────────────────────────────────
 const NORM_DAILY_COLS = ["Matricule","Nom","Projet","Service","Statut","Retard","Entrée","Sortie","Heure travaillée","Compensation","Email"] as const;
-const NORM_SUMM_COLS  = ["Matricule","Nom","Projet","Service","Nb jours","Jours absents","Jours incomplets","Heures travaillées","% quota"] as const;
+const NORM_SUMM_COLS  = ["Matricule","Nom","Projet","Service","Jours présents","Jours absents","Jours incomplets","Jours en retard","Jours de congé","Jours de mission","Jours non en service","Heures travaillées","% quota"] as const;
 type NormDailyCol = typeof NORM_DAILY_COLS[number];
 type NormSummCol  = typeof NORM_SUMM_COLS[number];
 
@@ -470,7 +470,7 @@ function SummaryTable({
         <table className="min-w-full text-sm">
           <thead className="bg-camublue-900 text-white sticky top-0 z-10">
             <tr>
-              {["Matricule","Nom complet","Projet / Service","Nb jours","Heures trav."].map((h) => (
+              {["Matricule","Nom complet","Projet / Service","Présents","Heures trav."].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold tracking-wide border-b border-camublue-800">{h}</th>
               ))}
               <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide border-b border-camublue-800 bg-red-900/40">Absents</th>
@@ -1880,9 +1880,13 @@ export default function AttendanceNormalesPage() {
         "Nom":                (r) => r.full_name,
         "Projet":             (r) => r.project !== "—" ? r.project : "",
         "Service":            (r) => r.department,
-        "Nb jours":           (r) => r.nb_jours,
-        "Jours absents":      (r) => r.absent_days,
-        "Jours incomplets":   (r) => r.incomplete_days,
+        "Jours présents":       (r) => r.nb_jours,
+        "Jours absents":        (r) => r.absent_days,
+        "Jours incomplets":     (r) => r.incomplete_days,
+        "Jours en retard":      (r) => r.late_days,
+        "Jours de congé":       (r) => r.leave_days,
+        "Jours de mission":     (r) => r.mission_days,
+        "Jours non en service": (r) => r.not_working_days,
         "Heures travaillées": (r) => formatMinutes(r.worked_minutes) || "0h",
         "% quota":            (r) => `${Math.min(100, Math.round((r.worked_minutes / MAX_MIN) * 100))}%`,
       };
