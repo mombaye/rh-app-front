@@ -99,7 +99,7 @@ interface SummaryRecord {
 interface Pointage {
   day: string; date: string;
   in_time: string | null; out_time: string | null;
-  status: "ok" | "absent" | "incomplete" | "anomaly" | "on_leave" | "on_mission";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "on_leave" | "on_mission" | "today" | "upcoming";
 }
 
 // ─── Utilitaires ──────────────────────────────────────────────────────────────
@@ -170,9 +170,25 @@ function yyyyMmToday(): string {
 }
 
 // ─── Export XLSX ──────────────────────────────────────────────────────────────
-function exportXLSX(filename: string, rows: Record<string, any>[]) {
+function frDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+/** Période exportée : ligne de titre + suffixe du nom de fichier. */
+function periodInfo(start: string, end: string): { label: string; slug: string } {
+  const today = isoToday();
+  const arrete = end > today && start <= today ? ` (données arrêtées au ${frDate(today)})` : "";
+  return {
+    label: start === end ? `Date : ${frDate(start)}` : `Période : du ${frDate(start)} au ${frDate(end)}${arrete}`,
+    slug: start === end ? start : `${start}_au_${end}`,
+  };
+}
+
+function exportXLSX(filename: string, rows: Record<string, any>[], period: { label: string; slug: string }) {
   if (!rows.length) return;
-  const ws = XLSX.utils.json_to_sheet(rows);
+  const ws = XLSX.utils.aoa_to_sheet([[period.label], []]);
+  XLSX.utils.sheet_add_json(ws, rows, { origin: "A3" });
   const wb = XLSX.utils.book_new();
 
   // Largeurs optimisées par contenu
@@ -181,16 +197,16 @@ function exportXLSX(filename: string, rows: Record<string, any>[]) {
     wch: Math.max(k.length, ...rows.map((r) => String(r[k] ?? "").length)) + 3,
   }));
 
-  // Gel de la première ligne d'en-tête
-  (ws as any)["!freeze"] = { xSplit: 0, ySplit: 1 };
+  // Gel jusqu'à la ligne d'en-tête du tableau (ligne 3)
+  (ws as any)["!freeze"] = { xSplit: 0, ySplit: 3 };
 
   XLSX.utils.book_append_sheet(wb, ws, "Pointages");
-  XLSX.writeFile(wb, `${filename}_${isoToday()}.xlsx`);
+  XLSX.writeFile(wb, `${filename}_${period.slug}.xlsx`);
 }
 
 // ─── Colonnes export personnalisé ─────────────────────────────────────────────
 const NORM_DAILY_COLS = ["Matricule","Nom","Projet","Service","Statut","Retard","Entrée","Sortie","Heure travaillée","Compensation","Email"] as const;
-const NORM_SUMM_COLS  = ["Matricule","Nom","Projet","Service","Nb jours","Heures travaillées","% quota (40h)"] as const;
+const NORM_SUMM_COLS  = ["Matricule","Nom","Projet","Service","Nb jours","Jours absents","Jours incomplets","Heures travaillées","% quota"] as const;
 type NormDailyCol = typeof NORM_DAILY_COLS[number];
 type NormSummCol  = typeof NORM_SUMM_COLS[number];
 
@@ -202,6 +218,8 @@ const STATUS_CFG = {
   on_mission: { label: "En Mission", dot: "bg-indigo-500",  badge: "bg-indigo-50 text-indigo-700 ring-indigo-200" },
   incomplete: { label: "Incomplet",  dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200" },
   anomaly:    { label: "Anomalie",   dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200" },
+  today:      { label: "En cours",   dot: "bg-slate-400",   badge: "bg-slate-50 text-slate-500 ring-slate-200" },
+  upcoming:   { label: "À venir",    dot: "bg-slate-300",   badge: "bg-slate-50 text-slate-400 ring-slate-200" },
 };
 
 const QUICK_FILTERS = [
@@ -315,6 +333,8 @@ function ExpandedDayTable({ records, dayDetails, isLoading }: {
     anomaly:    { label: "Anomalie",  cls: "bg-violet-50 text-violet-700" },
     on_leave:   { label: "Congé",     cls: "bg-blue-50 text-blue-600" },
     on_mission: { label: "Mission",   cls: "bg-sky-50 text-sky-700" },
+    today:      { label: "En cours",  cls: "bg-slate-50 text-slate-500" },
+    upcoming:   { label: "À venir",   cls: "bg-slate-50 text-slate-400" },
   };
   const rows: { emp: SummaryRecord; day: DayDetail }[] = [];
   for (const emp of records) {
@@ -1175,13 +1195,14 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
   const handleExport = () => {
     if (!pointages.length) return;
     const label = periodType === "weekly" ? selWeek : selMonth;
+    const bounds = periodType === "weekly" ? weekBounds(selWeek) : monthBounds(selMonth);
     exportXLSX(`pointages_${label}`, pointages.map((p) => ({
       Jour: p.day,
       Date: new Date(p.date + "T00:00:00").toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" }),
       Statut: STATUS_CFG[p.status]?.label ?? p.status,
       Entrée: p.in_time ? formatTime(p.in_time) : "—",
       Sortie: p.out_time ? formatTime(p.out_time) : "—",
-    })));
+    })), periodInfo(bounds.start, bounds.end));
   };
 
   return (
@@ -1847,21 +1868,30 @@ export default function AttendanceNormalesPage() {
         "Email":            (r) => r.email ?? "Manquant",
       };
       exportXLSX("pointage_normaux_journalier",
-        filtered.map((r) => Object.fromEntries(exportDailyCols.map((k) => [k, ALL[k](r)])))
+        filtered.map((r) => Object.fromEntries(exportDailyCols.map((k) => [k, ALL[k](r)]))),
+        periodInfo(date, date)
       );
     } else {
-      const MAX_MIN = viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WORKDAY_MIN * 4.33);
+      // Même référence que la colonne « Progression » du tableau
+      const MAX_MIN = viewMode === "weekly" ? MAX_WEEKLY_MIN : Math.round(MAX_WEEKLY_MIN * 4.33);
+      const quotaHeader = `% quota (${viewMode === "weekly" ? "40h/semaine" : `${formatMinutes(MAX_MIN)}/mois`})`;
       const ALL: Record<NormSummCol, (r: any) => any> = {
         "Matricule":          (r) => r.matricule,
         "Nom":                (r) => r.full_name,
         "Projet":             (r) => r.project !== "—" ? r.project : "",
         "Service":            (r) => r.department,
         "Nb jours":           (r) => r.nb_jours,
+        "Jours absents":      (r) => r.absent_days,
+        "Jours incomplets":   (r) => r.incomplete_days,
         "Heures travaillées": (r) => formatMinutes(r.worked_minutes) || "0h",
-        "% quota (40h)":      (r) => `${Math.min(100, Math.round((r.worked_minutes / MAX_MIN) * 100))}%`,
+        "% quota":            (r) => `${Math.min(100, Math.round((r.worked_minutes / MAX_MIN) * 100))}%`,
       };
+      const header = (k: NormSummCol) => (k === "% quota" ? quotaHeader : k);
+      const fallback = viewMode === "weekly" ? isoWeekBounds(week) : isoMonthBounds(month);
+      const src = viewMode === "weekly" ? weekly : monthly;
       exportXLSX(`pointage_normaux_${viewMode === "weekly" ? "hebdo" : "mensuel"}`,
-        summaryRecords.map((r) => Object.fromEntries(exportSummaryCols.map((k) => [k, ALL[k](r)])))
+        summaryRecords.map((r) => Object.fromEntries(exportSummaryCols.map((k) => [header(k), ALL[k](r)]))),
+        periodInfo(src?.start ?? fallback.start, src?.end ?? fallback.end)
       );
     }
     setShowExportDlg(false);

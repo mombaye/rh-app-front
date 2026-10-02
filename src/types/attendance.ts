@@ -172,7 +172,7 @@ export interface DayDetail {
   date: string;
   weekday: number;
   weekday_label: string;
-  status: "ok" | "absent" | "incomplete" | "anomaly" | "on_leave" | "on_mission";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "on_leave" | "on_mission" | "today" | "upcoming";
   in_time?: string | null;
   out_time?: string | null;
   worked_minutes: number;
