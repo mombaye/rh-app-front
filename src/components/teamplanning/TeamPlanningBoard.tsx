@@ -16,6 +16,24 @@ const KIND_STYLE: Record<CellKind, string> = {
   leave:   "bg-sky-100 text-sky-700",
   empty:   "bg-white border border-dashed border-rose-200 text-rose-300 hover:bg-rose-50",
 };
+// Projet rempli automatiquement d'après le pointage ou une mission validée (modifiable)
+const AUTO_PROJECT_STYLE = "bg-white border border-dashed border-emerald-400 text-emerald-700 italic";
+const ABSENT_STYLE = "bg-rose-50 border border-dashed border-rose-300 text-rose-400 hover:bg-rose-100";
+
+function cellStyle(cell: PlanningCell): string {
+  if (cell.kind === "project" && cell.auto) return AUTO_PROJECT_STYLE;
+  if (cell.kind === "empty" && cell.source === "absent") return ABSENT_STYLE;
+  return `${KIND_STYLE[cell.kind]} ${cell.auto ? "" : "font-semibold"}`;
+}
+
+function cellTitle(cell: PlanningCell): string {
+  if (cell.kind === "project" && cell.auto)
+    return `${cell.value} — rempli automatiquement (${cell.source === "mission" ? "mission validée" : "a pointé ce jour"}). Cliquez pour changer.`;
+  if (cell.kind === "empty" && cell.source === "absent") return "Aucun pointage ce jour : à renseigner";
+  if (cell.kind === "empty" && cell.source) return "A pointé ce jour : choisissez le projet";
+  return cell.value || "À renseigner";
+}
+
 const SHORT: Record<string, string> = { "Week-End": "WE", "Jour férié": "Férié", "Jour congés": "Congé" };
 
 type Picker = { mode: "cell" | "fill"; row: PlanningRow; day?: number; x: number; y: number };
@@ -139,9 +157,9 @@ export default function TeamPlanningBoard() {
     } else {
       const changes = row.cells
         .map((c, i) => ({ c, day: i + 1 }))
-        .filter(({ c }) => c.kind === "empty")
+        .filter(({ c }) => c.kind === "empty" || (c.kind === "project" && c.auto))
         .map(({ day: d }) => ({ employee_id: row.employee_id, day: d, value }));
-      if (changes.length === 0) toast("Aucun jour vide à remplir pour cet employé.");
+      if (changes.length === 0) toast("Aucun jour à remplir pour cet employé.");
       else applyChanges(changes);
     }
   };
@@ -272,6 +290,12 @@ export default function TeamPlanningBoard() {
               <span className={`w-3 h-3 rounded border border-slate-200 ${KIND_STYLE[k]}`} /> {l}
             </span>
           ))}
+          <span className="flex items-center gap-1">
+            <span className={`w-3 h-3 rounded ${AUTO_PROJECT_STYLE}`} /> Projet (auto, pointage)
+          </span>
+          <span className="flex items-center gap-1">
+            <span className={`w-3 h-3 rounded ${ABSENT_STYLE}`} /> Sans pointage
+          </span>
           {saving && <Loader2 size={14} className="animate-spin text-[#003c71]" />}
         </div>
       </div>
@@ -329,7 +353,7 @@ export default function TeamPlanningBoard() {
                           <div className="text-slate-400">{row.matricule}{empty > 0 && <span className="ml-1.5 text-rose-500">· {empty} vide(s)</span>}</div>
                         </div>
                         <div className="flex shrink-0">
-                          <button title="Remplir tous les jours vides avec un projet"
+                          <button title="Remplir les jours vides et automatiques avec un projet"
                             onClick={(e) => openPicker("fill", row, e.currentTarget)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-[#003c71] hover:bg-[#003c71]/10">
                             <Paintbrush size={14} />
@@ -341,8 +365,8 @@ export default function TeamPlanningBoard() {
                       <td key={i} className="border-b border-slate-100 p-0.5">
                         <button
                           onClick={(e) => onCellClick(row, cell, i + 1, e.currentTarget)}
-                          title={cell.value || "À renseigner"}
-                          className={`w-full h-7 rounded truncate px-0.5 ${KIND_STYLE[cell.kind]} ${cell.auto ? "" : "font-semibold"}`}>
+                          title={cellTitle(cell)}
+                          className={`w-full h-7 rounded truncate px-0.5 ${cellStyle(cell)}`}>
                           {SHORT[cell.value] ?? (cell.value || "·")}
                         </button>
                       </td>

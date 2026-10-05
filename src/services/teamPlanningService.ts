@@ -6,6 +6,8 @@ export interface PlanningCell {
   value: string;
   kind: CellKind;
   auto: boolean;
+  /** pointage / mission : jour travaillé (projet rempli automatiquement) ; absent : jour passé sans pointage */
+  source?: "pointage" | "mission" | "absent";
 }
 
 export interface PlanningRow {
