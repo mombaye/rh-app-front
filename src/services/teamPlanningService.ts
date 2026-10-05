@@ -54,6 +54,14 @@ export interface ImportSummary {
   unknown_employees: string[];
   bl_to_update: string[];
   manager_to_update: string[];
+  new_projects?: number;
+}
+
+export interface PlanningProjectCode {
+  id: number;
+  code: string;
+  business_line: string;
+  is_active: boolean;
 }
 
 const clean = (f: PlanningFilters) =>
@@ -84,6 +92,15 @@ export const teamPlanningService = {
 
   copyPrevious: async (filters: PlanningFilters): Promise<{ filled: number; rows: PlanningRow[] }> =>
     (await api.post("/api/team-planning/copy-previous/", clean(filters))).data,
+
+  listProjects: async (): Promise<{ business_lines: string[]; projects: PlanningProjectCode[] }> =>
+    (await api.get("/api/team-planning/projects/")).data,
+
+  addProject: async (code: string, business_line: string): Promise<PlanningProjectCode> =>
+    (await api.post("/api/team-planning/projects/", { code, business_line })).data,
+
+  setProjectActive: async (id: number, is_active: boolean): Promise<PlanningProjectCode> =>
+    (await api.patch(`/api/team-planning/projects/${id}/`, { is_active })).data,
 
   importFile: async (file: File): Promise<ImportSummary> => {
     const fd = new FormData();
