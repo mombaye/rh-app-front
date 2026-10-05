@@ -18,6 +18,7 @@ import {
   Stethoscope,
   BookUser,
   Ticket,
+  CalendarRange,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { COUNTRY } from "@/config/features";
@@ -26,6 +27,7 @@ import { useState, useEffect } from "react";
 import { leaveRequestService } from "@/services/leaveService";
 import { LeaveRequest } from "@/types/leave";
 import { getMonQuestionnaire } from "@/services/questionnaireService";
+import { teamPlanningService } from "@/services/teamPlanningService";
 
 const baseNavItems = [
   {
@@ -133,6 +135,12 @@ export default function EmployeeSidebar() {
 
   const isHse = user?.is_hse === true;
 
+  // Team Planning : seulement pour les profils autorisés (vue complète ou responsables concernés)
+  const [hasTeamPlanning, setHasTeamPlanning] = useState(false);
+  useEffect(() => {
+    if (user?.id) teamPlanningService.hasAccess(user.id).then(setHasTeamPlanning);
+  }, [user?.id]);
+
   const navItems: NavItem[] = [
     ...baseNavItems,
     ...(hasQuestionnaire
@@ -150,6 +158,15 @@ export default function EmployeeSidebar() {
             label: "Approbations",
             path: "/manager/approvals",
             icon: <ClipboardCheck size={20} />,
+          },
+        ]
+      : []),
+    ...(hasTeamPlanning
+      ? [
+          {
+            label: "Team Planning",
+            path: "/employee/team-planning",
+            icon: <CalendarRange size={20} />,
           },
         ]
       : []),

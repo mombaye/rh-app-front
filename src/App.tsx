@@ -49,6 +49,7 @@ const EmployeeAttendancePage        = lazy(() => import("@/pages/employee/Employ
 const EmployeeDocumentsPage         = lazy(() => import("@/pages/employee/EmployeeDocumentsPage"));
 const EmployeeExitAuthorizationPage = lazy(() => import("@/pages/employee/EmployeeExitAuthorizationPage"));
 const EmployeeServiceLeavesPage     = lazy(() => import("@/pages/employee/EmployeeServiceLeavesPage"));
+const EmployeeTeamPlanningPage      = lazy(() => import("@/pages/employee/EmployeeTeamPlanningPage"));
 const EmployeeQuestionnairePage     = lazy(() => import("@/pages/employee/EmployeeQuestionnairePage"));
 const EmployeeAttestationsPage      = lazy(() => import("@/pages/employee/EmployeeAttestationsPage"));
 
@@ -242,6 +243,11 @@ function App() {
         <Route path="/employee/exits" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeExitAuthorizationPage />
+          </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />
+        <Route path="/employee/team-planning" element={
+          <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
+            <EmployeeTeamPlanningPage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
         <Route path="/employee/service-leaves" element={

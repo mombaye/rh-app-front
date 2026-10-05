@@ -254,8 +254,9 @@ export default function TeamPlanningBoard() {
             </button>
           )}
           <button onClick={exportExcel}
+            title="Fichier Team Planning du mois, au format d'origine, avec les données remplies (réimportable)"
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
-            <FileDown size={15} /> Exporter
+            <FileDown size={15} /> Exporter le fichier rempli
           </button>
           {grid?.is_rh && (
             <>
