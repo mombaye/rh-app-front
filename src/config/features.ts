@@ -21,6 +21,9 @@ export const FEATURES = {
   migration:      flag("VITE_FEATURE_MIGRATION"),
   anticipation:   flag("VITE_FEATURE_ANTICIPATION"),
   interim:        flag("VITE_FEATURE_INTERIM"),
+  // Séparation « Internes / Intérimaires » dans Gestion Employés et Gestion Congés.
+  // false → Gestion Employés garde « Vue Globale », Gestion Congés n'a qu'une page pour tous.
+  contractSplit:  flag("VITE_FEATURE_CONTRACT_SPLIT"),
 
   // ── Pointage ───────────────────────────────────────────────────────────────
   shifts:         flag("VITE_FEATURE_SHIFTS"),

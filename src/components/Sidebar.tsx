@@ -110,8 +110,8 @@ export default function Sidebar() {
       icon: <Users2 size={20} />,
       subItems: [
         { label: "Vue Globale", path: "/employees/global"    },
-        { label: "Internes",    path: "/employees/internes"  },
-        ...(FEATURES.interim        ? [{ label: "Intérimaires",          path: "/employees/interims"                                                               }] : []),
+        ...(FEATURES.contractSplit ? [{ label: "Internes", path: "/employees/internes" }] : []),
+        ...(FEATURES.contractSplit && FEATURES.interim ? [{ label: "Intérimaires", path: "/employees/interims" }] : []),
         { label: "Alertes",         path: "/employees/alertes", badge: totalCount },
         ...(FEATURES.disciplinaire  ? [{ label: "Disciplinaire",          path: "/employees/disciplinaire"                                                         }] : []),
         ...(FEATURES.questionnaires ? [{ label: "Questionnaires sortie", path: "/employees/questionnaires", badge: questionnaireDoneCount || undefined, badgeRed: true }] : []),
@@ -122,8 +122,10 @@ export default function Sidebar() {
       path: "/leaves",
       icon: <CalendarDays size={20} />,
       subItems: [
-        { label: "Internes",      path: "/leaves/internes"      },
-        ...(FEATURES.interim     ? [{ label: "Intérimaires",     path: "/leaves/interimaires"  }] : []),
+        ...(FEATURES.contractSplit
+          ? [{ label: "Internes", path: "/leaves/internes" },
+             ...(FEATURES.interim ? [{ label: "Intérimaires", path: "/leaves/interimaires" }] : [])]
+          : [{ label: "Demandes de congé", path: "/leaves/demandes" }]),
         { label: "Hiérarchie",    path: "/leaves/hierarchie"    },
         { label: "Autorisations", path: "/leaves/autorisations" },
         ...(FEATURES.anticipation ? [{ label: "Anticipation",     path: "/leaves/anticipation"  }] : []),

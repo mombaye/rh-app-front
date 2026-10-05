@@ -1,7 +1,8 @@
 // src/types/leave.ts
 // Aligné avec leaves/serializers.py et leaves/models.py
 
-export type ContractType = "INTERNE" | "INTERIM";
+// ALL : pas de séparation Internes / Intérimaires (pays où VITE_FEATURE_CONTRACT_SPLIT=false)
+export type ContractType = "INTERNE" | "INTERIM" | "ALL";
 
 // ── LeaveType ── mirrors LeaveTypeSerializer ──────────────────────────────────
 export interface LeaveType {

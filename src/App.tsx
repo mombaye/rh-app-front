@@ -340,12 +340,12 @@ function App() {
             <GlobalEmployeesPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
         } />
-        <Route path="/employees/internes" element={
+        {FEATURES.contractSplit && <Route path="/employees/internes" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <InterneEmployeesPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
-        } />
-        {FEATURES.interim && <Route path="/employees/interims" element={
+        } />}
+        {FEATURES.contractSplit && FEATURES.interim && <Route path="/employees/interims" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <InterimEmployeesPage />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
@@ -399,13 +399,18 @@ function App() {
         } />
 
         {/* ── Congés et Absences (3 sous-routes) ───────────────── */}
-        <Route path="/leaves" element={<Navigate to="/leaves/internes" replace />} />
-        <Route path="/leaves/internes" element={
+        <Route path="/leaves" element={<Navigate to={FEATURES.contractSplit ? "/leaves/internes" : "/leaves/demandes"} replace />} />
+        {FEATURES.contractSplit && <Route path="/leaves/internes" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <LeavePage contractFilter="INTERNE" />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
-        } />
-        {FEATURES.interim && <Route path="/leaves/interimaires" element={
+        } />}
+        {!FEATURES.contractSplit && <Route path="/leaves/demandes" element={
+          <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
+            <LeavePage contractFilter="ALL" />
+          </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>
+        } />}
+        {FEATURES.contractSplit && FEATURES.interim && <Route path="/leaves/interimaires" element={
           <ProtectedRoute><FirstLoginGuard><NonPlanningRoute><RhOnlyRoute>
             <LeavePage contractFilter="INTERIM" />
           </RhOnlyRoute></NonPlanningRoute></FirstLoginGuard></ProtectedRoute>

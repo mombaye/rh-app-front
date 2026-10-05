@@ -15,14 +15,22 @@ import { Department, DepartmentCreate, EmployeeHierarchy } from "@/types/leave";
 import { departmentService, employeeHierarchyService, GlobalDGInfo } from "@/services/hierarchyService";
 import { getEmployees } from "@/services/employeeService";
 import { notifyEmployeesSynced } from "@/utils/employeeSync";
+import { FEATURES } from "@/config/features";
 
 // ─── Sections ───────────────────────────────────────────────────────────────
 type HierarchySection = "orgchart" | "employees" | "interimaires";
 
 const SECTIONS: { id: HierarchySection; label: string; description: string; Icon: React.ElementType; color: string }[] = [
   { id: "orgchart",     label: "Organigramme",        description: "Visualisez et gérez la structure organisationnelle, les départements et leurs membres",                     Icon: GitBranch, color: "blue"    },
-  { id: "employees",    label: "Hiérarchie Internes",  description: "Gérez les managers N+1/N+2 et la double validation pour chaque employé interne (CDI/CDD/Stage)",           Icon: Users,     color: "emerald" },
-  { id: "interimaires", label: "Intérimaires",          description: "Consultez la hiérarchie et les managers assignés pour les employés intérimaires",                         Icon: UserCheck, color: "purple"  },
+  ...(FEATURES.contractSplit
+    ? [
+        { id: "employees" as const,    label: "Hiérarchie Internes", description: "Gérez les managers N+1/N+2 et la double validation pour chaque employé interne (CDI/CDD/Stage)", Icon: Users,     color: "emerald" },
+        { id: "interimaires" as const, label: "Intérimaires",        description: "Consultez la hiérarchie et les managers assignés pour les employés intérimaires",               Icon: UserCheck, color: "purple"  },
+      ]
+    : [
+        // Pays sans séparation Internes / Intérimaires : une seule hiérarchie pour tous
+        { id: "employees" as const,    label: "Hiérarchie",          description: "Gérez les managers N+1/N+2 et la double validation pour chaque employé",                        Icon: Users,     color: "emerald" },
+      ]),
 ];
 
 // ─── Component principal (Modal) ────────────────────────────────────────────
@@ -122,7 +130,7 @@ export default function HierarchyManagement({ open, onClose, inline, onLeaveType
             /* ── Active Section Content ──────────────────────────────────── */
             <>
               {activeSection === "orgchart"     && <OrgChartTab />}
-              {activeSection === "employees"    && <EmployeesHierarchyTab filterContractTypes={["CDI","CDD","STAGE"]} />}
+              {activeSection === "employees"    && <EmployeesHierarchyTab filterContractTypes={FEATURES.contractSplit ? ["CDI","CDD","STAGE"] : undefined} />}
               {activeSection === "interimaires" && <EmployeesHierarchyTab filterContractTypes={["INTERIM"]} />}
             </>
           )}

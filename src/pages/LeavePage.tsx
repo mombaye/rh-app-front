@@ -172,7 +172,7 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
     if (tab !== "exit_authorizations") return;
     getEmployees({ status: "ACTIVE" })
       .then((list) => setEmployees(list.filter((e) =>
-        contractType === "INTERIM" ? e.type_contrat === "INTERIM" : e.type_contrat !== "INTERIM")))
+        contractType === "ALL" || (contractType === "INTERIM" ? e.type_contrat === "INTERIM" : e.type_contrat !== "INTERIM"))))
       .catch(() => setEmployees([]));
   }, [tab, contractType]);
   const [showForm,       setShowForm]       = useState(false);
@@ -432,10 +432,10 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
               </div>
               <div>
                 <h1 className="text-xl font-black text-camublue-900">
-                  {contractFilter === "INTERIM" ? "Intérimaires — Congés" : "Internes — Congés"}
+                  {contractFilter === "ALL" ? "Demandes de congé" : contractFilter === "INTERIM" ? "Intérimaires — Congés" : "Internes — Congés"}
                 </h1>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {contractFilter === "INTERIM" ? "Gestion des congés des intérimaires" : "Gestion des congés des employés internes (CDI / CDD / Stage)"}
+                  {contractFilter === "ALL" ? "Gestion des congés de tous les employés" : contractFilter === "INTERIM" ? "Gestion des congés des intérimaires" : "Gestion des congés des employés internes (CDI / CDD / Stage)"}
                 </p>
               </div>
             </div>
@@ -1569,7 +1569,7 @@ function BalancesTab({ contractType }: { contractType: ContractType }) {
       if (parseFloat(b.leave_type.monthly_accrual) <= 0) return false;
       const emp = empMap.get(b.employee);
       if (!emp) return false;
-      if (contractType === "INTERIM" ? emp.type_contrat !== "INTERIM" : emp.type_contrat === "INTERIM") return false;
+      if (contractType !== "ALL" && (contractType === "INTERIM" ? emp.type_contrat !== "INTERIM" : emp.type_contrat === "INTERIM")) return false;
       if (!q) return true;
       const name = b.employee_name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const mat  = (emp.matricule ?? "").toLowerCase();

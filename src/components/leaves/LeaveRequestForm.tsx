@@ -91,7 +91,8 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   // Load employees filtered by contract type
   useEffect(() => {
     getEmployees({ status: "ACTIVE" }).then((list) => {
-      const filtered = contractType === "INTERIM"
+      const filtered = contractType === "ALL" ? list
+        : contractType === "INTERIM"
         ? list.filter((e) => e.type_contrat === "INTERIM")
         : list.filter((e) => e.type_contrat !== "INTERIM");
       setAllEmployees(filtered);
@@ -333,7 +334,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
     }
   };
 
-  const contractLabel = contractType === "INTERIM" ? "Intérimaire" : "Interne";
+  const contractLabel = contractType === "ALL" ? "" : contractType === "INTERIM" ? "Intérimaire" : "Interne";
 
   // ── Étape 2 : upload du justificatif ──────────────────────────────────────
   if (createdId !== null) {
@@ -459,7 +460,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         <div className="flex justify-between items-start px-4 sm:px-8 pt-6 sm:pt-8">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Nouvelle demande</h2>
-            <p className="text-sm text-gray-400 mt-1">Employé {contractLabel} · Remplissez tous les champs</p>
+            <p className="text-sm text-gray-400 mt-1">{contractLabel ? `Employé ${contractLabel} · ` : ""}Remplissez tous les champs</p>
           </div>
           <button onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition p-1.5 rounded-lg hover:bg-gray-100">

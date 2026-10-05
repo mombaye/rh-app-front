@@ -19,7 +19,7 @@ export default function LeavesHierarchiePage() {
       <div className="flex flex-col h-full">
         <HierarchyManagement
           open={true}
-          onClose={() => navigate("/leaves/internes")}
+          onClose={() => navigate("/leaves")}
           inline={true}
           onLeaveTypes={() => setShowLeaveTypes(true)}
           onCountMode={() => setShowCountMode(true)}
