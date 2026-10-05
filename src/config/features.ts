@@ -28,6 +28,8 @@ export const FEATURES = {
   // ── Pointage ───────────────────────────────────────────────────────────────
   shifts:         flag("VITE_FEATURE_SHIFTS"),
   planning:       flag("VITE_FEATURE_PLANNING"),
+  omPointage:     flag("VITE_FEATURE_OM_POINTAGE"),     // Pointage O&M (+ forfaits)
+  teamPlanning:   flag("VITE_FEATURE_TEAM_PLANNING"),   // Team Planning
 
   // ── RH ─────────────────────────────────────────────────────────────────────
   missions:       flag("VITE_FEATURE_MISSIONS"),

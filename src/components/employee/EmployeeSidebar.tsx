@@ -139,7 +139,7 @@ export default function EmployeeSidebar() {
   // Team Planning : seulement pour les profils autorisés (vue complète ou responsables concernés)
   const [hasTeamPlanning, setHasTeamPlanning] = useState(false);
   useEffect(() => {
-    if (user?.id) teamPlanningService.hasAccess(user.id).then(setHasTeamPlanning);
+    if (FEATURES.teamPlanning && user?.id) teamPlanningService.hasAccess(user.id).then(setHasTeamPlanning);
   }, [user?.id]);
 
   const navItems: NavItem[] = [

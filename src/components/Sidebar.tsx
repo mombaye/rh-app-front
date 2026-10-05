@@ -142,8 +142,8 @@ export default function Sidebar() {
         ...(FEATURES.shifts ? [{ label: "Shifts", path: "/attendance/shifts" }] : []),
         { label: "Justifications", path: "/attendance/justifications" },
         { label: "Jours fériés",   path: "/attendance/feries"         },
-        { label: "Pointage O&M",   path: "/rh/om-pointage"           },
-        { label: "Team Planning",  path: "/rh/team-planning"         },
+        ...(FEATURES.omPointage   ? [{ label: "Pointage O&M",  path: "/rh/om-pointage"   }] : []),
+        ...(FEATURES.teamPlanning ? [{ label: "Team Planning", path: "/rh/team-planning" }] : []),
       ],
     },
     {

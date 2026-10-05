@@ -23,3 +23,7 @@ VITE_FEATURE_HSE=true
 
 # Pas de séparation Internes / Intérimaires (Gestion Employés : Vue Globale ; Gestion Congés : une seule page)
 VITE_FEATURE_CONTRACT_SPLIT=false
+
+# Gestion Pointages : pas de Pointage O&M ni de Team Planning au Burkina
+VITE_FEATURE_OM_POINTAGE=false
+VITE_FEATURE_TEAM_PLANNING=false

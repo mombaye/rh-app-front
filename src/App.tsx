@@ -245,11 +245,11 @@ function App() {
             <EmployeeExitAuthorizationPage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
-        <Route path="/employee/team-planning" element={
+        {FEATURES.teamPlanning && <Route path="/employee/team-planning" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeTeamPlanningPage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
-        } />
+        } />}
         <Route path="/employee/service-leaves" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeServiceLeavesPage />
@@ -294,8 +294,8 @@ function App() {
         <Route path="/manager/team-leaves"     element={<MgrRoute><ManagerTeamLeavesPage    /></MgrRoute>} />
         <Route path="/manager/team-contracts" element={<MgrRoute><ManagerTeamContractsPage /></MgrRoute>} />
         <Route path="/manager/tickets"        element={<MgrRoute><ManagerTicketsPage       /></MgrRoute>} />
-        <Route path="/manager/om-pointage"    element={<MgrRoute><ManagerOmPointagePage    /></MgrRoute>} />
-        <Route path="/manager/team-planning"  element={<MgrRoute><ManagerTeamPlanningPage  /></MgrRoute>} />
+        {FEATURES.omPointage && <Route path="/manager/om-pointage"    element={<MgrRoute><ManagerOmPointagePage    /></MgrRoute>} />}
+        {FEATURES.teamPlanning && <Route path="/manager/team-planning"  element={<MgrRoute><ManagerTeamPlanningPage  /></MgrRoute>} />}
 
         {/* ── Planning Manager ─────────────────────────────────── */}
         <Route path="/planning" element={
@@ -324,9 +324,9 @@ function App() {
         <Route path="/rh/documents"      element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhDocumentsPage      /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         {FEATURES.attestations && <Route path="/rh/attestations" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttestationsPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />}
         {FEATURES.missions     && <Route path="/rh/missions"     element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMissionsPage     /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />}
-        <Route path="/rh/om-pointage"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhOmPointagePage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
-        <Route path="/rh/om-forfaits"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhOmForfaitsPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
-        <Route path="/rh/team-planning" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhTeamPlanningPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        {FEATURES.omPointage && <Route path="/rh/om-pointage"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhOmPointagePage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />}
+        {FEATURES.omPointage && <Route path="/rh/om-forfaits"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhOmForfaitsPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />}
+        {FEATURES.teamPlanning && <Route path="/rh/team-planning" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhTeamPlanningPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />}
         <Route path="/rh/feedback"     element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhFeedbackPage   /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
 
         {/* ── Espace RH ────────────────────────────────────────── */}

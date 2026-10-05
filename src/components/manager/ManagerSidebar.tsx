@@ -31,7 +31,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
   const [hasTeamPlanning, setHasTeamPlanning] = useState(false);
 
   useEffect(() => {
-    if (user?.id) teamPlanningService.hasAccess(user.id).then(setHasTeamPlanning);
+    if (FEATURES.teamPlanning && user?.id) teamPlanningService.hasAccess(user.id).then(setHasTeamPlanning);
   }, [user?.id]);
 
   useEffect(() => {
@@ -65,7 +65,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
     { label: "Demande d'attestation",    path: "/manager/attestations", icon: <FileBadge size={20} />                                                          },
     { label: "Documents RH",            path: "/manager/documents",    icon: <FileStack size={20} />                                                          },
     { label: "Signalements",            path: "/manager/tickets",      icon: <Ticket size={20} />                                                                 },
-    { label: "Pointage O&M",           path: "/manager/om-pointage",  icon: <TableProperties size={20} />                                                        },
+    ...(FEATURES.omPointage ? [{ label: "Pointage O&M",           path: "/manager/om-pointage",  icon: <TableProperties size={20} />                                                        }] : []),
     ...(hasTeamPlanning ? [{ label: "Team Planning", path: "/manager/team-planning", icon: <CalendarRange size={20} /> }] : []),
     ...(isHse ? [{ label: "Gestion Passeports", path: "/hse/passeports", icon: <BookUser size={20} /> }] : []),
     ...(hasQuestionnaire ? [{ label: "Questionnaire de sortie", path: "/manager/questionnaire", icon: <ClipboardList size={20} /> }] : []),
