@@ -1,0 +1,18 @@
+# Test du BURKINA FASO en local (Mac/Windows), à côté du Sénégal :
+#   make bf       → http://localhost:8081  (appelle l'API Burkina locale : http://localhost:8031)
+#   make bf-down  → arrête
+# Build en mode « bf » : titre « eRH - Burkina Faso », drapeau, nom du pays (fichier .env.bf).
+name: erh-bf-front
+
+services:
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_MODE: bf
+        VITE_API_URL: http://localhost:8031
+        VITE_PUBLIC_URL: http://localhost:8081
+    image: erh-frontend:bf-local
+    container_name: erh-frontend-bf
+    ports:
+      - "8081:80"

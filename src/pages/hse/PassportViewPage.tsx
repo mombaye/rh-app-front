@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { ImSpinner2 } from "react-icons/im";
+import { COUNTRY } from "@/config/features";
 
 export default function PassportViewPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -40,7 +41,7 @@ export default function PassportViewPage() {
           onError={(e) => (e.currentTarget.style.display = "none")}
         />
         <span className="text-sm font-semibold tracking-widest uppercase">
-          Passeport Sécurité — CAMUSAT Sénégal
+          Passeport Sécurité — {COUNTRY.subtitle}
         </span>
       </div>
 

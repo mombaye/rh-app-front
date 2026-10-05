@@ -10,9 +10,10 @@ import {
   RefreshCw, Info,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { COUNTRY } from "@/config/features";
 
-// ─── Jours fériés Sénégalais par défaut ──────────────────────────────────────
-const DEFAULT_HOLIDAYS: Omit<PublicHoliday, "id">[] = [
+// ─── Jours fériés par défaut, selon le pays du build ─────────────────────────
+const DEFAULT_HOLIDAYS_SN: Omit<PublicHoliday, "id">[] = [
   { date: "2024-01-01", name: "Nouvel An",                       is_recurring: true,  description: "1er janvier" },
   { date: "2024-04-04", name: "Fête de l'Indépendance",          is_recurring: true,  description: "4 avril" },
   { date: "2024-05-01", name: "Fête du Travail",                 is_recurring: true,  description: "1er mai" },
@@ -21,6 +22,21 @@ const DEFAULT_HOLIDAYS: Omit<PublicHoliday, "id">[] = [
   { date: "2024-12-25", name: "Noël",                            is_recurring: true,  description: "25 décembre" },
   { date: "2024-02-18", name: "Gamou (Maouloud)",                is_recurring: false, description: "Naissance du Prophète (date variable)" },
 ];
+
+// Fêtes fixes du Burkina Faso (à faire valider par les RH) ; les fêtes religieuses
+// à date variable (Ramadan, Tabaski, Maouloud, lundi de Pâques, Ascension…) s'ajoutent chaque année.
+const DEFAULT_HOLIDAYS_BF: Omit<PublicHoliday, "id">[] = [
+  { date: "2024-01-01", name: "Nouvel An",                          is_recurring: true, description: "1er janvier" },
+  { date: "2024-01-03", name: "Anniversaire du soulèvement populaire", is_recurring: true, description: "3 janvier" },
+  { date: "2024-03-08", name: "Journée internationale de la femme", is_recurring: true, description: "8 mars" },
+  { date: "2024-05-01", name: "Fête du Travail",                    is_recurring: true, description: "1er mai" },
+  { date: "2024-08-15", name: "Assomption",                         is_recurring: true, description: "15 août" },
+  { date: "2024-11-01", name: "Toussaint",                          is_recurring: true, description: "1er novembre" },
+  { date: "2024-12-11", name: "Fête de l'Indépendance",             is_recurring: true, description: "11 décembre" },
+  { date: "2024-12-25", name: "Noël",                               is_recurring: true, description: "25 décembre" },
+];
+
+const DEFAULT_HOLIDAYS = COUNTRY.code === "BF" ? DEFAULT_HOLIDAYS_BF : DEFAULT_HOLIDAYS_SN;
 
 const MONTHS_FR = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
 
@@ -227,7 +243,7 @@ export default function HolidayManager({ onChanged }: HolidayManagerProps = {}) 
             <button onClick={handleSeed} disabled={seeding}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 text-xs font-medium hover:bg-amber-50 transition disabled:opacity-50">
               {seeding ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              Charger les fériés sénégalais
+              Charger les fériés ({COUNTRY.name})
             </button>
           )}
           <button onClick={openAdd}
@@ -257,7 +273,7 @@ export default function HolidayManager({ onChanged }: HolidayManagerProps = {}) 
           <button onClick={handleSeed} disabled={seeding}
             className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition mx-auto disabled:opacity-50">
             {seeding ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-            Charger les fériés sénégalais par défaut
+            Charger les fériés par défaut ({COUNTRY.name})
           </button>
         </div>
       ) : (

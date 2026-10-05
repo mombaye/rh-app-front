@@ -33,6 +33,7 @@ import { leaveBalanceService, leaveRequestService, leaveTypeService, holidayServ
 import { LeaveBalance, LeaveRequest, LeaveRequestCreate, LeaveType, HolidayCheckResult } from "@/types/leave";
 import AnticipationLeaveForm from "@/components/leaves/AnticipationLeaveForm";
 import toast from "react-hot-toast";
+import { COUNTRY } from "@/config/features";
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, {
@@ -118,7 +119,7 @@ function exportLeavesPDF(
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Camusat Sénégal RH — Document généré automatiquement — Page ${i}/${pageCount}`,
+      `${COUNTRY.subtitle} RH — Document généré automatiquement — Page ${i}/${pageCount}`,
       148.5,
       207,
       { align: "center" }

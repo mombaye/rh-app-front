@@ -11,12 +11,14 @@ COPY . .
 # ARG permet de passer VITE_API_URL au moment du build (docker compose build)
 ARG VITE_API_URL=http://192.168.1.50:8030
 ARG VITE_PUBLIC_URL=https://erh.camusatsn.com
-ARG VITE_APP_TITLE="eRH - Sénégal"
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_PUBLIC_URL=$VITE_PUBLIC_URL
-ENV VITE_APP_TITLE=$VITE_APP_TITLE
 
-RUN npm run build
+# Pays du build : « production » (Sénégal, .env + .env.production) ou « bf » (.env + .env.bf :
+# titre, drapeau, nom du pays…). Le titre vient de ces fichiers ; VITE_APP_TITLE le force si fourni.
+ARG VITE_MODE=production
+ARG VITE_APP_TITLE
+RUN if [ -z "$VITE_APP_TITLE" ]; then unset VITE_APP_TITLE; fi; npx vite build --mode "$VITE_MODE"
 
 # ── Étape 2 : servir avec nginx ───────────────────────────────────────────────
 FROM nginx:alpine

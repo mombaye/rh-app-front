@@ -37,6 +37,7 @@ import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { COUNTRY } from "@/config/features";
 
 // ������ Helpers ��������������������������������������������������������������������������������������������������������������������������������
 const fmt = (d: string) =>
@@ -114,7 +115,7 @@ function exportManagerPDF(
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Camusat Sénégal RH · Document confidentiel · Page ${i}/${pageCount}`,
+      `${COUNTRY.subtitle} RH · Document confidentiel · Page ${i}/${pageCount}`,
       148.5, 207, { align: "center" },
     );
   }

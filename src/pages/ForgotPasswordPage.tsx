@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Mail, ShieldCheck, KeyRound, Eye, EyeOff, CheckCircle, Loader2, RefreshCw } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { forgotPassword, verifyOtp, resetPasswordOtp } from "@/services/userService";
+import { COUNTRY } from "@/config/features";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Step = "email" | "otp" | "password" | "success";
@@ -423,7 +424,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         <p className="text-center text-xs text-slate-300 mt-5">
-          © {new Date().getFullYear()} Camusat Sénégal — RH
+          © {new Date().getFullYear()} {COUNTRY.subtitle} — RH
         </p>
       </motion.div>
     </div>

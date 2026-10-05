@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useAdminAuth } from "@/contexts/useAdminAuth";
 import { ShieldCheck } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
+import { COUNTRY } from "@/config/features";
 
 export default function AdminLoginPage() {
   const [username, setUsername] = useState("");
@@ -100,7 +101,7 @@ export default function AdminLoginPage() {
             </form>
 
             <footer className="mt-8 text-gray-400 text-xs w-full text-center">
-              © 2025 Camusat Sénégal — Administration
+              © {new Date().getFullYear()} {COUNTRY.subtitle} — Administration
             </footer>
           </CardContent>
         </Card>
