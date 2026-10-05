@@ -13,6 +13,7 @@ import {
   ClipboardList,
   CheckSquare,
 } from "lucide-react";
+import { FEATURES } from "@/config/features";
 
 type SpaceCard = {
   label: string;
@@ -73,13 +74,13 @@ const cards: SpaceCard[] = [
     icon: <Stethoscope size={28} />,
     color: "bg-rose-50 text-rose-600 border-rose-100",
   },
-  {
+  ...(FEATURES.questionnaires ? [{
     label: "Questionnaire sortie",
     description: "Compléter votre questionnaire de sortie",
     path: "/rh/my-questionnaire",
     icon: <ClipboardList size={28} />,
     color: "bg-teal-50 text-teal-600 border-teal-100",
-  },
+  }] : []),
   {
     label: "Approbation",
     description: "Gérer les demandes en attente de votre validation",

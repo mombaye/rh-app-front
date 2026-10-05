@@ -5,7 +5,7 @@ import {
   BookUser, ClipboardList, FileText, Ticket, TableProperties, CalendarRange,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
-import { COUNTRY } from "@/config/features";
+import { COUNTRY, FEATURES } from "@/config/features";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
 import { teamPlanningService } from "@/services/teamPlanningService";
@@ -35,6 +35,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
   }, [user?.id]);
 
   useEffect(() => {
+    if (!FEATURES.questionnaires) return;
     getMonQuestionnaire().then(res => {
       const active = res !== null && res.statut === "envoye";
       setHasQuestionnaire(active);

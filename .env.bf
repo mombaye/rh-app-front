@@ -18,7 +18,7 @@ VITE_FEATURE_MISSIONS=true
 VITE_FEATURE_ATTESTATIONS=true
 VITE_FEATURE_INFIRMERIE=true
 VITE_FEATURE_DISCIPLINAIRE=true
-VITE_FEATURE_QUESTIONNAIRES=true
+VITE_FEATURE_QUESTIONNAIRES=false
 VITE_FEATURE_HSE=true
 
 # Pas de séparation Internes / Intérimaires (Gestion Employés : Vue Globale ; Gestion Congés : une seule page)

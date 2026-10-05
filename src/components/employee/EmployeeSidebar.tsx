@@ -21,7 +21,7 @@ import {
   CalendarRange,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
-import { COUNTRY } from "@/config/features";
+import { COUNTRY, FEATURES } from "@/config/features";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
 import { leaveRequestService } from "@/services/leaveService";
@@ -104,6 +104,7 @@ export default function EmployeeSidebar() {
   const [hasQuestionnaire, setHasQuestionnaire] = useState(false);
 
   useEffect(() => {
+    if (!FEATURES.questionnaires) return;
     getMonQuestionnaire().then(res => {
       const active = res !== null && res.statut === "envoye";
       setHasQuestionnaire(active);

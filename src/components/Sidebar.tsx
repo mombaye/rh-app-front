@@ -50,6 +50,7 @@ export default function Sidebar() {
   const [questionnaireDoneCount, setQuestionnaireDoneCount] = useState(0);
 
   useEffect(() => {
+    if (!FEATURES.questionnaires) return;
     const fetch = async () => {
       try {
         const { count } = await getQuestionnaires("complete");

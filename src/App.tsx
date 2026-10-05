@@ -260,11 +260,11 @@ function App() {
             <EmployeeQuestionnairePage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />}
-        <Route path="/manager/questionnaire" element={
+        {FEATURES.questionnaires && <Route path="/manager/questionnaire" element={
           <ProtectedRoute><FirstLoginGuard><ManagerOnlyRoute>
             <EmployeeQuestionnairePage layout={ManagerLayout} />
           </ManagerOnlyRoute></FirstLoginGuard></ProtectedRoute>
-        } />
+        } />}
         {FEATURES.missions && <Route path="/employee/missions" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeMissionsPage />
@@ -311,7 +311,7 @@ function App() {
         <Route path="/rh/my-attendance"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhAttendancePage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-approvals"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhApprovalsPage  /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-exits"        element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMyExitAuthorizationPage /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
-        <Route path="/rh/my-questionnaire"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhQuestionnairePage        /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
+        {FEATURES.questionnaires && <Route path="/rh/my-questionnaire"  element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhQuestionnairePage        /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />}
         <Route path="/rh/my-service-leaves" element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhServiceLeavesPage        /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-infirmerie"   element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhInfirmeriePage       /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
         <Route path="/rh/my-documents"    element={<ProtectedRoute><FirstLoginGuard><RhOnlyRoute><RhMyDocumentsPage      /></RhOnlyRoute></FirstLoginGuard></ProtectedRoute>} />
@@ -367,7 +367,7 @@ function App() {
         } />}
 
         {/* ── Questionnaire de sortie public (sans auth) ───────── */}
-        <Route path="/questionnaire-sortie/:token" element={<QuestionnaireSortiePage />} />
+        {FEATURES.questionnaires && <Route path="/questionnaire-sortie/:token" element={<QuestionnaireSortiePage />} />}
 
         {/* ── Passeport sécurité public (scan QR — sans auth) ──── */}
         <Route path="/passeports/:slug/view" element={<PassportViewPage />} />

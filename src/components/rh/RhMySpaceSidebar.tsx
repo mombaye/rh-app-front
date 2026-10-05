@@ -22,6 +22,7 @@ import logo from "@/assets/images/logo-camusat.png";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
 import { getMonQuestionnaire } from "@/services/questionnaireService";
+import { FEATURES } from "@/config/features";
 
 const managerItem = {
   label: "Approbation",
@@ -61,6 +62,7 @@ export default function RhMySpaceSidebar() {
   const [hasQuestionnaire, setHasQuestionnaire] = useState(false);
 
   useEffect(() => {
+    if (!FEATURES.questionnaires) return;
     getMonQuestionnaire().then(res => {
       const active = res !== null && res.statut === "envoye";
       setHasQuestionnaire(active);
