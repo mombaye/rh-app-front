@@ -177,7 +177,10 @@ export default function TeamPlanningBoard() {
       if (s.bl_to_update.length) {
         toast(`${s.bl_to_update.length} employé(s) ont une Business Line différente du fichier dans leur fiche : ${s.bl_to_update.slice(0, 8).join(", ")}${s.bl_to_update.length > 8 ? "…" : ""}`, { duration: 12000 });
       }
-      if (s.unknown_employees.length) toast(`Matricules du fichier absents de l'application : ${s.unknown_employees.slice(0, 10).join(", ")}`, { duration: 10000 });
+      if (s.manager_to_update?.length) {
+        toast(`${s.manager_to_update.length} employé(s) ont un N+1 différent du LINE MANAGER du fichier (à corriger dans la fiche employé) : ${s.manager_to_update.slice(0, 6).join(", ")}${s.manager_to_update.length > 6 ? "…" : ""}`, { duration: 15000 });
+      }
+            if (s.unknown_employees.length) toast(`Matricules du fichier absents de l'application : ${s.unknown_employees.slice(0, 10).join(", ")}`, { duration: 10000 });
       load();
     } catch (e: any) {
       toast.error(e?.response?.data?.detail ?? "Import impossible", { id: t });
@@ -284,7 +287,7 @@ export default function TeamPlanningBoard() {
                 : "Le Team Planning n'est pas encore configuré par les RH.")
             : grid?.is_rh
               ? "Aucun employé actif n'a une Business Line correspondant aux codes projets. Renseignez la Business Line (ex. BL1) dans la fiche employé."
-              : "Aucun employé de votre équipe (N+1) n'a de Business Line concernée par le Team Planning."}
+              : "Aucun employé de votre équipe (directe ou de vos sous-responsables) n'a de Business Line concernée par le Team Planning."}
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-xl overflow-auto max-h-[calc(100vh-15rem)]">

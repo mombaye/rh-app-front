@@ -51,12 +51,26 @@ export interface ImportSummary {
   ignored_entries: number;
   unknown_employees: string[];
   bl_to_update: string[];
+  manager_to_update: string[];
 }
 
 const clean = (f: PlanningFilters) =>
   Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined && v !== ""));
 
+// Réponse mise en cache par utilisateur : sinon le menu refait l'appel à chaque changement de page.
+const accessCache = new Map<number | string, Promise<boolean>>();
+
 export const teamPlanningService = {
+  /** Menu Team Planning : seulement pour les RH et les responsables d'employés concernés. */
+  hasAccess: (userId: number | string): Promise<boolean> => {
+    if (!accessCache.has(userId)) {
+      accessCache.set(userId, api.get("/api/team-planning/access/")
+        .then((r) => !!r.data?.allowed)
+        .catch(() => { accessCache.delete(userId); return false; }));
+    }
+    return accessCache.get(userId)!;
+  },
+
   getGrid: async (filters: PlanningFilters): Promise<PlanningGrid> =>
     (await api.get("/api/team-planning/grid/", { params: clean(filters) })).data,
 
