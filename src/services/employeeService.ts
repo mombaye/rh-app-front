@@ -587,7 +587,8 @@ export type AlertePeriodeEssai = {
   type_alerte: TypeAlerte;
   date_fin: string;
   date_fin_periode_essai: string; // alias compat — même valeur que date_fin
-  jours_restants: number;
+  jours_restants: number;   // négatif si l'échéance est dépassée (-1 = 1 jour de retard)
+  en_retard?: boolean;
 };
 
 export type AlertesPeriodeEssaiResult = {

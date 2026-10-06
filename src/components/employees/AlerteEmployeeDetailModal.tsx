@@ -13,6 +13,7 @@ function fmtDate(iso: string | null | undefined): string {
 }
 
 function urgencyBadge(j: number) {
+  if (j < 0)   return { cls: "bg-red-600 text-white ring-1 ring-red-700", label: "En retard" };
   if (j <= 7)  return { cls: "bg-red-100 text-red-700 ring-1 ring-red-200",     label: "Urgent" };
   if (j <= 15) return { cls: "bg-amber-100 text-amber-700 ring-1 ring-amber-200", label: "Proche" };
   return               { cls: "bg-green-100 text-green-700 ring-1 ring-green-200", label: "À venir" };

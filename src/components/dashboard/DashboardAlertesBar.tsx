@@ -17,6 +17,7 @@ export default function DashboardAlertesBar() {
 
   if (loading || alertes.length === 0) return null;
 
+  const retards  = alertes.filter((a) => a.jours_restants < 0);
   const urgents  = alertes.filter((a) => a.jours_restants <= 7);
   const proches  = alertes.filter((a) => a.jours_restants > 7 && a.jours_restants <= 15);
   const preview  = alertes.slice(0, 5);
@@ -53,7 +54,8 @@ export default function DashboardAlertesBar() {
           </p>
           <p className="text-xs text-slate-500 mt-0.5">
             {[
-              urgents.length  > 0 && `${urgents.length} urgent${urgents.length > 1 ? "s" : ""} (≤ 7j)`,
+              retards.length  > 0 && `${retards.length} en retard`,
+              urgents.length - retards.length > 0 && `${urgents.length - retards.length} urgent${urgents.length - retards.length > 1 ? "s" : ""} (≤ 7j)`,
               proches.length  > 0 && `${proches.length} proche${proches.length > 1 ? "s" : ""} (8–15j)`,
               alertes.filter(a => a.type_alerte === "PERIODE_ESSAI").length > 0 &&
                 `${alertes.filter(a => a.type_alerte === "PERIODE_ESSAI").length} période${alertes.filter(a => a.type_alerte === "PERIODE_ESSAI").length > 1 ? "s" : ""} d'essai`,
@@ -92,6 +94,7 @@ export default function DashboardAlertesBar() {
           >
             <div className="px-5 md:px-6 py-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {preview.map((a) => {
+                const isLate   = a.jours_restants < 0;
                 const isUrgent = a.jours_restants <= 7;
                 const isProche = a.jours_restants > 7 && a.jours_restants <= 15;
                 return (
@@ -123,6 +126,7 @@ export default function DashboardAlertesBar() {
 
                     {/* Badge jours */}
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                      isLate   ? "bg-red-600 text-white" :
                       isUrgent ? "bg-red-100 text-red-700" :
                       isProche ? "bg-amber-100 text-amber-700" :
                                  "bg-green-100 text-green-700"

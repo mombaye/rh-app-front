@@ -47,7 +47,7 @@ const TYPE_ALERTE_LABELS: Record<TypeAlerte, string> = {
   FIN_INTERIM:   "Fin intérim",
 };
 
-const ALERTES_COLS = ["Matricule","Nom","Prénom","Service","Localisation","Type contrat","Type alerte","Date fin","Jours restants"] as const;
+const ALERTES_COLS = ["Matricule","Nom","Prénom","Service","Localisation","Type contrat","Type alerte","Date fin","Jours restants","Statut"] as const;
 type AlerteCol = typeof ALERTES_COLS[number];
 
 // ── KpiCard ───────────────────────────────────────────────────────────────────
@@ -155,6 +155,7 @@ export default function AlertesEmployesPage() {
       "Type alerte":    (a) => TYPE_ALERTE_LABELS[a.type_alerte] || a.type_alerte,
       "Date fin":       (a) => a.date_fin,
       "Jours restants": (a) => a.jours_restants,
+      "Statut":         (a) => (a.jours_restants < 0 ? `En retard de ${-a.jours_restants} j` : "À venir"),
     };
     exportXLSX("alertes_rh",
       filtered.map((a) => Object.fromEntries(exportCols.map((k) => [k, ALL[k](a)])))
@@ -177,7 +178,7 @@ export default function AlertesEmployesPage() {
               Alertes RH
             </h1>
             <p className="text-sm text-slate-400 mt-0.5">
-              Périodes d'essai, CDD, stages &amp; intérimaires arrivant à échéance dans les 30 prochains jours
+              Périodes d'essai, CDD, stages &amp; intérimaires : échéances des 30 prochains jours et retards (jours négatifs, ex. -2j)
             </p>
           </div>
 

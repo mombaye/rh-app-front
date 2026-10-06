@@ -14,6 +14,7 @@ function fmtDate(iso: string): string {
 }
 
 function urgencyBadge(j: number): string {
+  if (j < 0)   return "bg-red-600 text-white ring-1 ring-red-700";   // échéance dépassée
   if (j <= 7)  return "bg-red-100 text-red-700 ring-1 ring-red-200";
   if (j <= 15) return "bg-amber-100 text-amber-700 ring-1 ring-amber-200";
   return "bg-green-100 text-green-700 ring-1 ring-green-200";
@@ -175,7 +176,7 @@ export default function AlertesPeriodeEssaiPanel({
             <FaBell size={36} className="text-slate-200" />
             <p className="text-slate-400 text-sm">
               {alertes.length === 0
-                ? "Aucune alerte dans les 30 prochains jours"
+                ? "Aucune alerte (retards des 30 derniers jours ou échéances des 30 prochains jours)"
                 : "Aucun résultat pour cette recherche"}
             </p>
           </div>
@@ -230,8 +231,9 @@ export default function AlertesPeriodeEssaiPanel({
                       {fmtDate(a.date_fin)}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${urgencyBadge(a.jours_restants)}`}>
-                        {a.jours_restants}j
+                      <span title={a.jours_restants < 0 ? `En retard de ${-a.jours_restants} jour(s)` : `Dans ${a.jours_restants} jour(s)`}
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-bold whitespace-nowrap ${urgencyBadge(a.jours_restants)}`}>
+                        {a.jours_restants}j{a.jours_restants < 0 && " · En retard"}
                       </span>
                     </td>
                   </tr>
