@@ -8,6 +8,7 @@ import EmployeeChecklist from "@/components/hsastreinte/EmployeeChecklist";
 
 export default function FillersModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const [employees, setEmployees] = useState<EmpBrief[]>([]);
+  const [managers, setManagers] = useState<EmpBrief[]>([]);
   const [groups, setGroups] = useState<{ filler: EmpBrief; employee_ids: number[] }[]>([]);
   const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState<number | null>(null);
@@ -16,9 +17,10 @@ export default function FillersModal({ onClose, onChanged }: { onClose: () => vo
   const [saving, setSaving] = useState(false);
   const [changed, setChanged] = useState(false);
 
-  const apply = (r: { groups: { filler: EmpBrief; employee_ids: number[] }[]; employees: EmpBrief[] }) => {
+  const apply = (r: { groups: { filler: EmpBrief; employee_ids: number[] }[]; employees: EmpBrief[]; managers?: EmpBrief[] }) => {
     setGroups(r.groups);
     setEmployees(r.employees);
+    if (r.managers) setManagers(r.managers);
   };
   useEffect(() => {
     hsAstreinteService.getAssignments().then(apply)
@@ -42,7 +44,7 @@ export default function FillersModal({ onClose, onChanged }: { onClose: () => vo
     const id = Number(adding);
     if (!id) return;
     if (!groups.some((g) => g.filler.id === id)) {
-      const e = byId.get(id);
+      const e = byId.get(id) ?? managers.find((m) => m.id === id);
       if (e) setGroups((gs) => [...gs, { filler: e, employee_ids: [] }]);
     }
     setAdding("");
@@ -86,8 +88,8 @@ export default function FillersModal({ onClose, onChanged }: { onClose: () => vo
               <div className="flex gap-2">
                 <select value={adding} onChange={(e) => setAdding(e.target.value)}
                   className="flex-1 min-w-0 text-sm border border-slate-200 rounded-xl px-2 py-2">
-                  <option value="">Ajouter un responsable…</option>
-                  {employees.filter((e) => !groups.some((g) => g.filler.id === e.id)).map((e) => (
+                  <option value="">Ajouter un manager responsable…</option>
+                  {managers.filter((e) => !groups.some((g) => g.filler.id === e.id)).map((e) => (
                     <option key={e.id} value={e.id}>{e.nom} {e.prenom} ({e.matricule})</option>
                   ))}
                 </select>
