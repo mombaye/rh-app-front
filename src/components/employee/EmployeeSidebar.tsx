@@ -19,6 +19,7 @@ import {
   BookUser,
   Ticket,
   CalendarRange,
+  TableProperties,
 } from "lucide-react";
 import logo from "@/assets/images/logo-camusat.png";
 import { COUNTRY, FEATURES } from "@/config/features";
@@ -28,6 +29,7 @@ import { leaveRequestService } from "@/services/leaveService";
 import { LeaveRequest } from "@/types/leave";
 import { getMonQuestionnaire } from "@/services/questionnaireService";
 import { teamPlanningService } from "@/services/teamPlanningService";
+import { hsAstreinteService } from "@/services/hsAstreinteService";
 
 const baseNavItems = [
   {
@@ -136,6 +138,12 @@ export default function EmployeeSidebar() {
 
   const isHse = user?.is_hse === true;
 
+  // Pointage HS & Astreinte : seulement pour les responsables de saisie désignés par la RH
+  const [hasHsAstreinte, setHasHsAstreinte] = useState(false);
+  useEffect(() => {
+    if (FEATURES.omPointage && user?.id) hsAstreinteService.hasAccess(user.id).then(setHasHsAstreinte);
+  }, [user?.id]);
+
   // Team Planning : seulement pour les profils autorisés (vue complète ou responsables concernés)
   const [hasTeamPlanning, setHasTeamPlanning] = useState(false);
   useEffect(() => {
@@ -159,6 +167,15 @@ export default function EmployeeSidebar() {
             label: "Approbations",
             path: "/manager/approvals",
             icon: <ClipboardCheck size={20} />,
+          },
+        ]
+      : []),
+    ...(hasHsAstreinte
+      ? [
+          {
+            label: "Pointage HS & Astreinte",
+            path: "/employee/om-pointage",
+            icon: <TableProperties size={20} />,
           },
         ]
       : []),

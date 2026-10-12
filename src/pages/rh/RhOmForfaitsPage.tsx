@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Search, TableProperties, ArrowLeft, FileDown, Settings2, AlertTriangle, X, Plus, Trash2, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Search, TableProperties, ArrowLeft, FileDown, Settings2, AlertTriangle, X, Plus, Trash2, Save, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import api from "@/api/axios";
 import toast from "react-hot-toast";
 import AppLayout from "@/layouts/AppLayout";
+import BeneficiariesModal from "@/components/hsastreinte/BeneficiariesModal";
 // @ts-ignore
 import XLSXStyle from "xlsx-js-style";
 
@@ -57,6 +58,7 @@ export default function RhOmForfaitsPage() {
   const [serviceRates, setServiceRates] = useState<ServiceRate[]>([]);
   const [ratesLoading, setRatesLoading] = useState(false);
   const [showRatesModal, setShowRatesModal] = useState(false);
+  const [showBeneficiaries, setShowBeneficiaries] = useState(false);
   // Edition locale dans le modal
   const [editRates, setEditRates] = useState<ServiceRate[]>([]);
   const [savingRates, setSavingRates] = useState(false);
@@ -99,7 +101,8 @@ export default function RhOmForfaitsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get(`/api/attendance/om-pointage/all/?year=${year}&month=${month}`);
+      // Bénéficiaires du forfait seulement, montants calculés par le backend (tarifs par service)
+      const res = await api.get(`/api/attendance/hs-astreinte/forfaits/?year=${year}&month=${month}`);
       setRows(res.data.rows || []);
     } catch {
       toast.error("Impossible de charger les données.");
@@ -235,7 +238,7 @@ export default function RhOmForfaitsPage() {
     const sTotal = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 }, fill: { fgColor: { rgb: "1E293B" } }, alignment: { horizontal: "center" }, ...sBorderThin };
     const sTotalLabel = { ...sTotal, alignment: { horizontal: "left" } };
 
-    const titleRow = [`FORFAITS O&M — ${MONTHS_FR[month - 1].toUpperCase()} ${year}`];
+    const titleRow = [`FORFAITS HS & ASTREINTE — ${MONTHS_FR[month - 1].toUpperCase()} ${year}`];
     const headers = ["N°", "MATRICULE", "NOM", "PRENOM", "SERVICE", "QUALIFICATION", "ZONE", "MANAGER N+1",
       "FORFAIT HS", "ASTREINTES / NBR JOURS", "MONTANTS ASTREINTES", "MONTANT TOTAL (HS+Astreinte)", "COMMENTAIRES OU OMISSIONS"];
 
@@ -288,7 +291,7 @@ export default function RhOmForfaitsPage() {
 
     const wb = XLSXStyle.utils.book_new();
     XLSXStyle.utils.book_append_sheet(wb, ws, `Forfaits ${MONTHS_FR[month - 1]} ${year}`);
-    XLSXStyle.writeFile(wb, `Forfaits_OM_${MONTHS_FR[month - 1]}_${year}.xlsx`);
+    XLSXStyle.writeFile(wb, `Forfaits_HS_Astreinte_${MONTHS_FR[month - 1]}_${year}.xlsx`);
     toast.success("Export Excel téléchargé.");
   }
 
@@ -311,11 +314,18 @@ export default function RhOmForfaitsPage() {
                 <TableProperties size={20} className="text-white" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-xl font-bold text-slate-800">Forfaits O&M</h1>
-                <p className="text-xs text-slate-500">HS & Astreintes — {MONTHS_FR[month - 1]} {year}</p>
+                <h1 className="text-xl font-bold text-slate-800">Forfaits HS &amp; Astreinte</h1>
+                <p className="text-xs text-slate-500">Bénéficiaires du forfait — {MONTHS_FR[month - 1]} {year}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
+              <button
+                onClick={() => setShowBeneficiaries(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition shadow-sm bg-[#003c71] text-white hover:bg-[#003c71]/90"
+              >
+                <Users size={14} />
+                <span className="hidden sm:inline">Bénéficiaires ({rows.length})</span>
+              </button>
               <button
                 onClick={openRatesModal}
                 disabled={ratesLoading}
@@ -402,7 +412,11 @@ export default function RhOmForfaitsPage() {
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="animate-spin text-slate-400" size={32} /></div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-20 text-slate-400">Aucune donnée.</div>
+          <div className="text-center py-20 text-slate-400">
+            {rows.length === 0
+              ? "Aucun bénéficiaire. Cliquez sur « Bénéficiaires » pour choisir les employés concernés par le forfait."
+              : "Aucun résultat pour ce filtre."}
+          </div>
         ) : (
           <>
             {/* Vue carte — mobile */}
@@ -590,6 +604,7 @@ export default function RhOmForfaitsPage() {
       </div>
 
       {/* ── Modal Tarifs par service ──────────────────────────────────────────── */}
+      {showBeneficiaries && <BeneficiariesModal onClose={() => setShowBeneficiaries(false)} onSaved={fetchData} />}
       {showRatesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">

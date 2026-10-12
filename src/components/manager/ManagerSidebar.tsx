@@ -9,6 +9,7 @@ import { COUNTRY, FEATURES } from "@/config/features";
 import { useAuth } from "@/contexts/useAuth";
 import { useState, useEffect } from "react";
 import { teamPlanningService } from "@/services/teamPlanningService";
+import { hsAstreinteService } from "@/services/hsAstreinteService";
 import { getMonQuestionnaire } from "@/services/questionnaireService";
 
 interface NavItem {
@@ -29,6 +30,10 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [hasQuestionnaire, setHasQuestionnaire] = useState(false);
   const [hasTeamPlanning, setHasTeamPlanning] = useState(false);
+  const [hasHsAstreinte, setHasHsAstreinte] = useState(false);
+  useEffect(() => {
+    if (FEATURES.omPointage && user?.id) hsAstreinteService.hasAccess(user.id).then(setHasHsAstreinte);
+  }, [user?.id]);
 
   useEffect(() => {
     if (FEATURES.teamPlanning && user?.id) teamPlanningService.hasAccess(user.id).then(setHasTeamPlanning);
@@ -65,7 +70,7 @@ export default function ManagerSidebar({ pendingCount = 0 }: ManagerSidebarProps
     { label: "Demande d'attestation",    path: "/manager/attestations", icon: <FileBadge size={20} />                                                          },
     { label: "Documents RH",            path: "/manager/documents",    icon: <FileStack size={20} />                                                          },
     { label: "Signalements",            path: "/manager/tickets",      icon: <Ticket size={20} />                                                                 },
-    ...(FEATURES.omPointage ? [{ label: "Pointage O&M",           path: "/manager/om-pointage",  icon: <TableProperties size={20} />                                                        }] : []),
+    ...(FEATURES.omPointage && hasHsAstreinte ? [{ label: "Pointage HS & Astreinte",           path: "/manager/om-pointage",  icon: <TableProperties size={20} />                                                        }] : []),
     ...(hasTeamPlanning ? [{ label: "Team Planning", path: "/manager/team-planning", icon: <CalendarRange size={20} /> }] : []),
     ...(isHse ? [{ label: "Gestion Passeports", path: "/hse/passeports", icon: <BookUser size={20} /> }] : []),
     ...(hasQuestionnaire ? [{ label: "Questionnaire de sortie", path: "/manager/questionnaire", icon: <ClipboardList size={20} /> }] : []),

@@ -50,6 +50,7 @@ const EmployeeDocumentsPage         = lazy(() => import("@/pages/employee/Employ
 const EmployeeExitAuthorizationPage = lazy(() => import("@/pages/employee/EmployeeExitAuthorizationPage"));
 const EmployeeServiceLeavesPage     = lazy(() => import("@/pages/employee/EmployeeServiceLeavesPage"));
 const EmployeeTeamPlanningPage      = lazy(() => import("@/pages/employee/EmployeeTeamPlanningPage"));
+const EmployeeOmPointagePage        = lazy(() => import("@/pages/employee/EmployeeOmPointagePage"));
 const EmployeeQuestionnairePage     = lazy(() => import("@/pages/employee/EmployeeQuestionnairePage"));
 const EmployeeAttestationsPage      = lazy(() => import("@/pages/employee/EmployeeAttestationsPage"));
 
@@ -245,6 +246,11 @@ function App() {
             <EmployeeExitAuthorizationPage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />
+        {FEATURES.omPointage && <Route path="/employee/om-pointage" element={
+          <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
+            <EmployeeOmPointagePage />
+          </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />}
         {FEATURES.teamPlanning && <Route path="/employee/team-planning" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeTeamPlanningPage />
