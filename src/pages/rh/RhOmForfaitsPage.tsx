@@ -56,6 +56,8 @@ export default function RhOmForfaitsPage() {
 
   // Tarifs par service
   const [serviceRates, setServiceRates] = useState<ServiceRate[]>([]);
+  // Services renseignés sur les fiches employés
+  const [employeeServices, setEmployeeServices] = useState<string[]>([]);
   const [ratesLoading, setRatesLoading] = useState(false);
   const [showRatesModal, setShowRatesModal] = useState(false);
   const [showBeneficiaries, setShowBeneficiaries] = useState(false);
@@ -75,13 +77,13 @@ export default function RhOmForfaitsPage() {
     return m;
   }, [serviceRates]);
 
-  // Services présents dans les données + ceux configurés
+  // Services des fiches employés + ceux déjà configurés
   const allServices = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(employeeServices);
     rows.forEach(r => { if (r.service) set.add(r.service); });
     serviceRates.forEach(r => set.add(r.service));
     return Array.from(set).sort();
-  }, [rows, serviceRates]);
+  }, [rows, serviceRates, employeeServices]);
 
   useEffect(() => {
     try {
@@ -114,8 +116,12 @@ export default function RhOmForfaitsPage() {
   const fetchRates = useCallback(async () => {
     setRatesLoading(true);
     try {
-      const res = await api.get("/api/attendance/om-service-rates/");
+      const [res, svc] = await Promise.all([
+        api.get("/api/attendance/om-service-rates/"),
+        api.get("/api/attendance/om-service-rates/services/").catch(() => ({ data: [] })),
+      ]);
       setServiceRates(res.data || []);
+      setEmployeeServices(svc.data || []);
     } catch {
       // silencieux
     } finally {
@@ -183,8 +189,15 @@ export default function RhOmForfaitsPage() {
     setShowRatesModal(true);
   }
 
-  function addCustomService() {
-    setEditRates(prev => [...prev, { service: "", forfait_hs: 0, astreinte_per_day: 0 }]);
+  // Services des employés pas encore dans la liste du modal
+  const addableServices = useMemo(
+    () => allServices.filter(s => !editRates.some(r => r.service === s)),
+    [allServices, editRates]
+  );
+
+  function addService(service: string) {
+    if (!service) return;
+    setEditRates(prev => [...prev, { service, forfait_hs: 0, astreinte_per_day: 0 }]);
   }
 
   function removeEditRate(idx: number) {
@@ -640,17 +653,8 @@ export default function RhOmForfaitsPage() {
                   {editRates.map((rate, idx) => (
                     <tr key={idx}>
                       <td className="py-2 pr-3">
-                        {rate.id ? (
-                          <span className="font-medium text-slate-700">{rate.service}</span>
-                        ) : (
-                          <input
-                            type="text"
-                            value={rate.service}
-                            onChange={e => setEditRates(prev => prev.map((r, i) => i === idx ? { ...r, service: e.target.value } : r))}
-                            placeholder="Nom du service..."
-                            className="w-full px-2 py-1 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#003c71]/20"
-                          />
-                        )}
+                        <span className="font-medium text-slate-700">{rate.service}</span>
+                        {!rate.id && <span className="ml-2 text-[10px] text-orange-500">nouveau</span>}
                       </td>
                       <td className="py-2 px-3">
                         <input
@@ -688,12 +692,15 @@ export default function RhOmForfaitsPage() {
                 <p className="text-sm text-slate-400 text-center py-6">Aucun tarif configuré.</p>
               )}
 
-              <button
-                onClick={addCustomService}
-                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-dashed border-slate-300 text-slate-500 hover:bg-slate-50 transition"
-              >
-                <Plus size={13} /> Ajouter un service
-              </button>
+              {addableServices.length > 0 && (
+                <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-dashed border-slate-300 text-slate-500">
+                  <Plus size={13} />
+                  <select value="" onChange={e => addService(e.target.value)} className="bg-transparent focus:outline-none">
+                    <option value="">Ajouter un service…</option>
+                    {addableServices.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Footer modal */}

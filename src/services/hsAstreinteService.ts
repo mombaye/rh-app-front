@@ -68,12 +68,6 @@ export const hsAstreinteService = {
   save: async (year: number, month: number, changes: HsChange[]): Promise<{ rows: HsRow[]; errors: string[] }> =>
     (await api.post(`${BASE}/save/`, { year, month, changes })).data,
 
-  getAssignments: async (): Promise<{ groups: { filler: EmpBrief; employee_ids: number[] }[]; employees: EmpBrief[]; managers: EmpBrief[] }> =>
-    (await api.get(`${BASE}/assignments/`)).data,
-
-  setAssignments: async (filler_id: number, employee_ids: number[]) =>
-    (await api.post(`${BASE}/assignments/`, { filler_id, employee_ids })).data,
-
   getBeneficiaries: async (): Promise<{ employee_ids: number[]; employees: EmpBrief[] }> =>
     (await api.get(`${BASE}/beneficiaries/`)).data,
 

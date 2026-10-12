@@ -5,12 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Banknote, ChevronLeft, ChevronRight, FileDown, Loader2, Lock, LockOpen, Paintbrush, PlayCircle,
-  Search, TableProperties, UserCog, X as XIcon,
+  Search, TableProperties, X as XIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { HsCell, HsChange, HsCode, HsGrid, HsRow, hsAstreinteService } from "@/services/hsAstreinteService";
 import { exportAttendanceXLSX, periodInfo } from "@/utils/attendanceExport";
-import FillersModal from "@/components/hsastreinte/FillersModal";
 
 const MONTHS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -60,7 +59,6 @@ export default function HsAstreinteBoard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [picker, setPicker] = useState<Picker | null>(null);
-  const [showFillers, setShowFillers] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -245,10 +243,6 @@ export default function HsAstreinteBoard() {
           </button>
           {grid?.is_rh && (
             <>
-              <button onClick={() => setShowFillers(true)} title="Définir qui remplit le pointage de quels employés"
-                className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
-                <UserCog size={15} /> Responsables de saisie
-              </button>
               <button onClick={() => navigate("/rh/om-forfaits")}
                 className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl bg-[#003c71] text-white hover:bg-[#002b52]">
                 <Banknote size={15} /> Forfaits
@@ -417,7 +411,6 @@ export default function HsAstreinteBoard() {
           </div>
         </>
       )}
-      {showFillers && <FillersModal onClose={() => setShowFillers(false)} onChanged={load} />}
     </div>
   );
 }
