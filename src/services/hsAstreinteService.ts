@@ -29,6 +29,8 @@ export interface HsRow extends HsTotals {
   prenom: string;
   service: string;
   filler: string;
+  /** N+2 de l'employé */
+  n2: string;
   cells: HsCell[];
 }
 

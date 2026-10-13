@@ -192,7 +192,8 @@ export default function HsAstreinteBoard() {
       "Nom": r.nom,
       "Prénom": r.prenom,
       "Service": r.service,
-      "Rempli par": r.filler,
+      "Rempli par (N+1)": r.filler,
+      "N+2": r.n2,
       ...Object.fromEntries(r.cells.map((c, i) => [String(i + 1), c.code])),
       "Jours": r.jours_travailles,
       "HS (j)": r.nb_heures_sup,
@@ -225,7 +226,7 @@ export default function HsAstreinteBoard() {
             <span className="text-sm font-semibold text-slate-700 w-32 text-center">{MONTHS_FR[month - 1]} {year}</span>
             <button onClick={() => shiftMonth(1)} className="p-2 text-slate-500 hover:text-slate-800"><ChevronRight size={16} /></button>
           </div>
-          {grid && grid.is_rh && grid.fillers.length > 0 && (
+          {grid && (grid.is_rh ? grid.fillers.length > 0 : grid.fillers.length > 1) && (
             <select value={filler} onChange={(e) => setFiller(e.target.value)}
               className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white max-w-[220px]">
               <option value="">Tous les responsables</option>
