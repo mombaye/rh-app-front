@@ -1,0 +1,15 @@
+# Serveur BURKINA FASO — à faire une seule fois sur le serveur :
+#   cp docker-compose.bf.yml docker-compose.override.yml
+# Ensuite comme au Sénégal :  git pull origin main && docker compose up -d --build
+# (docker-compose.override.yml est ignoré par git et chargé automatiquement par docker compose)
+services:
+  frontend:
+    build:
+      args:
+        VITE_MODE: bf                              # textes, drapeau et menus du Burkina (.env.bf)
+        VITE_API_URL: ""                           # API appelée via /api/ (nginx ci-dessous)
+        VITE_PUBLIC_URL: https://rh.camusatbf.com
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./nginx.bf.conf:/etc/nginx/conf.d/default.conf:ro
