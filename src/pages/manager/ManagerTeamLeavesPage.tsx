@@ -6,8 +6,8 @@ import { Users, RefreshCw, Search, X, Clock, Download, Bell } from "lucide-react
 import * as XLSX from "xlsx";
 import { useAuth } from "@/contexts/useAuth";
 import ManagerLayout from "@/layouts/ManagerLayout";
-import { leaveRequestService } from "@/services/leaveService";
-import { LeaveRequest, EmployeeHierarchy } from "@/types/leave";
+import { leaveRequestService, leaveBalanceService } from "@/services/leaveService";
+import { LeaveRequest, LeaveBalance, EmployeeHierarchy } from "@/types/leave";
 import { employeeHierarchyService } from "@/services/hierarchyService";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
@@ -23,8 +23,19 @@ function fmtRelative(d: string) {
   return `il y a ${diff} j`;
 }
 
-// ─── Export Excel : statut et date de départ uniquement ──────────────────────
-function exportExcel(members: EmployeeHierarchy[], leaveMap: Map<number, LeaveRequest>) {
+/** Solde restant par employé : congés payés (CP) de l'année, sinon le premier solde trouvé. */
+function remainingByEmployee(balances: LeaveBalance[]): Map<number, number> {
+  const isCP = (b: LeaveBalance) =>
+    (b.leave_type as any)?.code === "CP" || ((b.leave_type as any)?.label ?? "").toLowerCase().includes("payé");
+  const map = new Map<number, number>();
+  [...balances].sort((a, b) => Number(isCP(b)) - Number(isCP(a))).forEach(b => {
+    if (!map.has(b.employee)) map.set(b.employee, parseFloat(b.remaining));
+  });
+  return map;
+}
+
+// ─── Export Excel : statut, date de départ et solde ──────────────────────────
+function exportExcel(members: EmployeeHierarchy[], leaveMap: Map<number, LeaveRequest>, remainingMap: Map<number, number>) {
   const data = members.map(m => {
     const leave = leaveMap.get(m.id);
     return {
@@ -34,10 +45,11 @@ function exportExcel(members: EmployeeHierarchy[], leaveMap: Map<number, LeaveRe
       "Fonction":        m.fonction  ?? "—",
       "Statut":          !leave ? "Disponible" : isOngoing(leave) ? "En congé" : "Congé prévu",
       "Départ en congé": leave ? fmtDate(leave.start_date) : "—",
+      "Solde congé (j)": remainingMap.has(m.id) ? remainingMap.get(m.id)! : "—",
     };
   });
   const ws = XLSX.utils.json_to_sheet(data);
-  ws["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 16 }];
+  ws["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 15 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, `Équipe ${new Date().toLocaleDateString("fr-FR").replace(/\//g, "-")}`);
   XLSX.writeFile(wb, `equipe_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -72,6 +84,7 @@ export default function ManagerTeamLeavesPage() {
 
   const [members,        setMembers]        = useState<EmployeeHierarchy[]>([]);
   const [requests,       setRequests]       = useState<LeaveRequest[]>([]);
+  const [balances,       setBalances]       = useState<LeaveBalance[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [search,         setSearch]         = useState("");
   const [selectedMember, setSelectedMember] = useState<EmployeeHierarchy | null>(null);
@@ -80,15 +93,17 @@ export default function ManagerTeamLeavesPage() {
     if (!employeeId) return;
     setLoading(true);
     try {
-      const [hier, reqs] = await Promise.allSettled([
+      const [hier, reqs, bals] = await Promise.allSettled([
         employeeHierarchyService.getAll({ department_head_id: employeeId }),
         leaveRequestService.getAll({ manager_employee_id: employeeId } as any),
+        leaveBalanceService.getAll(new Date().getFullYear()),
       ]);
       const allHier = hier.status === "fulfilled" ? hier.value : [];
       const allReqs = reqs.status === "fulfilled" ? reqs.value : [];
       // Le backend filtre déjà par n1_manager_id — on exclut juste le manager lui-même
       setMembers(allHier.filter(m => m.id !== employeeId));
       setRequests(allReqs.filter(r => r.employee.id !== employeeId));
+      setBalances(bals.status === "fulfilled" ? bals.value : []);
     } catch (err) {
       console.error(err);
       toast.error("Erreur lors du chargement de l'équipe.");
@@ -103,6 +118,8 @@ export default function ManagerTeamLeavesPage() {
   // ── Dérivés ────────────────────────────────────────────────────────────────
   const pending  = requests.filter(r => r.status === "PENDING" || r.status === "PENDING_SECOND");
   const leaveMap = approvedLeaveMap(requests);
+  const remainingMap = remainingByEmployee(balances);
+  const remainingOf = (id: number) => remainingMap.get(id) ?? null;
 
   const q        = search.trim().toLowerCase();
   const filtered = members.filter(m =>
@@ -134,13 +151,13 @@ export default function ManagerTeamLeavesPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-[#003c71]">Mon équipe</h1>
-              <p className="text-gray-500 text-sm mt-0.5">Membres du service · qui est en congé</p>
+              <p className="text-gray-500 text-sm mt-0.5">Membres du service · solde de congé · qui est en congé</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => exportExcel(members, leaveMap)}
+              onClick={() => exportExcel(members, leaveMap, remainingMap)}
               disabled={loading || members.length === 0}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#003c71] text-white text-sm font-semibold hover:bg-[#002d56] transition shadow-sm disabled:opacity-40"
             >
@@ -254,6 +271,7 @@ export default function ManagerTeamLeavesPage() {
                   key={member.id}
                   member={member}
                   leave={leaveMap.get(member.id)}
+                  remaining={remainingOf(member.id)}
                   index={i}
                   onClick={() => setSelectedMember(member)}
                 />
@@ -269,6 +287,7 @@ export default function ManagerTeamLeavesPage() {
           <MemberDetailModal
             member={selectedMember}
             leave={leaveMap.get(selectedMember.id)}
+            remaining={remainingOf(selectedMember.id)}
             onClose={() => setSelectedMember(null)}
           />
         )}

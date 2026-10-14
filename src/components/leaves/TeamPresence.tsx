@@ -1,6 +1,7 @@
 // Affichage commun des pages « Équipe de service » (employé, manager, RH) :
 // on indique seulement qu'un collègue est / part en congé et à partir de quand.
-// Pas de solde, pas de date de retour, pas de nombre de jours, pas de type ni de motif.
+// Pas de date de retour, pas de type ni de motif. Le solde de congé n'est affiché
+// que sur la page des managers (prop « remaining »).
 import { motion } from "framer-motion";
 import { Briefcase, Building2, Calendar, Clock, Hash, Users, X } from "lucide-react";
 import { EmployeeHierarchy, LeaveRequest } from "@/types/leave";
@@ -44,6 +45,23 @@ function initials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
+function fmtDays(n: number) {
+  return `${Number.isInteger(n) ? n : n.toFixed(1).replace(".", ",")} j`;
+}
+
+/** Solde de congé restant (pages manager uniquement). */
+function BalancePill({ remaining }: { remaining: number | null }) {
+  return (
+    <span
+      className="text-[11px] px-2 py-0.5 rounded-full bg-[#003c71]/5 text-[#003c71] border border-[#003c71]/15 font-semibold whitespace-nowrap"
+      title="Solde de congé restant"
+      aria-label={remaining === null ? "Solde de congé inconnu" : `Solde de congé restant : ${fmtDays(remaining)}`}
+    >
+      {remaining === null ? "— j" : fmtDays(remaining)}
+    </span>
+  );
+}
+
 function StatusBadge({ leave }: { leave: LeaveRequest | undefined }) {
   if (!leave) return null;
   return isOngoing(leave) ? (
@@ -57,11 +75,13 @@ function StatusBadge({ leave }: { leave: LeaveRequest | undefined }) {
   );
 }
 
-export function MemberCard({ member, leave, index, onClick }: {
+export function MemberCard({ member, leave, index, onClick, remaining }: {
   member: EmployeeHierarchy;
   leave: LeaveRequest | undefined;
   index: number;
   onClick: () => void;
+  /** Solde restant : à passer seulement pour les managers (undefined = non affiché) */
+  remaining?: number | null;
 }) {
   const color = isOngoing(leave) ? "#f59e0b" : leave ? "#0ea5e9" : "#003c71";
   return (
@@ -79,15 +99,20 @@ export function MemberCard({ member, leave, index, onClick }: {
         <p className="font-semibold text-gray-800 text-sm truncate">{member.full_name}</p>
         {leave && <p className="text-[11px] text-gray-500 truncate">{leaveText(leave)}</p>}
       </div>
-      <StatusBadge leave={leave} />
+      <div className="flex flex-col items-end gap-1 shrink-0">
+        {remaining !== undefined && <BalancePill remaining={remaining} />}
+        <StatusBadge leave={leave} />
+      </div>
     </motion.div>
   );
 }
 
-export function MemberDetailModal({ member, leave, onClose }: {
+export function MemberDetailModal({ member, leave, onClose, remaining }: {
   member: EmployeeHierarchy;
   leave: LeaveRequest | undefined;
   onClose: () => void;
+  /** Solde restant : à passer seulement pour les managers (undefined = non affiché) */
+  remaining?: number | null;
 }) {
   const color = isOngoing(leave) ? "#f59e0b" : leave ? "#0ea5e9" : "#003c71";
   return (
@@ -112,7 +137,13 @@ export function MemberDetailModal({ member, leave, onClose }: {
           <button onClick={onClose} className="text-white/60 hover:text-white transition"><X size={18} /></button>
         </div>
 
-        <div className="p-5">
+        <div className="p-5 space-y-3">
+          {remaining !== undefined && (
+            <div className="flex items-center justify-between bg-[#003c71]/5 border border-[#003c71]/10 rounded-xl px-4 py-3">
+              <span className="text-sm text-gray-600">Solde de congé restant</span>
+              <span className="text-xl font-bold text-[#003c71]">{remaining === null ? "—" : fmtDays(remaining)}</span>
+            </div>
+          )}
           <div className="bg-gray-50 rounded-xl p-4 space-y-2">
             {member.matricule && (
               <div className="flex items-center gap-2 text-sm">
