@@ -1,10 +1,10 @@
 // Affichage commun des pages « Équipe de service » (employé, manager, RH) :
 // on indique seulement qu'un collègue est / part en congé et à partir de quand.
 // Pas de date de retour, pas de type ni de motif. Le solde de congé n'est affiché
-// que sur la page des managers (prop « remaining »).
+// que pour les managers et la RH (prop « remaining »).
 import { motion } from "framer-motion";
 import { Briefcase, Building2, Calendar, Clock, Hash, Users, X } from "lucide-react";
-import { EmployeeHierarchy, LeaveRequest } from "@/types/leave";
+import { EmployeeHierarchy, LeaveBalance, LeaveRequest } from "@/types/leave";
 
 export function fmtDate(d: string) {
   return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
@@ -30,6 +30,17 @@ export function approvedLeaveMap(requests: LeaveRequest[]): Map<number, LeaveReq
     .filter((r) => r.status === "APPROVED" && toDay(r.end_date) >= today)
     .sort((a, b) => toDay(a.start_date).getTime() - toDay(b.start_date).getTime())
     .forEach((r) => { if (!map.has(r.employee.id)) map.set(r.employee.id, r); });
+  return map;
+}
+
+/** Solde restant par employé : congés payés (CP) de l'année, sinon le premier solde trouvé. */
+export function remainingByEmployee(balances: LeaveBalance[]): Map<number, number> {
+  const isCP = (b: LeaveBalance) =>
+    (b.leave_type as any)?.code === "CP" || ((b.leave_type as any)?.label ?? "").toLowerCase().includes("payé");
+  const map = new Map<number, number>();
+  [...balances].sort((a, b) => Number(isCP(b)) - Number(isCP(a))).forEach((b) => {
+    if (!map.has(b.employee)) map.set(b.employee, parseFloat(b.remaining));
+  });
   return map;
 }
 

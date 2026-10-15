@@ -4,21 +4,26 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Users, RefreshCw, Search, X, Building2 } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import EmployeeLayout from "@/layouts/EmployeeLayout";
-import { leaveRequestService } from "@/services/leaveService";
-import { LeaveRequest, EmployeeHierarchy } from "@/types/leave";
+import { leaveRequestService, leaveBalanceService } from "@/services/leaveService";
+import { LeaveRequest, LeaveBalance, EmployeeHierarchy } from "@/types/leave";
 import { employeeHierarchyService } from "@/services/hierarchyService";
 import { ImSpinner2 } from "react-icons/im";
-import { MemberCard, MemberDetailModal, approvedLeaveMap, isOngoing } from "@/components/leaves/TeamPresence";
+import { MemberCard, MemberDetailModal, approvedLeaveMap, isOngoing, remainingByEmployee } from "@/components/leaves/TeamPresence";
 
 type LayoutComponent = React.ComponentType<{ children: React.ReactNode }>;
 
-export default function EmployeeServiceLeavesPage({ layout: Layout = EmployeeLayout }: { layout?: LayoutComponent }) {
+/** showBalances : solde de congé de chaque collègue (RH uniquement ; jamais pour les employés) */
+export default function EmployeeServiceLeavesPage({ layout: Layout = EmployeeLayout, showBalances = false }: {
+  layout?: LayoutComponent;
+  showBalances?: boolean;
+}) {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
   const service    = user?.employee_service ?? "";
 
   const [members,        setMembers]        = useState<EmployeeHierarchy[]>([]);
   const [requests,       setRequests]       = useState<LeaveRequest[]>([]);
+  const [balances,       setBalances]       = useState<LeaveBalance[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [search,         setSearch]         = useState("");
   const [selectedMember, setSelectedMember] = useState<EmployeeHierarchy | null>(null);
@@ -27,25 +32,30 @@ export default function EmployeeServiceLeavesPage({ layout: Layout = EmployeeLay
     if (!service) { setLoading(false); return; }
     setLoading(true);
     try {
-      const [hier, reqs] = await Promise.allSettled([
+      const [hier, reqs, bals] = await Promise.allSettled([
         employeeHierarchyService.getAll({ service }),
         leaveRequestService.getAll({ department: service, status: "APPROVED", active_or_upcoming: 1 } as any),
+        showBalances ? leaveBalanceService.getAll(new Date().getFullYear()) : Promise.resolve([] as LeaveBalance[]),
       ]);
       const allHier = hier.status === "fulfilled" ? hier.value : [];
       const allReqs = reqs.status === "fulfilled" ? reqs.value : [];
       setMembers(allHier.filter(m => m.id !== employeeId));
       setRequests(allReqs.filter(r => r.employee.id !== employeeId));
+      setBalances(bals.status === "fulfilled" ? bals.value : []);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [service, employeeId]);
+  }, [service, employeeId, showBalances]);
 
   useEffect(() => { load(); }, [load]);
 
   // ── Dérivés ────────────────────────────────────────────────────────────────
   const leaveMap = approvedLeaveMap(requests);
+  const remainingMap = remainingByEmployee(balances);
+  // undefined = solde non affiché (page employé)
+  const remainingOf = (id: number) => showBalances ? (remainingMap.get(id) ?? null) : undefined;
 
   const q        = search.trim().toLowerCase();
   const filtered = members.filter(m =>
@@ -172,6 +182,7 @@ export default function EmployeeServiceLeavesPage({ layout: Layout = EmployeeLay
                   key={member.id}
                   member={member}
                   leave={leaveMap.get(member.id)}
+                  remaining={remainingOf(member.id)}
                   index={i}
                   onClick={() => setSelectedMember(member)}
                 />
@@ -187,6 +198,7 @@ export default function EmployeeServiceLeavesPage({ layout: Layout = EmployeeLay
           <MemberDetailModal
             member={selectedMember}
             leave={leaveMap.get(selectedMember.id)}
+            remaining={remainingOf(selectedMember.id)}
             onClose={() => setSelectedMember(null)}
           />
         )}

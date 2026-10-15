@@ -2,5 +2,5 @@ import EmployeeServiceLeavesPage from "@/pages/employee/EmployeeServiceLeavesPag
 import ManagerLayout from "@/layouts/ManagerLayout";
 
 export default function ManagerServiceLeavesPage() {
-  return <EmployeeServiceLeavesPage layout={ManagerLayout} />;
+  return <EmployeeServiceLeavesPage layout={ManagerLayout} showBalances />;
 }

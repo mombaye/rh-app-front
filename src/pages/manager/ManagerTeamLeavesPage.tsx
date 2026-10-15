@@ -13,7 +13,7 @@ import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
 import { onEmployeesSynced } from "@/utils/employeeSync";
 import {
-  MemberCard, MemberDetailModal, approvedLeaveMap, fmtDate, isOngoing,
+  MemberCard, MemberDetailModal, approvedLeaveMap, fmtDate, isOngoing, remainingByEmployee,
 } from "@/components/leaves/TeamPresence";
 
 function fmtRelative(d: string) {
@@ -21,17 +21,6 @@ function fmtRelative(d: string) {
   if (diff === 0) return "aujourd'hui";
   if (diff === 1) return "hier";
   return `il y a ${diff} j`;
-}
-
-/** Solde restant par employé : congés payés (CP) de l'année, sinon le premier solde trouvé. */
-function remainingByEmployee(balances: LeaveBalance[]): Map<number, number> {
-  const isCP = (b: LeaveBalance) =>
-    (b.leave_type as any)?.code === "CP" || ((b.leave_type as any)?.label ?? "").toLowerCase().includes("payé");
-  const map = new Map<number, number>();
-  [...balances].sort((a, b) => Number(isCP(b)) - Number(isCP(a))).forEach(b => {
-    if (!map.has(b.employee)) map.set(b.employee, parseFloat(b.remaining));
-  });
-  return map;
 }
 
 // ─── Export Excel : statut, date de départ et solde ──────────────────────────

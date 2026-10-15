@@ -2,5 +2,5 @@
 import RhMySpaceLayout from "@/layouts/RhMySpaceLayout";
 
 export default function RhServiceLeavesPage() {
-  return <EmployeeServiceLeavesPage layout={RhMySpaceLayout} />;
+  return <EmployeeServiceLeavesPage layout={RhMySpaceLayout} showBalances />;
 }
