@@ -631,7 +631,8 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                     <p className="text-[10px] text-gray-400 mt-2.5 italic">
                       {chainInfo.steps.length === 1
                         ? "1 niveau de validation"
-                        : `${chainInfo.steps.length} niveaux de validation — déterminés par l'arborescence`}
+                        : `${chainInfo.steps.length} niveaux de validation`}
+                      {chainInfo.custom ? " — validateurs choisis par la RH" : chainInfo.steps.length > 1 ? " — déterminés par l'arborescence" : ""}
                       {chainInfo.steps.some(s => s.is_on_leave) &&
                         " · 🌴 Un validateur est actuellement en congé"}
                     </p>

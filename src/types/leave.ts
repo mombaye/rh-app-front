@@ -446,6 +446,8 @@ export interface ApprovalChainInfo {
   approval_flow: "DG_ONLY" | "SINGLE" | "MULTI" | "N1_ONLY" | "HIERARCHY";
   steps:         ApprovalChainStep[];
   total_steps?:  number;
+  /** true = validateurs choisis par la RH parmi le circuit de l'organigramme */
+  custom?:       boolean;
 }
 
 // ── ApprovePayload ────────────────────────────────────────────────────────────
