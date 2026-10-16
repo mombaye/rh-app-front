@@ -164,7 +164,8 @@ function OrgChartTab() {
   const [showDeptForm,  setShowDeptForm]  = useState(false);
   const [deptForm,      setDeptForm]      = useState<{
     name: string; code: string; description: string; parent_id: number | null; head_id: number | null; dg_validator_id: number | null;
-  }>({ name: "", code: "", description: "", parent_id: null, head_id: null, dg_validator_id: null });
+    leave_validator_ids: number[];
+  }>({ name: "", code: "", description: "", parent_id: null, head_id: null, dg_validator_id: null, leave_validator_ids: [] });
   const [savingDept, setSavingDept] = useState(false);
   const [deletingDept, setDeletingDept] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -273,7 +274,7 @@ function OrgChartTab() {
 
   const openCreateDept = () => {
     setEditingDept(null);
-    setDeptForm({ name: "", code: "", description: "", parent_id: null, head_id: null, dg_validator_id: null });
+    setDeptForm({ name: "", code: "", description: "", parent_id: null, head_id: null, dg_validator_id: null, leave_validator_ids: [] });
     setShowDeptForm(true);
   };
 
@@ -286,6 +287,7 @@ function OrgChartTab() {
       parent_id:        dept.parent,
       head_id:          dept.head,
       dg_validator_id:  dept.dg_validator,
+      leave_validator_ids: dept.leave_validator_ids ?? [],
     });
     setShowDeptForm(true);
   };
@@ -728,13 +730,13 @@ function OrgChartTab() {
         // directement rattachés à lui — il n'apparaît PAS dans le circuit des
         // employés ordinaires.
         // Remonte l'arbre : dept → parent → grand-parent → … jusqu'à la racine.
-        const computeChainPreview = (): { label: string; name: string; isHead: boolean }[] => {
-          const chain: { label: string; name: string; isHead: boolean }[] = [];
+        const computeChainPreview = (): { id: number | null; label: string; name: string; isHead: boolean }[] => {
+          const chain: { id: number | null; label: string; name: string; isHead: boolean }[] = [];
 
           // Étape 1 : responsable du département courant (N+1)
           if (deptForm.head_id) {
             const headEmp = activeEmps.find(e => e.id === deptForm.head_id);
-            if (headEmp) chain.push({ label: "N+1", name: `${headEmp.nom} ${headEmp.prenom}`, isHead: true });
+            if (headEmp) chain.push({ id: headEmp.id, label: "N+1", name: `${headEmp.nom} ${headEmp.prenom}`, isHead: true });
           }
 
           // Étape 2+ : remonter les responsables des départements parents
@@ -747,7 +749,7 @@ function OrgChartTab() {
             if (!parentDept) break;
             if (parentDept.head) {
               const parentHead = activeEmps.find(e => e.id === parentDept.head);
-              if (parentHead) chain.push({ label: `N+${level}`, name: `${parentHead.nom} ${parentHead.prenom}`, isHead: false });
+              if (parentHead) chain.push({ id: parentHead.id, label: `N+${level}`, name: `${parentHead.nom} ${parentHead.prenom}`, isHead: false });
             }
             currentParentId = parentDept.parent ?? null;
             level++;
@@ -756,13 +758,25 @@ function OrgChartTab() {
           // Le DG n'apparaît QUE si aucun validateur n'a été trouvé (département
           // sans responsable ni parent configuré → fallback DG directement).
           if (chain.length === 0) {
-            chain.push({ label: "DG", name: globalDg?.full_name ?? "Directeur Général", isHead: false });
+            chain.push({ id: null, label: "DG", name: globalDg?.full_name ?? "Directeur Général", isHead: false });
           }
 
           return chain;
         };
 
         const chainPreview = computeChainPreview();
+        // Validateurs choisis parmi le circuit (aucun choix = tout le circuit valide)
+        const chainIds = chainPreview.map(s => s.id).filter((id): id is number => id !== null);
+        const chosen = deptForm.leave_validator_ids.filter(id => chainIds.includes(id));
+        const validates = (id: number | null) => id === null || chosen.length === 0 || chosen.includes(id);
+        const canChoose = chainIds.length > 1;
+        const toggleValidator = (id: number | null) => {
+          if (id === null || !canChoose) return;
+          const current = chosen.length ? chosen : chainIds;
+          const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
+          if (next.length === 0) { toast.error("Au moins un validateur est nécessaire."); return; }
+          setDeptForm(f => ({ ...f, leave_validator_ids: next.length === chainIds.length ? [] : chainIds.filter(x => next.includes(x)) }));
+        };
         const STEP_COLORS = [
           "bg-amber-50 border-amber-300 text-amber-800",
           "bg-orange-50 border-orange-300 text-orange-800",
@@ -845,22 +859,44 @@ function OrgChartTab() {
                     {chainPreview.map((step, i) => (
                       <div key={i} className="flex items-center gap-1.5">
                         {/* Flèche */}
-                        <span className="text-gray-300 text-sm font-bold">→</span>
-                        {/* Étape */}
-                        <div className={`flex flex-col items-center px-2 py-1 rounded-lg border text-[10px] font-semibold ${
-                          step.label === "DG"
-                            ? "bg-indigo-50 border-indigo-300 text-indigo-700"
-                            : (STEP_COLORS[i] ?? STEP_COLORS[STEP_COLORS.length - 1])
-                        }`}>
-                          <span className="font-bold">{step.label}</span>
+                        <span className="text-gray-300 text-sm font-bold" aria-hidden="true">→</span>
+                        {/* Étape : cliquable pour choisir qui valide */}
+                        <button
+                          type="button"
+                          onClick={() => toggleValidator(step.id)}
+                          disabled={!canChoose || step.id === null}
+                          aria-pressed={validates(step.id)}
+                          title={canChoose ? (validates(step.id) ? "Valide les congés — cliquer pour retirer" : "Ne valide pas — cliquer pour ajouter") : undefined}
+                          className={`flex flex-col items-center px-2 py-1 rounded-lg border text-[10px] font-semibold transition ${
+                            !validates(step.id)
+                              ? "bg-gray-50 border-gray-200 text-gray-400 line-through"
+                              : step.label === "DG"
+                                ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                                : (STEP_COLORS[i] ?? STEP_COLORS[STEP_COLORS.length - 1])
+                          } ${canChoose && step.id !== null ? "cursor-pointer hover:shadow-sm" : "cursor-default"}`}>
+                          <span className="font-bold flex items-center gap-1">
+                            {canChoose && step.id !== null && (validates(step.id) ? <Check size={10} /> : <X size={10} />)}
+                            {step.label}
+                          </span>
                           <span className="font-normal opacity-75 max-w-[90px] truncate">{step.name}</span>
-                        </div>
+                        </button>
                       </div>
                     ))}
                   </div>
 
-                  <p className="text-[10px] text-gray-400 mt-3 italic">
-                    {chainPreview[0]?.label === "DG"
+                  {canChoose && (
+                    <p className="text-[11px] text-gray-500 mt-3">
+                      Cliquez sur un manager pour choisir qui valide les congés des membres de ce département.
+                      {chosen.length > 0 && (
+                        <button type="button" onClick={() => setDeptForm(f => ({ ...f, leave_validator_ids: [] }))}
+                          className="ml-1 text-blue-600 hover:underline">Tout le circuit</button>
+                      )}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-gray-400 mt-1.5 italic">
+                    {chosen.length > 0
+                      ? `${chosen.length} validateur(s) choisi(s) sur ${chainIds.length} — les autres ne valident pas`
+                      : chainPreview[0]?.label === "DG"
                       ? "Aucun responsable configuré — les employés seront validés directement par le DG"
                       : deptForm.parent_id
                         ? `${chainPreview.length} niveau(x) de validation — déterminés par l'arborescence`
@@ -1561,7 +1597,8 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
         <span>
           Le <strong>circuit</strong> vient de l'organigramme (N+1, N+2, N+3…). Par défaut tous les managers du circuit
           valident, dans l'ordre. Avec <strong>Validateurs</strong>, choisissez ceux qui valident réellement
-          (les autres apparaissent barrés) ; « Personnalisé » indique un choix différent de l'organigramme.
+          (les autres apparaissent barrés). « Personnalisé » : choix fait pour l'employé ; « Choix du département » :
+          choix fait sur son département dans l'Organigramme (le choix sur l'employé est prioritaire).
         </span>
       </div>
 
@@ -1696,8 +1733,11 @@ function CircuitChips({ circuit }: { circuit: ValidationCircuit | undefined }) {
           </span>
         </span>
       ))}
-      {circuit.custom && (
+      {circuit.source === "employee" && (
         <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold ml-1">Personnalisé</span>
+      )}
+      {circuit.source === "department" && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 font-semibold ml-1" title="Validateurs choisis sur le département (Organigramme)">Choix du département</span>
       )}
     </div>
   );
@@ -1724,9 +1764,9 @@ function ValidatorsModal({ employee, circuit, onClose, onSaved }: {
     setSaving(true);
     try {
       const c = await employeeHierarchyService.setValidationCircuit(employee.id, ids);
-      toast.success(ids.length && ids.length < circuit.steps.length
+      toast.success(ids.length
         ? "Validateurs enregistrés — les demandes en attente suivent ce circuit ✓"
-        : "Circuit de l'organigramme rétabli ✓");
+        : "Choix retiré — l'employé suit à nouveau son département / l'organigramme ✓");
       onSaved(c);
     } catch {
       toast.error("Erreur lors de l'enregistrement des validateurs.");
@@ -1777,9 +1817,9 @@ function ValidatorsModal({ employee, circuit, onClose, onSaved }: {
         </div>
 
         <div className="flex gap-2 justify-between px-6 py-4 border-t border-gray-100 bg-gray-50">
-          <button onClick={() => save([])} disabled={saving || !circuit.custom}
+          <button onClick={() => save([])} disabled={saving || circuit.source !== "employee"}
             className="px-3 py-2 text-xs border rounded-xl hover:bg-gray-100 font-medium transition disabled:opacity-40"
-            title="Tous les managers du circuit valident à nouveau">
+            title="Retirer le choix fait pour cet employé (il suit à nouveau son département / l'organigramme)">
             Rétablir l'organigramme
           </button>
           <div className="flex gap-2">

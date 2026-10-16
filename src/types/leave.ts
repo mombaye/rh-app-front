@@ -362,6 +362,8 @@ export interface Department {
   dg_validator_name:   string | null;
   employee_count:      number;
   children:            DepartmentChild[];
+  /** Validateurs des congés des membres, choisis parmi le circuit ([] = tout le circuit) */
+  leave_validator_ids?: number[];
   created_at:          string;
   updated_at:          string;
 }
@@ -373,6 +375,7 @@ export interface DepartmentCreate {
   parent_id?:     number | null;
   head_id?:       number | null;
   dg_validator_id?: number | null;
+  leave_validator_ids?: number[];
 }
 
 // ── ApprovalRule ──────────────────────────────────────────────────────────────

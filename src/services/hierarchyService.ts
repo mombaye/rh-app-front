@@ -65,6 +65,8 @@ export interface ValidationCircuit {
   employee_id: number;
   steps: ValidationCircuitStep[];
   custom: boolean;        // true = validateurs choisis par la RH
+  /** origine du choix : cet employé, son département (organigramme), ou aucun */
+  source: "employee" | "department" | null;
 }
 
 export const employeeHierarchyService = {
