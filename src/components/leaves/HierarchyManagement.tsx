@@ -12,7 +12,7 @@ import toast from "react-hot-toast";
 import { Employee } from "@/types/employee";
 import { patchEmployee } from "@/services/employeeService";
 import { Department, DepartmentCreate, EmployeeHierarchy } from "@/types/leave";
-import { departmentService, employeeHierarchyService, GlobalDGInfo } from "@/services/hierarchyService";
+import { departmentService, employeeHierarchyService, GlobalDGInfo, ValidationCircuit } from "@/services/hierarchyService";
 import { getEmployees } from "@/services/employeeService";
 import { notifyEmployeesSynced } from "@/utils/employeeSync";
 import { FEATURES } from "@/config/features";
@@ -1360,22 +1360,29 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
   }>({ n1_manager_id: null, n2_manager_id: null, requires_two_approvals: false, is_hse_responsible: false });
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  // Circuit de validation (organigramme) de chaque employé + validateurs choisis
+  const [circuits, setCircuits] = useState<Map<number, ValidationCircuit>>(new Map());
+  const [circuitEmp, setCircuitEmp] = useState<EmployeeHierarchy | null>(null);
+
+  const circuitScope = filterContractTypes?.includes("INTERIM") ? "interim" : filterContractTypes ? "internes" : undefined;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [hier, emps] = await Promise.all([
+      const [hier, emps, circ] = await Promise.all([
         employeeHierarchyService.getAll(),
         getEmployees({ status: "ACTIVE" }),
+        employeeHierarchyService.getValidationCircuits(circuitScope).catch(() => [] as ValidationCircuit[]),
       ]);
       setEmployees(hier);
       setAllEmployees(emps);
+      setCircuits(new Map(circ.map(c => [c.employee_id, c])));
     } catch {
       toast.error("Impossible de charger la hiérarchie.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [circuitScope]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1497,16 +1504,14 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
             <tr>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Employé</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Service</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Manager N+1</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Manager N+2</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Double valid.</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Circuit de validation (organigramme)</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-gray-400 italic">
+                <td colSpan={4} className="py-8 text-center text-gray-400 italic">
                   Aucun employé trouvé.
                 </td>
               </tr>
@@ -1524,30 +1529,25 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
                 </td>
                 <td className="px-4 py-3 text-gray-500">{emp.service ?? "—"}</td>
                 <td className="px-4 py-3">
-                  {emp.n1_manager_name
-                    ? <span className="text-green-700">{emp.n1_manager_name}</span>
-                    : <span className="italic text-gray-400">Non défini</span>
-                  }
+                  <CircuitChips circuit={circuits.get(emp.id)} />
                 </td>
                 <td className="px-4 py-3">
-                  {emp.n2_manager_name
-                    ? <span className="text-purple-700">{emp.n2_manager_name}</span>
-                    : <span className="italic text-gray-400">—</span>
-                  }
-                </td>
-                <td className="px-4 py-3">
-                  {emp.requires_two_approvals
-                    ? <span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded">Oui</span>
-                    : <span className="text-gray-400 text-xs">Non</span>
-                  }
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => openEdit(emp)}
-                    className="flex items-center gap-1 px-2 py-1 border text-xs rounded hover:bg-gray-50 text-gray-600"
-                  >
-                    <Pencil size={11} /> Modifier
-                  </button>
+                  <div className="flex flex-col gap-1 items-start">
+                    <button
+                      onClick={() => setCircuitEmp(emp)}
+                      disabled={!circuits.get(emp.id)?.steps.length}
+                      className="flex items-center gap-1 px-2 py-1 border border-blue-200 text-xs rounded hover:bg-blue-50 text-blue-700 disabled:opacity-40 whitespace-nowrap"
+                      title="Choisir quels managers du circuit valident les congés"
+                    >
+                      <UserCheck size={11} /> Validateurs
+                    </button>
+                    <button
+                      onClick={() => openEdit(emp)}
+                      className="flex items-center gap-1 px-2 py-1 border text-xs rounded hover:bg-gray-50 text-gray-600"
+                    >
+                      <Pencil size={11} /> Modifier
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1559,10 +1559,24 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2 text-xs text-amber-800">
         <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
         <span>
-          <strong>N+1</strong> : approbateur direct (1er niveau). <strong>N+2</strong> : approbateur secondaire optionnel —
-          si renseigné, la validation à 2 niveaux est automatiquement activée.
+          Le <strong>circuit</strong> vient de l'organigramme (N+1, N+2, N+3…). Par défaut tous les managers du circuit
+          valident, dans l'ordre. Avec <strong>Validateurs</strong>, choisissez ceux qui valident réellement
+          (les autres apparaissent barrés) ; « Personnalisé » indique un choix différent de l'organigramme.
         </span>
       </div>
+
+      {circuitEmp && circuits.get(circuitEmp.id) && (
+        <ValidatorsModal
+          employee={circuitEmp}
+          circuit={circuits.get(circuitEmp.id)!}
+          onClose={() => setCircuitEmp(null)}
+          onSaved={c => {
+            setCircuits(prev => new Map(prev).set(c.employee_id, c));
+            setCircuitEmp(null);
+            notifyEmployeesSynced();
+          }}
+        />
+      )}
 
       {/* ── Modal : édition hiérarchie employé ──────────────────────────────── */}
       {editingEmp && (
@@ -1655,6 +1669,131 @@ function EmployeesHierarchyTab({ filterContractTypes }: { filterContractTypes?: 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Circuit de validation
+// ─────────────────────────────────────────────────────────────────────────────
+function CircuitChips({ circuit }: { circuit: ValidationCircuit | undefined }) {
+  if (!circuit) return <span className="text-xs text-gray-400">…</span>;
+  if (circuit.steps.length === 0) return <span className="italic text-gray-400 text-xs">Aucun validateur</span>;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {circuit.steps.map((s, i) => (
+        <span key={s.manager_id} className="inline-flex items-center gap-1">
+          {i > 0 && <span className="text-gray-300 text-xs" aria-hidden="true">→</span>}
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full border whitespace-nowrap ${
+              s.validates
+                ? "bg-blue-50 text-blue-700 border-blue-200"
+                : "bg-gray-50 text-gray-400 border-gray-200 line-through"
+            }`}
+            title={s.validates ? "Valide les congés" : "Ne valide pas les congés de cet employé"}
+          >
+            <strong className="font-semibold">N+{s.level}</strong> {s.manager_name}
+          </span>
+        </span>
+      ))}
+      {circuit.custom && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold ml-1">Personnalisé</span>
+      )}
+    </div>
+  );
+}
+
+function ValidatorsModal({ employee, circuit, onClose, onSaved }: {
+  employee: EmployeeHierarchy;
+  circuit: ValidationCircuit;
+  onClose: () => void;
+  onSaved: (c: ValidationCircuit) => void;
+}) {
+  const [selected, setSelected] = useState<Set<number>>(
+    new Set(circuit.steps.filter(s => s.validates).map(s => s.manager_id))
+  );
+  const [saving, setSaving] = useState(false);
+
+  const toggle = (id: number) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const save = async (ids: number[]) => {
+    setSaving(true);
+    try {
+      const c = await employeeHierarchyService.setValidationCircuit(employee.id, ids);
+      toast.success(ids.length && ids.length < circuit.steps.length
+        ? "Validateurs enregistrés — les demandes en attente suivent ce circuit ✓"
+        : "Circuit de l'organigramme rétabli ✓");
+      onSaved(c);
+    } catch {
+      toast.error("Erreur lors de l'enregistrement des validateurs.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const ordered = circuit.steps.filter(s => selected.has(s.manager_id));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-labelledby="validators-title"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <p id="validators-title" className="font-bold text-gray-800">Validateurs des congés</p>
+            <p className="text-xs text-gray-400">{employee.full_name} · {employee.matricule}</p>
+          </div>
+          <button onClick={onClose} aria-label="Fermer" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-3">
+          <p className="text-xs text-gray-500">
+            Circuit défini dans l'organigramme. Cochez les managers qui valident les demandes de congé de cet employé
+            (au moins un). Ils valident dans l'ordre du circuit.
+          </p>
+          <div className="space-y-2">
+            {circuit.steps.map(s => (
+              <label key={s.manager_id}
+                className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                  selected.has(s.manager_id) ? "border-blue-200 bg-blue-50/50" : "border-gray-100 hover:bg-gray-50"
+                }`}>
+                <input type="checkbox" checked={selected.has(s.manager_id)} onChange={() => toggle(s.manager_id)}
+                  className="h-4 w-4 rounded accent-blue-600" />
+                <span className="text-xs font-bold text-gray-500 w-10">N+{s.level}</span>
+                <span className="text-sm font-medium text-gray-700 flex-1">{s.manager_name}</span>
+              </label>
+            ))}
+          </div>
+          <div className="text-xs rounded-lg bg-gray-50 px-3 py-2 text-gray-600">
+            {ordered.length === 0
+              ? <span className="text-red-600">Choisissez au moins un validateur.</span>
+              : <>Circuit appliqué : {ordered.map((s, i) => <span key={s.manager_id}>{i > 0 && " → "}<strong>{s.manager_name}</strong></span>)}</>}
+          </div>
+        </div>
+
+        <div className="flex gap-2 justify-between px-6 py-4 border-t border-gray-100 bg-gray-50">
+          <button onClick={() => save([])} disabled={saving || !circuit.custom}
+            className="px-3 py-2 text-xs border rounded-xl hover:bg-gray-100 font-medium transition disabled:opacity-40"
+            title="Tous les managers du circuit valident à nouveau">
+            Rétablir l'organigramme
+          </button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm border rounded-xl hover:bg-gray-100 font-medium transition">
+              Annuler
+            </button>
+            <button onClick={() => save(ordered.map(s => s.manager_id))} disabled={saving || ordered.length === 0}
+              className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60 font-bold transition">
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              Enregistrer
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

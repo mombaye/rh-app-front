@@ -54,6 +54,19 @@ export const departmentService = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Employee Hierarchy  →  /api/employees/hierarchy/
 // ─────────────────────────────────────────────────────────────────────────────
+export interface ValidationCircuitStep {
+  level: number;          // 1 = N+1, 2 = N+2…
+  manager_id: number;
+  manager_name: string;
+  validates: boolean;     // valide les congés de l'employé
+}
+
+export interface ValidationCircuit {
+  employee_id: number;
+  steps: ValidationCircuitStep[];
+  custom: boolean;        // true = validateurs choisis par la RH
+}
+
 export const employeeHierarchyService = {
   getAll: async (params?: { service?: string; search?: string; n1_manager_id?: number; department_head_id?: number }): Promise<EmployeeHierarchy[]> => {
     const res = await axios.get(`${EMP_API}/hierarchy/`, {
@@ -70,6 +83,22 @@ export const employeeHierarchyService = {
     const res = await axios.patch(`${EMP_API}/hierarchy/${id}/`, data, {
       headers: getAuthHeaders(),
     });
+    return res.data;
+  },
+
+  /** Circuits de validation : tout le circuit de l'organigramme + qui valide (RH) */
+  getValidationCircuits: async (contract?: "internes" | "interim"): Promise<ValidationCircuit[]> => {
+    const res = await axios.get(`${EMP_API}/hierarchy/validation-circuits/`, {
+      headers: getAuthHeaders(),
+      params: contract ? { contract } : undefined,
+    });
+    return res.data;
+  },
+
+  /** Choisit les validateurs parmi le circuit ; [] = retour au circuit de l'organigramme */
+  setValidationCircuit: async (employeeId: number, validatorIds: number[]): Promise<ValidationCircuit> => {
+    const res = await axios.post(`${EMP_API}/hierarchy/validation-circuits/${employeeId}/`,
+      { validator_ids: validatorIds }, { headers: getAuthHeaders() });
     return res.data;
   },
 
