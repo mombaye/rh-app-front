@@ -41,7 +41,8 @@ const SHORT: Record<string, string> = { "Week-End": "WE", "Jour férié": "Féri
 
 type Picker = { mode: "cell" | "fill"; row: PlanningRow; day?: number; x: number; y: number };
 
-export default function TeamPlanningBoard() {
+/** rhPage : page RH (/rh/team-planning) — Business Lines, Remplissage et rapport n'apparaissent que là */
+export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean }) {
   const today = new Date();
   const [year, setYear]       = useState(today.getFullYear());
   const [month, setMonth]     = useState(today.getMonth() + 1);
@@ -246,14 +247,14 @@ export default function TeamPlanningBoard() {
             <span className="text-sm font-semibold text-slate-700 w-32 text-center">{MONTHS_FR[month - 1]} {year}</span>
             <button onClick={() => shiftMonth(1)} className="p-2 text-slate-500 hover:text-slate-800"><ChevronRight size={16} /></button>
           </div>
-          <div className="flex bg-white border border-slate-200 rounded-xl p-0.5" role="tablist" aria-label="Affichage">
+          {rhPage && <div className="flex bg-white border border-slate-200 rounded-xl p-0.5" role="tablist" aria-label="Affichage">
             {([["grid", "Planning", Table2], ["fill", "Remplissage", BarChart3]] as const).map(([v, label, Icon]) => (
               <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
                 className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg ${view === v ? "bg-[#003c71] text-white" : "text-slate-600 hover:bg-slate-50"}`}>
                 <Icon size={14} /> {label}
               </button>
             ))}
-          </div>
+          </div>}
           {grid && grid.business_lines.length > 1 && (
             <select value={bl} onChange={(e) => setBl(e.target.value)}
               className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white">
@@ -285,18 +286,18 @@ export default function TeamPlanningBoard() {
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
             <FileDown size={15} /> Exporter le fichier rempli
           </button>
-          <button onClick={fillReport}
+          {rhPage && <button onClick={fillReport}
             title="Rapport global : pour chaque employé, chaque code projet avec son pourcentage et le cumul"
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
             <FileSpreadsheet size={15} /> Rapport de remplissage
-          </button>
+          </button>}
           {grid?.is_rh && (
             <>
-              <button onClick={() => setShowBls(true)}
+              {rhPage && <button onClick={() => setShowBls(true)}
                 title="Créer une Business Line, ses codes projets et y rattacher des employés"
                 className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
                 <Layers size={15} /> Business Lines
-              </button>
+              </button>}
               <button onClick={() => setShowCodes(true)}
                 title="Ajouter, désactiver ou réactiver des codes projets"
                 className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
@@ -313,7 +314,7 @@ export default function TeamPlanningBoard() {
         </div>
       </div>
 
-      {view === "fill" ? <FillRatesPanel filters={filters} search={search} /> : <>
+      {rhPage && view === "fill" ? <FillRatesPanel filters={filters} search={search} /> : <>
       {/* Avancement + légende */}
       <div className="flex flex-col md:flex-row md:items-center gap-3 mb-3">
         <div className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5">
