@@ -142,10 +142,13 @@ export default function BusinessLinesModal({ onClose, onChanged }: { onClose: ()
   );
 }
 
-// Tous les employés actifs avec leur BL ; changement de BL employé par employé
+type EmpBl = BlEmployee & { business_line: string; bl_unknown?: boolean };
+
+// Tous les employés actifs avec leur BL ; changement de BL employé par employé.
+// BL « non créée » : écrite dans la fiche employé mais jamais créée sur la plateforme (à corriger).
 function AllEmployees({ onChanged }: { onChanged: () => void }) {
   const [bls, setBls] = useState<string[]>([]);
-  const [rows, setRows] = useState<(BlEmployee & { business_line: string })[] | null>(null);
+  const [rows, setRows] = useState<EmpBl[] | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("__all");
   const [busy, setBusy] = useState<number | null>(null);
@@ -159,18 +162,19 @@ function AllEmployees({ onChanged }: { onChanged: () => void }) {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (rows ?? []).filter((e) =>
-      (filter === "__all" || (filter === "__none" ? !e.business_line : e.business_line === filter)) &&
+      (filter === "__all" || (filter === "__none" ? !e.business_line
+        : filter === "__unknown" ? !!e.bl_unknown : e.business_line === filter)) &&
       (!q || `${e.matricule} ${e.nom} ${e.prenom} ${e.service} ${e.line_manager}`.toLowerCase().includes(q)));
   }, [rows, query, filter]);
 
-  const change = async (e: BlEmployee & { business_line: string }, bl: string) => {
+  const change = async (e: EmpBl, bl: string) => {
     if (bl === e.business_line) return;
     if (e.business_line && !window.confirm(
       `Changer ${e.nom} ${e.prenom} de ${e.business_line} vers ${bl || "aucune BL"} ?\nSes jours déjà saisis restent ; les prochains se feront avec les codes de ${bl || "—"}.`)) return;
     setBusy(e.id);
     try {
       const upd = await teamPlanningService.setEmployeeBl(e.id, bl);
-      setRows((list) => (list ?? []).map((x) => (x.id === upd.id ? { ...x, business_line: upd.business_line } : x)));
+      setRows((list) => (list ?? []).map((x) => (x.id === upd.id ? { ...x, business_line: upd.business_line, bl_unknown: false } : x)));
       toast.success(`${e.nom} ${e.prenom} : ${upd.business_line || "aucune BL"}`);
       onChanged();
     } catch (err: any) {
@@ -183,6 +187,7 @@ function AllEmployees({ onChanged }: { onChanged: () => void }) {
   if (!rows) return <div className="flex justify-center py-10"><Loader2 className="animate-spin text-[#003c71]" /></div>;
 
   const count = (bl: string) => rows.filter((e) => (bl ? e.business_line === bl : !e.business_line)).length;
+  const unknown = rows.filter((e) => e.bl_unknown);
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -198,9 +203,19 @@ function AllEmployees({ onChanged }: { onChanged: () => void }) {
           <option value="__all">Toutes ({rows.length})</option>
           {bls.map((b) => <option key={b} value={b}>{b} ({count(b)})</option>)}
           <option value="__none">Sans BL ({count("")})</option>
+          {unknown.length > 0 && <option value="__unknown">BL non créée sur la plateforme ({unknown.length})</option>}
         </select>
         <span className="text-sm text-slate-500">{shown.length} employé(s)</span>
       </div>
+      {unknown.length > 0 && (
+        <div className="mx-5 mt-3 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800 flex items-center justify-between gap-2 flex-wrap">
+          <span>
+            <strong>{unknown.length} employé(s)</strong> ont dans leur fiche une BL qui n'existe pas sur la plateforme
+            ({[...new Set(unknown.map((e) => e.business_line))].join(", ")}). Choisissez la bonne BL ou « — Aucune ».
+          </span>
+          <button onClick={() => setFilter("__unknown")} className="text-amber-900 font-semibold underline">Les afficher</button>
+        </div>
+      )}
       <div className="flex-1 overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 z-10">
@@ -224,8 +239,9 @@ function AllEmployees({ onChanged }: { onChanged: () => void }) {
                   <div className="flex items-center gap-2">
                     <select value={e.business_line} disabled={busy === e.id} onChange={(ev) => change(e, ev.target.value)}
                       aria-label={`Business Line de ${e.nom} ${e.prenom}`}
-                      className={`w-full border rounded-lg px-2 py-1.5 text-sm ${e.business_line ? "border-[#003c71]/30 text-[#003c71] font-semibold" : "border-slate-200 text-slate-400"}`}>
+                      className={`w-full border rounded-lg px-2 py-1.5 text-sm ${e.bl_unknown ? "border-amber-300 bg-amber-50 text-amber-800 font-semibold" : e.business_line ? "border-[#003c71]/30 text-[#003c71] font-semibold" : "border-slate-200 text-slate-400"}`}>
                       <option value="">— Aucune</option>
+                      {e.bl_unknown && <option value={e.business_line}>{e.business_line} (non créée)</option>}
                       {bls.map((b) => <option key={b} value={b}>{b}</option>)}
                     </select>
                     {busy === e.id && <Loader2 size={14} className="animate-spin text-[#003c71] shrink-0" />}
@@ -390,6 +406,7 @@ function BlStaff({ bl, onChanged }: { bl: string; onChanged: () => void }) {
               <label className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer">
                 <input type="checkbox" checked={checked.has(e.id)} onChange={() => toggle(e.id)} className="accent-[#003c71]" />
                 <span className="text-base text-slate-700 truncate">{e.nom} {e.prenom}</span>
+                {e.previous_bl && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 shrink-0" title="BL de la fiche, non créée sur la plateforme">{e.previous_bl} non créée</span>}
                 <span className="ml-auto text-xs text-slate-500 shrink-0">{e.matricule}{e.service ? ` · ${e.service}` : ""}</span>
               </label>
             </li>

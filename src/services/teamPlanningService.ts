@@ -81,6 +81,8 @@ export interface BlEmployee {
   service: string;
   fonction: string;
   line_manager: string;
+  /** candidat : BL écrite dans sa fiche mais non créée sur la plateforme */
+  previous_bl?: string;
 }
 
 export interface BlEmployees {
@@ -156,7 +158,7 @@ export const teamPlanningService = {
   setBlEmployees: async (bl: string, add: number[], remove: number[]): Promise<BlEmployees & { added: number; removed: number; skipped: number }> =>
     (await api.post(`/api/team-planning/business-lines/${encodeURIComponent(bl)}/employees/`, { add, remove })).data,
 
-  getAllEmployeesBl: async (): Promise<{ business_lines: string[]; employees: (BlEmployee & { business_line: string })[] }> =>
+  getAllEmployeesBl: async (): Promise<{ business_lines: string[]; employees: (BlEmployee & { business_line: string; bl_unknown?: boolean })[] }> =>
     (await api.get("/api/team-planning/business-lines/all-employees/")).data,
 
   setEmployeeBl: async (employee_id: number, business_line: string): Promise<BlEmployee & { business_line: string }> =>
