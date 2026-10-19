@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, CalendarRange, ChevronLeft, ChevronRight, FileDown, FileSpreadsheet, History, Layers, ListChecks, Loader2, Paintbrush, Search, Table2, Upload, X as XIcon } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarRange, ChevronLeft, ChevronRight, FileSpreadsheet, Layers, ListChecks, Loader2, Paintbrush, Search, Settings2, Table2, Upload, X as XIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   CellKind, PlanningCell, PlanningChange, PlanningGrid, PlanningRow, teamPlanningService,
@@ -54,10 +54,10 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
   const [saving, setSaving]   = useState(false);
   const [picker, setPicker]   = useState<Picker | null>(null);
   const [query, setQuery]     = useState("");
-  const [copying, setCopying] = useState(false);
   const [showCodes, setShowCodes] = useState(false);
   const [showBls, setShowBls] = useState(false);
   const [view, setView] = useState<"grid" | "fill">("grid");
+  const [showPlatform, setShowPlatform] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const filters = useMemo(() => ({ year, month, business_line: bl, manager }), [year, month, bl, manager]);
@@ -107,23 +107,6 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
       toast.error(errs?.length ? errs.slice(0, 3).join("\n") : e?.response?.data?.detail ?? "Enregistrement impossible");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const copyPrevious = async () => {
-    const prev = new Date(year, month - 2, 1);
-    if (!window.confirm(`Remplir les jours vides de ${MONTHS_FR[month - 1]} avec le dernier projet de chaque employé en ${MONTHS_FR[prev.getMonth()]} ${prev.getFullYear()} ?\n\nLes jours déjà renseignés, week-ends, fériés et congés ne sont pas modifiés.`)) return;
-    setCopying(true);
-    try {
-      const res = await teamPlanningService.copyPrevious(filters);
-      const updated = new Map(res.rows.map((r) => [r.employee_id, r]));
-      setGrid((g) => g && { ...g, rows: g.rows.map((r) => updated.get(r.employee_id) ?? r) });
-      if (res.filled) toast.success(`${res.filled} jour(s) remplis pour ${res.rows.length} employé(s)`);
-      else toast("Rien à reprendre : aucun projet saisi le mois précédent, ou aucun jour vide.");
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail ?? "Opération impossible");
-    } finally {
-      setCopying(false);
     }
   };
 
@@ -180,19 +163,6 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
     return q ? list.filter((v) => v.toLowerCase().includes(q)) : list;
   }, [picker, grid, query]);
 
-  const exportExcel = async () => {
-    try {
-      const blob = await teamPlanningService.exportExcel(filters);
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `Team_planning_${bl || "All_BL"}_${year}-${String(month).padStart(2, "0")}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    } catch {
-      toast.error("Export impossible");
-    }
-  };
-
   const fillReport = async () => {
     try {
       const blob = await teamPlanningService.fillReport(filters);
@@ -247,14 +217,12 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
             <span className="text-sm font-semibold text-slate-700 w-32 text-center">{MONTHS_FR[month - 1]} {year}</span>
             <button onClick={() => shiftMonth(1)} className="p-2 text-slate-500 hover:text-slate-800"><ChevronRight size={16} /></button>
           </div>
-          {rhPage && <div className="flex bg-white border border-slate-200 rounded-xl p-0.5" role="tablist" aria-label="Affichage">
-            {([["grid", "Planning", Table2], ["fill", "Remplissage", BarChart3]] as const).map(([v, label, Icon]) => (
-              <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
-                className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg ${view === v ? "bg-[#003c71] text-white" : "text-slate-600 hover:bg-slate-50"}`}>
-                <Icon size={14} /> {label}
-              </button>
-            ))}
-          </div>}
+          {rhPage && view === "fill" && (
+            <button onClick={() => setView("grid")} title="Revenir à la grille de saisie"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl bg-[#003c71]/10 text-[#003c71] font-semibold hover:bg-[#003c71]/15">
+              <ArrowLeft size={14} /> Taux de remplissage · retour au planning
+            </button>
+          )}
           {grid && grid.business_lines.length > 1 && (
             <select value={bl} onChange={(e) => setBl(e.target.value)}
               className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white">
@@ -274,43 +242,19 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher…"
               className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white w-44" />
           </div>
-          {view === "grid" && grid && grid.rows.length > 0 && (
-            <button onClick={copyPrevious} disabled={copying}
-              title="Remplit les jours vides avec le dernier projet du mois précédent"
-              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50">
-              {copying ? <Loader2 size={15} className="animate-spin" /> : <History size={15} />} Reprendre le mois précédent
-            </button>
-          )}
-          <button onClick={exportExcel}
-            title="Fichier Team Planning du mois, au format d'origine, avec les données remplies (réimportable)"
-            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
-            <FileDown size={15} /> Exporter le fichier rempli
-          </button>
           {rhPage && <button onClick={fillReport}
             title="Rapport global : pour chaque employé, chaque code projet avec son pourcentage et le cumul"
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
             <FileSpreadsheet size={15} /> Rapport de remplissage
           </button>}
-          {grid?.is_rh && (
-            <>
-              {rhPage && <button onClick={() => setShowBls(true)}
-                title="Créer une Business Line, ses codes projets et y rattacher des employés"
-                className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
-                <Layers size={15} /> Business Lines
-              </button>}
-              <button onClick={() => setShowCodes(true)}
-                title="Ajouter, désactiver ou réactiver des codes projets"
-                className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
-                <ListChecks size={15} /> Codes projets
-              </button>
-              <button onClick={() => fileRef.current?.click()}
-                className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl bg-[#003c71] text-white hover:bg-[#002b52]">
-                <Upload size={15} /> Importer le fichier
-              </button>
-              <input ref={fileRef} type="file" accept=".xlsx,.xlsm" className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importFile(f); }} />
-            </>
+          {(rhPage || grid?.is_rh) && (
+            <button onClick={() => setShowPlatform(true)}
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl bg-[#003c71] text-white font-semibold hover:bg-[#002b52]">
+              <Settings2 size={15} /> Gestion plateforme
+            </button>
           )}
+          <input ref={fileRef} type="file" accept=".xlsx,.xlsm" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importFile(f); }} />
         </div>
       </div>
 
@@ -469,6 +413,50 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
       )}
       {showCodes && <ProjectCodesModal onClose={() => setShowCodes(false)} onChanged={load} />}
       {showBls && <BusinessLinesModal onClose={() => setShowBls(false)} onChanged={load} />}
+      {showPlatform && (() => {
+        const items: { key: string; label: string; desc: string; Icon: typeof Layers; run: () => void; show: boolean }[] = [
+          { key: "grid", label: "Planning", desc: "Grille de saisie des projets, jour par jour", Icon: Table2,
+            run: () => setView("grid"), show: rhPage },
+          { key: "fill", label: "Taux de remplissage", desc: "Pourcentage de chaque code projet et cumul par employé", Icon: BarChart3,
+            run: () => setView("fill"), show: rhPage },
+          { key: "bl", label: "Business Lines", desc: "Créer une BL, ses codes projets, y rattacher les employés", Icon: Layers,
+            run: () => setShowBls(true), show: rhPage && !!grid?.is_rh },
+          { key: "codes", label: "Codes projets", desc: "Ajouter, désactiver ou réactiver des codes", Icon: ListChecks,
+            run: () => setShowCodes(true), show: !!grid?.is_rh },
+          { key: "import", label: "Importer le fichier", desc: "Fichier Excel Team Planning (codes projets et saisies)", Icon: Upload,
+            run: () => fileRef.current?.click(), show: !!grid?.is_rh },
+        ];
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowPlatform(false)}>
+            <div role="dialog" aria-modal="true" aria-labelledby="platform-title"
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <div>
+                  <h2 id="platform-title" className="text-lg font-bold text-[#003c71]">Gestion plateforme</h2>
+                  <p className="text-sm text-slate-500">Choisissez une fonctionnalité</p>
+                </div>
+                <button onClick={() => setShowPlatform(false)} aria-label="Fermer" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><XIcon size={16} /></button>
+              </div>
+              <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {items.filter((i) => i.show).map(({ key, label, desc, Icon, run }) => {
+                  const current = (key === "grid" || key === "fill") && view === key;
+                  return (
+                    <button key={key} onClick={() => { setShowPlatform(false); run(); }}
+                      className={`text-left flex gap-3 p-4 rounded-xl border transition ${current
+                        ? "border-[#003c71] bg-[#003c71]/5" : "border-slate-200 hover:border-[#003c71]/40 hover:bg-slate-50"}`}>
+                      <span className="w-10 h-10 rounded-xl bg-[#003c71]/10 text-[#003c71] flex items-center justify-center shrink-0"><Icon size={18} /></span>
+                      <span>
+                        <span className="block font-semibold text-slate-800">{label}{current && <span className="ml-2 text-xs font-normal text-[#003c71]">(affiché)</span>}</span>
+                        <span className="block text-sm text-slate-500">{desc}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
