@@ -1606,6 +1606,13 @@ export default function EmployeeLeavesPage({
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  // Types de congés relus à chaque ouverture du formulaire : un type créé par la RH
+  // (ex. « Demande de disponibilité ») apparaît sans recharger la page
+  useEffect(() => {
+    if (!showForm) return;
+    leaveTypeService.getAll().then(setLeaveTypes).catch(() => {});
+  }, [showForm]);
+
   // Rafraîchir silencieusement quand l'onglet redevient visible
   // (ex : l'admin révoque un congé pendant que l'employé est sur la page)
   useEffect(() => {
