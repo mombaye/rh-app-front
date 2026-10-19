@@ -64,6 +64,46 @@ export interface PlanningProjectCode {
   is_active: boolean;
 }
 
+export interface BusinessLineInfo {
+  code: string;
+  label: string;
+  active_codes: number;
+  inactive_codes: number;
+  employees: number;
+  created_here: boolean;
+}
+
+export interface BlEmployee {
+  id: number;
+  matricule: string;
+  nom: string;
+  prenom: string;
+  service: string;
+  fonction: string;
+  line_manager: string;
+}
+
+export interface BlEmployees {
+  business_line: string;
+  members: BlEmployee[];
+  /** employés actifs sans Business Line (seuls ajoutables) */
+  candidates: BlEmployee[];
+}
+
+export interface FillRateRow {
+  employee_id: number;
+  matricule: string;
+  nom: string;
+  prenom: string;
+  business_line: string;
+  line_manager: string;
+  /** jours ouvrés hors congés (week-ends et fériés exclus, sauf s'ils portent un projet) */
+  total_days: number;
+  project_days: number;
+  pct: number;
+  projects: { code: string; days: number; pct: number }[];
+}
+
 const clean = (f: PlanningFilters) =>
   Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined && v !== ""));
 
@@ -101,6 +141,24 @@ export const teamPlanningService = {
 
   setProjectActive: async (id: number, is_active: boolean): Promise<PlanningProjectCode> =>
     (await api.patch(`/api/team-planning/projects/${id}/`, { is_active })).data,
+
+  listBusinessLines: async (): Promise<BusinessLineInfo[]> =>
+    (await api.get("/api/team-planning/business-lines/")).data,
+
+  createBusinessLine: async (code: string, label: string): Promise<{ code: string; label: string }> =>
+    (await api.post("/api/team-planning/business-lines/", { code, label })).data,
+
+  getBlEmployees: async (bl: string): Promise<BlEmployees> =>
+    (await api.get(`/api/team-planning/business-lines/${encodeURIComponent(bl)}/employees/`)).data,
+
+  setBlEmployees: async (bl: string, add: number[], remove: number[]): Promise<BlEmployees & { added: number; removed: number; skipped: number }> =>
+    (await api.post(`/api/team-planning/business-lines/${encodeURIComponent(bl)}/employees/`, { add, remove })).data,
+
+  getFillRates: async (filters: PlanningFilters): Promise<{ year: number; month: number; rows: FillRateRow[] }> =>
+    (await api.get("/api/team-planning/fill-rates/", { params: clean(filters) })).data,
+
+  fillReport: async (filters: PlanningFilters): Promise<Blob> =>
+    (await api.get("/api/team-planning/fill-report/", { params: clean(filters), responseType: "blob" })).data,
 
   importFile: async (file: File): Promise<ImportSummary> => {
     const fd = new FormData();

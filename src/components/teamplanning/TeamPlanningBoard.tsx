@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarRange, ChevronLeft, ChevronRight, FileDown, History, ListChecks, Loader2, Paintbrush, Search, Upload, X as XIcon } from "lucide-react";
+import { BarChart3, CalendarRange, ChevronLeft, ChevronRight, FileDown, FileSpreadsheet, History, Layers, ListChecks, Loader2, Paintbrush, Search, Table2, Upload, X as XIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   CellKind, PlanningCell, PlanningChange, PlanningGrid, PlanningRow, teamPlanningService,
 } from "@/services/teamPlanningService";
 import ProjectCodesModal from "@/components/teamplanning/ProjectCodesModal";
+import BusinessLinesModal from "@/components/teamplanning/BusinessLinesModal";
+import FillRatesPanel from "@/components/teamplanning/FillRatesPanel";
 
 const MONTHS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -53,6 +55,8 @@ export default function TeamPlanningBoard() {
   const [query, setQuery]     = useState("");
   const [copying, setCopying] = useState(false);
   const [showCodes, setShowCodes] = useState(false);
+  const [showBls, setShowBls] = useState(false);
+  const [view, setView] = useState<"grid" | "fill">("grid");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const filters = useMemo(() => ({ year, month, business_line: bl, manager }), [year, month, bl, manager]);
@@ -188,6 +192,19 @@ export default function TeamPlanningBoard() {
     }
   };
 
+  const fillReport = async () => {
+    try {
+      const blob = await teamPlanningService.fillReport(filters);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `Remplissage_team_planning_${bl || "All_BL"}_${year}-${String(month).padStart(2, "0")}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error("Rapport impossible");
+    }
+  };
+
   const importFile = async (file: File) => {
     const t = toast.loading("Import du fichier…");
     try {
@@ -229,6 +246,14 @@ export default function TeamPlanningBoard() {
             <span className="text-sm font-semibold text-slate-700 w-32 text-center">{MONTHS_FR[month - 1]} {year}</span>
             <button onClick={() => shiftMonth(1)} className="p-2 text-slate-500 hover:text-slate-800"><ChevronRight size={16} /></button>
           </div>
+          <div className="flex bg-white border border-slate-200 rounded-xl p-0.5" role="tablist" aria-label="Affichage">
+            {([["grid", "Planning", Table2], ["fill", "Remplissage", BarChart3]] as const).map(([v, label, Icon]) => (
+              <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
+                className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg ${view === v ? "bg-[#003c71] text-white" : "text-slate-600 hover:bg-slate-50"}`}>
+                <Icon size={14} /> {label}
+              </button>
+            ))}
+          </div>
           {grid && grid.business_lines.length > 1 && (
             <select value={bl} onChange={(e) => setBl(e.target.value)}
               className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white">
@@ -248,7 +273,7 @@ export default function TeamPlanningBoard() {
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher…"
               className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white w-44" />
           </div>
-          {grid && grid.rows.length > 0 && (
+          {view === "grid" && grid && grid.rows.length > 0 && (
             <button onClick={copyPrevious} disabled={copying}
               title="Remplit les jours vides avec le dernier projet du mois précédent"
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50">
@@ -260,8 +285,18 @@ export default function TeamPlanningBoard() {
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
             <FileDown size={15} /> Exporter le fichier rempli
           </button>
+          <button onClick={fillReport}
+            title="Rapport global : pour chaque employé, chaque code projet avec son pourcentage et le cumul"
+            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
+            <FileSpreadsheet size={15} /> Rapport de remplissage
+          </button>
           {grid?.is_rh && (
             <>
+              <button onClick={() => setShowBls(true)}
+                title="Créer une Business Line, ses codes projets et y rattacher des employés"
+                className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
+                <Layers size={15} /> Business Lines
+              </button>
               <button onClick={() => setShowCodes(true)}
                 title="Ajouter, désactiver ou réactiver des codes projets"
                 className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
@@ -278,6 +313,7 @@ export default function TeamPlanningBoard() {
         </div>
       </div>
 
+      {view === "fill" ? <FillRatesPanel filters={filters} search={search} /> : <>
       {/* Avancement + légende */}
       <div className="flex flex-col md:flex-row md:items-center gap-3 mb-3">
         <div className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5">
@@ -387,6 +423,8 @@ export default function TeamPlanningBoard() {
         </div>
       )}
 
+      </>}
+
       {/* Sélecteur de projet */}
       {picker && grid && (
         <>
@@ -428,6 +466,7 @@ export default function TeamPlanningBoard() {
         </>
       )}
       {showCodes && <ProjectCodesModal onClose={() => setShowCodes(false)} onChanged={load} />}
+      {showBls && <BusinessLinesModal onClose={() => setShowBls(false)} onChanged={load} />}
     </div>
   );
 }
