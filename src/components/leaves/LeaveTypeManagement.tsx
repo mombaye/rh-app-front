@@ -96,10 +96,21 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    setForm((f) => ({
-      ...f,
-      [name]: type === "checkbox" ? (e.target as HTMLInputElement).checked : value,
-    }));
+    const checked = (e.target as HTMLInputElement).checked;
+    setForm((f) => {
+      const next = { ...f, [name]: type === "checkbox" ? checked : value };
+      // « Congé payé » coché → ce n'est plus un congé non payé
+      if (name === "is_paid" && checked) next.is_paid = true;
+      // « Déduit du solde » coché → incompatible avec un congé non payé : il redevient payé
+      if (name === "deducts_from_balance" && checked && !f.is_paid) next.is_paid = true;
+      return next;
+    });
+    setFormError(null);
+  };
+
+  /** Congé non payé (demande de disponibilité) : ni payé ni déduit du solde → aucun solde exigé. */
+  const setUnpaid = (on: boolean) => {
+    setForm((f) => ({ ...f, is_paid: !on, deducts_from_balance: on ? false : f.deducts_from_balance }));
     setFormError(null);
   };
 
@@ -216,7 +227,7 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
                       )}
                       {!t.is_paid && (
                         <span className="text-[10px] font-semibold text-gray-500 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded-full">
-                          Non payé
+                          {t.deducts_from_balance ? "Non payé" : "Congé non payé"}
                         </span>
                       )}
                       {t.requires_justification && (
@@ -357,6 +368,16 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
                       className="w-4 h-4 rounded accent-camublue-900"
                     />
                     <span className="text-sm text-gray-700 font-medium">Déduit du solde de congé</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input type="checkbox" checked={!form.is_paid && !form.deducts_from_balance}
+                      onChange={(e) => setUnpaid(e.target.checked)}
+                      className="w-4 h-4 rounded accent-camublue-900"
+                    />
+                    <div>
+                      <span className="text-sm text-gray-700 font-medium">Congés non payés</span>
+                      <p className="text-xs text-gray-400 mt-0.5">Demandes de disponibilité : absence longue durée sans solde. Ni payé, ni déduit du solde — aucun solde n'est exigé.</p>
+                    </div>
                   </label>
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <input type="checkbox" name="requires_manager_approval" checked={form.requires_manager_approval} onChange={handleChange}
