@@ -58,20 +58,20 @@ export default function BusinessLinesModal({ onClose, onChanged }: { onClose: ()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={close}>
       <div role="dialog" aria-modal="true" aria-labelledby="bl-title"
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
-            <h2 id="bl-title" className="font-bold text-[#003c71]">Business Lines</h2>
-            <p className="text-xs text-slate-500">Créez une BL, ajoutez ses codes projets, puis les employés concernés.</p>
+            <h2 id="bl-title" className="text-lg font-bold text-[#003c71]">Business Lines</h2>
+            <p className="text-sm text-slate-500">Créez une BL, ajoutez ses codes projets, puis les employés concernés.</p>
           </div>
           <button onClick={close} aria-label="Fermer" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><XIcon size={16} /></button>
         </div>
 
         <div className="flex flex-1 min-h-0 flex-col md:flex-row">
           {/* Liste des BL + création */}
-          <div className="md:w-64 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col">
+          <div className="md:w-80 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col">
             <div className="p-3 space-y-2 border-b border-slate-100">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase">Nouvelle Business Line</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase">Nouvelle Business Line</p>
               <input value={newBl} onChange={(e) => setNewBl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()}
                 placeholder="Code, ex. BL6" maxLength={20} aria-label="Code de la nouvelle Business Line"
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#003c71]" />
@@ -91,10 +91,10 @@ export default function BusinessLinesModal({ onClose, onChanged }: { onClose: ()
               ) : bls.map((b) => (
                 <button key={b.code} onClick={() => setSelected(b.code)}
                   className={`w-full text-left px-3 py-2 rounded-xl mb-1 ${selected === b.code ? "bg-[#003c71] text-white" : "hover:bg-slate-50 text-slate-700"}`}>
-                  <div className="flex items-center gap-1.5 font-semibold text-sm"><Layers size={13} /> {b.code}
-                    {b.label && <span className={`font-normal text-xs truncate ${selected === b.code ? "text-white/80" : "text-slate-400"}`}>· {b.label}</span>}
+                  <div className="flex items-center gap-1.5 font-semibold text-base"><Layers size={15} /> {b.code}
+                    {b.label && <span className={`font-normal text-sm truncate ${selected === b.code ? "text-white/80" : "text-slate-400"}`}>· {b.label}</span>}
                   </div>
-                  <div className={`text-[11px] ${selected === b.code ? "text-white/80" : "text-slate-400"}`}>
+                  <div className={`text-xs ${selected === b.code ? "text-white/80" : "text-slate-400"}`}>
                     {b.active_codes} code(s) · {b.employees} employé(s)
                   </div>
                 </button>
@@ -111,7 +111,7 @@ export default function BusinessLinesModal({ onClose, onChanged }: { onClose: ()
                 <div className="px-5 pt-3 flex gap-1.5 border-b border-slate-100" role="tablist">
                   {([["codes", `Codes projets (${current.active_codes})`], ["employees", `Employés (${current.employees})`]] as [Tab, string][]).map(([t, l]) => (
                     <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
-                      className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px ${tab === t ? "border-[#003c71] text-[#003c71]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+                      className={`px-4 py-2.5 text-base font-semibold border-b-2 -mb-px ${tab === t ? "border-[#003c71] text-[#003c71]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
                       {l}
                     </button>
                   ))}
@@ -192,8 +192,8 @@ function BlCodes({ bl, onChanged }: { bl: string; onChanged: () => void }) {
         ) : (
           <ul className="divide-y divide-slate-100">
             {sorted.map((c) => (
-              <li key={c.id} className="flex items-center justify-between py-2">
-                <span className={`font-mono text-sm ${c.is_active ? "text-slate-800" : "text-slate-400 line-through"}`}>{c.code}</span>
+              <li key={c.id} className="flex items-center justify-between py-2.5">
+                <span className={`font-mono text-base ${c.is_active ? "text-slate-800" : "text-slate-400 line-through"}`}>{c.code}</span>
                 <button onClick={() => toggle(c)} disabled={busy === c.id}
                   className={`text-xs font-semibold px-3 py-1 rounded-full border disabled:opacity-50 ${c.is_active
                     ? "border-rose-200 text-rose-600 hover:bg-rose-50"
@@ -253,13 +253,13 @@ function BlStaff({ bl, onChanged }: { bl: string; onChanged: () => void }) {
       {/* Employés sans BL */}
       <div className="flex flex-col min-h-0 border-b lg:border-b-0 lg:border-r border-slate-100">
         <div className="px-4 pt-3 pb-2 space-y-2">
-          <p className="text-xs font-semibold text-slate-600">Employés sans Business Line ({data.candidates.length})</p>
+          <p className="text-sm font-semibold text-slate-600">Employés sans Business Line ({data.candidates.length})</p>
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher…" aria-label="Rechercher un employé"
               className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#003c71]" />
           </div>
-          <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center justify-between text-sm">
             <button onClick={() => setChecked(new Set(candidates.map((e) => e.id)))} className="text-[#003c71] hover:underline">
               Tout sélectionner ({candidates.length})
             </button>
@@ -272,10 +272,10 @@ function BlStaff({ bl, onChanged }: { bl: string; onChanged: () => void }) {
         <ul className="flex-1 overflow-auto px-2 pb-3">
           {candidates.map((e) => (
             <li key={e.id}>
-              <label className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+              <label className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer">
                 <input type="checkbox" checked={checked.has(e.id)} onChange={() => toggle(e.id)} className="accent-[#003c71]" />
-                <span className="text-sm text-slate-700 truncate">{e.nom} {e.prenom}</span>
-                <span className="ml-auto text-[11px] text-slate-400 shrink-0">{e.matricule}{e.service ? ` · ${e.service}` : ""}</span>
+                <span className="text-base text-slate-700 truncate">{e.nom} {e.prenom}</span>
+                <span className="ml-auto text-xs text-slate-500 shrink-0">{e.matricule}{e.service ? ` · ${e.service}` : ""}</span>
               </label>
             </li>
           ))}
@@ -285,12 +285,12 @@ function BlStaff({ bl, onChanged }: { bl: string; onChanged: () => void }) {
 
       {/* Membres */}
       <div className="flex flex-col min-h-0">
-        <p className="px-4 pt-3 pb-2 text-xs font-semibold text-slate-600">Employés de {bl} ({data.members.length})</p>
+        <p className="px-4 pt-3 pb-2 text-sm font-semibold text-slate-600">Employés de {bl} ({data.members.length})</p>
         <ul className="flex-1 overflow-auto px-2 pb-3">
           {data.members.map((e) => (
-            <li key={e.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50">
-              <span className="text-sm text-slate-700 truncate">{e.nom} {e.prenom}</span>
-              <span className="text-[11px] text-slate-400 shrink-0">{e.matricule}</span>
+            <li key={e.id} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50">
+              <span className="text-base text-slate-700 truncate">{e.nom} {e.prenom}</span>
+              <span className="text-xs text-slate-500 shrink-0">{e.matricule}</span>
               <button onClick={() => window.confirm(`Retirer ${e.nom} ${e.prenom} de ${bl} ? Sa fiche n'aura plus de Business Line.`) && update([], [e.id])}
                 disabled={busy} title={`Retirer de ${bl}`} aria-label={`Retirer ${e.nom} ${e.prenom} de ${bl}`}
                 className="ml-auto p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50">
