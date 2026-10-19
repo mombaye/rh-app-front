@@ -436,7 +436,8 @@ export default function TeamPlanningBoard() {
               </span>
               <button onClick={() => setPicker(null)} className="text-slate-400 hover:text-slate-600"><XIcon size={14} /></button>
             </div>
-            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Code projet…"
+            <p className="px-1 pb-1.5 text-[10px] text-slate-400">Codes projets de {picker.row.business_line} uniquement</p>
+            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Code projet ${picker.row.business_line}…`}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && options[0]) choose(options[0]);
                 if (e.key === "Escape") setPicker(null);

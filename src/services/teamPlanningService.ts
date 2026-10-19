@@ -154,6 +154,12 @@ export const teamPlanningService = {
   setBlEmployees: async (bl: string, add: number[], remove: number[]): Promise<BlEmployees & { added: number; removed: number; skipped: number }> =>
     (await api.post(`/api/team-planning/business-lines/${encodeURIComponent(bl)}/employees/`, { add, remove })).data,
 
+  getAllEmployeesBl: async (): Promise<{ business_lines: string[]; employees: (BlEmployee & { business_line: string })[] }> =>
+    (await api.get("/api/team-planning/business-lines/all-employees/")).data,
+
+  setEmployeeBl: async (employee_id: number, business_line: string): Promise<BlEmployee & { business_line: string }> =>
+    (await api.post("/api/team-planning/business-lines/all-employees/", { employee_id, business_line })).data,
+
   getFillRates: async (filters: PlanningFilters): Promise<{ year: number; month: number; rows: FillRateRow[] }> =>
     (await api.get("/api/team-planning/fill-rates/", { params: clean(filters) })).data,
 

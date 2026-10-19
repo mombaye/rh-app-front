@@ -2,18 +2,20 @@
 // Réservé à la vue complète (RH et profils autorisés).
 // Seuls les employés SANS Business Line peuvent être ajoutés à une BL.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Layers, Loader2, Plus, Search, UserMinus, UserPlus, X as XIcon } from "lucide-react";
+import { Layers, Loader2, Plus, Search, UserMinus, UserPlus, Users, X as XIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import {
-  BlEmployees, BusinessLineInfo, PlanningProjectCode, teamPlanningService,
+  BlEmployee, BlEmployees, BusinessLineInfo, PlanningProjectCode, teamPlanningService,
 } from "@/services/teamPlanningService";
 
 type Tab = "codes" | "employees";
+type Mode = "bl" | "all";
 
 export default function BusinessLinesModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const [bls, setBls] = useState<BusinessLineInfo[]>([]);
   const [selected, setSelected] = useState("");
   const [tab, setTab] = useState<Tab>("codes");
+  const [mode, setMode] = useState<Mode>("bl");
   const [loading, setLoading] = useState(true);
   const [changed, setChanged] = useState(false);
   const [newBl, setNewBl] = useState("");
@@ -64,9 +66,20 @@ export default function BusinessLinesModal({ onClose, onChanged }: { onClose: ()
             <h2 id="bl-title" className="text-lg font-bold text-[#003c71]">Business Lines</h2>
             <p className="text-sm text-slate-500">Créez une BL, ajoutez ses codes projets, puis les employés concernés.</p>
           </div>
-          <button onClick={close} aria-label="Fermer" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><XIcon size={16} /></button>
+          <div className="flex items-center gap-2">
+            <div className="flex bg-slate-100 rounded-xl p-0.5" role="tablist" aria-label="Affichage">
+              {([["bl", "Par Business Line", Layers], ["all", "Tous les employés", Users]] as const).map(([m, label, Icon]) => (
+                <button key={m} role="tab" aria-selected={mode === m} onClick={() => setMode(m)}
+                  className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg ${mode === m ? "bg-white text-[#003c71] shadow-sm font-semibold" : "text-slate-600"}`}>
+                  <Icon size={14} /> {label}
+                </button>
+              ))}
+            </div>
+            <button onClick={close} aria-label="Fermer" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><XIcon size={16} /></button>
+          </div>
         </div>
 
+        {mode === "all" ? <AllEmployees onChanged={() => { setChanged(true); loadBls(); }} /> : (
         <div className="flex flex-1 min-h-0 flex-col md:flex-row">
           {/* Liste des BL + création */}
           <div className="md:w-80 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col">
@@ -123,6 +136,108 @@ export default function BusinessLinesModal({ onClose, onChanged }: { onClose: ()
             )}
           </div>
         </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Tous les employés actifs avec leur BL ; changement de BL employé par employé
+function AllEmployees({ onChanged }: { onChanged: () => void }) {
+  const [bls, setBls] = useState<string[]>([]);
+  const [rows, setRows] = useState<(BlEmployee & { business_line: string })[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("__all");
+  const [busy, setBusy] = useState<number | null>(null);
+
+  useEffect(() => {
+    teamPlanningService.getAllEmployeesBl()
+      .then((r) => { setBls(r.business_lines); setRows(r.employees); })
+      .catch(() => toast.error("Impossible de charger les employés"));
+  }, []);
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (rows ?? []).filter((e) =>
+      (filter === "__all" || (filter === "__none" ? !e.business_line : e.business_line === filter)) &&
+      (!q || `${e.matricule} ${e.nom} ${e.prenom} ${e.service} ${e.line_manager}`.toLowerCase().includes(q)));
+  }, [rows, query, filter]);
+
+  const change = async (e: BlEmployee & { business_line: string }, bl: string) => {
+    if (bl === e.business_line) return;
+    if (e.business_line && !window.confirm(
+      `Changer ${e.nom} ${e.prenom} de ${e.business_line} vers ${bl || "aucune BL"} ?\nSes jours déjà saisis restent ; les prochains se feront avec les codes de ${bl || "—"}.`)) return;
+    setBusy(e.id);
+    try {
+      const upd = await teamPlanningService.setEmployeeBl(e.id, bl);
+      setRows((list) => (list ?? []).map((x) => (x.id === upd.id ? { ...x, business_line: upd.business_line } : x)));
+      toast.success(`${e.nom} ${e.prenom} : ${upd.business_line || "aucune BL"}`);
+      onChanged();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail ?? "Changement impossible");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (!rows) return <div className="flex justify-center py-10"><Loader2 className="animate-spin text-[#003c71]" /></div>;
+
+  const count = (bl: string) => rows.filter((e) => (bl ? e.business_line === bl : !e.business_line)).length;
+
+  return (
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="px-5 py-3 flex gap-2 flex-wrap items-center border-b border-slate-100">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher un employé, un service…"
+            aria-label="Rechercher un employé"
+            className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#003c71]" />
+        </div>
+        <select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filtrer par Business Line"
+          className="border border-slate-200 rounded-xl px-3 py-2 text-sm">
+          <option value="__all">Toutes ({rows.length})</option>
+          {bls.map((b) => <option key={b} value={b}>{b} ({count(b)})</option>)}
+          <option value="__none">Sans BL ({count("")})</option>
+        </select>
+        <span className="text-sm text-slate-500">{shown.length} employé(s)</span>
+      </div>
+      <div className="flex-1 overflow-auto">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-slate-50 z-10">
+            <tr className="text-left text-xs text-slate-600">
+              <th className="px-5 py-2 font-semibold">Employé</th>
+              <th className="px-3 py-2 font-semibold">Service</th>
+              <th className="px-3 py-2 font-semibold">Line manager</th>
+              <th className="px-3 py-2 font-semibold w-48">Business Line</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {shown.map((e) => (
+              <tr key={e.id} className="hover:bg-slate-50">
+                <td className="px-5 py-2">
+                  <div className="font-medium text-slate-700">{e.nom} {e.prenom}</div>
+                  <div className="text-xs text-slate-400">{e.matricule}{e.fonction ? ` · ${e.fonction}` : ""}</div>
+                </td>
+                <td className="px-3 py-2 text-slate-500">{e.service || "—"}</td>
+                <td className="px-3 py-2 text-slate-500">{e.line_manager || "—"}</td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <select value={e.business_line} disabled={busy === e.id} onChange={(ev) => change(e, ev.target.value)}
+                      aria-label={`Business Line de ${e.nom} ${e.prenom}`}
+                      className={`w-full border rounded-lg px-2 py-1.5 text-sm ${e.business_line ? "border-[#003c71]/30 text-[#003c71] font-semibold" : "border-slate-200 text-slate-400"}`}>
+                      <option value="">— Aucune</option>
+                      {bls.map((b) => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                    {busy === e.id && <Loader2 size={14} className="animate-spin text-[#003c71] shrink-0" />}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {shown.length === 0 && (
+              <tr><td colSpan={4} className="text-center text-sm text-slate-400 py-10">Aucun employé.</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
