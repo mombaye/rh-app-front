@@ -1,15 +1,17 @@
 // src/components/common/DownloadAppButton.tsx
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Smartphone, X } from "lucide-react";
+import { Download, Smartphone, X } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
 interface DownloadAppButtonProps {
   className?: string;
 }
 
-/** Lien de l'APK Android (fichier .env : VITE_ANDROID_APP_URL). Vide = « bientôt disponible ». */
-const ANDROID_APP_URL = (import.meta.env.VITE_ANDROID_APP_URL as string | undefined)?.trim() ?? "";
+/** APK Android (fichier .env : VITE_ANDROID_APP_URL). Vide = « bientôt disponible ».
+ *  Un chemin (/downloads/…) est complété avec l'adresse du site pour que le QR code marche sur le téléphone. */
+const RAW_APP_URL = (import.meta.env.VITE_ANDROID_APP_URL as string | undefined)?.trim() ?? "";
+const ANDROID_APP_URL = RAW_APP_URL.startsWith("/") ? `${window.location.origin}${RAW_APP_URL}` : RAW_APP_URL;
 
 /**
  * Bouton "Télécharger l'app" : QR code à scanner avec un téléphone Android pour télécharger l'APK.
@@ -86,6 +88,10 @@ export default function DownloadAppButton({ className }: DownloadAppButtonProps)
                       <li>Si Android bloque l'installation, autorisez les « applications inconnues » pour ce navigateur.</li>
                     </ol>
 
+                    <a href={ANDROID_APP_URL} download="eRH-Camusat.apk"
+                      className="mt-5 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-camublue-900 hover:bg-camublue-800 text-white font-semibold text-sm transition-colors">
+                      <Download className="h-4 w-4" /> Télécharger
+                    </a>
                     <p className="mt-3 text-[11px] text-slate-400 text-center">Disponible sur Android. Version iOS bientôt disponible.</p>
                   </>
                 ) : (

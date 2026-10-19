@@ -1,0 +1,7 @@
+Dossier des fichiers téléchargeables depuis la plateforme (bouton « Télécharger l'app »).
+
+Déposer ici l'APK Android sous le nom exact :  erh-camusat.apk
+→ disponible sur https://<site>/downloads/erh-camusat.apk (QR code et bouton Télécharger).
+
+Pour une nouvelle version : remplacer le fichier (même nom). Pas besoin de reconstruire le frontend.
+Ce dossier n'est pas versionné dans Git (sauf ce fichier).

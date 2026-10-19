@@ -10,3 +10,6 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+    volumes:
+      # APK de l'application mobile : déposer le fichier dans ./downloads/ (non versionné)
+      - ./downloads:/usr/share/nginx/downloads:ro

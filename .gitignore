@@ -27,3 +27,7 @@ dist_old
 
 # Surcharge locale Docker (dev Mac) : jamais versionnée, jamais sur le serveur
 docker-compose.override.yml
+
+# Fichiers téléchargeables (APK de l'app mobile) : déposés sur le serveur, jamais versionnés
+downloads/*
+!downloads/LISEZMOI.txt
