@@ -102,6 +102,8 @@ export interface FillRateRow {
   project_days: number;
   pct: number;
   projects: { code: string; days: number; pct: number }[];
+  /** BL comptée d'office à 100 % (ex. BL5, NOPE) */
+  forced?: boolean;
 }
 
 const clean = (f: PlanningFilters) =>

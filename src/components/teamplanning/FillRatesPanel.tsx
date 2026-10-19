@@ -65,7 +65,7 @@ export default function FillRatesPanel({ filters, search }: { filters: PlanningF
       </div>
       <p className="text-[11px] text-slate-500">
         Pourcentage = jours du code projet / jours ouvrés hors congés (week-ends et fériés exclus, sauf s'ils portent un projet).
-        Le cumul est la somme des pourcentages de l'employé.
+        Le cumul est la somme des pourcentages de l'employé. Les BL marquées « 100 % d'office » (BL5, NOPE) sont comptées à 100 %.
       </p>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-auto max-h-[calc(100vh-20rem)]">
@@ -86,7 +86,10 @@ export default function FillRatesPanel({ filters, search }: { filters: PlanningF
                   <div className="font-semibold text-slate-700">{r.nom} {r.prenom}</div>
                   <div className="text-xs text-slate-400">{r.matricule}{r.line_manager ? ` · ${r.line_manager}` : ""}</div>
                 </td>
-                <td className="px-3 py-2 text-xs text-slate-500">{r.business_line}</td>
+                <td className="px-3 py-2 text-xs text-slate-500">
+                  {r.business_line}
+                  {r.forced && <div className="mt-1 text-[10px] font-semibold text-emerald-700 whitespace-nowrap" title="Cette BL est comptée à 100 % sans saisie">100 % d'office</div>}
+                </td>
                 <td className="px-3 py-2">
                   {/* Barre empilée : un segment par code projet */}
                   <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden flex" role="img"
