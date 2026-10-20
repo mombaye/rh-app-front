@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Télécharger eRH-Camusat</title>
+  <link rel="icon" type="image/png" href="/telecharger/logo-erh.png" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 24px 16px; background: #f1f5f9; color: #1e293b;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    .card {
+      width: 100%; max-width: 380px; background: #fff; border-radius: 24px; padding: 32px 24px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, .10); text-align: center;
+    }
+    .logo { width: 96px; height: 96px; border-radius: 24px; box-shadow: 0 4px 14px rgba(15, 23, 42, .12); }
+    h1 { font-size: 22px; margin: 18px 0 4px; color: #003c71; }
+    .sub { margin: 0 0 24px; color: #64748b; font-size: 14px; }
+    .btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+      padding: 16px; border-radius: 14px; background: #003c71; color: #fff; font-size: 17px; font-weight: 700;
+      text-decoration: none; border: 0;
+    }
+    .btn:active { background: #002b52; }
+    .meta { margin-top: 10px; font-size: 12px; color: #94a3b8; }
+    ol { text-align: left; margin: 24px 0 0; padding-left: 20px; font-size: 13px; color: #475569; line-height: 1.5; }
+    li + li { margin-top: 6px; }
+    .note { margin-top: 20px; font-size: 12px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <img class="logo" src="/telecharger/logo-erh.png" alt="Logo Camusat" />
+    <h1>eRH-Camusat</h1>
+    <p class="sub">Application mobile RH de Camusat</p>
+
+    <a id="download" class="btn" href="/downloads/erh-camusat.apk" download="eRH-Camusat.apk">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>
+      </svg>
+      Télécharger l'application
+    </a>
+    <p class="meta">Android · fichier APK (environ 75 Mo)</p>
+
+    <ol>
+      <li>Appuyez sur <strong>Télécharger l'application</strong>.</li>
+      <li>Une fois le téléchargement terminé, ouvrez le fichier <strong>eRH-Camusat.apk</strong>.</li>
+      <li>Si Android bloque l'installation, autorisez les <strong>« applications inconnues »</strong> pour votre navigateur, puis revenez.</li>
+      <li>Installez, puis connectez-vous avec vos identifiants eRH.</li>
+    </ol>
+
+    <p class="note">Version iOS bientôt disponible.</p>
+  </main>
+  <script>
+    // Lien toujours « neuf » : aucun cache (téléphone ou Cloudflare) ne peut renvoyer une ancienne réponse
+    var a = document.getElementById("download");
+    a.href = "/downloads/erh-camusat.apk?t=" + Date.now();
+  </script>
+</body>
+</html>

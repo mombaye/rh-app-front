@@ -88,7 +88,7 @@ export default function DownloadAppButton({ className }: DownloadAppButtonProps)
                       <li>Si Android bloque l'installation, autorisez les « applications inconnues » pour ce navigateur.</li>
                     </ol>
 
-                    <a href={ANDROID_APP_URL} download="eRH-Camusat.apk"
+                    <a href={ANDROID_APP_URL} target="_blank" rel="noopener noreferrer"
                       className="mt-5 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-camublue-900 hover:bg-camublue-800 text-white font-semibold text-sm transition-colors">
                       <Download className="h-4 w-4" /> Télécharger
                     </a>
