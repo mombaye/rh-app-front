@@ -7,7 +7,7 @@ export interface PlanningCell {
   kind: CellKind;
   auto: boolean;
   /** pointage / mission : jour travaillé (projet rempli automatiquement) ; absent : jour passé sans pointage */
-  source?: "pointage" | "mission" | "absent";
+  source?: "pointage" | "mission" | "absent" | "forfait";
 }
 
 export interface PlanningRow {
@@ -17,6 +17,8 @@ export interface PlanningRow {
   prenom: string;
   business_line: string;
   line_manager: string;
+  /** BL remplie d'office (ex. BL5, NOPE) : aucun code projet à saisir */
+  auto_filled?: boolean;
   cells: PlanningCell[];
 }
 

@@ -30,6 +30,7 @@ function cellStyle(cell: PlanningCell): string {
 }
 
 function cellTitle(cell: PlanningCell): string {
+  if (cell.source === "forfait") return `${cell.value} — rempli d'office (100 %), aucun code projet à saisir`;
   if (cell.kind === "project" && cell.auto)
     return `${cell.value} — rempli automatiquement (${cell.source === "mission" ? "mission validée" : "a pointé ce jour"}). Cliquez pour changer.`;
   if (cell.kind === "empty" && cell.source === "absent") return "Aucun pointage ce jour : à renseigner";
@@ -339,15 +340,16 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <div className="font-semibold text-slate-700 truncate">{row.nom} {row.prenom}</div>
-                          <div className="text-slate-400">{row.matricule}{empty > 0 && <span className="ml-1.5 text-rose-500">· {empty} vide(s)</span>}</div>
+                          <div className="text-slate-400">{row.matricule}{empty > 0 && <span className="ml-1.5 text-rose-500">· {empty} vide(s)</span>}
+                            {row.auto_filled && <span className="ml-1.5 text-emerald-600 font-semibold">· 100 % d'office</span>}</div>
                         </div>
-                        <div className="flex shrink-0">
+                        {!row.auto_filled && <div className="flex shrink-0">
                           <button title="Remplir les jours vides et automatiques avec un projet"
                             onClick={(e) => openPicker("fill", row, e.currentTarget)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-[#003c71] hover:bg-[#003c71]/10">
                             <Paintbrush size={14} />
                           </button>
-                        </div>
+                        </div>}
                       </div>
                     </td>
                     {row.cells.map((cell, i) => (
