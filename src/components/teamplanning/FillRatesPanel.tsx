@@ -91,6 +91,9 @@ export default function FillRatesPanel({ filters, search }: { filters: PlanningF
                   {r.forced && <div className="mt-1 text-[10px] font-semibold text-emerald-700 whitespace-nowrap" title="Cette BL est comptée à 100 % sans saisie">100 % d'office</div>}
                 </td>
                 <td className="px-3 py-2">
+                  {r.forced ? (
+                    <span className="text-xs text-emerald-700 italic">Aucun code projet requis — 100 % d'office</span>
+                  ) : (<>
                   {/* Barre empilée : un segment par code projet */}
                   <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden flex" role="img"
                     aria-label={`Remplissage ${fmt(r.pct)} : ${r.projects.map((p) => `${p.code} ${fmt(p.pct)}`).join(", ") || "aucun projet"}`}>
@@ -108,6 +111,7 @@ export default function FillRatesPanel({ filters, search }: { filters: PlanningF
                       </span>
                     ))}
                   </div>
+                  </>)}
                 </td>
                 <td className="px-3 py-2 text-right text-xs text-slate-500 whitespace-nowrap">{r.project_days} / {r.total_days}</td>
                 <td className="px-3 py-2 text-right">
