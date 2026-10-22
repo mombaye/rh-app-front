@@ -152,6 +152,8 @@ export interface LeaveRequestCreate {
   half_day_start?:  boolean;
   half_day_end?:    boolean;
   is_anticipation?: boolean;
+  /** Validateurs du circuit décochés par la RH : ils ne valident pas cette demande */
+  skipped_validator_ids?: number[];
 }
 
 // ── LeaveBalance ── mirrors LeaveBalanceSerializer ───────────────────────────

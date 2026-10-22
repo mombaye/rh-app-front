@@ -69,6 +69,8 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   // Circuit de validation dynamique
   const [chainInfo,    setChainInfo]    = useState<ApprovalChainInfo | null>(null);
   const [loadingChain, setLoadingChain] = useState(false);
+  // Validateurs décochés : la demande est validée par le reste du circuit
+  const [skipped,      setSkipped]      = useState<number[]>([]);
 
   // Document upload step
   const [createdId,   setCreatedId]   = useState<number | null>(null);
@@ -125,6 +127,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
 
   // Charger le circuit de validation dès qu'un employé est sélectionné
   useEffect(() => {
+    setSkipped([]);
     if (!selectedEmployee) { setChainInfo(null); return; }
     setLoadingChain(true);
     leaveRequestService.getApprovalChain(selectedEmployee.id)
@@ -298,6 +301,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
         end_date:       form.end_date,
         days:           parseFloat(form.days),
         motif:          "",
+        skipped_validator_ids: skipped,
       });
 
       // Upload du justificatif (obligatoire ou optionnel) s'il a été sélectionné
@@ -609,19 +613,37 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
                           "bg-violet-50 border-violet-300 text-violet-800",
                           "bg-rose-50 border-rose-300 text-rose-800",
                         ];
-                        const colorClass = step.level === "DG"
+                        const id = step.approver_id;
+                        const off = id !== null && skipped.includes(id);
+                        // Au moins un validateur doit rester coché
+                        const lastOn = !off && chainInfo.steps.filter(s => s.approver_id !== null && !skipped.includes(s.approver_id)).length <= 1;
+                        const colorClass = off
+                          ? "bg-gray-100 border-gray-300 text-gray-400 line-through"
+                          : step.level === "DG"
                           ? "bg-indigo-50 border-indigo-300 text-indigo-700"
                           : (STEP_COLORS[i] ?? STEP_COLORS[STEP_COLORS.length - 1]);
                         return (
                           <div key={i} className="flex items-center gap-1.5">
                             <span className="text-gray-300 font-bold text-sm">→</span>
-                            <div className={`flex flex-col items-center px-2 py-1 rounded-lg border text-[10px] font-semibold ${colorClass}`}>
-                              <span className="font-bold">{step.level}</span>
-                              <span className="font-normal opacity-75 max-w-[110px] truncate">
-                                {step.approver_name ?? "—"}
-                                {step.is_on_leave ? " 🌴" : ""}
+                            <label
+                              title={off ? "Ne valide pas cette demande — cocher pour le réintégrer"
+                                : lastOn ? "Au moins un validateur doit rester dans le circuit"
+                                : "Décocher si ce validateur n'a pas besoin de valider"}
+                              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-semibold ${colorClass} ${id !== null && !lastOn ? "cursor-pointer" : ""}`}>
+                              {id !== null && (
+                                <input type="checkbox" checked={!off} disabled={lastOn}
+                                  aria-label={`${step.level} ${step.approver_name ?? ""} valide cette demande`}
+                                  onChange={() => setSkipped(prev => off ? prev.filter(x => x !== id) : [...prev, id])}
+                                  className="h-3 w-3 accent-[#003c71] disabled:opacity-50" />
+                              )}
+                              <span className="flex flex-col items-center">
+                                <span className="font-bold">{step.level}</span>
+                                <span className="font-normal opacity-75 max-w-[110px] truncate">
+                                  {step.approver_name ?? "—"}
+                                  {step.is_on_leave ? " 🌴" : ""}
+                                </span>
                               </span>
-                            </div>
+                            </label>
                           </div>
                         );
                       })}
@@ -629,9 +651,11 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
 
                     {/* Légende */}
                     <p className="text-[10px] text-gray-400 mt-2.5 italic">
-                      {chainInfo.steps.length === 1
+                      {chainInfo.steps.length - skipped.length === 1
                         ? "1 niveau de validation"
-                        : `${chainInfo.steps.length} niveaux de validation`}
+                        : `${chainInfo.steps.length - skipped.length} niveaux de validation`}
+                      {skipped.length > 0 && ` — ${skipped.length} validateur(s) décoché(s), le reste du circuit valide`}
+                      {skipped.length === 0 && chainInfo.steps.length > 1 && " · décochez un validateur qui n'a pas besoin de valider"}
                       {chainInfo.custom ? " — validateurs choisis par la RH" : chainInfo.steps.length > 1 ? " — déterminés par l'arborescence" : ""}
                       {chainInfo.steps.some(s => s.is_on_leave) &&
                         " · 🌴 Un validateur est actuellement en congé"}
