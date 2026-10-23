@@ -307,7 +307,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
               <Settings2 size={15} /> Gestion plateforme
             </button>
           )}
-          <input ref={fileRef} type="file" accept=".xlsx,.xlsm" className="hidden"
+          <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.csv" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) previewImport(f); }} />
         </div>
       </div>
