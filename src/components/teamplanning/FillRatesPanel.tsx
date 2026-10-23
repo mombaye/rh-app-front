@@ -88,6 +88,7 @@ export default function FillRatesPanel({ filters, search }: { filters: PlanningF
                 </td>
                 <td className="px-3 py-2 text-xs text-slate-500">
                   {r.business_line}
+                  {r.fixed_code && <div className="mt-1 text-[10px] font-semibold text-emerald-700 whitespace-nowrap" title="Code projet fixe : jours remplis d'office avec ce code">Code fixe</div>}
                   {r.forced && <div className="mt-1 text-[10px] font-semibold text-emerald-700 whitespace-nowrap" title="Cette BL est comptée à 100 % sans saisie">100 % d'office</div>}
                 </td>
                 <td className="px-3 py-2">

@@ -7,7 +7,7 @@ export interface PlanningCell {
   kind: CellKind;
   auto: boolean;
   /** pointage / mission : jour travaillé (projet rempli automatiquement) ; absent : jour passé sans pointage */
-  source?: "pointage" | "mission" | "absent" | "forfait";
+  source?: "pointage" | "mission" | "absent" | "forfait" | "fixe";
 }
 
 export interface PlanningRow {
@@ -21,6 +21,8 @@ export interface PlanningRow {
   line_manager: string;
   /** BL remplie d'office (ex. BL5, NOPE) : aucun code projet à saisir */
   auto_filled?: boolean;
+  /** Code projet fixe importé : jours remplis d'office avec ce code */
+  fixed_code?: string;
   cells: PlanningCell[];
 }
 
@@ -67,6 +69,7 @@ export interface ImportSummary {
   multi_bl?: string[];
   unresolved_managers?: string[];
   exited_employees?: string[];
+  fixed_codes?: number;
   managers?: string[];
   // Commun
   unknown_employees: string[];
@@ -122,6 +125,7 @@ export interface FillRateRow {
   projects: { code: string; days: number; pct: number }[];
   /** BL comptée d'office à 100 % (ex. BL5, NOPE) */
   forced?: boolean;
+  fixed_code?: string;
 }
 
 const clean = (f: PlanningFilters) =>

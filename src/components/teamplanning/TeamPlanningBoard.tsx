@@ -30,6 +30,7 @@ function cellStyle(cell: PlanningCell): string {
 }
 
 function cellTitle(cell: PlanningCell): string {
+  if (cell.source === "fixe") return `${cell.value} — code projet fixe, rempli d'office (100 %)`;
   if (cell.source === "forfait") return `${cell.value} — rempli d'office (100 %), aucun code projet à saisir`;
   if (cell.kind === "project" && cell.auto)
     return `${cell.value} — rempli automatiquement (${cell.source === "mission" ? "mission validée" : "a pointé ce jour"}). Cliquez pour changer.`;
@@ -393,7 +394,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
                         <div className="min-w-0">
                           <div className="font-semibold text-slate-700 truncate">{row.nom} {row.prenom}</div>
                           <div className="text-slate-400">{row.matricule}{empty > 0 && <span className="ml-1.5 text-rose-500">· {empty} vide(s)</span>}
-                            {row.auto_filled && <span className="ml-1.5 text-emerald-600 font-semibold">· 100 % d'office</span>}</div>
+                            {row.auto_filled && <span className="ml-1.5 text-emerald-600 font-semibold">· {row.fixed_code ? "code fixe" : "100 % d'office"}</span>}</div>
                         </div>
                         {!row.auto_filled && <div className="flex shrink-0">
                           <button title="Remplir les jours vides et automatiques avec un projet"
@@ -474,6 +475,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
           ["Employés dont le responsable sera mis à jour", s.managers_updated],
           ["Business Lines ajoutées", s.new_business_lines],
           ["Codes projets ajoutés", s.new_projects],
+          ["Employés avec un code projet fixe (remplis d'office, 100 %)", s.fixed_codes],
         ] : [
           ["Codes projets ajoutés", s.new_projects],
           ["Saisies importées", s.entries],
