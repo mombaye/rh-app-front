@@ -41,7 +41,9 @@ function cellTitle(cell: PlanningCell): string {
 
 const SHORT: Record<string, string> = { "Week-End": "WE", "Jour férié": "Férié", "Jour congés": "Congé" };
 
-type Picker = { mode: "cell" | "fill"; row: PlanningRow; day?: number; x: number; y: number };
+type Target = { employee_id: number; day: number; row: PlanningRow };
+type Picker = { mode: "cell" | "fill" | "range"; row: PlanningRow; day?: number; x: number; y: number; targets?: Target[] };
+type Sel = { r0: number; d0: number; r1: number; d1: number };
 
 /** rhPage : page RH (/rh/team-planning). Les profils à vue complète (grid.is_rh, ex. bndiaye@ / acalvagna@) ont la même
  *  interface depuis leur propre espace : Business Lines, Remplissage, rapport et import. */
@@ -57,6 +59,13 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [picker, setPicker]   = useState<Picker | null>(null);
+  // Remplissage rapide façon Excel : on choisit un code (le « pinceau »), puis on clique ou on tire sur les jours
+  const [brush, setBrush]     = useState("");
+  const [sel, setSel]         = useState<Sel | null>(null);
+  const selRef  = useRef<Sel | null>(null);
+  const drag    = useRef<{ r0: number; d0: number } | null>(null);
+  const lastEl  = useRef<HTMLElement | null>(null);
+  const latest  = useRef<{ rows: PlanningRow[]; brush: string; grid: PlanningGrid | null }>({ rows: [], brush: "", grid: null });
   const [query, setQuery]     = useState("");
   const [showCodes, setShowCodes] = useState(false);
   const [showBls, setShowBls] = useState(false);
@@ -98,6 +107,17 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
     return { total: cells.length, filled, pct: cells.length ? Math.round((filled * 1000) / cells.length) / 10 : 0 };
   }, [grid]);
 
+  latest.current = { rows, brush, grid };
+
+  const rowBls = (row: PlanningRow) => (row.business_lines?.length ? row.business_lines : [row.business_line]);
+
+  const paint = (targets: Target[], value: string) => {
+    const special = new Set(grid?.special_values ?? []);
+    const ok = targets.filter((t) => !value || special.has(value) || rowBls(t.row).some((b) => grid?.projects[b]?.includes(value)));
+    if (ok.length < targets.length) toast(`${targets.length - ok.length} jour(s) ignoré(s) : « ${value} » n'est pas un code de leur Business Line`);
+    applyChanges(ok.map((t) => ({ employee_id: t.employee_id, day: t.day, value })));
+  };
+
   const applyChanges = async (changes: PlanningChange[]) => {
     if (!grid || changes.length === 0) return;
     setSaving(true);
@@ -114,13 +134,54 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
     }
   };
 
-  const openPicker = (mode: Picker["mode"], row: PlanningRow, el: HTMLElement, day?: number) => {
+  const openPicker = (mode: Picker["mode"], row: PlanningRow, el: HTMLElement, day?: number, targets?: Target[]) => {
     const rect = el.getBoundingClientRect();
     const x = Math.min(rect.left, window.innerWidth - 260);
     const y = rect.bottom + 300 > window.innerHeight ? Math.max(8, rect.top - 300) : rect.bottom + 4;
     setQuery("");
-    setPicker({ mode, row, day, x, y });
+    setPicker({ mode, row, day, x, y, targets });
   };
+
+  const updateSel = (s: Sel | null) => { selRef.current = s; setSel(s); };
+
+  // Fin du glissement : un seul jour = clic ; plusieurs jours / employés = remplissage de la plage
+  useEffect(() => {
+    const onUp = () => {
+      if (!drag.current) return;
+      drag.current = null;
+      const s = selRef.current;
+      updateSel(null);
+      if (!s) return;
+      const { rows: rs, brush: b } = latest.current;
+      const single = s.r0 === s.r1 && s.d0 === s.d1;
+      if (single) {
+        const row = rs[s.r0]; const cell = row?.cells[s.d0 - 1];
+        if (!row || !cell || !lastEl.current) return;
+        if (cell.kind === "leave" && cell.auto) { toast("Congé approuvé dans Gestion des congés : non modifiable ici."); return; }
+        if (b) paint([{ employee_id: row.employee_id, day: s.d0, row }], b);
+        else openPicker("cell", row, lastEl.current, s.d0);
+        return;
+      }
+      const targets: Target[] = [];
+      for (let r = Math.min(s.r0, s.r1); r <= Math.max(s.r0, s.r1); r++) {
+        const row = rs[r];
+        if (!row || row.auto_filled) continue;           // lignes remplies d'office : une saisie à la fois
+        for (let d = Math.min(s.d0, s.d1); d <= Math.max(s.d0, s.d1); d++) {
+          const cell = row.cells[d - 1];
+          // Congés approuvés, week-ends et fériés restent tels quels quand on tire sur plusieurs jours
+          if (cell && !(cell.auto && (cell.kind === "leave" || cell.kind === "weekend" || cell.kind === "holiday"))) targets.push({ employee_id: row.employee_id, day: d, row });
+        }
+      }
+      if (targets.length === 0) { toast("Aucun jour modifiable dans la sélection."); return; }
+      if (b) paint(targets, b);
+      else if (lastEl.current) openPicker("range", targets[0].row, lastEl.current, undefined, targets);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setBrush(""); };
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("mouseup", onUp); window.removeEventListener("keydown", onKey); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grid]);
 
   const onCellClick = (row: PlanningRow, cell: PlanningCell, day: number, el: HTMLElement) => {
     if (cell.kind === "leave" && cell.auto) {
@@ -144,9 +205,12 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
 
   const choose = (value: string) => {
     if (!picker) return;
-    const { row, day, mode } = picker;
+    const { row, day, mode, targets } = picker;
     setPicker(null);
-    if (mode === "cell" && day) {
+    if (mode !== "fill") setBrush(value);               // le code choisi devient le pinceau (vide = effacer, pas de pinceau)
+    if (mode === "range" && targets) {
+      paint(targets, value);
+    } else if (mode === "cell" && day) {
       applyChanges([{ employee_id: row.employee_id, day, value }]);
     } else {
       const changes = row.cells
@@ -160,9 +224,9 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
 
   const options = useMemo(() => {
     if (!picker || !grid) return [];
-    const bls = picker.row.business_lines?.length ? picker.row.business_lines : [picker.row.business_line];
-    const codes = [...new Set(bls.flatMap((b) => grid.projects[b] ?? []))];
-    const list = picker.mode === "cell" ? [...codes, ...grid.special_values] : codes;
+    const scope = picker.mode === "range" && picker.targets ? picker.targets.map((t) => t.row) : [picker.row];
+    const codes = [...new Set(scope.flatMap(rowBls).flatMap((b) => grid.projects[b] ?? []))];
+    const list = picker.mode !== "fill" ? [...codes, ...grid.special_values] : codes;
     const q = query.trim().toLowerCase();
     return q ? list.filter((v) => v.toLowerCase().includes(q)) : list;
   }, [picker, grid, query]);
@@ -344,6 +408,17 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
           {saving && <Loader2 size={14} className="animate-spin text-[#003c71]" />}
         </div>
       </div>
+      <div className="flex items-center gap-2 mb-2 min-h-[28px] text-xs text-slate-500">
+        {brush ? (
+          <span className="flex items-center gap-2 bg-[#003c71] text-white rounded-full pl-3 pr-1.5 py-1" role="status">
+            <Paintbrush size={12} /> Pinceau : <strong>{brush}</strong> — cliquez ou tirez sur les jours à remplir
+            <button onClick={() => setBrush("")} aria-label="Arrêter le pinceau (Échap)" title="Arrêter (Échap)"
+              className="rounded-full p-0.5 hover:bg-white/20"><XIcon size={12} /></button>
+          </span>
+        ) : (
+          <span>Astuce : tirez sur plusieurs jours (ou plusieurs employés) pour les remplir d'un coup avec le même code, comme dans Excel. Week-ends, fériés et congés sont ignorés.</span>
+        )}
+      </div>
 
       {/* Grille */}
       {loading ? (
@@ -359,8 +434,8 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
               : "Aucun employé de votre équipe (directe ou de vos sous-responsables) n'a de Business Line concernée par le Team Planning."}
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-xl overflow-auto max-h-[calc(100vh-15rem)]">
-          <table className="text-[11px] border-collapse">
+        <div className="bg-white border border-slate-200 rounded-xl overflow-auto max-h-[calc(100vh-15rem)] select-none">
+          <table className={`text-[11px] border-collapse ${brush ? "cursor-crosshair" : ""}`}>
             <thead className="sticky top-0 z-20">
               <tr className="bg-slate-50">
                 <th className="sticky left-0 z-30 bg-slate-50 text-left px-3 py-2 min-w-[230px] border-b border-r border-slate-200 text-slate-600">
@@ -376,7 +451,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {rows.map((row, ri) => {
                 const group = `${row.business_line} · ${row.line_manager || "Sans line manager"}`;
                 const header = group !== lastGroup;
                 lastGroup = group;
@@ -410,9 +485,24 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
                     {row.cells.map((cell, i) => (
                       <td key={i} className="border-b border-slate-100 p-0.5">
                         <button
-                          onClick={(e) => onCellClick(row, cell, i + 1, e.currentTarget)}
+                          onMouseDown={(e) => {
+                            if (e.button !== 0) return;
+                            e.preventDefault();
+                            drag.current = { r0: ri, d0: i + 1 };
+                            lastEl.current = e.currentTarget;
+                            updateSel({ r0: ri, d0: i + 1, r1: ri, d1: i + 1 });
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!drag.current) return;
+                            lastEl.current = e.currentTarget;
+                            updateSel({ ...drag.current, r1: ri, d1: i + 1 });
+                          }}
+                          onClick={(e) => { if (e.detail === 0) onCellClick(row, cell, i + 1, e.currentTarget); }}   // clavier
                           title={cellTitle(cell)}
-                          className={`w-full h-7 rounded truncate px-0.5 ${cellStyle(cell)}`}>
+                          className={`w-full h-7 rounded truncate px-0.5 ${cellStyle(cell)} ${
+                            sel && ri >= Math.min(sel.r0, sel.r1) && ri <= Math.max(sel.r0, sel.r1)
+                              && i + 1 >= Math.min(sel.d0, sel.d1) && i + 1 <= Math.max(sel.d0, sel.d1)
+                              ? "ring-2 ring-[#003c71] ring-inset" : ""}`}>
                           {SHORT[cell.value] ?? (cell.value || "·")}
                         </button>
                       </td>
@@ -434,7 +524,9 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
           <div className="fixed z-50 w-60 bg-white border border-slate-200 rounded-xl shadow-xl p-2" style={{ left: picker.x, top: picker.y }}>
             <div className="flex items-center justify-between px-1 pb-1.5">
               <span className="text-[11px] font-semibold text-slate-600 truncate">
-                {picker.mode === "fill" ? "Remplir les jours vides" : `Le ${picker.day} ${MONTHS_FR[month - 1].toLowerCase()}`} · {picker.row.business_line}
+                {picker.mode === "fill" ? "Remplir les jours vides"
+                  : picker.mode === "range" ? `${picker.targets?.length ?? 0} jour(s) sélectionné(s)`
+                  : `Le ${picker.day} ${MONTHS_FR[month - 1].toLowerCase()}`} · {picker.row.business_line}
               </span>
               <button onClick={() => setPicker(null)} className="text-slate-400 hover:text-slate-600"><XIcon size={14} /></button>
             </div>
@@ -454,7 +546,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
               ))}
               {options.length === 0 && <div className="text-xs text-slate-400 px-2 py-2">Aucun code trouvé</div>}
             </div>
-            {picker.mode === "cell" ? (
+            {picker.mode !== "fill" ? (
               <button onClick={() => choose("")}
                 className="w-full text-left text-xs px-2 py-1.5 mt-1 border-t border-slate-100 text-rose-600 hover:bg-rose-50 rounded-md">
                 Effacer la saisie
