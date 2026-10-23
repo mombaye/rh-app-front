@@ -43,7 +43,8 @@ const SHORT: Record<string, string> = { "Week-End": "WE", "Jour férié": "Féri
 
 type Picker = { mode: "cell" | "fill"; row: PlanningRow; day?: number; x: number; y: number };
 
-/** rhPage : page RH (/rh/team-planning) — Business Lines, Remplissage et rapport n'apparaissent que là */
+/** rhPage : page RH (/rh/team-planning). Les profils à vue complète (grid.is_rh, ex. bndiaye@ / acalvagna@) ont la même
+ *  interface depuis leur propre espace : Business Lines, Remplissage, rapport et import. */
 export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean }) {
   const today = new Date();
   const [year, setYear]       = useState(today.getFullYear());
@@ -52,6 +53,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
   const [manager, setManager] = useState("");
   const [search, setSearch]   = useState("");
   const [grid, setGrid]       = useState<PlanningGrid | null>(null);
+  const fullView = rhPage || !!grid?.is_rh;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [picker, setPicker]   = useState<Picker | null>(null);
@@ -264,7 +266,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
             <span className="text-sm font-semibold text-slate-700 w-32 text-center">{MONTHS_FR[month - 1]} {year}</span>
             <button onClick={() => shiftMonth(1)} className="p-2 text-slate-500 hover:text-slate-800"><ChevronRight size={16} /></button>
           </div>
-          {rhPage && view === "fill" && (
+          {fullView && view === "fill" && (
             <button onClick={() => setView("grid")} title="Revenir à la grille de saisie"
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl bg-[#003c71]/10 text-[#003c71] font-semibold hover:bg-[#003c71]/15">
               <ArrowLeft size={14} /> Taux de remplissage · retour au planning
@@ -289,19 +291,19 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher…"
               className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white w-44" />
           </div>
-          {rhPage && <button onClick={fillReport}
+          {fullView && <button onClick={fillReport}
             title="Rapport global : pour chaque employé, chaque code projet avec son pourcentage et le cumul"
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
             <FileSpreadsheet size={15} /> Rapport de remplissage
           </button>}
-          {rhPage && grid?.is_rh && (
+          {grid?.is_rh && (
             <button onClick={() => fileRef.current?.click()}
               title="Importer la liste des agents (BL, responsables, codes projets) sans écraser les saisies"
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
               <Upload size={15} /> Importer
             </button>
           )}
-          {(rhPage || grid?.is_rh) && (
+          {fullView && (
             <button onClick={() => setShowPlatform(true)}
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl bg-[#003c71] text-white font-semibold hover:bg-[#002b52]">
               <Settings2 size={15} /> Gestion plateforme
@@ -312,7 +314,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
         </div>
       </div>
 
-      {rhPage && view === "fill" ? <FillRatesPanel filters={filters} search={search} /> : <>
+      {fullView && view === "fill" ? <FillRatesPanel filters={filters} search={search} /> : <>
       {/* Avancement + légende */}
       <div className="flex flex-col md:flex-row md:items-center gap-3 mb-3">
         <div className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5">
@@ -543,11 +545,11 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
       {showPlatform && (() => {
         const items: { key: string; label: string; desc: string; Icon: typeof Layers; run: () => void; show: boolean }[] = [
           { key: "grid", label: "Planning", desc: "Grille de saisie des projets, jour par jour", Icon: Table2,
-            run: () => setView("grid"), show: rhPage },
+            run: () => setView("grid"), show: fullView },
           { key: "fill", label: "Taux de remplissage", desc: "Pourcentage de chaque code projet et cumul par employé", Icon: BarChart3,
-            run: () => setView("fill"), show: rhPage },
+            run: () => setView("fill"), show: fullView },
           { key: "bl", label: "Business Lines", desc: "Créer une BL, ses codes projets, y rattacher les employés", Icon: Layers,
-            run: () => setShowBls(true), show: rhPage && !!grid?.is_rh },
+            run: () => setShowBls(true), show: !!grid?.is_rh },
           { key: "codes", label: "Codes projets", desc: "Ajouter, désactiver ou réactiver des codes", Icon: ListChecks,
             run: () => setShowCodes(true), show: !!grid?.is_rh },
           { key: "import", label: "Importer le fichier", desc: "Fichier Excel Team Planning (codes projets et saisies)", Icon: Upload,
