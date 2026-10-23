@@ -11,6 +11,8 @@ export interface PlanningCell {
 }
 
 export interface PlanningRow {
+  /** Toutes les BL de l'employé (ex. BL2/BL3) : il saisit les codes de chacune */
+  business_lines?: string[];
   employee_id: number;
   matricule: string;
   nom: string;
@@ -64,6 +66,8 @@ export interface ImportSummary {
   new_business_lines?: number;
   multi_bl?: string[];
   unresolved_managers?: string[];
+  exited_employees?: string[];
+  managers?: string[];
   // Commun
   unknown_employees: string[];
   new_projects?: number;
@@ -187,5 +191,13 @@ export const teamPlanningService = {
     fd.append("file", file);
     if (dryRun) fd.append("dry_run", "1");
     return (await api.post("/api/team-planning/import/", fd, { headers: { "Content-Type": undefined } })).data;
+  },
+
+  /** Excel des matricules du fichier inconnus de l'application ou sortis (à corriger puis réimporter) */
+  exportImportGaps: async (file: File): Promise<Blob> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("export", "1");
+    return (await api.post("/api/team-planning/import/", fd, { headers: { "Content-Type": undefined }, responseType: "blob" })).data;
   },
 };

@@ -157,9 +157,9 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
 
   const options = useMemo(() => {
     if (!picker || !grid) return [];
-    const list = picker.mode === "cell"
-      ? [...(grid.projects[picker.row.business_line] ?? []), ...grid.special_values]
-      : grid.projects[picker.row.business_line] ?? [];
+    const bls = picker.row.business_lines?.length ? picker.row.business_lines : [picker.row.business_line];
+    const codes = [...new Set(bls.flatMap((b) => grid.projects[b] ?? []))];
+    const list = picker.mode === "cell" ? [...codes, ...grid.special_values] : codes;
     const q = query.trim().toLowerCase();
     return q ? list.filter((v) => v.toLowerCase().includes(q)) : list;
   }, [picker, grid, query]);
@@ -189,6 +189,20 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
       setPendingImport({ file, summary });
     } catch (e: any) {
       toast.error(e?.response?.data?.detail ?? "Fichier illisible", { id: t });
+    }
+  };
+
+  const exportGaps = async () => {
+    if (!pendingImport) return;
+    try {
+      const blob = await teamPlanningService.exportImportGaps(pendingImport.file);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "Matricules_non_importes.xlsx";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error("Export impossible");
     }
   };
 
@@ -421,7 +435,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
               </span>
               <button onClick={() => setPicker(null)} className="text-slate-400 hover:text-slate-600"><XIcon size={14} /></button>
             </div>
-            <p className="px-1 pb-1.5 text-[10px] text-slate-400">Codes projets de {picker.row.business_line} uniquement</p>
+            <p className="px-1 pb-1.5 text-[10px] text-slate-400">Codes projets de {(picker.row.business_lines?.length ? picker.row.business_lines : [picker.row.business_line]).join(" / ")} uniquement</p>
             <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Code projet ${picker.row.business_line}…`}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && options[0]) choose(options[0]);
@@ -466,8 +480,9 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
           ["Saisies ignorées", s.ignored_entries],
         ];
         const notes: [string, string[] | undefined][] = [
+          ["Matricules en motif de sortie dans les fiches employés (ignorés)", s.exited_employees],
           ["Matricules absents de l'application (ignorés)", s.unknown_employees],
-          ["Plusieurs BL dans le fichier : BL actuelle conservée, à choisir dans « Business Lines »", s.multi_bl],
+          ["Plusieurs BL : l'employé saisit les codes projets de toutes ses BL", s.multi_bl],
           ["Responsables introuvables ou ambigus (non affectés)", s.unresolved_managers],
         ];
         return (
@@ -490,6 +505,18 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
                     <p className="mt-1 break-words">{l!.slice(0, 40).join(", ")}{l!.length > 40 ? "…" : ""}</p>
                   </details>
                 ))}
+                {agents && !!s.managers?.length && (
+                  <details className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    <summary className="cursor-pointer font-semibold">{s.managers.length} responsable(s) avec leur équipe</summary>
+                    <p className="mt-1 break-words">{s.managers.join(", ")}</p>
+                  </details>
+                )}
+                {agents && !!((s.exited_employees?.length ?? 0) + s.unknown_employees.length) && (
+                  <button onClick={exportGaps}
+                    className="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 font-semibold text-[#003c71]">
+                    Exporter les matricules inconnus et sortis (Excel)
+                  </button>
+                )}
                 <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
                   Les saisies du planning, les Business Lines et les codes projets déjà présents sont conservés : l'import ne fait que des ajouts et des mises à jour.
                 </p>
