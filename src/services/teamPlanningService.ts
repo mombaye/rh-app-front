@@ -50,12 +50,22 @@ export interface PlanningChange {
 }
 
 export interface ImportSummary {
-  projects: Record<string, number>;
-  entries: number;
-  ignored_entries: number;
+  dry_run?: boolean;
+  // Fichier « Team planning » (codes projets et saisies)
+  projects?: Record<string, number>;
+  entries?: number;
+  ignored_entries?: number;
+  bl_to_update?: string[];
+  manager_to_update?: string[];
+  // Fichier « LISTE AGENTS » (BL et responsables)
+  rows?: number;
+  bl_updated?: number;
+  managers_updated?: number;
+  new_business_lines?: number;
+  multi_bl?: string[];
+  unresolved_managers?: string[];
+  // Commun
   unknown_employees: string[];
-  bl_to_update: string[];
-  manager_to_update: string[];
   new_projects?: number;
 }
 
@@ -172,9 +182,10 @@ export const teamPlanningService = {
   fillReport: async (filters: PlanningFilters): Promise<Blob> =>
     (await api.get("/api/team-planning/fill-report/", { params: clean(filters), responseType: "blob" })).data,
 
-  importFile: async (file: File): Promise<ImportSummary> => {
+  importFile: async (file: File, dryRun = false): Promise<ImportSummary> => {
     const fd = new FormData();
     fd.append("file", file);
+    if (dryRun) fd.append("dry_run", "1");
     return (await api.post("/api/team-planning/import/", fd, { headers: { "Content-Type": undefined } })).data;
   },
 };

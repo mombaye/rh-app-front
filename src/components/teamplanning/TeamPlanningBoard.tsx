@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, BarChart3, CalendarRange, ChevronLeft, ChevronRight, FileSpreadsheet, Layers, ListChecks, Loader2, Paintbrush, Search, Settings2, Table2, Upload, X as XIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import {
-  CellKind, PlanningCell, PlanningChange, PlanningGrid, PlanningRow, teamPlanningService,
+  CellKind, ImportSummary, PlanningCell, PlanningChange, PlanningGrid, PlanningRow, teamPlanningService,
 } from "@/services/teamPlanningService";
 import ProjectCodesModal from "@/components/teamplanning/ProjectCodesModal";
 import BusinessLinesModal from "@/components/teamplanning/BusinessLinesModal";
@@ -177,13 +177,44 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
     }
   };
 
+  // Import en deux temps : aperçu (rien n'est enregistré), puis confirmation
+  const [pendingImport, setPendingImport] = useState<{ file: File; summary: ImportSummary } | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const previewImport = async (file: File) => {
+    const t = toast.loading("Lecture du fichier…");
+    try {
+      const summary = await teamPlanningService.importFile(file, true);
+      toast.dismiss(t);
+      setPendingImport({ file, summary });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail ?? "Fichier illisible", { id: t });
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!pendingImport) return;
+    setImporting(true);
+    try {
+      await importFile(pendingImport.file);
+      setPendingImport(null);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const importFile = async (file: File) => {
     const t = toast.loading("Import du fichier…");
     try {
       const s = await teamPlanningService.importFile(file);
-      const projets = Object.entries(s.projects).map(([k, v]) => `${k} : ${v}`).join(", ");
+      if (s.rows !== undefined) {
+        toast.success("Liste des agents mise à jour — les saisies déjà faites sont conservées", { id: t, duration: 6000 });
+        load();
+        return;
+      }
+      const projets = Object.entries(s.projects ?? {}).map(([k, v]) => `${k} : ${v}`).join(", ");
       toast.success(`Fichier importé — ${projets}${s.new_projects ? ` · ${s.new_projects} nouveau(x) code(s) ajouté(s)` : ""}`, { id: t, duration: 6000 });
-      if (s.bl_to_update.length) {
+      if (s.bl_to_update?.length) {
         toast(`${s.bl_to_update.length} employé(s) ont une Business Line différente du fichier dans leur fiche : ${s.bl_to_update.slice(0, 8).join(", ")}${s.bl_to_update.length > 8 ? "…" : ""}`, { duration: 12000 });
       }
       if (s.manager_to_update?.length) {
@@ -248,6 +279,13 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
             <FileSpreadsheet size={15} /> Rapport de remplissage
           </button>}
+          {rhPage && grid?.is_rh && (
+            <button onClick={() => fileRef.current?.click()}
+              title="Importer la liste des agents (BL, responsables, codes projets) sans écraser les saisies"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
+              <Upload size={15} /> Importer
+            </button>
+          )}
           {(rhPage || grid?.is_rh) && (
             <button onClick={() => setShowPlatform(true)}
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl bg-[#003c71] text-white font-semibold hover:bg-[#002b52]">
@@ -255,7 +293,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
             </button>
           )}
           <input ref={fileRef} type="file" accept=".xlsx,.xlsm" className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importFile(f); }} />
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) previewImport(f); }} />
         </div>
       </div>
 
@@ -413,6 +451,61 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
           </div>
         </>
       )}
+      {pendingImport && (() => {
+        const s = pendingImport.summary;
+        const agents = s.rows !== undefined;
+        const lines: [string, number | undefined][] = agents ? [
+          ["Lignes lues dans le fichier", s.rows],
+          ["Employés dont la Business Line sera mise à jour", s.bl_updated],
+          ["Employés dont le responsable sera mis à jour", s.managers_updated],
+          ["Business Lines ajoutées", s.new_business_lines],
+          ["Codes projets ajoutés", s.new_projects],
+        ] : [
+          ["Codes projets ajoutés", s.new_projects],
+          ["Saisies importées", s.entries],
+          ["Saisies ignorées", s.ignored_entries],
+        ];
+        const notes: [string, string[] | undefined][] = [
+          ["Matricules absents de l'application (ignorés)", s.unknown_employees],
+          ["Plusieurs BL dans le fichier : BL actuelle conservée, à choisir dans « Business Lines »", s.multi_bl],
+          ["Responsables introuvables ou ambigus (non affectés)", s.unresolved_managers],
+        ];
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => !importing && setPendingImport(null)}>
+            <div role="dialog" aria-modal="true" aria-labelledby="import-title"
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-100">
+                <h2 id="import-title" className="text-lg font-bold text-[#003c71]">Importer « {pendingImport.file.name} »</h2>
+                <p className="text-sm text-slate-500">Rien n'est enregistré avant votre confirmation.</p>
+              </div>
+              <div className="px-6 py-4 space-y-3 text-sm">
+                <ul className="space-y-1.5">
+                  {lines.map(([label, n]) => (
+                    <li key={label} className="flex justify-between gap-3"><span className="text-slate-600">{label}</span><strong className="text-[#003c71]">{n ?? 0}</strong></li>
+                  ))}
+                </ul>
+                {notes.filter(([, l]) => l?.length).map(([label, l]) => (
+                  <details key={label} className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <summary className="cursor-pointer font-semibold">{l!.length} — {label}</summary>
+                    <p className="mt-1 break-words">{l!.slice(0, 40).join(", ")}{l!.length > 40 ? "…" : ""}</p>
+                  </details>
+                ))}
+                <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                  Les saisies du planning, les Business Lines et les codes projets déjà présents sont conservés : l'import ne fait que des ajouts et des mises à jour.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100">
+                <button onClick={() => setPendingImport(null)} disabled={importing}
+                  className="px-4 py-2 text-sm rounded-xl border border-slate-200 hover:bg-slate-50">Annuler</button>
+                <button onClick={confirmImport} disabled={importing}
+                  className="px-4 py-2 text-sm rounded-xl bg-[#003c71] text-white font-semibold hover:bg-[#002b52] disabled:opacity-60">
+                  {importing ? "Import…" : "Confirmer l'import"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {showCodes && <ProjectCodesModal onClose={() => setShowCodes(false)} onChanged={load} />}
       {showBls && <BusinessLinesModal onClose={() => setShowBls(false)} onChanged={load} />}
       {showPlatform && (() => {
