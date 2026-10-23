@@ -476,12 +476,14 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
           ["Business Lines ajoutées", s.new_business_lines],
           ["Codes projets ajoutés", s.new_projects],
           ["Employés avec un code projet fixe (remplis d'office, 100 %)", s.fixed_codes],
+          ["Anciens codes projets fixes retirés (absents du fichier)", s.fixed_removed],
         ] : [
           ["Codes projets ajoutés", s.new_projects],
           ["Saisies importées", s.entries],
           ["Saisies ignorées", s.ignored_entries],
         ];
         const notes: [string, string[] | undefined][] = [
+          ["Business Line changée d'après le fichier (les saisies déjà faites sont conservées)", s.bl_changes],
           ["Matricules en motif de sortie dans les fiches employés (ignorés)", s.exited_employees],
           ["Matricules absents de l'application (ignorés)", s.unknown_employees],
           ["Plusieurs BL : l'employé saisit les codes projets de toutes ses BL", s.multi_bl],

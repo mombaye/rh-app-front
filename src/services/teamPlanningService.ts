@@ -70,6 +70,8 @@ export interface ImportSummary {
   unresolved_managers?: string[];
   exited_employees?: string[];
   fixed_codes?: number;
+  fixed_removed?: number;
+  bl_changes?: string[];
   managers?: string[];
   // Commun
   unknown_employees: string[];
