@@ -484,6 +484,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
         ];
         const notes: [string, string[] | undefined][] = [
           ["Business Line changée d'après le fichier (les saisies déjà faites sont conservées)", s.bl_changes],
+          ["Sans code sur la ligne : code projet repris des autres employés de la même BL", s.fixed_from_bl],
           ["Matricules en motif de sortie dans les fiches employés (ignorés)", s.exited_employees],
           ["Matricules absents de l'application (ignorés)", s.unknown_employees],
           ["Plusieurs BL : l'employé saisit les codes projets de toutes ses BL", s.multi_bl],

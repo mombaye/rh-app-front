@@ -72,6 +72,7 @@ export interface ImportSummary {
   fixed_codes?: number;
   fixed_removed?: number;
   bl_changes?: string[];
+  fixed_from_bl?: string[];
   managers?: string[];
   // Commun
   unknown_employees: string[];
