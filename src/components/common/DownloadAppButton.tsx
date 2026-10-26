@@ -86,14 +86,14 @@ export default function DownloadAppButton({ className }: DownloadAppButtonProps)
                       <li>Ouvrez l'appareil photo ou un lecteur de QR code et scannez.</li>
                       <li>Android : téléchargez le fichier, puis ouvrez-le pour installer l'app.</li>
                       <li>Si Android bloque l'installation, autorisez les « applications inconnues » pour ce navigateur.</li>
-                      <li>iPhone : installez TestFlight, puis suivez le lien d'invitation affiché.</li>
+                      <li>iPhone : ouvrez la page avec Safari, puis Partager › « Sur l'écran d'accueil » (gratuit, sans App Store).</li>
                     </ol>
 
                     <a href={ANDROID_APP_URL} target="_blank" rel="noopener noreferrer"
                       className="mt-5 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-camublue-900 hover:bg-camublue-800 text-white font-semibold text-sm transition-colors">
                       <Download className="h-4 w-4" /> Télécharger
                     </a>
-                    <p className="mt-3 text-[11px] text-slate-400 text-center">Android : téléchargement direct. iPhone : installation via TestFlight (lien affiché après le scan).</p>
+                    <p className="mt-3 text-[11px] text-slate-400 text-center">Android : téléchargement direct. iPhone : ajout à l'écran d'accueil, sans App Store.</p>
                   </>
                 ) : (
                   <>
