@@ -39,13 +39,9 @@
     <p class="sub">Application mobile RH de Camusat</p>
 
     <section id="ios" hidden>
-      <a id="ios-btn" class="btn" href="#" hidden>Installer sur iPhone (TestFlight)</a>
+      <a id="ios-btn" class="btn" href="#" hidden>Installer sur iPhone</a>
       <p id="ios-soon" class="meta" hidden>La version iPhone est en cours de préparation. Elle sera disponible ici très bientôt.</p>
-      <ol id="ios-steps" hidden>
-        <li>Installez l'application gratuite <strong>TestFlight</strong> depuis l'App Store.</li>
-        <li>Appuyez sur <strong>Installer sur iPhone</strong> : TestFlight s'ouvre.</li>
-        <li>Appuyez sur <strong>Accepter</strong>, puis <strong>Installer</strong>, et connectez-vous avec vos identifiants eRH.</li>
-      </ol>
+      <ol id="ios-steps" hidden></ol>
     </section>
 
     <section id="android">
@@ -73,25 +69,37 @@
     var a = document.getElementById("download");
     a.href = "/downloads/erh-camusat.apk?t=" + Date.now();
 
-    // iPhone / iPad : lien TestFlight (fichier /downloads/testflight.txt contenant l'adresse du lien d'invitation)
+    // iPhone / iPad : le lien d'installation est dans /downloads/ios-link.txt (ou testflight.txt), une adresse par fichier :
+    //   https://apps.apple.com/…           App Store (même « non répertoriée ») : bouton Obtenir, rien d'autre à installer
+    //   itms-services://?action=…          installation directe (Ad Hoc / Entreprise) : popup « Installer », sans TestFlight
+    //   https://expo.dev/…                 page d'installation EAS (iPhone enregistrés)
+    //   https://testflight.apple.com/…     TestFlight
     var isIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     if (isIos) {
       document.getElementById("android").hidden = true;
       document.getElementById("other-note").hidden = true;
       document.getElementById("ios").hidden = false;
-      fetch("/downloads/testflight.txt?t=" + Date.now(), { cache: "no-store" })
-        .then(function (r) { return r.ok ? r.text() : ""; })
-        .then(function (t) {
-          t = (t || "").trim();
-          if (/^https:\/\/testflight\.apple\.com\//.test(t)) {
-            var b = document.getElementById("ios-btn");
-            b.href = t; b.hidden = false;
-            document.getElementById("ios-steps").hidden = false;
-          } else {
-            document.getElementById("ios-soon").hidden = false;
-          }
-        })
-        .catch(function () { document.getElementById("ios-soon").hidden = false; });
+      var STEPS = {
+        store: ["Appuyez sur <strong>Ouvrir dans l'App Store</strong>.", "Appuyez sur <strong>Obtenir</strong>, puis ouvrez l'application.", "Connectez-vous avec vos identifiants eRH."],
+        direct: ["Appuyez sur <strong>Installer sur iPhone</strong>, puis confirmez avec <strong>Installer</strong>.", "L'icône <strong>eRH-Camusat</strong> apparaît sur votre écran d'accueil.", "Si l'iPhone demande de faire confiance : <strong>Réglages › Général › VPN et gestion de l'appareil</strong>.", "Ouvrez l'application et connectez-vous avec vos identifiants eRH."],
+        testflight: ["Installez l'application gratuite <strong>TestFlight</strong> depuis l'App Store.", "Appuyez sur <strong>Installer sur iPhone</strong> : TestFlight s'ouvre.", "Appuyez sur <strong>Accepter</strong>, puis <strong>Installer</strong>, et connectez-vous avec vos identifiants eRH."]
+      };
+      var read = function (name) {
+        return fetch("/downloads/" + name + "?t=" + Date.now(), { cache: "no-store" })
+          .then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; });
+      };
+      var valid = /^(https:\/\/(apps\.apple\.com|testflight\.apple\.com|expo\.dev)\/|itms-services:\/\/\?action=download-manifest&url=https:\/\/)/;
+      read("ios-link.txt").then(function (t) { return valid.test((t || "").trim()) ? t : read("testflight.txt"); }).then(function (t) {
+        t = (t || "").trim();
+        if (!valid.test(t)) { document.getElementById("ios-soon").hidden = false; return; }
+        var kind = /apps\.apple\.com/.test(t) ? "store" : /testflight/.test(t) ? "testflight" : "direct";
+        var b = document.getElementById("ios-btn");
+        b.href = t; b.hidden = false;
+        b.textContent = kind === "store" ? "Ouvrir dans l'App Store" : "Installer sur iPhone";
+        var ol = document.getElementById("ios-steps");
+        ol.innerHTML = STEPS[kind].map(function (x) { return "<li>" + x + "</li>"; }).join("");
+        ol.hidden = false;
+      });
     }
   </script>
 </body>
