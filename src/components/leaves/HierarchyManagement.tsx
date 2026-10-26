@@ -177,6 +177,10 @@ function OrgChartTab() {
   const [bulkSearch,    setBulkSearch]    = useState("");
   const [bulkSaving,    setBulkSaving]    = useState(false);
   const [globalDg,      setGlobalDg]      = useState<GlobalDGInfo | null>(null);
+  // Choix du Directeur (DG)
+  const [dgModal,  setDgModal]  = useState(false);
+  const [dgSearch, setDgSearch] = useState("");
+  const [dgSaving, setDgSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -229,6 +233,28 @@ function OrgChartTab() {
     });
     return map;
   }, [employees, departments]);
+
+  const chooseDg = async (employeeId: number | null) => {
+    setDgSaving(true);
+    try {
+      await employeeHierarchyService.setGlobalDG(employeeId);
+      toast.success(employeeId ? "Directeur défini — les circuits de validation sont mis à jour." : "Directeur retiré.");
+      setDgModal(false);
+      setDgSearch("");
+      await load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail ?? "Impossible de définir le Directeur.");
+    } finally {
+      setDgSaving(false);
+    }
+  };
+
+  const dgCandidates = useMemo(() => {
+    const q = dgSearch.trim().toLowerCase();
+    const list = allEmployees.filter((e) => e.status === "ACTIVE");
+    const hit = q ? list.filter((e) => `${e.matricule ?? ""} ${e.nom ?? ""} ${e.prenom ?? ""} ${e.email ?? ""}`.toLowerCase().includes(q)) : list;
+    return hit.slice(0, 8);
+  }, [allEmployees, dgSearch]);
 
   // Noms des DG validators (dédupliqués)
   const dgNames = useMemo(() =>
@@ -483,6 +509,10 @@ function OrgChartTab() {
           ) : (
             <p className="text-xs text-indigo-400 italic mt-1">Non défini</p>
           )}
+          <button onClick={() => setDgModal(true)}
+            className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 bg-white/70 hover:bg-white border border-indigo-300 rounded-lg px-2.5 py-1">
+            <Pencil size={11} /> {globalDg ? "Changer le Directeur" : "Définir le Directeur"}
+          </button>
         </div>
 
         {/* Responsables de depts racines affichés au niveau DG */}
@@ -931,6 +961,44 @@ function OrgChartTab() {
       })()}
 
       {/* ── Modal : assignation en masse des membres ─────────────────────────── */}
+      {dgModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => !dgSaving && setDgModal(false)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="dg-title"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h2 id="dg-title" className="text-base font-bold text-indigo-900">Directeur (DG)</h2>
+                <p className="text-xs text-gray-500">Il valide les congés des responsables de département.</p>
+              </div>
+              <button onClick={() => setDgModal(false)} aria-label="Fermer" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><X size={16} /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              {globalDg && (
+                <p className="text-xs text-gray-600">Actuel : <strong>{globalDg.full_name}</strong>{globalDg.matricule ? ` (${globalDg.matricule})` : ""}</p>
+              )}
+              <input autoFocus value={dgSearch} onChange={(e) => setDgSearch(e.target.value)}
+                placeholder="Rechercher par nom, matricule ou email…"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              <ul className="max-h-64 overflow-auto divide-y divide-gray-100 border border-gray-100 rounded-lg">
+                {dgCandidates.map((e) => (
+                  <li key={e.id}>
+                    <button disabled={dgSaving} onClick={() => chooseDg(e.id)}
+                      className="w-full text-left px-3 py-2 hover:bg-indigo-50 disabled:opacity-60">
+                      <span className="text-sm font-semibold text-gray-800">{e.nom} {e.prenom}</span>
+                      <span className="block text-[11px] text-gray-500">{e.matricule} · {e.email || "pas d'email"}{e.is_dg ? " · Directeur actuel" : ""}</span>
+                    </button>
+                  </li>
+                ))}
+                {dgCandidates.length === 0 && <li className="px-3 py-3 text-xs text-gray-400">Aucun employé trouvé</li>}
+              </ul>
+              {globalDg && (
+                <button disabled={dgSaving} onClick={() => chooseDg(null)}
+                  className="text-xs text-rose-600 hover:underline">Retirer le Directeur</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {bulkDept && (() => {
         const q = bulkSearch.trim().toLowerCase();
 

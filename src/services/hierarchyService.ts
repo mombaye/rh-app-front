@@ -143,6 +143,14 @@ export const employeeHierarchyService = {
     });
     return res.data;
   },
+
+  /** POST /api/employees/hierarchy/dg/ — désigne le Directeur (employee_id null = retirer). RH uniquement. */
+  setGlobalDG: async (employeeId: number | null): Promise<{ dg: GlobalDGInfo | null }> => {
+    const res = await axios.post(`${EMP_API}/hierarchy/dg/`, { employee_id: employeeId }, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  },
 };
 
 export interface HierarchyMini {
