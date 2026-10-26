@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/telecharger/logo-erh.png" />
   <style>
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body {
       margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
       padding: 24px 16px; background: #f1f5f9; color: #1e293b;
@@ -37,6 +38,17 @@
     <h1>eRH-Camusat</h1>
     <p class="sub">Application mobile RH de Camusat</p>
 
+    <section id="ios" hidden>
+      <a id="ios-btn" class="btn" href="#" hidden>Installer sur iPhone (TestFlight)</a>
+      <p id="ios-soon" class="meta" hidden>La version iPhone est en cours de préparation. Elle sera disponible ici très bientôt.</p>
+      <ol id="ios-steps" hidden>
+        <li>Installez l'application gratuite <strong>TestFlight</strong> depuis l'App Store.</li>
+        <li>Appuyez sur <strong>Installer sur iPhone</strong> : TestFlight s'ouvre.</li>
+        <li>Appuyez sur <strong>Accepter</strong>, puis <strong>Installer</strong>, et connectez-vous avec vos identifiants eRH.</li>
+      </ol>
+    </section>
+
+    <section id="android">
     <a id="download" class="btn" href="/downloads/erh-camusat.apk" download="eRH-Camusat.apk">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -52,13 +64,35 @@
       <li>Si Android bloque l'installation, autorisez les <strong>« applications inconnues »</strong> pour votre navigateur, puis revenez.</li>
       <li>Installez, puis connectez-vous avec vos identifiants eRH.</li>
     </ol>
+    </section>
 
-    <p class="note">Version iOS bientôt disponible.</p>
+    <p id="other-note" class="note">Version iPhone : ouvrez cette page depuis votre iPhone.</p>
   </main>
   <script>
     // Lien toujours « neuf » : aucun cache (téléphone ou Cloudflare) ne peut renvoyer une ancienne réponse
     var a = document.getElementById("download");
     a.href = "/downloads/erh-camusat.apk?t=" + Date.now();
+
+    // iPhone / iPad : lien TestFlight (fichier /downloads/testflight.txt contenant l'adresse du lien d'invitation)
+    var isIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (isIos) {
+      document.getElementById("android").hidden = true;
+      document.getElementById("other-note").hidden = true;
+      document.getElementById("ios").hidden = false;
+      fetch("/downloads/testflight.txt?t=" + Date.now(), { cache: "no-store" })
+        .then(function (r) { return r.ok ? r.text() : ""; })
+        .then(function (t) {
+          t = (t || "").trim();
+          if (/^https:\/\/testflight\.apple\.com\//.test(t)) {
+            var b = document.getElementById("ios-btn");
+            b.href = t; b.hidden = false;
+            document.getElementById("ios-steps").hidden = false;
+          } else {
+            document.getElementById("ios-soon").hidden = false;
+          }
+        })
+        .catch(function () { document.getElementById("ios-soon").hidden = false; });
+    }
   </script>
 </body>
 </html>

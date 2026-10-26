@@ -73,8 +73,8 @@ export default function DownloadAppButton({ className }: DownloadAppButtonProps)
                 {ANDROID_APP_URL ? (
                   <>
                     <p className="text-sm text-slate-500 text-center leading-relaxed mb-5">
-                      Scannez ce QR code avec votre téléphone <span className="font-semibold text-slate-700">Android</span> pour
-                      télécharger l'application <span className="font-semibold text-slate-700">eRH Camusat</span>.
+                      Scannez ce QR code avec votre téléphone <span className="font-semibold text-slate-700">Android</span> ou
+                      <span className="font-semibold text-slate-700"> iPhone</span> pour télécharger l'application <span className="font-semibold text-slate-700">eRH Camusat</span>.
                     </p>
 
                     <div className="p-4 bg-white rounded-2xl border-2 border-camublue-900/15 shadow-sm">
@@ -84,15 +84,16 @@ export default function DownloadAppButton({ className }: DownloadAppButtonProps)
 
                     <ol className="mt-5 text-xs text-slate-500 space-y-1 self-stretch list-decimal list-inside">
                       <li>Ouvrez l'appareil photo ou un lecteur de QR code et scannez.</li>
-                      <li>Téléchargez le fichier, puis ouvrez-le pour installer l'app.</li>
+                      <li>Android : téléchargez le fichier, puis ouvrez-le pour installer l'app.</li>
                       <li>Si Android bloque l'installation, autorisez les « applications inconnues » pour ce navigateur.</li>
+                      <li>iPhone : installez TestFlight, puis suivez le lien d'invitation affiché.</li>
                     </ol>
 
                     <a href={ANDROID_APP_URL} target="_blank" rel="noopener noreferrer"
                       className="mt-5 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-camublue-900 hover:bg-camublue-800 text-white font-semibold text-sm transition-colors">
                       <Download className="h-4 w-4" /> Télécharger
                     </a>
-                    <p className="mt-3 text-[11px] text-slate-400 text-center">Disponible sur Android. Version iOS bientôt disponible.</p>
+                    <p className="mt-3 text-[11px] text-slate-400 text-center">Android : téléchargement direct. iPhone : installation via TestFlight (lien affiché après le scan).</p>
                   </>
                 ) : (
                   <>
