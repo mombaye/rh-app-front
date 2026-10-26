@@ -2,7 +2,8 @@
 // Réservé à la vue complète (RH et profils autorisés).
 // Seuls les employés SANS Business Line peuvent être ajoutés à une BL.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Layers, Loader2, Plus, Search, UserMinus, UserPlus, Users, X as XIcon } from "lucide-react";
+import { Download, Layers, Loader2, Plus, Search, UserMinus, UserPlus, Users, X as XIcon } from "lucide-react";
+import * as XLSX from "xlsx";
 import toast from "react-hot-toast";
 import {
   BlEmployee, BlEmployees, BusinessLineInfo, PlanningProjectCode, teamPlanningService,
@@ -16,6 +17,20 @@ export default function BusinessLinesModal({ onClose, onChanged }: { onClose: ()
   const [selected, setSelected] = useState("");
   const [tab, setTab] = useState<Tab>("codes");
   const [mode, setMode] = useState<Mode>("bl");
+  // Employés affichés dans l'onglet « Tous les employés » (avec recherche et filtre), exportés tels quels
+  const [exportRows, setExportRows] = useState<EmpBl[]>([]);
+
+  const exportEmployees = () => {
+    const data = exportRows.map((e) => ({
+      "Matricule": e.matricule, "Nom": e.nom, "Prénom": e.prenom, "Service": e.service, "Fonction": e.fonction,
+      "Line manager": e.line_manager, "Business Line": e.business_line || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws["!cols"] = [14, 24, 24, 30, 30, 30, 14].map((wch) => ({ wch }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Employés");
+    XLSX.writeFile(wb, `Employes_Business_Lines_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
   const [loading, setLoading] = useState(true);
   const [changed, setChanged] = useState(false);
   const [newBl, setNewBl] = useState("");
@@ -67,6 +82,13 @@ export default function BusinessLinesModal({ onClose, onChanged }: { onClose: ()
             <p className="text-sm text-slate-500">Créez une BL, ajoutez ses codes projets, puis les employés concernés.</p>
           </div>
           <div className="flex items-center gap-2">
+            {mode === "all" && (
+              <button onClick={exportEmployees} disabled={exportRows.length === 0}
+                title="Exporter en Excel les employés affichés (selon la recherche et le filtre)"
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 font-semibold text-[#003c71] disabled:opacity-50">
+                <Download size={14} /> Exporter
+              </button>
+            )}
             <div className="flex bg-slate-100 rounded-xl p-0.5" role="tablist" aria-label="Affichage">
               {([["bl", "Par Business Line", Layers], ["all", "Tous les employés", Users]] as const).map(([m, label, Icon]) => (
                 <button key={m} role="tab" aria-selected={mode === m} onClick={() => setMode(m)}
@@ -79,7 +101,7 @@ export default function BusinessLinesModal({ onClose, onChanged }: { onClose: ()
           </div>
         </div>
 
-        {mode === "all" ? <AllEmployees onChanged={() => { setChanged(true); loadBls(); }} /> : (
+        {mode === "all" ? <AllEmployees onChanged={() => { setChanged(true); loadBls(); }} onShown={setExportRows} /> : (
         <div className="flex flex-1 min-h-0 flex-col md:flex-row">
           {/* Liste des BL + création */}
           <div className="md:w-80 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col">
@@ -146,7 +168,7 @@ type EmpBl = BlEmployee & { business_line: string; bl_unknown?: boolean };
 
 // Tous les employés actifs avec leur BL ; changement de BL employé par employé.
 // BL « non créée » : écrite dans la fiche employé mais jamais créée sur la plateforme (à corriger).
-function AllEmployees({ onChanged }: { onChanged: () => void }) {
+function AllEmployees({ onChanged, onShown }: { onChanged: () => void; onShown: (rows: EmpBl[]) => void }) {
   const [bls, setBls] = useState<string[]>([]);
   const [rows, setRows] = useState<EmpBl[] | null>(null);
   const [query, setQuery] = useState("");
@@ -166,6 +188,8 @@ function AllEmployees({ onChanged }: { onChanged: () => void }) {
         : filter === "__unknown" ? !!e.bl_unknown : e.business_line === filter)) &&
       (!q || `${e.matricule} ${e.nom} ${e.prenom} ${e.service} ${e.line_manager}`.toLowerCase().includes(q)));
   }, [rows, query, filter]);
+
+  useEffect(() => { onShown(shown); }, [shown, onShown]);
 
   const change = async (e: EmpBl, bl: string) => {
     if (bl === e.business_line) return;
