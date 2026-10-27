@@ -71,6 +71,7 @@ export interface ImportSummary {
   multi_bl?: string[];
   unresolved_managers?: string[];
   exited_employees?: string[];
+  exited_kept?: string[];
   fixed_codes?: number;
   fixed_removed?: number;
   bl_changes?: string[];

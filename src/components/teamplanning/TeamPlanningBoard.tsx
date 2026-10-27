@@ -584,7 +584,8 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
         const notes: [string, string[] | undefined][] = [
           ["Business Line changée d'après le fichier (les saisies déjà faites sont conservées)", s.bl_changes],
           ["Sans code sur la ligne : code projet repris des autres employés de la même BL", s.fixed_from_bl],
-          ["Matricules en motif de sortie dans les fiches employés (ignorés)", s.exited_employees],
+          ["Sortis avec une date de sortie : mis à jour, visibles dans le planning jusqu'à leur sortie (et dans l'historique)", s.exited_kept],
+          ["Sortis sans date de sortie dans leur fiche (ignorés : renseignez la date pour les afficher)", s.exited_employees],
           ["Matricules absents de l'application (ignorés)", s.unknown_employees],
           ["Plusieurs BL : l'employé saisit les codes projets de toutes ses BL", s.multi_bl],
           ["Responsables introuvables ou ambigus (non affectés)", s.unresolved_managers],
