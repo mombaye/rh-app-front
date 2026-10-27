@@ -30,6 +30,9 @@ export const FEATURES = {
   planning:       flag("VITE_FEATURE_PLANNING"),
   omPointage:     flag("VITE_FEATURE_OM_POINTAGE"),     // Pointage O&M (+ forfaits)
   teamPlanning:   flag("VITE_FEATURE_TEAM_PLANNING"),   // Team Planning
+  // Pointages séparés : « Normales » = bureau seulement, « Shifts » = shift seulement, techniciens non affichés
+  // (régime de chaque employé importé depuis un fichier Bureau / Shift / Techniciens). Désactivé par défaut (Sénégal).
+  pointageGroups: flag("VITE_FEATURE_POINTAGE_GROUPS", false),
 
   // ── RH ─────────────────────────────────────────────────────────────────────
   missions:       flag("VITE_FEATURE_MISSIONS"),

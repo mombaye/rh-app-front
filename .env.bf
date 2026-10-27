@@ -13,6 +13,8 @@ VITE_FEATURE_MIGRATION=true
 VITE_FEATURE_ANTICIPATION=true
 VITE_FEATURE_INTERIM=true
 VITE_FEATURE_SHIFTS=true
+# Pointage normal = bureau, pointage shift = shift, techniciens non affichés (fichier Bureau / Shift / Techniciens)
+VITE_FEATURE_POINTAGE_GROUPS=true
 VITE_FEATURE_PLANNING=true
 VITE_FEATURE_MISSIONS=true
 VITE_FEATURE_ATTESTATIONS=true

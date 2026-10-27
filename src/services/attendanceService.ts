@@ -9,8 +9,8 @@ import type {
   ShiftTeamKey,
 } from "@/types/attendance";
 
-export async function getDailyStats(date: string): Promise<DailyStatsResponse> {
-  const { data } = await api.get("/api/attendance/daily-stats/", { params: { date } });
+export async function getDailyStats(date: string, attendanceStatus?: "SHIFT" | "STANDARD"): Promise<DailyStatsResponse> {
+  const { data } = await api.get("/api/attendance/daily-stats/", { params: { date, attendance_status: attendanceStatus } });
   return data;
 }
 
