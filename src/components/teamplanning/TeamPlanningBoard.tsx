@@ -18,6 +18,7 @@ const KIND_STYLE: Record<CellKind, string> = {
   holiday: "bg-amber-50 text-amber-700",
   leave:   "bg-sky-100 text-sky-700",
   empty:   "bg-white border border-dashed border-rose-200 text-rose-300 hover:bg-rose-50",
+  exited:  "bg-slate-200/70 text-slate-300 cursor-not-allowed",
 };
 // Projet rempli automatiquement d'après le pointage ou une mission validée (modifiable)
 const AUTO_PROJECT_STYLE = "bg-white border border-dashed border-emerald-400 text-emerald-700 italic";
@@ -30,6 +31,7 @@ function cellStyle(cell: PlanningCell): string {
 }
 
 function cellTitle(cell: PlanningCell): string {
+  if (cell.kind === "exited") return "Employé sorti : plus rien à renseigner";
   if (cell.source === "fixe") return `${cell.value} — code projet fixe, rempli d'office (100 %)`;
   if (cell.source === "forfait") return `${cell.value} — rempli d'office (100 %), aucun code projet à saisir`;
   if (cell.kind === "project" && cell.auto)
@@ -157,6 +159,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
       if (single) {
         const row = rs[s.r0]; const cell = row?.cells[s.d0 - 1];
         if (!row || !cell || !lastEl.current) return;
+        if (cell.kind === "exited") return;
         if (cell.kind === "leave" && cell.auto) { toast("Congé approuvé dans Gestion des congés : non modifiable ici."); return; }
         if (b) paint([{ employee_id: row.employee_id, day: s.d0, row }], b);
         else openPicker("cell", row, lastEl.current, s.d0);
@@ -169,7 +172,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
         for (let d = Math.min(s.d0, s.d1); d <= Math.max(s.d0, s.d1); d++) {
           const cell = row.cells[d - 1];
           // Congés approuvés, week-ends et fériés restent tels quels quand on tire sur plusieurs jours
-          if (cell && !(cell.auto && (cell.kind === "leave" || cell.kind === "weekend" || cell.kind === "holiday"))) targets.push({ employee_id: row.employee_id, day: d, row });
+          if (cell && cell.kind !== "exited" && !(cell.auto && (cell.kind === "leave" || cell.kind === "weekend" || cell.kind === "holiday"))) targets.push({ employee_id: row.employee_id, day: d, row });
         }
       }
       if (targets.length === 0) { toast("Aucun jour modifiable dans la sélection."); return; }
@@ -184,6 +187,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
   }, [grid]);
 
   const onCellClick = (row: PlanningRow, cell: PlanningCell, day: number, el: HTMLElement) => {
+    if (cell.kind === "exited") return;
     if (cell.kind === "leave" && cell.auto) {
       toast("Congé approuvé dans Gestion des congés : non modifiable ici.");
       return;
@@ -394,7 +398,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
           </div>
         </div>
         <div className="flex items-center gap-2 text-[11px] text-slate-600 flex-wrap">
-          {([["project", "Projet"], ["leave", "Congé (auto)"], ["holiday", "Férié (auto)"], ["weekend", "Week-end (auto)"], ["empty", "À renseigner"]] as [CellKind, string][]).map(([k, l]) => (
+          {([["project", "Projet"], ["leave", "Congé (auto)"], ["holiday", "Férié (auto)"], ["weekend", "Week-end (auto)"], ["empty", "À renseigner"], ["exited", "Après la sortie"]] as [CellKind, string][]).map(([k, l]) => (
             <span key={k} className="flex items-center gap-1">
               <span className={`w-3 h-3 rounded border border-slate-200 ${KIND_STYLE[k]}`} /> {l}
             </span>
@@ -471,6 +475,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
                         <div className="min-w-0">
                           <div className="font-semibold text-slate-700 truncate">{row.nom} {row.prenom}</div>
                           <div className="text-slate-400">{row.matricule}{empty > 0 && <span className="ml-1.5 text-rose-500">· {empty} vide(s)</span>}
+                            {row.exit_date && <span className="ml-1.5 text-slate-500 font-semibold" title="Employé sorti : les jours suivants sont grisés">· sorti le {row.exit_date.split("-").reverse().join("/")}</span>}
                             {row.auto_filled && <span className="ml-1.5 text-emerald-600 font-semibold">· {row.fixed_code ? "code fixe" : "100 % d'office"}</span>}</div>
                         </div>
                         {!row.auto_filled && <div className="flex shrink-0">

@@ -1,6 +1,6 @@
 import api from "@/api/axios";
 
-export type CellKind = "project" | "weekend" | "holiday" | "leave" | "empty";
+export type CellKind = "project" | "weekend" | "holiday" | "leave" | "empty" | "exited";
 
 export interface PlanningCell {
   value: string;
@@ -23,6 +23,8 @@ export interface PlanningRow {
   auto_filled?: boolean;
   /** Code projet fixe importé : jours remplis d'office avec ce code */
   fixed_code?: string;
+  /** Date de sortie (employé sorti) : les jours suivants sont grisés et non modifiables */
+  exit_date?: string | null;
   cells: PlanningCell[];
 }
 
