@@ -23,7 +23,6 @@ import type { Employee } from "@/types/employee";
 import { exportAttendanceXLSX as exportXLSX, periodInfo } from "@/utils/attendanceExport";
 import { onEmployeesSynced } from "@/utils/employeeSync";
 import { FEATURES } from "@/config/features";
-import PointageGroupsImport from "@/components/attendance/PointageGroupsImport";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ViewMode = "daily" | "weekly" | "monthly";
@@ -1930,8 +1929,6 @@ export default function AttendanceNormalesPage() {
               <Filter className="h-4 w-4" /><span className="hidden sm:inline">Filtrer</span>
               {statusFilter !== "all" && <span className="bg-orange-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold leading-none">1</span>}
             </button>
-
-            {FEATURES.pointageGroups && <PointageGroupsImport onDone={fetchData} />}
 
             <button onClick={handleExport}
               className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition flex items-center gap-1.5">
