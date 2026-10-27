@@ -84,7 +84,8 @@ export default function FillRatesPanel({ filters, search }: { filters: PlanningF
               <tr key={r.employee_id} className="align-top">
                 <td className="px-3 py-2">
                   <div className="font-semibold text-slate-700">{r.nom} {r.prenom}</div>
-                  <div className="text-xs text-slate-400">{r.matricule}{r.line_manager ? ` · ${r.line_manager}` : ""}</div>
+                  <div className="text-xs text-slate-400">{r.matricule}{r.line_manager ? ` · ${r.line_manager}` : ""}
+                    {r.exit_date && <span className="ml-1.5 font-semibold text-slate-500">· sorti le {r.exit_date.split("-").reverse().join("/")}</span>}</div>
                 </td>
                 <td className="px-3 py-2 text-xs text-slate-500">
                   {r.business_line}

@@ -132,6 +132,7 @@ export interface FillRateRow {
   /** BL comptée d'office à 100 % (ex. BL5, NOPE) */
   forced?: boolean;
   fixed_code?: string;
+  exit_date?: string | null;
 }
 
 const clean = (f: PlanningFilters) =>
