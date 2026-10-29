@@ -10,6 +10,7 @@ import MissionModal from "@/components/employees/MissionModal";
 import BulkCreateAccountsModal from "@/components/employees/BulkCreateAccountsModal";
 import BulkImportModal from "@/components/employees/BulkImportModal";
 import ExportModal from "@/components/employees/ExportModal";
+import CareerExportModal from "@/components/employees/CareerExportModal";
 import { Employee } from "@/types/employee";
 import {
   getEmployees,
@@ -871,6 +872,7 @@ export default function GlobalEmployeesPage() {
   const [bulkMatOpen,      setBulkMatOpen]      = useState(false);
   const [bulkImportOpen,   setBulkImportOpen]   = useState(false);
   const [exportOpen,       setExportOpen]       = useState(false);
+  const [careerExportOpen, setCareerExportOpen] = useState(false);
 
   // ── Dropdowns ────────────────────────────────────────────────────────────────
   const [profileDropdownOpen,  setProfileDropdownOpen]  = useState(false);
@@ -1122,6 +1124,12 @@ export default function GlobalEmployeesPage() {
               <FiDownload size={14} className="text-emerald-600" /> Extraction
             </button>
 
+            {/* Historique des contrats / fonctions */}
+            <button onClick={() => setCareerExportOpen(true)}
+              className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition">
+              <FiClock size={14} className="text-camublue-600" /> Export historique
+            </button>
+
             {/* Ajout en masse */}
             <button onClick={() => setBulkImportOpen(true)}
               className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition">
@@ -1236,6 +1244,7 @@ export default function GlobalEmployeesPage() {
         {/* Extraction personnalisée */}
         <AnimatePresence>
           {exportOpen && <ExportModal onClose={() => setExportOpen(false)} />}
+          {careerExportOpen && <CareerExportModal onClose={() => setCareerExportOpen(false)} />}
         </AnimatePresence>
       </motion.div>
     </AppLayout>

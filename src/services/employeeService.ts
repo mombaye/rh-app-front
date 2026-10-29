@@ -205,6 +205,17 @@ export const interimToInterim = async (
 ): Promise<ConvertInterimResult> =>
   (await api.post(`/api/employees/${employeeId}/interim-to-interim/`, payload)).data;
 
+/** Historique des contrats (ou des fonctions) de chaque employé : un fichier Excel, une ligne par période. */
+export const exportCareerHistory = async (kind: "contrat" | "fonction") => {
+  const res = await api.get("/api/employees/career-export/", { params: { kind }, responseType: "blob" });
+  const blob = new Blob([res.data], { type: res.headers["content-type"] });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `Historique_${kind === "contrat" ? "contrats" : "fonctions"}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
 export const exportEmployeesExcel = async (opts?: {
   status?: "ALL" | "ACTIVE" | "EXITED";
   type_contrat?: ContractType;
