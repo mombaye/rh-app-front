@@ -7,7 +7,7 @@ import { exportCareerHistory } from "@/services/employeeService";
 
 const CHOICES = [
   { kind: "contrat" as const, label: "Export par Contrat", Icon: FiFileText,
-    desc: "Les employés dont le contrat a changé sur la plateforme, avec leur parcours (CDD, renouvellements, CDI…) ligne par ligne." },
+    desc: "Pour chaque employé, son parcours de contrats (CDD, renouvellements, CDI…) ligne par ligne, et la période de chaque contrat." },
   { kind: "fonction" as const, label: "Export par Fonction", Icon: FiBriefcase,
     desc: "Pour chaque employé, les fonctions occupées avec leur période (du … au …), une ligne par fonction." },
 ];
