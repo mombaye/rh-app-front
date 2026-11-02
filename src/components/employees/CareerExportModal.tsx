@@ -9,7 +9,7 @@ const CHOICES = [
   { kind: "contrat" as const, label: "Export par Contrat", Icon: FiFileText,
     desc: "Les employés dont le contrat a changé sur la plateforme, avec leur parcours (CDD, renouvellements, CDI…) ligne par ligne." },
   { kind: "fonction" as const, label: "Export par Fonction", Icon: FiBriefcase,
-    desc: "L'historique des fonctions de chaque employé : postes occupés et promotions… une ligne par fonction." },
+    desc: "Pour chaque employé, les fonctions occupées avec leur période (du … au …), une ligne par fonction." },
 ];
 
 export default function CareerExportModal({ onClose }: { onClose: () => void }) {
