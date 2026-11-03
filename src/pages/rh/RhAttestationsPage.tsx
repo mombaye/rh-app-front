@@ -5,7 +5,7 @@ import {
   FileText, Download, RefreshCw, Search, X,
   RotateCcw, LayoutTemplate, Settings2,
   User, Calendar, Briefcase, Building2, FileCheck, Clock,
-  CheckCircle2, Ban, History, PlusCircle, Send, XCircle, Move, Minus, Plus,
+  CheckCircle2, Ban, History, PlusCircle, Send, XCircle, Move, Minus, Plus, Trash2, Undo2,
 } from "lucide-react";
 import { ImSpinner2 } from "react-icons/im";
 import toast from "react-hot-toast";
@@ -50,6 +50,7 @@ const HISTORY_CONFIG: Record<string, { icon: React.ReactNode; color: string; dot
   VALIDATED:   { icon: <Send        size={13} />, color: "text-emerald-600", dot: "bg-emerald-500" },
   REGENERATED: { icon: <RotateCcw   size={13} />, color: "text-violet-600",  dot: "bg-violet-400"  },
   REJECTED:    { icon: <XCircle     size={13} />, color: "text-red-600",     dot: "bg-red-400"     },
+  GENERATION_CANCELLED: { icon: <Undo2 size={13} />, color: "text-amber-600",  dot: "bg-amber-400"   },
 };
 
 // ── Séparateur section ──────────────────────────────────────────────────────
@@ -226,10 +227,12 @@ interface GeneratedPanelProps {
   onValidate: () => void;
   validating: boolean;
   rejecting: boolean;
+  onCancelGeneration: () => Promise<void>;
+  cancelling: boolean;
 }
 
 function GeneratedPanel({
-  manageTarget, onRegenerate, regenerating, onValidate, validating, rejecting,
+  manageTarget, onRegenerate, regenerating, onValidate, validating, rejecting, onCancelGeneration, cancelling,
 }: GeneratedPanelProps) {
   const doc = useDocumentPreview(manageTarget.id);
 
@@ -242,7 +245,7 @@ function GeneratedPanel({
     reloadPreview: doc.loadPreview,
   });
 
-  const busy = regenerating || validating || rejecting || stamp.saving;
+  const busy = regenerating || validating || rejecting || cancelling || stamp.saving;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -323,6 +326,26 @@ function GeneratedPanel({
               {regenerating ? "Re-génération en cours…" : "Re-générer l'aperçu"}
             </p>
             <p className="text-xs text-gray-400">Recréer le document avec les données actuelles</p>
+          </div>
+        </button>
+
+        {/* Annuler la génération (ex. mauvais type de contrat) : la demande repasse « En attente » */}
+        <button
+          onClick={onCancelGeneration}
+          disabled={busy}
+          className="flex items-center gap-3 w-full px-4 py-3.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition disabled:opacity-60 text-left"
+        >
+          <div className="w-9 h-9 rounded-lg bg-amber-200 flex items-center justify-center shrink-0">
+            {cancelling
+              ? <ImSpinner2 className="animate-spin text-amber-700" size={16} />
+              : <Undo2 size={16} className="text-amber-700" />
+            }
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800">
+              {cancelling ? "Annulation en cours…" : "Annuler la génération"}
+            </p>
+            <p className="text-xs text-amber-700/70">Supprimer ce document et remettre la demande en attente</p>
           </div>
         </button>
 
@@ -564,6 +587,37 @@ export default function RhAttestationsPage() {
     } finally { setRejecting(false); }
   };
 
+  // ── Annuler la génération ──────────────────────────────────────────────────
+  const [cancelling, setCancelling] = useState(false);
+  const handleCancelGeneration = async () => {
+    if (!manageTarget) return;
+    if (!window.confirm("Annuler le document généré ? Il sera supprimé et la demande repassera « En attente » (rien n'est envoyé à l'employé).")) return;
+    setCancelling(true);
+    try {
+      const updated = await attestationService.cancelGeneration(manageTarget.id);
+      setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
+      setManageTarget(updated);
+      if (detailTarget?.id === updated.id) await openDetail(updated);
+      toast.success("Génération annulée — la demande est de nouveau en attente.");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors de l'annulation");
+    } finally { setCancelling(false); }
+  };
+
+  // ── Supprimer ──────────────────────────────────────────────────────────────
+  const handleDelete = async (r: AttestationRequest) => {
+    if (!window.confirm(`Supprimer définitivement la demande « ${r.document_type_display} » de ${r.employee_nom_complet} ?`)) return;
+    try {
+      await attestationService.delete(r.id);
+      setRequests(prev => prev.filter(x => x.id !== r.id));
+      if (manageTarget?.id === r.id) closeManageModal();
+      if (detailTarget?.id === r.id) setDetailTarget(null);
+      toast.success("Demande supprimée.");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Erreur lors de la suppression");
+    }
+  };
+
   // ── Re-générer ─────────────────────────────────────────────────────────────
   const handleRegenerate = async () => {
     if (!manageTarget) return;
@@ -713,13 +767,23 @@ export default function RhAttestationsPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={() => { setManageTarget(r); setProcessNotes(""); setRejectNotes(""); setShowRejectForm(false); }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003c71] hover:bg-[#003c71]/90 text-white rounded-lg text-xs font-semibold transition ml-auto"
-                          >
-                            <Settings2 size={13} />
-                            Gérer
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => { setManageTarget(r); setProcessNotes(""); setRejectNotes(""); setShowRejectForm(false); }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003c71] hover:bg-[#003c71]/90 text-white rounded-lg text-xs font-semibold transition"
+                            >
+                              <Settings2 size={13} />
+                              Gérer
+                            </button>
+                            <button
+                              onClick={() => handleDelete(r)}
+                              aria-label={`Supprimer la demande de ${r.employee_nom_complet}`}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-semibold transition"
+                            >
+                              <Trash2 size={13} />
+                              Supprimer
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1027,6 +1091,8 @@ export default function RhAttestationsPage() {
                     onValidate={handleValidate}
                     validating={validating}
                     rejecting={rejecting}
+                    onCancelGeneration={handleCancelGeneration}
+                    cancelling={cancelling}
                   />
                 )}
 

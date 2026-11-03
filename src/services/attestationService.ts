@@ -102,6 +102,16 @@ export const attestationService = {
     return res.data;
   },
 
+  /** Annule un document généré non encore envoyé : la demande repasse « En attente ». */
+  cancelGeneration: async (id: number, notes?: string): Promise<AttestationRequest> => {
+    const res = await axios.post<AttestationRequest>(
+      `${API}/${id}/cancel-generation/`,
+      { notes: notes || "" },
+      { headers: authHeaders() },
+    );
+    return res.data;
+  },
+
   delete: async (id: number): Promise<void> => {
     await axios.delete(`${API}/${id}/`, { headers: authHeaders() });
   },

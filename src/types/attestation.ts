@@ -32,7 +32,7 @@ export interface AttestationRequest {
 
 export interface AttestationHistory {
   id:             number;
-  action:         "CREATED" | "GENERATED" | "PROCESSED" | "VALIDATED" | "REGENERATED" | "REJECTED";
+  action:         "CREATED" | "GENERATED" | "PROCESSED" | "VALIDATED" | "REGENERATED" | "REJECTED" | "GENERATION_CANCELLED";
   action_display: string;
   performed_by:   string;
   performed_at:   string;
