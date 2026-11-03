@@ -14,11 +14,14 @@ const CHOICES = [
 
 export default function CareerExportModal({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState<"contrat" | "fonction" | null>(null);
+  const [monthly, setMonthly] = useState(false);
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const run = async (kind: "contrat" | "fonction") => {
+    if (monthly && !month) { toast.error("Choisissez un mois"); return; }
     setBusy(kind);
     try {
-      await exportCareerHistory(kind);
+      await exportCareerHistory(kind, monthly ? month : undefined);
       toast.success("Fichier téléchargé");
       onClose();
     } catch {
@@ -40,6 +43,27 @@ export default function CareerExportModal({ onClose }: { onClose: () => void }) 
           <button onClick={onClose} disabled={!!busy} aria-label="Fermer" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><FiX size={16} /></button>
         </div>
         <div className="p-5 space-y-3">
+          <div className="rounded-xl border border-gray-200 px-4 py-3 space-y-2">
+            <div className="flex gap-2 text-xs font-semibold" role="radiogroup" aria-label="Période de l'export">
+              {[{ v: false, l: "Tout l'historique" }, { v: true, l: "Un mois" }].map(o => (
+                <button key={String(o.v)} type="button" role="radio" aria-checked={monthly === o.v}
+                  onClick={() => setMonthly(o.v)} disabled={!!busy}
+                  className={`px-3 py-1.5 rounded-lg border transition ${monthly === o.v ? "bg-camublue-900 text-white border-camublue-900" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+            {monthly && (
+              <div>
+                <label htmlFor="career-export-month" className="block text-xs font-semibold text-gray-600 mb-1">Mois</label>
+                <input id="career-export-month" type="month" value={month} onChange={e => setMonth(e.target.value)} disabled={!!busy}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                <p className="text-xs text-gray-500 mt-1">
+                  Seuls les événements prenant effet ce mois-là sont exportés, d'après leur date d'effet (prise en fonction), pas la date de saisie.
+                </p>
+              </div>
+            )}
+          </div>
           {CHOICES.map(({ kind, label, Icon, desc }) => (
             <button key={kind} onClick={() => run(kind)} disabled={!!busy}
               className="w-full text-left flex items-start gap-3 rounded-xl border border-gray-200 hover:border-camublue-600 hover:bg-camublue-50/40 px-4 py-3 transition disabled:opacity-60">

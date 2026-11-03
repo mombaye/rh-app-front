@@ -206,12 +206,12 @@ export const interimToInterim = async (
   (await api.post(`/api/employees/${employeeId}/interim-to-interim/`, payload)).data;
 
 /** Historique des contrats (ou des fonctions) de chaque employé : un fichier Excel, une ligne par période. */
-export const exportCareerHistory = async (kind: "contrat" | "fonction") => {
-  const res = await api.get("/api/employees/career-export/", { params: { kind }, responseType: "blob" });
+export const exportCareerHistory = async (kind: "contrat" | "fonction", month?: string) => {
+  const res = await api.get("/api/employees/career-export/", { params: { kind, ...(month ? { month } : {}) }, responseType: "blob" });
   const blob = new Blob([res.data], { type: res.headers["content-type"] });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `Historique_${kind === "contrat" ? "contrats" : "fonctions"}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  a.download = `Historique_${kind === "contrat" ? "contrats" : "fonctions"}_${month || new Date().toISOString().slice(0, 10)}.xlsx`;
   a.click();
   URL.revokeObjectURL(a.href);
 };
