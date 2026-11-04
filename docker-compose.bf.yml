@@ -8,7 +8,7 @@ services:
       args:
         VITE_MODE: bf                              # textes, drapeau et menus du Burkina (.env.bf)
         VITE_API_URL: ""                           # API appelée via /api/ (nginx ci-dessous)
-        VITE_PUBLIC_URL: https://rh.camusatbf.com
+        VITE_PUBLIC_URL: https://erh.camusatbf.com
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
