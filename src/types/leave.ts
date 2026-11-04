@@ -226,6 +226,7 @@ export interface MigrationImportRow {
   system_taken?:     number | null;
   file_taken?:       number | null;
   taken_override?:   number | null;
+  acquired_override?: number | null;
   message?:          string;
 }
 export interface MigrationImportResult {

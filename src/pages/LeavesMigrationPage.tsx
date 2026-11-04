@@ -18,6 +18,7 @@ import { MigrationImportResult, MigrationImportRow } from "@/types/leave";
 interface EditableRow extends MigrationImportRow {
   edited: number;
   taken_override?: number | null;
+  acquired_override?: number | null;
 }
 
 // ─── Helpers de calcul (source unique de vérité) ──────────────────────────────
@@ -330,6 +331,7 @@ export default function LeavesMigrationPage() {
         ...r,
         edited: r.new_remaining ?? r.current_remaining ?? 0,
         taken_override: r.taken_override ?? null,
+        acquired_override: r.acquired_override ?? null,
       }));
       setRows(newRows);
       if (res.errors_count > 0) {
@@ -394,6 +396,7 @@ export default function LeavesMigrationPage() {
           date_embauche:   r.date_embauche,
           solde_anterieur: r.solde_anterieur ?? 0,
           ...(r.taken_override != null ? { taken_override: r.taken_override } : {}),
+          ...(r.acquired_override != null ? { acquired_override: r.acquired_override } : {}),
         })),
         { year: currentYear }
       );
