@@ -3,7 +3,6 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Users2,
-  BadgeDollarSign,
   Clock,
   CalendarDays,
   ChevronDown,
@@ -145,11 +144,6 @@ export default function Sidebar() {
         ...(FEATURES.omPointage   ? [{ label: "Pointage HS & Astreinte", path: "/rh/om-pointage" }] : []),
         ...(FEATURES.teamPlanning ? [{ label: "Team Planning", path: "/rh/team-planning" }] : []),
       ],
-    },
-    {
-      label: "Bulletins Salariés",
-      path: "/payslip",
-      icon: <BadgeDollarSign size={20} />,
     },
     {
       label: "Gestion Ressources",
