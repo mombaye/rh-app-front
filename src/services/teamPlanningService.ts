@@ -42,6 +42,18 @@ export interface PlanningGrid {
   stats: { total: number; filled: number; pct: number };
 }
 
+export interface ManagerStatus {
+  manager_id: number;
+  name: string;
+  email: string;
+  employees: number;
+  incomplete: number;
+  pct: number;
+  missing: { name: string; pct: number }[];
+}
+
+export interface RemindResult { sent: string[]; no_email: string[]; failed: string[]; unknown: number[] }
+
 export interface PlanningFilters {
   year: number;
   month: number;
@@ -193,6 +205,12 @@ export const teamPlanningService = {
 
   getFillRates: async (filters: PlanningFilters): Promise<{ year: number; month: number; rows: FillRateRow[] }> =>
     (await api.get("/api/team-planning/fill-rates/", { params: clean(filters) })).data,
+
+  getManagersStatus: async (year: number, month: number): Promise<{ managers: ManagerStatus[] }> =>
+    (await api.get("/api/team-planning/managers/", { params: { year, month } })).data,
+
+  remindManagers: async (year: number, month: number, manager_ids: number[]): Promise<RemindResult> =>
+    (await api.post("/api/team-planning/remind/", { year, month, manager_ids })).data,
 
   fillReport: async (filters: PlanningFilters): Promise<Blob> =>
     (await api.get("/api/team-planning/fill-report/", { params: clean(filters), responseType: "blob" })).data,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, CalendarRange, ChevronLeft, ChevronRight, FileSpreadsheet, Layers, ListChecks, Loader2, Paintbrush, Search, Settings2, Table2, Upload, X as XIcon } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarRange, ChevronLeft, ChevronRight, FileSpreadsheet, Layers, ListChecks, Loader2, Mail, Paintbrush, Search, Settings2, Table2, Upload, X as XIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   CellKind, ImportSummary, PlanningCell, PlanningChange, PlanningGrid, PlanningRow, teamPlanningService,
@@ -7,6 +7,7 @@ import {
 import ProjectCodesModal from "@/components/teamplanning/ProjectCodesModal";
 import BusinessLinesModal from "@/components/teamplanning/BusinessLinesModal";
 import FillRatesPanel from "@/components/teamplanning/FillRatesPanel";
+import RemindManagersModal from "@/components/teamplanning/RemindManagersModal";
 
 const MONTHS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -71,6 +72,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
   const [query, setQuery]     = useState("");
   const [showCodes, setShowCodes] = useState(false);
   const [showBls, setShowBls] = useState(false);
+  const [showRemind, setShowRemind] = useState(false);
   const [view, setView] = useState<"grid" | "fill">("grid");
   const [showPlatform, setShowPlatform] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -359,6 +361,11 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher…"
               className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white w-44" />
           </div>
+          {fullView && <button onClick={() => setShowRemind(true)}
+            title="Envoyer un e-mail de relance aux responsables qui n'ont pas terminé leur Team Planning"
+            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 font-semibold hover:bg-amber-100">
+            <Mail size={15} /> Relance
+          </button>}
           {fullView && <button onClick={fillReport}
             title="Rapport global : pour chaque employé, chaque code projet avec son pourcentage et le cumul"
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
@@ -638,6 +645,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
           </div>
         );
       })()}
+      {showRemind && <RemindManagersModal year={year} month={month} onClose={() => setShowRemind(false)} />}
       {showCodes && <ProjectCodesModal onClose={() => setShowCodes(false)} onChanged={load} />}
       {showBls && <BusinessLinesModal onClose={() => setShowBls(false)} onChanged={load} />}
       {showPlatform && (() => {
