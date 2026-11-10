@@ -5,13 +5,9 @@ import api from "@/api/axios";
 import toast from "react-hot-toast";
 import AppLayout from "@/layouts/AppLayout";
 import BeneficiariesModal from "@/components/hsastreinte/BeneficiariesModal";
+import { HsCampaign, campaignLabel, frDate } from "@/services/hsAstreinteService";
 // @ts-ignore
 import XLSXStyle from "xlsx-js-style";
-
-const MONTHS_FR = [
-  "Janvier","Février","Mars","Avril","Mai","Juin",
-  "Juillet","Août","Septembre","Octobre","Novembre","Décembre",
-];
 
 interface OmRow {
   employee_id: number;
@@ -25,10 +21,15 @@ interface OmRow {
   n1_manager_name: string;
   nb_heures_sup: number;
   nb_jours_astreintes: number;
+  nb_days_off: number;
   jours_travailles: number;
   heures_totales: number;
   // Calculé par le backend
   forfait_hs_amount: number;
+  nb_astreintes_payees: number;
+  montant_astreintes_brut: number;
+  plafond: number | null;
+  plafond_applique: boolean;
   montant_astreintes: number;
   montant_a_recevoir: number;
   has_rate: boolean;
@@ -39,16 +40,17 @@ interface ServiceRate {
   service: string;
   forfait_hs: number;       // montant forfait si Y > 0
   astreinte_per_day: number; // montant par jour Z
+  plafond_enabled: boolean;  // plafond du montant d'astreinte sur la période
+  plafond_amount: number;
 }
 
-const STORAGE_KEY = (year: number, month: number) =>
-  `om_forfaits_comments_${year}_${month}`;
+const STORAGE_KEY = (campaignId: number | null) => `om_forfaits_comments_campaign_${campaignId ?? "none"}`;
 
 export default function RhOmForfaitsPage() {
   const navigate = useNavigate();
-  const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1);
+  const [campaignId, setCampaignId] = useState<number | null>(null);
+  const [campaign, setCampaign] = useState<HsCampaign | null>(null);
+  const [campaigns, setCampaigns] = useState<HsCampaign[]>([]);
   const [rows, setRows] = useState<OmRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -87,15 +89,15 @@ export default function RhOmForfaitsPage() {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY(year, month));
+      const saved = localStorage.getItem(STORAGE_KEY(campaign?.id ?? null));
       setComments(saved ? JSON.parse(saved) : {});
     } catch { setComments({}); }
-  }, [year, month]);
+  }, [campaign?.id]);
 
   function saveComment(employeeId: number, text: string) {
     setComments(prev => {
       const next = { ...prev, [employeeId]: text };
-      try { localStorage.setItem(STORAGE_KEY(year, month), JSON.stringify(next)); } catch {}
+      try { localStorage.setItem(STORAGE_KEY(campaign?.id ?? null), JSON.stringify(next)); } catch {}
       return next;
     });
   }
@@ -103,15 +105,19 @@ export default function RhOmForfaitsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Bénéficiaires du forfait seulement, montants calculés par le backend (tarifs par service)
-      const res = await api.get(`/api/attendance/hs-astreinte/forfaits/?year=${year}&month=${month}`);
+      // Bénéficiaires du forfait seulement, montants calculés par le backend
+      // (tarifs par service, Days Off déduits des astreintes, plafond du service)
+      const res = await api.get("/api/attendance/hs-astreinte/forfaits/", { params: campaignId ? { campaign: campaignId } : {} });
       setRows(res.data.rows || []);
+      setCampaigns(res.data.campaigns || []);
+      setCampaign(res.data.campaign || null);
+      if (res.data.campaign && res.data.campaign.id !== campaignId) setCampaignId(res.data.campaign.id);
     } catch {
       toast.error("Impossible de charger les données.");
     } finally {
       setLoading(false);
     }
-  }, [year, month]);
+  }, [campaignId]);
 
   const fetchRates = useCallback(async () => {
     setRatesLoading(true);
@@ -129,7 +135,8 @@ export default function RhOmForfaitsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); fetchRates(); }, [fetchData, fetchRates]);
+  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchRates(); }, [fetchRates]);
 
   const services = useMemo(
     () => Array.from(new Set(rows.map(r => r.service).filter(Boolean))).sort(),
@@ -162,9 +169,14 @@ export default function RhOmForfaitsPage() {
   const totals = useMemo(() => filtered.reduce((acc, r) => ({
     forfaitHs: acc.forfaitHs + r.forfait_hs_amount,
     nbJoursAstr: acc.nbJoursAstr + r.nb_jours_astreintes,
+    nbDaysOff: acc.nbDaysOff + r.nb_days_off,
+    nbPayees: acc.nbPayees + r.nb_astreintes_payees,
     montantAstr: acc.montantAstr + r.montant_astreintes,
     total: acc.total + r.montant_a_recevoir,
-  }), { forfaitHs: 0, nbJoursAstr: 0, montantAstr: 0, total: 0 }), [filtered]);
+  }), { forfaitHs: 0, nbJoursAstr: 0, nbDaysOff: 0, nbPayees: 0, montantAstr: 0, total: 0 }), [filtered]);
+
+  const periodTitle = campaign ? campaignLabel(campaign) : "Aucune période";
+  const periodSlug = campaign ? `${campaign.start_date}_au_${campaign.end_date}` : "periode";
 
   const servicesWithoutRate = useMemo(
     () => services.filter(s => rows.some(r => r.service === s && !r.has_rate)),
@@ -175,8 +187,6 @@ export default function RhOmForfaitsPage() {
     return n === 0 ? "0" : n.toLocaleString("fr-FR");
   }
 
-  function prevMonth() { if (month === 1) { setYear(y => y - 1); setMonth(12); } else setMonth(m => m - 1); }
-  function nextMonth() { if (month === 12) { setYear(y => y + 1); setMonth(1); } else setMonth(m => m + 1); }
 
   // ── Modal tarifs ────────────────────────────────────────────────────────────
 
@@ -184,7 +194,7 @@ export default function RhOmForfaitsPage() {
     // Initialiser l'édition avec les tarifs existants + les services manquants
     const existing = serviceRates.map(r => ({ ...r }));
     const missingServices = allServices.filter(s => !rateByService[s]);
-    const newEntries: ServiceRate[] = missingServices.map(s => ({ service: s, forfait_hs: 0, astreinte_per_day: 0 }));
+    const newEntries: ServiceRate[] = missingServices.map(s => ({ service: s, forfait_hs: 0, astreinte_per_day: 0, plafond_enabled: false, plafond_amount: 0 }));
     setEditRates([...existing, ...newEntries]);
     setShowRatesModal(true);
   }
@@ -197,7 +207,7 @@ export default function RhOmForfaitsPage() {
 
   function addService(service: string) {
     if (!service) return;
-    setEditRates(prev => [...prev, { service, forfait_hs: 0, astreinte_per_day: 0 }]);
+    setEditRates(prev => [...prev, { service, forfait_hs: 0, astreinte_per_day: 0, plafond_enabled: false, plafond_amount: 0 }]);
   }
 
   function removeEditRate(idx: number) {
@@ -205,22 +215,27 @@ export default function RhOmForfaitsPage() {
   }
 
   async function saveRates() {
+    // Upsert chaque tarif (ignore les lignes avec service vide)
+    const valid = editRates.filter(r => r.service.trim());
+    const noCap = valid.find(r => r.plafond_enabled && !(r.plafond_amount > 0));
+    if (noCap) { toast.error(`${noCap.service} : indiquez le montant du plafond.`); return; }
     setSavingRates(true);
     try {
-      // Upsert chaque tarif (ignore les lignes avec service vide)
-      const valid = editRates.filter(r => r.service.trim());
       for (const r of valid) {
         await api.post("/api/attendance/om-service-rates/upsert/", {
           service: r.service.trim(),
           forfait_hs: r.forfait_hs,
           astreinte_per_day: r.astreinte_per_day,
+          plafond_enabled: r.plafond_enabled,
+          plafond_amount: r.plafond_enabled ? r.plafond_amount : 0,
         });
       }
       await fetchRates();
+      fetchData();
       setShowRatesModal(false);
       toast.success("Tarifs enregistrés.");
-    } catch {
-      toast.error("Erreur lors de la sauvegarde.");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail ?? "Erreur lors de la sauvegarde.");
     } finally {
       setSavingRates(false);
     }
@@ -251,19 +266,21 @@ export default function RhOmForfaitsPage() {
     const sTotal = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 }, fill: { fgColor: { rgb: "1E293B" } }, alignment: { horizontal: "center" }, ...sBorderThin };
     const sTotalLabel = { ...sTotal, alignment: { horizontal: "left" } };
 
-    const titleRow = [`FORFAITS HS & ASTREINTE — ${MONTHS_FR[month - 1].toUpperCase()} ${year}`];
+    const titleRow = [`FORFAITS HS & ASTREINTE — ${periodTitle.toUpperCase()}`];
     const headers = ["N°", "MATRICULE", "NOM", "PRENOM", "SERVICE", "QUALIFICATION", "ZONE", "MANAGER N+1",
-      "FORFAIT HS", "ASTREINTES / NBR JOURS", "MONTANTS ASTREINTES", "MONTANT TOTAL (HS+Astreinte)", "COMMENTAIRES OU OMISSIONS"];
+      "FORFAIT HS", "ASTREINTES / NBR JOURS", "DAYS OFF", "ASTREINTES PAYÉES", "MONTANTS ASTREINTES", "MONTANT TOTAL (HS+Astreinte)", "COMMENTAIRES OU OMISSIONS"];
 
     const dataRows = filtered.map((row, i) => [
       i + 1, row.matricule, row.nom, row.prenom, row.service, row.qualification, row.zone,
       row.n1_manager_name || row.manager,
-      row.forfait_hs_amount, row.nb_jours_astreintes, row.montant_astreintes, row.montant_a_recevoir,
-      comments[row.employee_id] || "",
+      row.forfait_hs_amount, row.nb_jours_astreintes, row.nb_days_off, row.nb_astreintes_payees,
+      row.montant_astreintes, row.montant_a_recevoir,
+      [row.plafond_applique ? `Plafonné à ${fmt(row.plafond ?? 0)} (calcul : ${fmt(row.montant_astreintes_brut)})` : "",
+        comments[row.employee_id] || ""].filter(Boolean).join(" — "),
     ]);
 
     const totalsRow = ["", "TOTAUX", "", "", "", "", "", "",
-      totals.forfaitHs, totals.nbJoursAstr, totals.montantAstr, totals.total, ""];
+      totals.forfaitHs, totals.nbJoursAstr, totals.nbDaysOff, totals.nbPayees, totals.montantAstr, totals.total, ""];
 
     const wsData = [titleRow, headers, ...dataRows, totalsRow];
     const ws = XLSXStyle.utils.aoa_to_sheet(wsData);
@@ -281,7 +298,7 @@ export default function RhOmForfaitsPage() {
       for (let c = 0; c < nCols; c++) {
         const addr = XLSXStyle.utils.encode_cell({ r, c });
         if (!ws[addr]) ws[addr] = { v: "", t: "s" };
-        const isAmount = c >= 8 && c <= 11;
+        const isAmount = c >= 8 && c <= 13;
         ws[addr].s = {
           font: { sz: 10, bold: isAmount, color: { rgb: isAmount ? "003C71" : "374151" } },
           fill: { fgColor: { rgb: r % 2 === 0 ? "F8FAFC" : "FFFFFF" } },
@@ -298,13 +315,13 @@ export default function RhOmForfaitsPage() {
     }
     ws["!cols"] = [
       { wch: 5 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 20 },
-      { wch: 14 }, { wch: 22 }, { wch: 20 }, { wch: 28 }, { wch: 30 },
+      { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 14 }, { wch: 20 }, { wch: 28 }, { wch: 40 },
     ];
     ws["!rows"] = [{ hpt: 28 }, { hpt: 40 }];
 
     const wb = XLSXStyle.utils.book_new();
-    XLSXStyle.utils.book_append_sheet(wb, ws, `Forfaits ${MONTHS_FR[month - 1]} ${year}`);
-    XLSXStyle.writeFile(wb, `Forfaits_HS_Astreinte_${MONTHS_FR[month - 1]}_${year}.xlsx`);
+    XLSXStyle.utils.book_append_sheet(wb, ws, "Forfaits");
+    XLSXStyle.writeFile(wb, `Forfaits_HS_Astreinte_${periodSlug}.xlsx`);
     toast.success("Export Excel téléchargé.");
   }
 
@@ -328,7 +345,7 @@ export default function RhOmForfaitsPage() {
               </div>
               <div className="min-w-0">
                 <h1 className="text-xl font-bold text-slate-800">Forfaits HS &amp; Astreinte</h1>
-                <p className="text-xs text-slate-500">Bénéficiaires du forfait — {MONTHS_FR[month - 1]} {year}</p>
+                <p className="text-xs text-slate-500">Bénéficiaires du forfait — {campaign ? `du ${frDate(campaign.start_date)} au ${frDate(campaign.end_date)}` : "aucune période"}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
@@ -360,11 +377,14 @@ export default function RhOmForfaitsPage() {
                 <FileDown size={14} />
                 <span className="hidden sm:inline">Exporter Excel</span>
               </button>
-              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
-                <button onClick={prevMonth} className="p-1 hover:bg-slate-100 rounded-lg transition"><ChevronLeft size={16} /></button>
-                <span className="font-semibold text-slate-700 min-w-[110px] text-center text-sm">{MONTHS_FR[month - 1]} {year}</span>
-                <button onClick={nextMonth} className="p-1 hover:bg-slate-100 rounded-lg transition"><ChevronRight size={16} /></button>
-              </div>
+              {campaigns.length > 0 && (
+                <select value={campaignId ?? ""} onChange={e => setCampaignId(Number(e.target.value))}
+                  className="px-3 py-2 text-sm font-semibold text-slate-700 border border-slate-200 rounded-xl bg-white shadow-sm max-w-[280px]">
+                  {campaigns.map(c => (
+                    <option key={c.id} value={c.id}>{campaignLabel(c)}{c.status !== "OPEN" ? ` · ${c.status_label}` : ""}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
@@ -426,7 +446,9 @@ export default function RhOmForfaitsPage() {
           <div className="flex justify-center py-20"><Loader2 className="animate-spin text-slate-400" size={32} /></div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-20 text-slate-400">
-            {rows.length === 0
+            {!campaign
+              ? "Aucune période de saisie : créez-en une depuis le pointage HS & Astreinte."
+              : rows.length === 0
               ? "Aucun bénéficiaire. Cliquez sur « Bénéficiaires » pour choisir les employés concernés par le forfait."
               : "Aucun résultat pour ce filtre."}
           </div>
@@ -460,9 +482,16 @@ export default function RhOmForfaitsPage() {
                         <p className="text-[10px] text-slate-400 uppercase font-medium">Jours astr.</p>
                         <p className={`font-semibold ${row.nb_jours_astreintes > 0 ? "text-purple-600" : "text-slate-400"}`}>{row.nb_jours_astreintes}</p>
                       </div>
+                      {row.nb_days_off > 0 && (
+                        <div>
+                          <p className="text-[10px] text-slate-400 uppercase font-medium">Days Off</p>
+                          <p className="font-semibold text-teal-600">−{row.nb_days_off} → {row.nb_astreintes_payees} payée(s)</p>
+                        </div>
+                      )}
                       <div>
                         <p className="text-[10px] text-slate-400 uppercase font-medium">Montant astr.</p>
                         <p className={`font-semibold ${row.montant_astreintes > 0 ? "text-purple-600" : "text-slate-400"}`}>{fmt(row.montant_astreintes)}</p>
+                        {row.plafond_applique && <p className="text-[10px] text-orange-600">Plafonné (calcul : {fmt(row.montant_astreintes_brut)})</p>}
                       </div>
                     </div>
                     <div className="px-4 pb-3">
@@ -500,9 +529,13 @@ export default function RhOmForfaitsPage() {
                       ASTREINTES
                       <div className="text-[10px] font-normal text-white/60">Nbr jours Z</div>
                     </th>
-                    <th className="px-3 py-3 text-center font-semibold min-w-[130px]">
+                    <th className="px-3 py-3 text-center font-semibold min-w-[90px]">
+                      DAYS OFF
+                      <div className="text-[10px] font-normal text-white/60">jours D déduits</div>
+                    </th>
+                    <th className="px-3 py-3 text-center font-semibold min-w-[150px]">
                       MONTANT ASTR.
-                      <div className="text-[10px] font-normal text-white/60">tarif/j × nb jours</div>
+                      <div className="text-[10px] font-normal text-white/60">tarif/j × (Z − D), plafonné</div>
                     </th>
                     <th className="px-3 py-3 text-center font-semibold min-w-[160px] bg-emerald-700">
                       MONTANT À RECEVOIR
@@ -532,7 +565,15 @@ export default function RhOmForfaitsPage() {
                           <span className={row.nb_jours_astreintes > 0 ? "text-purple-600" : "text-slate-300"}>{row.nb_jours_astreintes}</span>
                         </td>
                         <td className="px-3 py-2 text-center font-semibold">
+                          <span className={row.nb_days_off > 0 ? "text-teal-600" : "text-slate-300"}>{row.nb_days_off}</span>
+                        </td>
+                        <td className="px-3 py-2 text-center font-semibold">
                           <span className={row.montant_astreintes > 0 ? "text-purple-600" : "text-slate-300"}>{fmt(row.montant_astreintes)}</span>
+                          {row.plafond_applique && (
+                            <div className="text-[10px] font-normal text-orange-600" title={`Calcul : ${fmt(row.montant_astreintes_brut)} FCFA`}>
+                              plafonné ({fmt(row.montant_astreintes_brut)})
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-center bg-emerald-50/40">
                           <span className={`inline-block px-3 py-1 rounded-lg text-sm font-bold ${row.montant_a_recevoir > 0 ? "bg-emerald-100 text-emerald-700" : "text-slate-300"}`}>
@@ -557,6 +598,7 @@ export default function RhOmForfaitsPage() {
                     <td colSpan={2} />
                     <td className="px-3 py-2 text-center text-amber-300">{fmt(totals.forfaitHs)}</td>
                     <td className="px-3 py-2 text-center text-purple-300">{totals.nbJoursAstr}</td>
+                    <td className="px-3 py-2 text-center text-teal-300">{totals.nbDaysOff}</td>
                     <td className="px-3 py-2 text-center text-purple-300">{fmt(totals.montantAstr)}</td>
                     <td className="px-3 py-2 text-center bg-emerald-800 text-emerald-200 font-bold">{fmt(totals.total)}</td>
                     <td />
@@ -620,12 +662,12 @@ export default function RhOmForfaitsPage() {
       {showBeneficiaries && <BeneficiariesModal onClose={() => setShowBeneficiaries(false)} onSaved={fetchData} />}
       {showRatesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
             {/* Header modal */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <div>
                 <h2 className="text-base font-bold text-slate-800">Tarifs par service</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Forfait H.Sup (si jours Y &gt; 0) et tarif Astreinte/jour (jours Z)</p>
+                <p className="text-xs text-slate-400 mt-0.5">Forfait H.Sup (si jours Y &gt; 0), tarif Astreinte/jour (jours Z − Days Off) et plafond facultatif du montant d'astreinte sur la période</p>
               </div>
               <button onClick={() => setShowRatesModal(false)} className="p-2 rounded-xl hover:bg-slate-100 transition">
                 <X size={18} className="text-slate-500" />
@@ -644,7 +686,11 @@ export default function RhOmForfaitsPage() {
                     </th>
                     <th className="text-center pb-2 font-semibold px-3">
                       <span className="text-purple-600">Astreinte / jour</span>
-                      <div className="text-[10px] text-slate-400 normal-case font-normal">FCFA × nb jours Z</div>
+                      <div className="text-[10px] text-slate-400 normal-case font-normal">FCFA × (Z − Days Off)</div>
+                    </th>
+                    <th className="text-center pb-2 font-semibold px-3">
+                      <span className="text-orange-600">Plafond astreinte</span>
+                      <div className="text-[10px] text-slate-400 normal-case font-normal">FCFA par période</div>
                     </th>
                     <th className="w-8" />
                   </tr>
@@ -673,6 +719,26 @@ export default function RhOmForfaitsPage() {
                           className="w-full px-2 py-1 text-sm border border-purple-200 rounded-lg bg-purple-50/40 focus:outline-none focus:ring-2 focus:ring-purple-300/40 text-center font-semibold text-purple-700"
                           min={0} step={1000}
                         />
+                      </td>
+                      <td className="py-2 px-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            title="Activer le plafond"
+                            checked={rate.plafond_enabled}
+                            onChange={e => setEditRates(prev => prev.map((r, i) => i === idx ? { ...r, plafond_enabled: e.target.checked } : r))}
+                            className="accent-orange-500 w-4 h-4 shrink-0"
+                          />
+                          <input
+                            type="number"
+                            value={rate.plafond_enabled ? rate.plafond_amount : ""}
+                            disabled={!rate.plafond_enabled}
+                            placeholder="Sans plafond"
+                            onChange={e => setEditRates(prev => prev.map((r, i) => i === idx ? { ...r, plafond_amount: Number(e.target.value) } : r))}
+                            className="w-full min-w-[110px] px-2 py-1 text-sm border border-orange-200 rounded-lg bg-orange-50/40 focus:outline-none focus:ring-2 focus:ring-orange-300/40 text-center font-semibold text-orange-700 disabled:bg-slate-50 disabled:border-slate-200 disabled:text-slate-400 disabled:font-normal"
+                            min={0} step={5000}
+                          />
+                        </div>
                       </td>
                       <td className="py-2 pl-2">
                         <button
