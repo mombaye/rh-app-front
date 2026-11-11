@@ -33,6 +33,7 @@ export const CODE_META: Record<Exclude<HsCode, "">, { label: string; cls: string
   D: { label: "Days Off",         cls: "bg-teal-100 text-teal-700",       dot: "bg-teal-500" },
 };
 const ALL_CODES = Object.keys(CODE_META) as Exclude<HsCode, "">[];
+const NO_SERVICE = "__none__";
 const codesFor = (row: HsRow) => ALL_CODES.filter((c) => c !== "D" || row.days_off_allowed);
 
 const STEPS: { status: CampaignStatus; label: string }[] = [
@@ -96,6 +97,7 @@ export default function HsAstreinteBoard() {
   const [campaignId, setCampaignId] = useState<number | null>(null);
   const [bl, setBl] = useState("");
   const [search, setSearch] = useState("");
+  const [service, setService] = useState("");
   const [grid, setGrid] = useState<HsGrid | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -128,11 +130,20 @@ export default function HsAstreinteBoard() {
   const showBlGroups = !bl && (grid?.business_lines.length ?? 0) > 1;
   const hasDaysOff = !!grid?.rows.some((r) => r.days_off_allowed || r.nb_days_off > 0);
 
+  // Filtre par service : jamais pour les agents de la BL NOPE (ils restent toujours affichés, sans filtre)
+  const isNope = (r: HsRow) => (r.bl || "").toUpperCase() === "NOPE";
+  const services = useMemo(() =>
+    [...new Set((grid?.rows ?? []).filter((r) => !isNope(r)).map((r) => r.service || ""))].sort((a, b) => a.localeCompare(b, "fr")),
+  [grid]);
+  // Le service choisi n'existe plus (autre BL ou autre période) : on retire le filtre
+  useEffect(() => { if (service && service !== NO_SERVICE && !services.includes(service)) setService(""); }, [services, service]);
+
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const all = grid?.rows ?? [];
+    const all = (grid?.rows ?? []).filter((r) =>
+      !service || isNope(r) || (service === NO_SERVICE ? !r.service : r.service === service));
     return q ? all.filter((r) => `${r.matricule} ${r.nom} ${r.prenom} ${r.service} ${r.bl}`.toLowerCase().includes(q)) : all;
-  }, [grid, search]);
+  }, [grid, search, service]);
 
   const totals = useMemo(() => rows.reduce((t, r) => ({
     hs: t.hs + r.nb_heures_sup, astr: t.astr + r.nb_jours_astreintes, off: t.off + r.nb_days_off,
@@ -412,7 +423,16 @@ export default function HsAstreinteBoard() {
               ))}
             </div>
           )}
-          <div className="relative xl:ml-auto">
+          {services.length > 1 && (
+            <select value={service} onChange={(e) => setService(e.target.value)} aria-label="Filtrer par service"
+              className={`xl:ml-auto max-w-full xl:max-w-[240px] px-3 py-2 text-sm border rounded-xl bg-white focus:outline-none focus:border-[#003c71] ${service ? "border-[#003c71] text-[#003c71] font-semibold" : "border-slate-200 text-slate-600"}`}>
+              <option value="">Tous les services</option>
+              {services.map((sv) => sv
+                ? <option key={sv} value={sv}>{sv}</option>
+                : <option key={NO_SERVICE} value={NO_SERVICE}>Sans service</option>)}
+            </select>
+          )}
+          <div className={`relative ${services.length > 1 ? "" : "xl:ml-auto"}`}>
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un employé…"
               className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white w-full xl:w-56 focus:outline-none focus:border-[#003c71]" />
