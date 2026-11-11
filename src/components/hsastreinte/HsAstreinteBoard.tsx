@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Banknote, CalendarPlus, Check, FileDown, Loader2, Lock, MoreHorizontal, Network, Paintbrush, Pencil,
-  PlayCircle, RotateCcw, Search, Upload, TableProperties, Trash2, X as XIcon,
+  MapPin, PlayCircle, RotateCcw, Search, Upload, TableProperties, Trash2, X as XIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -20,6 +20,7 @@ import { exportAttendanceXLSX, periodInfo } from "@/utils/attendanceExport";
 import CampaignModal from "@/components/hsastreinte/CampaignModal";
 import BusinessLinesModal from "@/components/hsastreinte/BusinessLinesModal";
 import ImportModal from "@/components/hsastreinte/ImportModal";
+import ZoneModal from "@/components/hsastreinte/ZoneModal";
 
 const MONTHS_SHORT = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
@@ -107,6 +108,7 @@ export default function HsAstreinteBoard() {
   const [campaignModal, setCampaignModal] = useState<"new" | "edit" | null>(null);
   const [showBls, setShowBls] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [zoneRow, setZoneRow] = useState<HsRow | null>(null);
   const [zone, setZone] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState("");
@@ -555,6 +557,13 @@ export default function HsAstreinteBoard() {
                           </div>
                           <div className="text-slate-400 truncate">{row.matricule}{row.service ? ` · ${row.service}` : ""}{row.zone ? ` · ${row.zone}` : ""}</div>
                         </div>
+                        <div className="flex items-center shrink-0">
+                        <button title={row.zone ? `Zone : ${row.zone} — modifier` : "Définir la zone de cet employé"}
+                          aria-label={`Modifier la zone de ${row.nom} ${row.prenom}`}
+                          onClick={() => setZoneRow(row)}
+                          className="p-1.5 rounded-lg text-slate-300 group-hover:text-slate-500 hover:!text-[#003c71] hover:bg-[#003c71]/10 shrink-0">
+                          <MapPin size={14} />
+                        </button>
                         {grid.editable && (
                           <button title="Remplir les jours vides de cette ligne"
                             onClick={(e) => openPicker("fill", row, e.currentTarget)}
@@ -562,6 +571,7 @@ export default function HsAstreinteBoard() {
                             <Paintbrush size={14} />
                           </button>
                         )}
+                        </div>
                       </div>
                     </td>
                     {row.cells.map((cell, i) => (
@@ -624,6 +634,10 @@ export default function HsAstreinteBoard() {
       {campaignModal && (
         <CampaignModal campaign={campaignModal === "edit" ? campaign : null}
           onClose={() => setCampaignModal(null)} onSaved={onCampaignSaved} />
+      )}
+      {zoneRow && (
+        <ZoneModal row={zoneRow} zones={zones} onClose={() => setZoneRow(null)}
+          onSaved={(id, z) => setGrid((g) => g && { ...g, rows: g.rows.map((r) => r.employee_id === id ? { ...r, zone: z } : r) })} />
       )}
       {showImport && campaignId && <ImportModal campaignId={campaignId} onClose={() => setShowImport(false)} onImported={load} />}
       {showBls && <BusinessLinesModal onClose={() => setShowBls(false)} onSaved={load} />}

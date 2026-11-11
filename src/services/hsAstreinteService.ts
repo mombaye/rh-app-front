@@ -123,6 +123,9 @@ export const hsAstreinteService = {
     return accessCache.get(userId)!;
   },
 
+  setZone: async (employee_id: number, zone: string): Promise<{ employee_id: number; zone: string }> =>
+    (await api.post(`${BASE}/zone/`, { employee_id, zone })).data,
+
   importFile: async (file: File, campaign: number, opts: { dryRun?: boolean; sheet?: string; overwrite?: boolean } = {}): Promise<HsImportResult> => {
     const fd = new FormData();
     fd.append("file", file);
