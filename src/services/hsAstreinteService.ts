@@ -133,7 +133,8 @@ export const hsAstreinteService = {
     fd.append("dry_run", opts.dryRun ? "true" : "false");
     fd.append("overwrite", opts.overwrite ? "true" : "false");
     if (opts.sheet) fd.append("sheet", opts.sheet);
-    return (await api.post(`${BASE}/import/`, fd)).data;
+    // Le client impose application/json par défaut : on le retire pour que le navigateur envoie le fichier en multipart
+    return (await api.post(`${BASE}/import/`, fd, { headers: { "Content-Type": undefined } })).data;
   },
 
   getGrid: async (campaign?: number | null, bl = ""): Promise<HsGrid> =>
