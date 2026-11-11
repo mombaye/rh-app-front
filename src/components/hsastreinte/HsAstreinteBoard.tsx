@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Banknote, CalendarPlus, Check, FileDown, Loader2, Lock, MoreHorizontal, Network, Paintbrush, Pencil,
-  PlayCircle, RotateCcw, Search, TableProperties, Trash2, X as XIcon,
+  PlayCircle, RotateCcw, Search, Upload, TableProperties, Trash2, X as XIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -19,6 +19,7 @@ import {
 import { exportAttendanceXLSX, periodInfo } from "@/utils/attendanceExport";
 import CampaignModal from "@/components/hsastreinte/CampaignModal";
 import BusinessLinesModal from "@/components/hsastreinte/BusinessLinesModal";
+import ImportModal from "@/components/hsastreinte/ImportModal";
 
 const MONTHS_SHORT = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
@@ -105,6 +106,8 @@ export default function HsAstreinteBoard() {
   const [busy, setBusy] = useState(false);
   const [campaignModal, setCampaignModal] = useState<"new" | "edit" | null>(null);
   const [showBls, setShowBls] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [zone, setZone] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState("");
 
@@ -135,15 +138,19 @@ export default function HsAstreinteBoard() {
   const services = useMemo(() =>
     [...new Set((grid?.rows ?? []).filter((r) => !isNope(r)).map((r) => r.service || ""))].sort((a, b) => a.localeCompare(b, "fr")),
   [grid]);
+  const NO_ZONE = "__nozone__";
+  const zones = useMemo(() => [...new Set((grid?.rows ?? []).map((r) => r.zone || ""))].sort((a, b) => a.localeCompare(b, "fr", { numeric: true })), [grid]);
+  useEffect(() => { if (zone && zone !== NO_ZONE && !zones.includes(zone)) setZone(""); }, [zones, zone]);
   // Le service choisi n'existe plus (autre BL ou autre période) : on retire le filtre
   useEffect(() => { if (service && service !== NO_SERVICE && !services.includes(service)) setService(""); }, [services, service]);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     const all = (grid?.rows ?? []).filter((r) =>
-      !service || isNope(r) || (service === NO_SERVICE ? !r.service : r.service === service));
+      (!service || isNope(r) || (service === NO_SERVICE ? !r.service : r.service === service)) &&
+      (!zone || (zone === NO_ZONE ? !r.zone : r.zone === zone)));
     return q ? all.filter((r) => `${r.matricule} ${r.nom} ${r.prenom} ${r.service} ${r.bl}`.toLowerCase().includes(q)) : all;
-  }, [grid, search, service]);
+  }, [grid, search, service, zone]);
 
   const totals = useMemo(() => rows.reduce((t, r) => ({
     hs: t.hs + r.nb_heures_sup, astr: t.astr + r.nb_jours_astreintes, off: t.off + r.nb_days_off,
@@ -317,6 +324,10 @@ export default function HsAstreinteBoard() {
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100">
               <Network size={16} /> <span className="hidden xl:inline">Accès BL</span>
             </button>
+            <button onClick={() => setShowImport(true)} disabled={!campaignId} title="Importer un fichier de pointage (feuille de la période, zones des employés)"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+              <Upload size={16} /> <span className="hidden xl:inline">Importer</span>
+            </button>
             <button onClick={() => navigate("/rh/om-forfaits")} title="Montants, tarifs et plafonds par service"
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100">
               <Banknote size={16} /> <span className="hidden xl:inline">Forfaits</span>
@@ -423,16 +434,25 @@ export default function HsAstreinteBoard() {
               ))}
             </div>
           )}
+          {zones.filter(Boolean).length > 0 && (
+            <select value={zone} onChange={(e) => setZone(e.target.value)} aria-label="Filtrer par zone"
+              className={`xl:ml-auto max-w-full xl:max-w-[200px] px-3 py-2 text-sm border rounded-xl bg-white focus:outline-none focus:border-[#003c71] ${zone ? "border-[#003c71] text-[#003c71] font-semibold" : "border-slate-200 text-slate-600"}`}>
+              <option value="">Toutes les zones</option>
+              {zones.map((z) => z
+                ? <option key={z} value={z}>{z}</option>
+                : <option key={NO_ZONE} value={NO_ZONE}>Sans zone</option>)}
+            </select>
+          )}
           {services.length > 1 && (
             <select value={service} onChange={(e) => setService(e.target.value)} aria-label="Filtrer par service"
-              className={`xl:ml-auto max-w-full xl:max-w-[240px] px-3 py-2 text-sm border rounded-xl bg-white focus:outline-none focus:border-[#003c71] ${service ? "border-[#003c71] text-[#003c71] font-semibold" : "border-slate-200 text-slate-600"}`}>
+              className={`${zones.filter(Boolean).length > 0 ? "" : "xl:ml-auto"} max-w-full xl:max-w-[240px] px-3 py-2 text-sm border rounded-xl bg-white focus:outline-none focus:border-[#003c71] ${service ? "border-[#003c71] text-[#003c71] font-semibold" : "border-slate-200 text-slate-600"}`}>
               <option value="">Tous les services</option>
               {services.map((sv) => sv
                 ? <option key={sv} value={sv}>{sv}</option>
                 : <option key={NO_SERVICE} value={NO_SERVICE}>Sans service</option>)}
             </select>
           )}
-          <div className={`relative ${services.length > 1 ? "" : "xl:ml-auto"}`}>
+          <div className={`relative ${services.length > 1 || zones.filter(Boolean).length > 0 ? "" : "xl:ml-auto"}`}>
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un employé…"
               className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white w-full xl:w-56 focus:outline-none focus:border-[#003c71]" />
@@ -533,7 +553,7 @@ export default function HsAstreinteBoard() {
                               </span>
                             )}
                           </div>
-                          <div className="text-slate-400 truncate">{row.matricule}{row.service ? ` · ${row.service}` : ""}</div>
+                          <div className="text-slate-400 truncate">{row.matricule}{row.service ? ` · ${row.service}` : ""}{row.zone ? ` · ${row.zone}` : ""}</div>
                         </div>
                         {grid.editable && (
                           <button title="Remplir les jours vides de cette ligne"
@@ -605,6 +625,7 @@ export default function HsAstreinteBoard() {
         <CampaignModal campaign={campaignModal === "edit" ? campaign : null}
           onClose={() => setCampaignModal(null)} onSaved={onCampaignSaved} />
       )}
+      {showImport && campaignId && <ImportModal campaignId={campaignId} onClose={() => setShowImport(false)} onImported={load} />}
       {showBls && <BusinessLinesModal onClose={() => setShowBls(false)} onSaved={load} />}
     </div>
   );

@@ -32,6 +32,8 @@ export interface HsRow extends HsTotals {
   nom: string;
   prenom: string;
   service: string;
+  /** Zone d'intervention (reprise du fichier importé), vide si inconnue */
+  zone?: string;
   /** BL normalisée (ex. « BL4 »), vide si non renseignée */
   bl: string;
   status: string;
@@ -73,6 +75,28 @@ export interface HsGrid {
 
 export const NO_BL = "__none__";
 
+export interface HsImportResult {
+  dry_run: boolean;
+  overwrite: boolean;
+  sheet: string;
+  sheets: { name: string; start: string; end: string }[];
+  sheet_period: { start: string; end: string };
+  campaign_period: { start: string; end: string };
+  employees_in_file: number;
+  matched: number;
+  unmatched: string[];
+  unmatched_count: number;
+  zones_updated: number;
+  written: number;
+  overwritten: number;
+  kept: number;
+  same_as_auto: number;
+  unknown_codes: number;
+  days_off_refused: number;
+  out_of_range: number;
+  after_exit: number;
+}
+
 export interface HsChange { employee_id: number; date: string; code: HsCode }
 
 export interface EmpBrief { id: number; matricule: string; nom: string; prenom: string; service: string; bl?: string; n1: string }
@@ -97,6 +121,16 @@ export const hsAstreinteService = {
         .catch(() => { accessCache.delete(userId); return false; }));
     }
     return accessCache.get(userId)!;
+  },
+
+  importFile: async (file: File, campaign: number, opts: { dryRun?: boolean; sheet?: string; overwrite?: boolean } = {}): Promise<HsImportResult> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("campaign", String(campaign));
+    fd.append("dry_run", opts.dryRun ? "true" : "false");
+    fd.append("overwrite", opts.overwrite ? "true" : "false");
+    if (opts.sheet) fd.append("sheet", opts.sheet);
+    return (await api.post(`${BASE}/import/`, fd)).data;
   },
 
   getGrid: async (campaign?: number | null, bl = ""): Promise<HsGrid> =>
