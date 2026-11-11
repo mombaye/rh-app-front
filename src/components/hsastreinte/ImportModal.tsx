@@ -17,7 +17,7 @@ export default function ImportModal({ campaignId, onClose, onImported }: { campa
     setBusy(true); setError("");
     try {
       const r = await hsAstreinteService.importFile(f, campaignId, opts);
-      if (opts.dryRun) { setPreview(r); setSheet(r.sheet); }
+      if (opts.dryRun) { setPreview(r); }
       else {
         toast.success(`Import terminé : ${r.written + r.overwritten} saisie(s) enregistrée(s), ${r.zones_updated} zone(s) mise(s) à jour`);
         onImported(); onClose();
@@ -62,15 +62,24 @@ export default function ImportModal({ campaignId, onClose, onImported }: { campa
 
           {preview?.sheets && preview.sheets.length > 0 && (
             <div>
-              <label htmlFor="hs-import-sheet" className="block text-xs font-semibold text-slate-600 mb-1">Feuille utilisée</label>
+              <label htmlFor="hs-import-sheet" className="block text-xs font-semibold text-slate-600 mb-1">Feuilles utilisées</label>
               <select id="hs-import-sheet" value={sheet} onChange={(e) => changeSheet(e.target.value)} disabled={busy}
                 className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white">
+                <option value="">Automatique : toutes les feuilles de la période</option>
                 {[...preview.sheets].reverse().map((s) => (
                   <option key={s.name} value={s.name}>{s.name.trim()} · {frDate(s.start)} → {frDate(s.end)}</option>
                 ))}
               </select>
-              <p className="text-[11px] text-slate-500 mt-1">Choisie automatiquement : la feuille qui correspond à la période de saisie (sinon la date du jour, sinon la plus récente).</p>
+              {preview.sheets_used && (
+                <p className="text-[11px] text-slate-600 mt-1">
+                  Lue{preview.sheets_used.length > 1 ? "s" : ""} : <strong>{preview.sheets_used.map((n) => n.trim()).join(" + ")}</strong>
+                  {" "}— si la période s'étend sur deux feuilles, les deux sont reprises.
+                </p>
+              )}
             </div>
+          )}
+          {preview?.warning && (
+            <div role="status" className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">{preview.warning}</div>
           )}
 
           {ready && preview && (
@@ -79,7 +88,7 @@ export default function ImportModal({ campaignId, onClose, onImported }: { campa
                 {[
                   ["Employés dans le fichier", preview.employees_in_file],
                   ["Reconnus", preview.matched],
-                  ["Saisies à enregistrer", preview.written + preview.overwritten],
+                  [preview.zones_only ? "Jours repris" : "Saisies à enregistrer", preview.written + preview.overwritten],
                   ["Zones à mettre à jour", preview.zones_updated],
                 ].map(([l, v]) => (
                   <div key={String(l)} className="border border-slate-200 rounded-xl px-3 py-2">

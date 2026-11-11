@@ -79,6 +79,11 @@ export interface HsImportResult {
   dry_run: boolean;
   overwrite: boolean;
   sheet: string;
+  /** Feuilles lues (toutes celles qui touchent la période), de la plus ancienne à la plus récente */
+  sheets_used: string[];
+  /** Aucune feuille ne couvre la période : seules les zones sont reprises */
+  zones_only: boolean;
+  warning: string;
   sheets: { name: string; start: string; end: string }[];
   sheet_period: { start: string; end: string };
   campaign_period: { start: string; end: string };
