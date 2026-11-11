@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { EmpBrief } from "@/services/hsAstreinteService";
 
+const NO_SERVICE = "__none__";
+
 export default function EmployeeChecklist({ employees, selected, onChange, note }: {
   employees: EmpBrief[];
   selected: Set<number>;
@@ -12,12 +14,17 @@ export default function EmployeeChecklist({ employees, selected, onChange, note 
 }) {
   const [q, setQ] = useState("");
   const [onlySelected, setOnlySelected] = useState(false);
+  const [service, setService] = useState("");
+  const services = useMemo(() =>
+    [...new Set(employees.map((e) => e.service || ""))].sort((a, b) => a.localeCompare(b, "fr")),
+  [employees]);
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
     return employees.filter((e) =>
       (!onlySelected || selected.has(e.id)) &&
+      (!service || (service === NO_SERVICE ? !e.service : e.service === service)) &&
       (!s || `${e.matricule} ${e.nom} ${e.prenom} ${e.service}`.toLowerCase().includes(s)));
-  }, [employees, q, onlySelected, selected]);
+  }, [employees, q, onlySelected, selected, service]);
 
   const toggle = (id: number) => {
     const next = new Set(selected);
@@ -38,6 +45,13 @@ export default function EmployeeChecklist({ employees, selected, onChange, note 
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nom, matricule, service…"
             className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-[#003c71]" />
         </div>
+        <select value={service} onChange={(e) => setService(e.target.value)} aria-label="Filtrer par service"
+          className={`max-w-[220px] px-3 py-2 text-sm border rounded-xl bg-white focus:outline-none focus:border-[#003c71] ${service ? "border-[#003c71] text-[#003c71] font-semibold" : "border-slate-200 text-slate-600"}`}>
+          <option value="">Tous les services</option>
+          {services.map((s) => s
+            ? <option key={s} value={s}>{s}</option>
+            : <option key={NO_SERVICE} value={NO_SERVICE}>Sans service</option>)}
+        </select>
         <label className="flex items-center gap-1.5 text-xs text-slate-600">
           <input type="checkbox" checked={onlySelected} onChange={(e) => setOnlySelected(e.target.checked)} /> Cochés seulement
         </label>
