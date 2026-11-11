@@ -558,12 +558,14 @@ export default function HsAstreinteBoard() {
                           <div className="text-slate-400 truncate">{row.matricule}{row.service ? ` · ${row.service}` : ""}{row.zone ? ` · ${row.zone}` : ""}</div>
                         </div>
                         <div className="flex items-center shrink-0">
-                        <button title={row.zone ? `Zone : ${row.zone} — modifier` : "Définir la zone de cet employé"}
+                        {isRh && (
+                          <button title={row.zone ? `Zone : ${row.zone} — modifier` : "Définir la zone de cet employé"}
                           aria-label={`Modifier la zone de ${row.nom} ${row.prenom}`}
                           onClick={() => setZoneRow(row)}
                           className="p-1.5 rounded-lg text-slate-300 group-hover:text-slate-500 hover:!text-[#003c71] hover:bg-[#003c71]/10 shrink-0">
                           <MapPin size={14} />
                         </button>
+                        )}
                         {grid.editable && (
                           <button title="Remplir les jours vides de cette ligne"
                             onClick={(e) => openPicker("fill", row, e.currentTarget)}
@@ -635,7 +637,7 @@ export default function HsAstreinteBoard() {
         <CampaignModal campaign={campaignModal === "edit" ? campaign : null}
           onClose={() => setCampaignModal(null)} onSaved={onCampaignSaved} />
       )}
-      {zoneRow && (
+      {isRh && zoneRow && (
         <ZoneModal row={zoneRow} zones={zones} onClose={() => setZoneRow(null)}
           onSaved={(id, z) => setGrid((g) => g && { ...g, rows: g.rows.map((r) => r.employee_id === id ? { ...r, zone: z } : r) })} />
       )}
