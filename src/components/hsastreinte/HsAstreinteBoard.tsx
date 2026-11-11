@@ -2,11 +2,14 @@
 // Codes : X présent, Y heures sup., Z astreinte, C congés, A sortie, M maladie, D Days Off (BL avec l'option).
 // Les cases en pointillés sont remplies automatiquement (pointage, congés, sorties) ; une saisie les remplace.
 // Accès : la RH voit tout ; un éditeur voit tous les agents des BL qui lui sont attribuées.
+//
+// Écran volontairement épuré : une carte « période » (choix, 3 étapes, une seule action principale),
+// des onglets BL, puis la grille. Les actions rares sont dans le menu « ⋯ ».
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Banknote, CalendarPlus, CheckCircle2, FileDown, Loader2, Lock, Network, Paintbrush, Pencil, PlayCircle,
-  RotateCcw, Search, TableProperties, Trash2, X as XIcon,
+  Banknote, CalendarPlus, Check, FileDown, Loader2, Lock, MoreHorizontal, Network, Paintbrush, Pencil,
+  PlayCircle, RotateCcw, Search, TableProperties, Trash2, X as XIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -32,11 +35,11 @@ export const CODE_META: Record<Exclude<HsCode, "">, { label: string; cls: string
 const ALL_CODES = Object.keys(CODE_META) as Exclude<HsCode, "">[];
 const codesFor = (row: HsRow) => ALL_CODES.filter((c) => c !== "D" || row.days_off_allowed);
 
-const STATUS_META: Record<CampaignStatus, { label: string; cls: string }> = {
-  DRAFT:  { label: "Brouillon", cls: "bg-slate-100 text-slate-600 border-slate-200" },
-  OPEN:   { label: "Saisie ouverte", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  CLOSED: { label: "Clôturée", cls: "bg-red-50 text-red-700 border-red-200" },
-};
+const STEPS: { status: CampaignStatus; label: string }[] = [
+  { status: "DRAFT", label: "Brouillon" },
+  { status: "OPEN", label: "Saisie ouverte" },
+  { status: "CLOSED", label: "Clôturée" },
+];
 
 const SOURCE_LABEL: Record<string, string> = {
   pointage: "a pointé ce jour", mission: "mission validée", conge: "congé approuvé",
@@ -65,6 +68,29 @@ function cellTitle(cell: HsCell, exitDate: string | null): string {
 
 type Picker = { mode: "cell" | "fill"; row: HsRow; index?: number; x: number; y: number };
 
+/** Les trois étapes d'une période ; l'étape en cours est mise en avant. */
+function Steps({ status }: { status: CampaignStatus }) {
+  const current = STEPS.findIndex((s) => s.status === status);
+  return (
+    <ol className="flex items-center gap-1.5 text-xs">
+      {STEPS.map((s, i) => {
+        const done = i < current, active = i === current;
+        return (
+          <li key={s.status} className="flex items-center gap-1.5">
+            {i > 0 && <span className={`w-5 h-px ${i <= current ? "bg-[#003c71]" : "bg-slate-200"}`} />}
+            <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold whitespace-nowrap ${
+              active ? (s.status === "CLOSED" ? "bg-slate-700 text-white" : s.status === "OPEN" ? "bg-emerald-600 text-white" : "bg-[#003c71] text-white")
+                : done ? "text-[#003c71]" : "text-slate-400"}`}>
+              {done ? <Check size={12} /> : <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center ${active ? "bg-white/25" : "border border-current"}`}>{i + 1}</span>}
+              {s.label}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export default function HsAstreinteBoard() {
   const navigate = useNavigate();
   const [campaignId, setCampaignId] = useState<number | null>(null);
@@ -77,6 +103,7 @@ export default function HsAstreinteBoard() {
   const [busy, setBusy] = useState(false);
   const [campaignModal, setCampaignModal] = useState<"new" | "edit" | null>(null);
   const [showBls, setShowBls] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -87,8 +114,7 @@ export default function HsAstreinteBoard() {
       setError("");
       if (g.campaign && g.campaign.id !== campaignId) setCampaignId(g.campaign.id);
     } catch (e: any) {
-      const msg = e?.response?.data?.detail ?? "Impossible de charger le pointage";
-      setError(msg);
+      setError(e?.response?.data?.detail ?? "Impossible de charger le pointage");
       setGrid(null);
     } finally {
       setLoading(false);
@@ -98,7 +124,8 @@ export default function HsAstreinteBoard() {
   useEffect(() => { load(); }, [load]);
 
   const campaign = grid?.campaign ?? null;
-  const showBlGroups = (grid?.business_lines.length ?? 0) > 1;
+  const isRh = !!grid?.is_rh;
+  const showBlGroups = !bl && (grid?.business_lines.length ?? 0) > 1;
   const hasDaysOff = !!grid?.rows.some((r) => r.days_off_allowed || r.nb_days_off > 0);
 
   const rows = useMemo(() => {
@@ -108,9 +135,8 @@ export default function HsAstreinteBoard() {
   }, [grid, search]);
 
   const totals = useMemo(() => rows.reduce((t, r) => ({
-    jours: t.jours + r.jours_travailles, hs: t.hs + r.nb_heures_sup, astr: t.astr + r.nb_jours_astreintes,
-    off: t.off + r.nb_days_off,
-  }), { jours: 0, hs: 0, astr: 0, off: 0 }), [rows]);
+    hs: t.hs + r.nb_heures_sup, astr: t.astr + r.nb_jours_astreintes, off: t.off + r.nb_days_off,
+  }), { hs: 0, astr: 0, off: 0 }), [rows]);
 
   const offDays = useMemo(() => new Set((grid?.days ?? []).map((d, i) => (d.weekday >= 5 || d.holiday ? i : -1)).filter((i) => i >= 0)), [grid]);
 
@@ -176,6 +202,7 @@ export default function HsAstreinteBoard() {
 
   const setStatus = async (status: CampaignStatus) => {
     if (!campaign) return;
+    setMenuOpen(false);
     const msg: Record<CampaignStatus, string> = {
       OPEN: campaign.status === "CLOSED" ? "Rouvrir la saisie pour les éditeurs ?" : "Donner le go ? Les éditeurs des BL pourront remplir le pointage de cette période.",
       CLOSED: "Clôturer la période ? Plus personne ne pourra modifier le pointage.",
@@ -185,7 +212,7 @@ export default function HsAstreinteBoard() {
     setBusy(true);
     try {
       await hsAstreinteService.setCampaignStatus(campaign.id, status);
-      toast.success(status === "OPEN" ? "Campagne de saisie lancée." : status === "CLOSED" ? "Période clôturée." : "Période repassée en brouillon.");
+      toast.success(status === "OPEN" ? "C'est parti : la saisie est ouverte." : status === "CLOSED" ? "Période clôturée." : "Période repassée en brouillon.");
       load();
     } catch (e: any) {
       toast.error(e?.response?.data?.detail ?? "Modification impossible");
@@ -195,6 +222,7 @@ export default function HsAstreinteBoard() {
   };
 
   const removeCampaign = async () => {
+    setMenuOpen(false);
     if (!campaign || !window.confirm(`Supprimer la période « ${campaignLabel(campaign)} » ?\nLes saisies déjà faites sur ces dates sont conservées.`)) return;
     setBusy(true);
     try {
@@ -237,197 +265,212 @@ export default function HsAstreinteBoard() {
     })), periodInfo(campaign.start_date, campaign.end_date));
   };
 
-  const totalHeaders = ["Jours", "HS(j)", "Astr(j)", ...(hasDaysOff ? ["Days Off", "Astr. payées"] : []), "H.norm", "H.HS", "H.Astr", "H.Total"];
+  // Totaux affichés : l'essentiel (les heures restent dans l'export Excel)
+  const totalHeaders = ["Jours", "HS", "Astr.", ...(hasDaysOff ? ["Days Off", "Payées"] : [])];
   const totalValues = (r: HsRow) => [
     r.jours_travailles, r.nb_heures_sup, r.nb_jours_astreintes,
     ...(hasDaysOff ? [r.nb_days_off, Math.max(0, r.nb_jours_astreintes - r.nb_days_off)] : []),
-    r.heures_normales, r.heures_sup_effectuees, r.heures_astreintes, r.heures_totales,
   ];
-  const totalCls = (h: string, v: number) => !v ? "text-slate-700"
-    : h === "HS(j)" ? "text-amber-600" : h === "Astr(j)" || h === "Astr. payées" ? "text-purple-600" : h === "Days Off" ? "text-teal-600" : "text-slate-700";
+  const totalCls = (h: string, v: number) => !v ? "text-slate-300"
+    : h === "HS" ? "text-amber-600" : h === "Astr." || h === "Payées" ? "text-purple-600" : h === "Days Off" ? "text-teal-600" : "text-slate-700";
+
+  // Une seule action principale selon l'étape
+  const primary = !isRh || !campaign ? null
+    : campaign.status === "DRAFT" ? { label: "Donner le go", icon: <PlayCircle size={16} />, to: "OPEN" as CampaignStatus, cls: "bg-emerald-600 hover:bg-emerald-700 text-white" }
+    : campaign.status === "OPEN" ? { label: "Clôturer", icon: <Lock size={15} />, to: "CLOSED" as CampaignStatus, cls: "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50" }
+    : { label: "Rouvrir", icon: <RotateCcw size={15} />, to: "OPEN" as CampaignStatus, cls: "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50" };
+
+  const hint = !campaign ? ""
+    : campaign.status === "DRAFT" ? "Vérifiez les pointages ci-dessous, puis donnez le go : les éditeurs des BL pourront remplir."
+    : campaign.status === "OPEN" ? (grid?.editable ? "Cliquez sur une case pour saisir un code, ou sur le pinceau pour remplir une ligne." : grid?.lock_reason ?? "")
+    : "Période clôturée : consultation seulement.";
 
   let lastGroup = "";
-  const isRh = !!grid?.is_rh;
 
   return (
     <div className="px-4 md:px-6 pb-10">
-      {/* En-tête */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#003c71] flex items-center justify-center shadow shrink-0">
+      {/* Titre + raccourcis */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-[#003c71] flex items-center justify-center shrink-0">
             <TableProperties size={20} className="text-white" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-800 whitespace-nowrap">Pointage HS &amp; Astreinte</h1>
-            <p className="text-xs text-slate-500">
-              {isRh ? "Présence, heures sup. et astreintes, jour par jour" : grid?.my_bls.length ? `Vos BL : ${grid.my_bls.join(", ")}` : "Présence, heures sup. et astreintes"}
-            </p>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold text-slate-800 leading-tight">Pointage HS &amp; Astreinte</h1>
+            {!isRh && !!grid?.my_bls.length && <p className="text-xs text-slate-500">Vos BL : {grid.my_bls.join(", ")}</p>}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {grid && grid.campaigns.length > 0 && (
-            <select value={campaignId ?? ""} onChange={(e) => setCampaignId(Number(e.target.value))}
-              className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white max-w-[280px] font-semibold text-slate-700">
-              {grid.campaigns.map((c) => (
-                <option key={c.id} value={c.id}>{campaignLabel(c)}{c.status !== "OPEN" ? ` · ${STATUS_META[c.status].label}` : ""}</option>
-              ))}
-            </select>
-          )}
-          {campaign && (
-            <span className={`text-xs font-semibold px-2.5 py-1.5 rounded-xl border ${STATUS_META[campaign.status].cls}`}>
-              {STATUS_META[campaign.status].label}
-            </span>
-          )}
-          {grid && grid.business_lines.length > 1 && (
-            <select value={bl} onChange={(e) => setBl(e.target.value)}
-              className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white">
-              <option value="">Toutes les BL</option>
-              {grid.business_lines.map((b) => <option key={b} value={b}>{blLabel(b)}</option>)}
-            </select>
-          )}
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher…"
-              className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white w-44" />
+        {isRh && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => setShowBls(true)} title="Éditeurs de chaque BL et option Days Off"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100">
+              <Network size={16} /> <span className="hidden xl:inline">Accès BL</span>
+            </button>
+            <button onClick={() => navigate("/rh/om-forfaits")} title="Montants, tarifs et plafonds par service"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100">
+              <Banknote size={16} /> <span className="hidden xl:inline">Forfaits</span>
+            </button>
           </div>
-          <button onClick={exportExcel} disabled={!rows.length}
-            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50">
-            <FileDown size={15} /> Exporter
-          </button>
-          {isRh && (
-            <>
-              <button onClick={() => setShowBls(true)}
-                className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
-                <Network size={15} /> Accès BL
-              </button>
-              <button onClick={() => navigate("/rh/om-forfaits")}
-                className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl bg-[#003c71] text-white hover:bg-[#002b52]">
-                <Banknote size={15} /> Forfaits
-              </button>
-            </>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* Actions RH sur la période */}
-      {isRh && (
-        <div className="flex items-center gap-2 flex-wrap bg-white border border-slate-200 rounded-xl px-3 py-2 mb-3">
-          <button onClick={() => setCampaignModal("new")}
-            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-[#003c71]/5 text-[#003c71] hover:bg-[#003c71]/10 font-semibold">
-            <CalendarPlus size={15} /> Nouvelle période
-          </button>
-          {campaign && campaign.status !== "CLOSED" && (
-            <button onClick={() => setCampaignModal("edit")}
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-50">
-              <Pencil size={14} /> Modifier les dates
-            </button>
-          )}
-          {campaign?.status === "DRAFT" && (
-            <>
-              <button onClick={() => setStatus("OPEN")} disabled={busy}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-semibold disabled:opacity-60">
-                {busy ? <Loader2 size={15} className="animate-spin" /> : <PlayCircle size={15} />} Donner le go
-              </button>
-              <button onClick={removeCampaign} disabled={busy}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 disabled:opacity-60">
-                <Trash2 size={14} /> Supprimer
-              </button>
-            </>
-          )}
-          {campaign?.status === "OPEN" && (
-            <>
-              <button onClick={() => setStatus("CLOSED")} disabled={busy}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-60">
-                <Lock size={14} /> Clôturer la saisie
-              </button>
-              <button onClick={() => setStatus("DRAFT")} disabled={busy}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-60">
-                <RotateCcw size={14} /> Repasser en brouillon
-              </button>
-            </>
-          )}
-          {campaign?.status === "CLOSED" && (
-            <button onClick={() => setStatus("OPEN")} disabled={busy}
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-60">
-              <RotateCcw size={14} /> Rouvrir la saisie
-            </button>
-          )}
-          {campaign && (
-            <span className="text-xs text-slate-500 ml-auto">
-              {campaign.nb_days} jours · du {frDate(campaign.start_date)} au {frDate(campaign.end_date)}
-            </span>
-          )}
-        </div>
-      )}
-
-      {campaign?.status === "DRAFT" && isRh && (
-        <div className="flex items-center gap-2 bg-sky-50 border border-sky-200 text-sky-800 rounded-xl px-4 py-2.5 text-sm mb-3">
-          <CheckCircle2 size={15} className="shrink-0" />
-          Brouillon : seuls les RH voient cette période. Vérifiez les pointages, puis cliquez sur « Donner le go » pour ouvrir la saisie aux éditeurs des BL.
-        </div>
-      )}
-      {grid && campaign && !grid.editable && (
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-2.5 text-sm mb-3">
-          <Lock size={15} className="shrink-0" /> {grid.lock_reason} Consultation seulement.
-        </div>
-      )}
-
-      {/* Résumé + légende */}
-      {campaign && (
-        <div className="flex flex-col md:flex-row md:items-center gap-3 mb-3">
-          <div className="flex gap-2 flex-wrap">
-            {([["Employés", rows.length, "text-slate-700"], ["Jours travaillés", totals.jours, "text-emerald-700"],
-              ["Heures sup. (j)", totals.hs, "text-amber-600"], ["Astreintes (j)", totals.astr, "text-purple-600"],
-              ...(hasDaysOff ? [["Days Off", totals.off, "text-teal-600"]] : [])] as [string, number, string][]).map(([l, v, c]) => (
-              <div key={l} className="bg-white border border-slate-200 rounded-xl px-3 py-1.5">
-                <div className="text-[10px] text-slate-500">{l}</div>
-                <div className={`text-base font-bold ${c}`}>{v}</div>
+      {/* Carte période */}
+      {grid && campaign && (
+        <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3 mb-4">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+            <div className="min-w-0 flex-1">
+              {grid.campaigns.length > 1 ? (
+                <select value={campaignId ?? ""} onChange={(e) => setCampaignId(Number(e.target.value))}
+                  className="w-full max-w-md text-base font-bold text-slate-800 bg-transparent -ml-1 pr-6 py-0.5 rounded-lg hover:bg-slate-50 focus:outline-none cursor-pointer truncate">
+                  {grid.campaigns.map((c) => (
+                    <option key={c.id} value={c.id}>{campaignLabel(c)}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-base font-bold text-slate-800 truncate">{campaign.label || "Période de saisie"}</div>
+              )}
+              <div className="text-xs text-slate-500">
+                Du {frDate(campaign.start_date)} au {frDate(campaign.end_date)} · {campaign.nb_days} jours
               </div>
-            ))}
+            </div>
+            <Steps status={campaign.status} />
+            {isRh && (
+              <div className="flex items-center gap-2">
+                {primary && (
+                  <button onClick={() => setStatus(primary.to)} disabled={busy}
+                    className={`flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-60 ${primary.cls}`}>
+                    {busy ? <Loader2 size={15} className="animate-spin" /> : primary.icon} {primary.label}
+                  </button>
+                )}
+                <div className="relative">
+                  <button onClick={() => setMenuOpen((o) => !o)} title="Autres actions"
+                    className="p-2 rounded-xl text-slate-500 hover:bg-slate-100">
+                    <MoreHorizontal size={18} />
+                  </button>
+                  {menuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
+                      <div className="absolute right-0 top-full mt-1 z-40 w-56 bg-white border border-slate-200 rounded-xl shadow-lg py-1 text-sm">
+                        <button onClick={() => { setMenuOpen(false); setCampaignModal("new"); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-slate-700">
+                          <CalendarPlus size={15} /> Nouvelle période
+                        </button>
+                        {campaign.status !== "CLOSED" && (
+                          <button onClick={() => { setMenuOpen(false); setCampaignModal("edit"); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-slate-700">
+                            <Pencil size={14} /> Modifier les dates
+                          </button>
+                        )}
+                        {campaign.status === "OPEN" && (
+                          <button onClick={() => setStatus("DRAFT")}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-slate-700">
+                            <RotateCcw size={14} /> Repasser en brouillon
+                          </button>
+                        )}
+                        <button onClick={exportExcel} disabled={!rows.length}
+                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-slate-700 disabled:opacity-40">
+                          <FileDown size={15} /> Exporter en Excel
+                        </button>
+                        {campaign.status === "DRAFT" && (
+                          <button onClick={removeCampaign}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-rose-50 text-rose-600 border-t border-slate-100">
+                            <Trash2 size={14} /> Supprimer la période
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+            {!isRh && (
+              <button onClick={exportExcel} disabled={!rows.length} title="Exporter en Excel"
+                className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100 disabled:opacity-40">
+                <FileDown size={16} /> Exporter
+              </button>
+            )}
           </div>
-          <div className="flex items-center gap-2 text-[11px] text-slate-600 flex-wrap md:ml-auto">
+          {hint && (
+            <p className={`mt-2 text-xs flex items-center gap-1.5 ${campaign.status === "DRAFT" ? "text-[#003c71]" : "text-slate-500"}`}>
+              {!grid.editable && <Lock size={12} className="shrink-0" />} {hint}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Onglets BL + recherche */}
+      {grid && campaign && (
+        <div className="flex flex-col xl:flex-row xl:items-center gap-2 mb-3">
+          {grid.business_lines.length > 1 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              {["", ...grid.business_lines].map((b) => (
+                <button key={b || "all"} onClick={() => setBl(b)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${bl === b
+                    ? "bg-[#003c71] text-white" : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+                  {b ? blLabel(b) : "Toutes"}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="relative xl:ml-auto">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un employé…"
+              className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white w-full xl:w-56 focus:outline-none focus:border-[#003c71]" />
+          </div>
+        </div>
+      )}
+
+      {/* Résumé discret + légende */}
+      {grid && campaign && rows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 mb-2">
+          <span><b className="text-slate-700">{rows.length}</b> employés</span>
+          <span><b className="text-purple-600">{totals.astr}</b> astreintes</span>
+          {hasDaysOff && <span><b className="text-teal-600">{totals.off}</b> Days Off</span>}
+          <span><b className="text-amber-600">{totals.hs}</b> jours HS</span>
+          {saving && <Loader2 size={13} className="animate-spin text-[#003c71]" />}
+          <span className="flex items-center gap-2 flex-wrap sm:ml-auto">
             {ALL_CODES.filter((c) => c !== "D" || hasDaysOff).map((c) => (
-              <span key={c} className="flex items-center gap-1">
+              <span key={c} className="flex items-center gap-1" title={CODE_META[c].label}>
                 <span className={`w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center ${CODE_META[c].cls}`}>{c}</span>
-                {CODE_META[c].label}
+                <span className="hidden md:inline">{CODE_META[c].label}</span>
               </span>
             ))}
-            <span className="flex items-center gap-1">
-              <span className="w-4 h-4 rounded border border-dashed border-emerald-500 bg-emerald-50" /> Automatique
+            <span className="flex items-center gap-1" title="Rempli automatiquement (pointage, congés, sorties)">
+              <span className="w-4 h-4 rounded border border-dashed border-emerald-500 bg-emerald-50" /> <span className="hidden md:inline">Auto</span>
             </span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> HS / astreinte possible</span>
-            {saving && <Loader2 size={14} className="animate-spin text-[#003c71]" />}
-          </div>
+          </span>
         </div>
       )}
 
-      {/* Grille */}
+      {/* Contenu */}
       {loading ? (
         <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#003c71]" /></div>
       ) : error || !grid ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-sm text-slate-500">{error}</div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-sm text-slate-500">{error}</div>
       ) : !campaign ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-sm text-slate-500">
+        <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center">
+          <CalendarPlus size={28} className="mx-auto text-[#003c71] mb-3" />
           {isRh ? (
             <>
-              <p className="mb-3">Aucune période de saisie. Créez-en une en choisissant la date de début et de fin.</p>
+              <p className="font-semibold text-slate-800">Aucune période de saisie</p>
+              <p className="text-sm text-slate-500 mt-1 mb-4">Choisissez une date de début et une date de fin pour commencer.</p>
               <button onClick={() => setCampaignModal("new")}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#003c71] text-white font-semibold">
-                <CalendarPlus size={15} /> Nouvelle période
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#003c71] text-white text-sm font-semibold">
+                <CalendarPlus size={15} /> Créer une période
               </button>
             </>
-          ) : grid.lock_reason}
+          ) : <p className="text-sm text-slate-500">{grid.lock_reason}</p>}
         </div>
       ) : rows.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-sm text-slate-500">
+        <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-sm text-slate-500">
           Aucun employé pour ce filtre.
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-xl overflow-auto max-h-[calc(100vh-18rem)]">
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-auto max-h-[calc(100vh-17rem)]">
           <table className="text-[11px] border-collapse">
             <thead className="sticky top-0 z-20">
               <tr className="bg-slate-50">
-                <th className="sticky left-0 z-30 bg-slate-50 text-left px-3 py-2 min-w-[220px] border-b border-r border-slate-200 text-slate-600">Employé</th>
+                <th className="sticky left-0 z-30 bg-slate-50 text-left px-3 py-2 min-w-[210px] border-b border-r border-slate-200 text-slate-500 font-semibold">Employé</th>
                 {grid.days.map((d, i) => {
                   const newMonth = i === 0 || d.day === 1;
                   return (
@@ -440,7 +483,7 @@ export default function HsAstreinteBoard() {
                   );
                 })}
                 {totalHeaders.map((h) => (
-                  <th key={h} className={`px-2 py-1 border-b border-l border-slate-200 text-white font-semibold whitespace-nowrap ${h === "Days Off" ? "bg-teal-700" : "bg-[#003c71]"}`}>{h}</th>
+                  <th key={h} className="px-2 py-1 border-b border-l border-slate-200 bg-slate-50 text-slate-600 font-semibold whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -453,7 +496,7 @@ export default function HsAstreinteBoard() {
                   header && (
                     <tr key={`g-${group}`}>
                       <td colSpan={grid.days.length + totalHeaders.length + 1}
-                        className="sticky left-0 bg-[#003c71]/5 px-3 py-1.5 text-[11px] font-semibold text-[#003c71] border-b border-slate-200">
+                        className="sticky left-0 bg-slate-50/80 px-3 py-1 text-[11px] font-bold text-[#003c71] border-b border-slate-200">
                         {group}
                       </td>
                     </tr>
@@ -470,14 +513,12 @@ export default function HsAstreinteBoard() {
                               </span>
                             )}
                           </div>
-                          <div className="text-slate-400 truncate">
-                            {row.matricule}{row.bl ? ` · ${row.bl}` : ""}{row.service ? ` · ${row.service}` : ""}
-                          </div>
+                          <div className="text-slate-400 truncate">{row.matricule}{row.service ? ` · ${row.service}` : ""}</div>
                         </div>
                         {grid.editable && (
-                          <button title="Remplir les jours vides avec un code"
+                          <button title="Remplir les jours vides de cette ligne"
                             onClick={(e) => openPicker("fill", row, e.currentTarget)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#003c71] hover:bg-[#003c71]/10 shrink-0">
+                            className="p-1.5 rounded-lg text-slate-300 group-hover:text-slate-500 hover:!text-[#003c71] hover:bg-[#003c71]/10 shrink-0">
                             <Paintbrush size={14} />
                           </button>
                         )}
@@ -493,7 +534,7 @@ export default function HsAstreinteBoard() {
                       </td>
                     ))}
                     {totalValues(row).map((v, k) => (
-                      <td key={k} className={`px-2 text-center border-b border-l border-slate-100 tabular-nums font-semibold ${totalCls(totalHeaders[k], v)}`}>{v}</td>
+                      <td key={k} className={`px-2 text-center border-b border-l border-slate-100 tabular-nums font-bold ${totalCls(totalHeaders[k], v)}`}>{v}</td>
                     ))}
                   </tr>,
                 ];
@@ -528,12 +569,12 @@ export default function HsAstreinteBoard() {
             {picker.mode === "cell" ? (
               <button onClick={() => choose("")}
                 className="w-full text-left text-xs px-2 py-1.5 mt-1 border-t border-slate-100 text-rose-600 hover:bg-rose-50 rounded-md">
-                Effacer la saisie (revenir à l'automatique)
+                Effacer (revenir à l'automatique)
               </button>
             ) : (
               <button onClick={clearRow}
                 className="w-full text-left text-xs px-2 py-1.5 mt-1 border-t border-slate-100 text-rose-600 hover:bg-rose-50 rounded-md">
-                Vider la ligne (toutes les saisies de la période)
+                Vider la ligne
               </button>
             )}
           </div>
