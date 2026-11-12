@@ -436,28 +436,29 @@ export default function HsAstreinteBoard() {
               ))}
             </div>
           )}
-          {zones.filter(Boolean).length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 xl:ml-auto">
+            {services.length > 1 && (
+              <select value={service} onChange={(e) => setService(e.target.value)} aria-label="Filtrer par service"
+                className={`flex-1 min-w-[150px] xl:flex-none xl:max-w-[240px] px-3 py-2 text-sm border rounded-xl bg-white focus:outline-none focus:border-[#003c71] ${service ? "border-[#003c71] text-[#003c71] font-semibold" : "border-slate-200 text-slate-600"}`}>
+                <option value="">Tous les services</option>
+                {services.map((sv) => sv
+                  ? <option key={sv} value={sv}>{sv}</option>
+                  : <option key={NO_SERVICE} value={NO_SERVICE}>Sans service</option>)}
+              </select>
+            )}
             <select value={zone} onChange={(e) => setZone(e.target.value)} aria-label="Filtrer par zone"
-              className={`xl:ml-auto max-w-full xl:max-w-[200px] px-3 py-2 text-sm border rounded-xl bg-white focus:outline-none focus:border-[#003c71] ${zone ? "border-[#003c71] text-[#003c71] font-semibold" : "border-slate-200 text-slate-600"}`}>
+              title={zones.filter(Boolean).length === 0 ? "Aucune zone enregistrée : importez le fichier de pointage ou définissez la zone d'un employé" : undefined}
+              className={`flex-1 min-w-[140px] xl:flex-none xl:max-w-[200px] px-3 py-2 text-sm border rounded-xl bg-white focus:outline-none focus:border-[#003c71] ${zone ? "border-[#003c71] text-[#003c71] font-semibold" : "border-slate-200 text-slate-600"}`}>
               <option value="">Toutes les zones</option>
               {zones.map((z) => z
                 ? <option key={z} value={z}>{z}</option>
                 : <option key={NO_ZONE} value={NO_ZONE}>Sans zone</option>)}
             </select>
-          )}
-          {services.length > 1 && (
-            <select value={service} onChange={(e) => setService(e.target.value)} aria-label="Filtrer par service"
-              className={`${zones.filter(Boolean).length > 0 ? "" : "xl:ml-auto"} max-w-full xl:max-w-[240px] px-3 py-2 text-sm border rounded-xl bg-white focus:outline-none focus:border-[#003c71] ${service ? "border-[#003c71] text-[#003c71] font-semibold" : "border-slate-200 text-slate-600"}`}>
-              <option value="">Tous les services</option>
-              {services.map((sv) => sv
-                ? <option key={sv} value={sv}>{sv}</option>
-                : <option key={NO_SERVICE} value={NO_SERVICE}>Sans service</option>)}
-            </select>
-          )}
-          <div className={`relative ${services.length > 1 || zones.filter(Boolean).length > 0 ? "" : "xl:ml-auto"}`}>
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un employé…"
-              className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white w-full xl:w-56 focus:outline-none focus:border-[#003c71]" />
+            <div className="relative flex-1 min-w-[180px] xl:flex-none">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un employé…"
+                className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white w-full xl:w-56 focus:outline-none focus:border-[#003c71]" />
+            </div>
           </div>
         </div>
       )}
