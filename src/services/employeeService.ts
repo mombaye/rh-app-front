@@ -254,6 +254,14 @@ export const createAccountFromEmployee = async (
   return (await axiosInstance.post(`/api/employees/${employeeId}/create-account/`, payload)).data;
 };
 
+/** Génère un nouveau mot de passe provisoire et l'envoie par email ; si l'email échoue, il est renvoyé pour être communiqué à la main. */
+export const resetPasswordForEmployee = async (employeeId: number): Promise<{
+  success: boolean; username: string; message?: string; warning?: string; password?: string;
+}> => {
+  const axiosInstance = localStorage.getItem("admin_access_token") ? adminApi : api;
+  return (await axiosInstance.post(`/api/employees/${employeeId}/reset-password/`, {})).data;
+};
+
 export const deleteAccountFromEmployee = async (employeeId: number) => {
   const axiosInstance = localStorage.getItem("admin_access_token") ? adminApi : api;
   return (await axiosInstance.delete(`/api/employees/${employeeId}/delete-account/`)).data;

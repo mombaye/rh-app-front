@@ -3,14 +3,14 @@ import {
   FaEdit, FaFileExcel, FaUserPlus, FaPaperPlane,
   FaSort, FaSortUp, FaSortDown, FaFilePdf, FaHistory, FaBriefcase, FaExchangeAlt,
   FaSearch, FaTimes, FaChevronRight, FaArrowLeft, FaCheck,
-  FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight, FaUsers, FaUserTimes, FaTrash, FaRegSave,
+  FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight, FaUsers, FaUserTimes, FaTrash, FaRegSave, FaKey,
 } from "react-icons/fa";
 import { FiGitCommit } from "react-icons/fi";
 import { TbLogout, TbPlane } from "react-icons/tb";
 import { AiOutlineRollback } from "react-icons/ai";
 import { motion, AnimatePresence } from "framer-motion";
 import { Employee } from "@/types/employee";
-import { createAccountFromEmployee, deleteAccountFromEmployee, sendAccessCodes } from "@/services/employeeService";
+import { createAccountFromEmployee, deleteAccountFromEmployee, resetPasswordForEmployee, sendAccessCodes } from "@/services/employeeService";
 import * as XLSX from "xlsx";
 import { Input } from "@/components/ui/input";
 import toast from "react-hot-toast";
@@ -207,9 +207,11 @@ export default function EmployeesTable({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sendScope, setSendScope] = useState<"selected" | "filtered" | "all">("selected");
   const [createAccountConfirmEmp, setCreateAccountConfirmEmp] = useState<Employee | null>(null);
-  const [createdCredentials, setCreatedCredentials] = useState<{ username: string; password: string; empName: string } | null>(null);
+  const [createdCredentials, setCreatedCredentials] = useState<{ username: string; password: string; empName: string; reset?: boolean } | null>(null);
   const [selectedManagerLevel, setSelectedManagerLevel] = useState<0 | 1 | 2>(0);
   const [deleteAccountConfirmEmp, setDeleteAccountConfirmEmp] = useState<Employee | null>(null);
+  const [resetConfirmEmp, setResetConfirmEmp] = useState<Employee | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
 
   // Pagination
@@ -430,6 +432,31 @@ export default function EmployeesTable({
     setDeleteAccountConfirmEmp(emp);
   };
 
+  const handleResetPassword = (emp: Employee) => {
+    if (!emp.has_user) return toast.error("Cet employé n'a pas de compte utilisateur.");
+    setRowOpen(false);
+    setResetConfirmEmp(emp);
+  };
+
+  const doResetPassword = async (emp: Employee) => {
+    setResetLoading(true);
+    try {
+      const res = await resetPasswordForEmployee(emp.id);
+      setResetConfirmEmp(null);
+      if (res.warning) {
+        toast.success(`Mot de passe réinitialisé pour ${emp.prenom} ${emp.nom}`);
+        if (res.password) setCreatedCredentials({ username: res.username, password: res.password, empName: `${emp.prenom} ${emp.nom}`, reset: true });
+        else toast.error(res.warning, { duration: 6000 });
+      } else {
+        toast.success(res.message ?? `Nouveau mot de passe envoyé à ${emp.prenom} ${emp.nom}`);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Erreur lors de la réinitialisation du mot de passe");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const doDeleteAccount = async (emp: Employee) => {
     setDeleteAccountLoading(true);
     try {
@@ -545,6 +572,7 @@ export default function EmployeesTable({
       { id: "history",         icon: <FaHistory size={15} />,         label: "Voir l'historique des modifs", color: "text-indigo-600",   show: true },
       { id: "send-code",       icon: <FaPaperPlane size={15} />,      label: "Envoyer le code d'accès",      color: "text-emerald-600",  show: true },
       { id: "create-account",  icon: <FaUserPlus size={15} />,    label: "Créer un accès utilisateur",    color: "text-blue-600",  show: !isExited && !rowEmp.has_user },
+      { id: "reset-password",  icon: <FaKey size={15} />,         label: "Réinitialiser le mot de passe",   color: "text-amber-600", show: !!rowEmp.has_user },
       { id: "delete-account",  icon: <FaUserTimes size={15} />,  label: "Supprimer le compte utilisateur", color: "text-red-500",  show: !!rowEmp.has_user },
       { id: "mission",         icon: <TbPlane size={15} />,           label: rowEmp.on_mission ? "Gérer la mission" : "Définir en mission", color: "text-indigo-600", show: !isExited },
       { id: "exit",            icon: <TbLogout size={15} />,          label: "Enregistrer la sortie",        color: "text-red-600",      show: !isExited },
@@ -561,6 +589,7 @@ export default function EmployeesTable({
       else if (id === "history")         { setHistoryEmp(rowEmp); setHistoryOpen(true); setRowOpen(false); }
       else if (id === "send-code")       { doSendCodeSingle(rowEmp); }
       else if (id === "create-account")  { handleCreateAccount(rowEmp); }
+      else if (id === "reset-password")  { handleResetPassword(rowEmp); }
       else if (id === "delete-account")  { handleDeleteAccount(rowEmp); }
       else if (id === "mission")         { onMission?.(rowEmp); setRowOpen(false); }
       else if (id === "exit")            { onExit(rowEmp); setRowOpen(false); }
@@ -1261,7 +1290,7 @@ export default function EmployeesTable({
                   <FaUserPlus className="text-white" size={16} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800 text-base">Compte créé — email non envoyé</h3>
+                  <h3 className="font-bold text-slate-800 text-base">{createdCredentials.reset ? "Mot de passe réinitialisé — email non envoyé" : "Compte créé — email non envoyé"}</h3>
                   <p className="text-xs text-slate-500 mt-0.5">{createdCredentials.empName}</p>
                 </div>
               </div>
@@ -1295,6 +1324,67 @@ export default function EmployeesTable({
             </motion.div>
           </div>
         )}
+
+      {/* ── Confirmation réinitialisation du mot de passe ── */}
+      <AnimatePresence>
+        {resetConfirmEmp && (
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[70] p-4"
+            onClick={() => !resetLoading && setResetConfirmEmp(null)}
+          >
+            <motion.div
+              role="dialog" aria-modal="true" aria-labelledby="reset-pwd-title"
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.15 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500 shrink-0">
+                  <FaKey className="text-white" size={16} />
+                </div>
+                <div>
+                  <h3 id="reset-pwd-title" className="font-bold text-slate-800 text-base">Réinitialiser le mot de passe</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {resetConfirmEmp.prenom} {resetConfirmEmp.nom} · {resetConfirmEmp.matricule}
+                  </p>
+                </div>
+              </div>
+              <div className="px-6 py-5 space-y-3">
+                <p className="text-sm text-slate-700 leading-relaxed">
+                  Un nouveau mot de passe provisoire sera créé et envoyé par email à{" "}
+                  <strong>{resetConfirmEmp.email || "l'employé"}</strong>. L'ancien mot de passe ne fonctionnera plus et l'employé
+                  devra en choisir un nouveau à sa prochaine connexion.
+                </p>
+                {!resetConfirmEmp.email && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                    Aucune adresse email : le mot de passe vous sera affiché pour que vous le communiquiez vous-même.
+                  </p>
+                )}
+              </div>
+              <div className="px-6 pb-5 flex gap-3">
+                <button
+                  onClick={() => setResetConfirmEmp(null)}
+                  disabled={resetLoading}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => doResetPassword(resetConfirmEmp)}
+                  disabled={resetLoading}
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {resetLoading ? <ImSpinner2 className="animate-spin" size={15} /> : <FaKey size={12} />}
+                  {resetLoading ? "Envoi…" : "Réinitialiser"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ── Confirmation suppression de compte utilisateur ── */}
       <AnimatePresence>
