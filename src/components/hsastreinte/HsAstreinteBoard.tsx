@@ -33,10 +33,12 @@ export const CODE_META: Record<Exclude<HsCode, "">, { label: string; cls: string
   A: { label: "Sortie",           cls: "bg-orange-100 text-orange-700",   dot: "bg-orange-500" },
   M: { label: "Maladie",          cls: "bg-rose-100 text-rose-700",       dot: "bg-rose-500" },
   D: { label: "Days Off",         cls: "bg-teal-100 text-teal-700",       dot: "bg-teal-500" },
+  I: { label: "Incomplet",        cls: "bg-stone-200 text-stone-700",     dot: "bg-stone-500" },
 };
 const ALL_CODES = Object.keys(CODE_META) as Exclude<HsCode, "">[];
 const NO_SERVICE = "__none__";
-const codesFor = (row: HsRow) => ALL_CODES.filter((c) => c !== "D" || row.days_off_allowed);
+// I (pointage incomplet) vient seulement du pointage : on ne le propose pas à la saisie
+const codesFor = (row: HsRow) => ALL_CODES.filter((c) => c !== "I" && (c !== "D" || row.days_off_allowed));
 
 const STEPS: { status: CampaignStatus; label: string }[] = [
   { status: "DRAFT", label: "Brouillon" },
@@ -47,6 +49,7 @@ const STEPS: { status: CampaignStatus; label: string }[] = [
 const SOURCE_LABEL: Record<string, string> = {
   pointage: "a pointé ce jour", mission: "mission validée", conge: "congé approuvé",
   maladie: "congé maladie approuvé", sortie: "sortie approuvée",
+  pointage_incomplet: "entrée ou sortie manquante, compté comme présent",
 };
 
 const blLabel = (bl: string) => (bl === NO_BL || !bl ? "Sans BL" : bl);
@@ -134,6 +137,7 @@ export default function HsAstreinteBoard() {
   const isRh = !!grid?.is_rh;
   const showBlGroups = !bl && (grid?.business_lines.length ?? 0) > 1;
   const hasDaysOff = !!grid?.rows.some((r) => r.days_off_allowed || r.nb_days_off > 0);
+  const hasIncomplete = !!grid?.rows.some((r) => r.nb_incomplets > 0);
 
   // Filtre par service : jamais pour les agents de la BL NOPE (ils restent toujours affichés, sans filtre)
   const isNope = (r: HsRow) => (r.bl || "").toUpperCase() === "NOPE";
@@ -156,7 +160,8 @@ export default function HsAstreinteBoard() {
 
   const totals = useMemo(() => rows.reduce((t, r) => ({
     hs: t.hs + r.nb_heures_sup, astr: t.astr + r.nb_jours_astreintes, off: t.off + r.nb_days_off,
-  }), { hs: 0, astr: 0, off: 0 }), [rows]);
+    inc: t.inc + (r.nb_incomplets ?? 0),
+  }), { hs: 0, astr: 0, off: 0, inc: 0 }), [rows]);
 
   const offDays = useMemo(() => new Set((grid?.days ?? []).map((d, i) => (d.weekday >= 5 || d.holiday ? i : -1)).filter((i) => i >= 0)), [grid]);
 
@@ -277,6 +282,7 @@ export default function HsAstreinteBoard() {
       "HS (j)": r.nb_heures_sup,
       "Astr. (j)": r.nb_jours_astreintes,
       "Days Off": r.nb_days_off,
+      "Incomplets (comptés présents)": r.nb_incomplets ?? 0,
       "Astr. payées (j)": Math.max(0, r.nb_jours_astreintes - r.nb_days_off),
       "H. normales": r.heures_normales,
       "H. HS": r.heures_sup_effectuees,
@@ -470,9 +476,10 @@ export default function HsAstreinteBoard() {
           <span><b className="text-purple-600">{totals.astr}</b> astreintes</span>
           {hasDaysOff && <span><b className="text-teal-600">{totals.off}</b> Days Off</span>}
           <span><b className="text-amber-600">{totals.hs}</b> jours HS</span>
+          {totals.inc > 0 && <span title="Comptés comme présents dans les jours travaillés"><b className="text-stone-600">{totals.inc}</b> incomplets</span>}
           {saving && <Loader2 size={13} className="animate-spin text-[#003c71]" />}
           <span className="flex items-center gap-2 flex-wrap sm:ml-auto">
-            {ALL_CODES.filter((c) => c !== "D" || hasDaysOff).map((c) => (
+            {ALL_CODES.filter((c) => (c !== "D" || hasDaysOff) && (c !== "I" || hasIncomplete)).map((c) => (
               <span key={c} className="flex items-center gap-1" title={CODE_META[c].label}>
                 <span className={`w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center ${CODE_META[c].cls}`}>{c}</span>
                 <span className="hidden md:inline">{CODE_META[c].label}</span>

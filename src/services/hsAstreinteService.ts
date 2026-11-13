@@ -1,7 +1,8 @@
 import api from "@/api/axios";
 
-/** D = Days Off (seulement pour les BL où l'option est activée, ex. BL4) */
-export type HsCode = "" | "X" | "Y" | "Z" | "C" | "A" | "M" | "D";
+/** D = Days Off (seulement pour les BL où l'option est activée, ex. BL4).
+ *  I = pointage incomplet : automatique seulement, compté comme présent dans les cumuls. */
+export type HsCode = "" | "X" | "Y" | "Z" | "C" | "A" | "M" | "D" | "I";
 
 export interface HsCell {
   code: HsCode;
@@ -20,6 +21,8 @@ export interface HsTotals {
   nb_heures_sup: number;
   nb_jours_astreintes: number;
   nb_days_off: number;
+  /** jours « I » (pointage incomplet), déjà inclus dans jours_travailles / jours_normaux */
+  nb_incomplets: number;
   heures_normales: number;
   heures_sup_effectuees: number;
   heures_astreintes: number;
