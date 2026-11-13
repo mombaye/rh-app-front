@@ -1315,7 +1315,18 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
 
   const PENDING_STATUSES = ["PENDING", "PENDING_SECOND", ...(isRh ? ["PENDING_RH"] : [])] as string[];
 
-  const pending = requests.filter(r => PENDING_STATUSES.includes(r.status));
+  // En attente de MA décision : je suis le validateur courant de la chaîne.
+  // Une fois que j'ai validé (ou rejeté), la demande ne reste que dans l'historique,
+  // même si elle attend encore le N+2 ou la RH.
+  const awaitsMe = (r: LeaveRequest): boolean => {
+    if (!PENDING_STATUSES.includes(r.status)) return false;
+    if (r.status === "PENDING_RH") return isRh;
+    const current = (r.pending_approvers ?? []).filter(a => a.is_current);
+    // Pas de chaîne connue (anciennes demandes) : comportement précédent
+    if (current.length === 0) return true;
+    return current.some(a => a.approver_id === employeeId);
+  };
+  const pending = requests.filter(awaitsMe);
 
   // Items agrégés pour le panneau "En attente"
   const allPendingItems: PendingItem[] = [
@@ -1662,8 +1673,8 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
           <LeaveDetailModal
             req={detailTarget}
             onClose={() => setDetailTarget(null)}
-            onApprove={(detailTarget.status === "PENDING" || detailTarget.status === "PENDING_SECOND") ? () => { setDetailTarget(null); setApproveTarget(detailTarget); } : undefined}
-            onReject={(detailTarget.status === "PENDING" || detailTarget.status === "PENDING_SECOND") ? () => { setDetailTarget(null); setRejectTarget(detailTarget); } : undefined}
+            onApprove={awaitsMe(detailTarget) ? () => { setDetailTarget(null); setApproveTarget(detailTarget); } : undefined}
+            onReject={awaitsMe(detailTarget) ? () => { setDetailTarget(null); setRejectTarget(detailTarget); } : undefined}
           />
         )}
         {showExport && (
