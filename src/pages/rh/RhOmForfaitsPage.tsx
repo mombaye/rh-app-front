@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Loader2, Search, TableProperties, ArrowLeft, FileDown, Settings2, AlertTriangle, X, Plus, Trash2, Save, Users } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import api from "@/api/axios";
 import toast from "react-hot-toast";
 import AppLayout from "@/layouts/AppLayout";
+import ManagerLayout from "@/layouts/ManagerLayout";
+import EmployeeLayout from "@/layouts/EmployeeLayout";
 import BeneficiariesModal from "@/components/hsastreinte/BeneficiariesModal";
 import { HsCampaign, campaignLabel, frDate } from "@/services/hsAstreinteService";
 // @ts-ignore
@@ -48,6 +50,9 @@ const STORAGE_KEY = (campaignId: number | null) => `om_forfaits_comments_campaig
 
 export default function RhOmForfaitsPage() {
   const navigate = useNavigate();
+  // Même page pour la RH et les accès délégués HS & Astreinte (espace manager ou employé)
+  const space = useLocation().pathname.split("/")[1] || "rh";
+  const Layout = space === "manager" ? ManagerLayout : space === "employee" ? EmployeeLayout : AppLayout;
   const [campaignId, setCampaignId] = useState<number | null>(null);
   const [campaign, setCampaign] = useState<HsCampaign | null>(null);
   const [campaigns, setCampaigns] = useState<HsCampaign[]>([]);
@@ -326,7 +331,7 @@ export default function RhOmForfaitsPage() {
   }
 
   return (
-    <AppLayout>
+    <Layout>
       <div className="px-4 md:px-6 pb-10">
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
@@ -334,7 +339,7 @@ export default function RhOmForfaitsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <button
-                onClick={() => navigate("/rh/om-pointage")}
+                onClick={() => navigate(`/${space}/om-pointage`)}
                 className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition shrink-0"
                 title="Retour au pointage"
               >
@@ -789,6 +794,6 @@ export default function RhOmForfaitsPage() {
           </div>
         </div>
       )}
-    </AppLayout>
+    </Layout>
   );
 }

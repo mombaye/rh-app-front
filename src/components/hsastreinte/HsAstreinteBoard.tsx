@@ -6,7 +6,7 @@
 // Écran volontairement épuré : une carte « période » (choix, 3 étapes, une seule action principale),
 // des onglets BL, puis la grille. Les actions rares sont dans le menu « ⋯ ».
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Banknote, CalendarPlus, Check, FileDown, Loader2, Lock, MoreHorizontal, Network, Paintbrush, Pencil,
   MapPin, PlayCircle, RotateCcw, Search, Upload, TableProperties, Trash2, X as XIcon,
@@ -96,6 +96,7 @@ function Steps({ status }: { status: CampaignStatus }) {
 
 export default function HsAstreinteBoard() {
   const navigate = useNavigate();
+  const space = useLocation().pathname.split("/")[1] || "rh";   // rh, manager ou employee
   const [campaignId, setCampaignId] = useState<number | null>(null);
   const [bl, setBl] = useState("");
   const [search, setSearch] = useState("");
@@ -330,7 +331,7 @@ export default function HsAstreinteBoard() {
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100 disabled:opacity-50">
               <Upload size={16} /> <span className="hidden xl:inline">Importer</span>
             </button>
-            <button onClick={() => navigate("/rh/om-forfaits")} title="Montants, tarifs et plafonds par service"
+            <button onClick={() => navigate(`/${space}/om-forfaits`)} title="Montants, tarifs et plafonds par service"
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100">
               <Banknote size={16} /> <span className="hidden xl:inline">Forfaits</span>
             </button>
