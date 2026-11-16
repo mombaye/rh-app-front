@@ -1,7 +1,8 @@
 import api from "@/api/axios";
 
 /** D = Days Off (seulement pour les BL où l'option est activée, ex. BL4) */
-export type HsCode = "" | "X" | "Y" | "Z" | "C" | "A" | "M" | "D";
+/** I = pointage incomplet (entrée sans sortie ou l'inverse) : automatique seulement, non saisissable */
+export type HsCode = "" | "X" | "Y" | "Z" | "C" | "A" | "M" | "D" | "I";
 
 export interface HsCell {
   code: HsCode;
