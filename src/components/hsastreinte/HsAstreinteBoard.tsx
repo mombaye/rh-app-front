@@ -6,7 +6,7 @@
 // Écran volontairement épuré : une carte « période » (choix, 3 étapes, une seule action principale),
 // des onglets BL, puis la grille. Les actions rares sont dans le menu « ⋯ ».
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Banknote, CalendarPlus, Check, FileDown, Loader2, Lock, MoreHorizontal, Network, Paintbrush, Pencil,
   MapPin, PlayCircle, RotateCcw, Search, Upload, TableProperties, Trash2, X as XIcon,
@@ -33,12 +33,16 @@ export const CODE_META: Record<Exclude<HsCode, "">, { label: string; cls: string
   A: { label: "Sortie",           cls: "bg-orange-100 text-orange-700",   dot: "bg-orange-500" },
   M: { label: "Maladie",          cls: "bg-rose-100 text-rose-700",       dot: "bg-rose-500" },
   D: { label: "Days Off",         cls: "bg-teal-100 text-teal-700",       dot: "bg-teal-500" },
-  I: { label: "Incomplet",        cls: "bg-stone-200 text-stone-700",     dot: "bg-stone-500" },
+  // Automatique seulement (entrée sans sortie ou l'inverse), compté comme présent ; non saisissable
+  I: { label: "Incomplet",        cls: "bg-yellow-100 text-yellow-800",   dot: "bg-yellow-500" },
 };
 const ALL_CODES = Object.keys(CODE_META) as Exclude<HsCode, "">[];
+const AUTO_ONLY: HsCode[] = ["I"];
+const SELECTABLE_CODES = ALL_CODES.filter((c) => !AUTO_ONLY.includes(c));
 const NO_SERVICE = "__none__";
-// I (pointage incomplet) vient seulement du pointage : on ne le propose pas à la saisie
-const codesFor = (row: HsRow) => ALL_CODES.filter((c) => c !== "I" && (c !== "D" || row.days_off_allowed));
+const codesFor = (row: HsRow) => SELECTABLE_CODES.filter((c) => c !== "D" || row.days_off_allowed);
+// Code inconnu envoyé par l'API (ex. nouveau code côté backend) : affiché tel quel au lieu de faire planter la page
+const metaOf = (code: string) => CODE_META[code as Exclude<HsCode, "">] ?? { label: code, cls: "bg-slate-100 text-slate-600", dot: "bg-slate-400" };
 
 const STEPS: { status: CampaignStatus; label: string }[] = [
   { status: "DRAFT", label: "Brouillon" },
@@ -49,7 +53,7 @@ const STEPS: { status: CampaignStatus; label: string }[] = [
 const SOURCE_LABEL: Record<string, string> = {
   pointage: "a pointé ce jour", mission: "mission validée", conge: "congé approuvé",
   maladie: "congé maladie approuvé", sortie: "sortie approuvée",
-  pointage_incomplet: "entrée ou sortie manquante, compté comme présent",
+  pointage_incomplet: "entrée sans sortie ou sortie sans entrée, compté comme présent",
 };
 
 const blLabel = (bl: string) => (bl === NO_BL || !bl ? "Sans BL" : bl);
@@ -57,14 +61,14 @@ const blLabel = (bl: string) => (bl === NO_BL || !bl ? "Sans BL" : bl);
 function cellClass(cell: HsCell, offDay: boolean): string {
   if (cell.locked && !cell.code) return "bg-slate-200/70 text-slate-300 cursor-not-allowed";
   if (!cell.code) return offDay ? "bg-slate-100 text-slate-300" : "bg-white border border-dashed border-slate-200 text-slate-300 hover:bg-slate-50";
-  const base = CODE_META[cell.code as Exclude<HsCode, "">].cls;
+  const base = metaOf(cell.code).cls;
   return cell.auto ? `${base} border border-dashed border-current italic opacity-80` : `${base} font-bold`;
 }
 
 function cellTitle(cell: HsCell, exitDate: string | null): string {
   const parts: string[] = [];
   if (cell.code) {
-    const label = CODE_META[cell.code as Exclude<HsCode, "">].label;
+    const label = metaOf(cell.code).label;
     parts.push(cell.auto ? `${cell.code} — ${label}, rempli automatiquement (${SOURCE_LABEL[cell.source ?? ""] ?? "auto"})` : `${cell.code} — ${label}`);
   } else parts.push(cell.locked ? "" : "À renseigner");
   if (cell.locked && exitDate) parts.push(`Sorti le ${frDate(exitDate)}`);
@@ -99,6 +103,7 @@ function Steps({ status }: { status: CampaignStatus }) {
 
 export default function HsAstreinteBoard() {
   const navigate = useNavigate();
+  const space = useLocation().pathname.split("/")[1] || "rh";   // rh, manager ou employee
   const [campaignId, setCampaignId] = useState<number | null>(null);
   const [bl, setBl] = useState("");
   const [search, setSearch] = useState("");
@@ -207,7 +212,7 @@ export default function HsAstreinteBoard() {
     // Pinceau : jours vides (hors week-ends / fériés / après la sortie) et jours « présent » remplis automatiquement
     const changes = row.cells
       .map((c, i) => ({ c, i }))
-      .filter(({ c, i }) => !c.locked && ((!c.code && !offDays.has(i)) || (c.auto && c.code === "X")))
+      .filter(({ c, i }) => !c.locked && ((!c.code && !offDays.has(i)) || (c.auto && (c.code === "X" || c.code === "I"))))
       .map(({ i }) => ({ employee_id: row.employee_id, date: grid.days[i].date, code }));
     if (changes.length === 0) toast("Aucun jour à remplir pour cet employé.");
     else applyChanges(changes);
@@ -336,7 +341,7 @@ export default function HsAstreinteBoard() {
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100 disabled:opacity-50">
               <Upload size={16} /> <span className="hidden xl:inline">Importer</span>
             </button>
-            <button onClick={() => navigate("/rh/om-forfaits")} title="Montants, tarifs et plafonds par service"
+            <button onClick={() => navigate(`/${space}/om-forfaits`)} title="Montants, tarifs et plafonds par service"
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100">
               <Banknote size={16} /> <span className="hidden xl:inline">Forfaits</span>
             </button>

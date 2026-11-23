@@ -251,6 +251,11 @@ function App() {
             <EmployeeOmPointagePage />
           </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
         } />}
+        {FEATURES.omPointage && <Route path="/employee/om-forfaits" element={
+          <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
+            <RhOmForfaitsPage />
+          </EmployeeOnlyRoute></FirstLoginGuard></ProtectedRoute>
+        } />}
         {FEATURES.teamPlanning && <Route path="/employee/team-planning" element={
           <ProtectedRoute><FirstLoginGuard><EmployeeOnlyRoute>
             <EmployeeTeamPlanningPage />
@@ -301,6 +306,8 @@ function App() {
         <Route path="/manager/team-contracts" element={<MgrRoute><ManagerTeamContractsPage /></MgrRoute>} />
         <Route path="/manager/tickets"        element={<MgrRoute><ManagerTicketsPage       /></MgrRoute>} />
         {FEATURES.omPointage && <Route path="/manager/om-pointage"    element={<MgrRoute><ManagerOmPointagePage    /></MgrRoute>} />}
+        {/* Forfaits HS & Astreinte : accès délégué (groupe HS_ASTREINTE_RH), contrôlé par l'API */}
+        {FEATURES.omPointage && <Route path="/manager/om-forfaits"    element={<MgrRoute><RhOmForfaitsPage         /></MgrRoute>} />}
         {FEATURES.teamPlanning && <Route path="/manager/team-planning"  element={<MgrRoute><ManagerTeamPlanningPage  /></MgrRoute>} />}
 
         {/* ── Planning Manager ─────────────────────────────────── */}
