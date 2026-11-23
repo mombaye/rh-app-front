@@ -19,7 +19,7 @@ import {
   FileCheck, Upload, ExternalLink, Users, Settings2, Wallet,
   Search, History, Info, Trash2, Send, FileSpreadsheet,
   CheckCircle, XOctagon, Mail, GitBranch, UserX, ShieldCheck,
-  AlertCircle, SlidersHorizontal, Check, LogOut,
+  AlertCircle, SlidersHorizontal, Check, LogOut, FileDown,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ExportColumnKey, ExportColumnDef } from "@/types/leave";
@@ -39,6 +39,7 @@ const STATUS_CFG: Record<
   PENDING:        { label: "En attente",          color: "#d97706", bg: "#fffbeb", border: "#fde68a", dot: "bg-amber-400"   },
   PENDING_SECOND: { label: "En att. 2ème valid.", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe", dot: "bg-violet-500"  },
   PENDING_RH:     { label: "En attente RH",       color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe", dot: "bg-blue-500"    },
+  PENDING_DG:     { label: "Clôture DG",       color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe", dot: "bg-blue-500"    },
   APPROVED:       { label: "Approuvé",            color: "#059669", bg: "#ecfdf5", border: "#a7f3d0", dot: "bg-emerald-500" },
   REJECTED:       { label: "Rejeté",              color: "#dc2626", bg: "#fef2f2", border: "#fecaca", dot: "bg-red-500"     },
   CANCELLED:      { label: "Annulé",              color: "#64748b", bg: "#f8fafc", border: "#e2e8f0", dot: "bg-slate-400"   },
@@ -285,8 +286,10 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   const handleHrValidate = async (id: number) => {
     setHrValidateLoading(true);
     try {
-      await leaveRequestService.hrValidate(id, user?.employee_id ?? undefined);
-      toast.success("Congé validé par la RH ✓");
+      const updated = await leaveRequestService.hrValidate(id, user?.employee_id ?? undefined);
+      toast.success(updated?.status === "PENDING_DG"
+        ? "Clôturé par la RH ✓ — en attente de la clôture du DG"
+        : "Congé validé par la RH ✓");
       setHrValidateTarget(null);
       await fetchAll();
     } catch (err: any) {
@@ -2498,6 +2501,7 @@ function ManageModal({
   const isPending     = r.status === "PENDING" || r.status === "PENDING_SECOND";
   const isPendingRH   = r.status === "PENDING_RH";
   const isApproved    = r.status === "APPROVED";
+  const closureRhDg   = !!useAuth().user?.leave_rh_dg_closure;
   const isRejected    = r.status === "REJECTED";
   const isRevoked     = r.status === "REVOKED";
   const isCancelled   = r.status === "CANCELLED";
@@ -2625,8 +2629,10 @@ function ManageModal({
             <>
               <ActionBtn
                 icon={CheckCircle2}
-                label="Valider (RH)"
-                description="Approuver définitivement ce congé en tant que RH"
+                label={closureRhDg ? "Clôturer (RH)" : "Valider (RH)"}
+                description={closureRhDg
+                  ? "Clôturer en tant que RH : la demande passe au DG, qui délivre l'attestation de congé"
+                  : "Approuver définitivement ce congé en tant que RH"}
                 onClick={() => onHrValidate(r)}
                 variant="success"
               />
@@ -2636,6 +2642,38 @@ function ManageModal({
                 description="Rejeter cette demande depuis la validation RH"
                 onClick={() => onHrReject(r)}
                 variant="danger"
+              />
+            </>
+          )}
+
+          {/* ── En attente de clôture DG ── */}
+          {r.status === "PENDING_DG" && (
+            <div className="px-4 py-3 rounded-2xl border border-purple-200 bg-purple-50 text-xs text-purple-700">
+              Clôturé par le RH{r.hr_reviewer ? ` (${r.hr_reviewer.full_name})` : ""}. En attente de la clôture
+              du DG, qui délivrera l'attestation de congé.
+            </div>
+          )}
+
+          {/* ── Attestation de congé (délivrée à la clôture DG) ── */}
+          {isApproved && r.has_attestation && (
+            <>
+              <ActionBtn
+                icon={FileDown}
+                label="Télécharger l'attestation de congé"
+                description={`Délivrée à la clôture DG${r.dg_reviewer ? ` (${r.dg_reviewer.full_name})` : ""}`}
+                onClick={() => {
+                  leaveRequestService.downloadAttestation(r.id)
+                    .catch(() => toast.error("Impossible de télécharger l'attestation de congé."));
+                }}
+              />
+              <ActionBtn
+                icon={RotateCcw}
+                label="Regénérer l'attestation"
+                description="Refaire l'attestation à partir des données actuelles (nom, poste, dates)"
+                onClick={() => {
+                  leaveRequestService.downloadAttestation(r.id, true)
+                    .catch(() => toast.error("Impossible de regénérer l'attestation de congé."));
+                }}
               />
             </>
           )}
@@ -3010,6 +3048,8 @@ function QuickApproveBtn({
 function HrValidateModal({ request: r, loading, onClose, onConfirm }: {
   request: LeaveRequest; loading: boolean; onClose: () => void; onConfirm: () => void;
 }) {
+  // Burkina Faso : la validation RH est une clôture, le DG clôture ensuite et délivre l'attestation
+  const closureRhDg = !!useAuth().user?.leave_rh_dg_closure;
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
@@ -3043,9 +3083,13 @@ function HrValidateModal({ request: r, loading, onClose, onConfirm }: {
         {/* Corps */}
         <div className="px-5 py-5 space-y-3">
           <p className="text-sm text-slate-600 leading-relaxed">
-            Vous êtes sur le point de valider définitivement la demande de congé de{" "}
+            {closureRhDg ? "Vous êtes sur le point de clôturer, en tant que RH, la demande de congé de" : "Vous êtes sur le point de valider définitivement la demande de congé de"}{" "}
             <span className="font-semibold text-slate-800">{r.employee?.full_name ?? "cet employé"}</span>.
-            Cette action passera le statut à <span className="font-semibold text-emerald-700">Approuvé</span>.
+            {closureRhDg ? (
+              <> Elle passera au <span className="font-semibold text-emerald-700">DG</span>, qui la clôturera et délivrera l'attestation de congé.</>
+            ) : (
+              <> Cette action passera le statut à <span className="font-semibold text-emerald-700">Approuvé</span>.</>
+            )}
           </p>
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 space-y-1">
             <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Détails du congé</p>
@@ -3657,6 +3701,26 @@ function ValidationChain({ r }: { r: LeaveRequest }) {
         status: n2Status,
       });
     }
+  }
+
+  // Clôture RH puis DG (Burkina Faso) : le DG délivre l'attestation de congé
+  if (r.status === "PENDING_DG" || r.dg_reviewed_at) {
+    const dgRejected = r.status === "REJECTED" && !!r.dg_reviewed_at;
+    steps.push({
+      label:  "Clôture RH",
+      name:   r.hr_reviewer?.full_name ?? null,
+      email:  r.hr_reviewer?.email ?? null,
+      date:   fmtDt(r.hr_reviewed_at),
+      status: "done",
+    });
+    steps.push({
+      label:  "Clôture DG · attestation",
+      name:   r.dg_reviewer?.full_name ?? null,
+      email:  r.dg_reviewer?.email ?? null,
+      date:   fmtDt(r.dg_reviewed_at),
+      note:   dgRejected ? r.reject_reason : null,
+      status: r.status === "PENDING_DG" ? "waiting" : dgRejected ? "rejected" : "done",
+    });
   }
 
   const dot: Record<StepStatus, string> = {

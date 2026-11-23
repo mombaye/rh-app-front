@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaExchangeAlt, FaInfoCircle } from "react-icons/fa";
 import { ImSpinner2 } from "react-icons/im";
@@ -66,9 +66,11 @@ interface Props {
   employee: Employee | null;
   onClose: () => void;
   onSuccess: (updatedEmployee: Employee) => void;
+  /** Type de mutation présélectionné à l'ouverture (ex. renouvellement depuis les Alertes RH) */
+  initialEventType?: CareerEventType;
 }
 
-export default function ContractChangeModal({ open, employee, onClose, onSuccess }: Props) {
+export default function ContractChangeModal({ open, employee, onClose, onSuccess, initialEventType }: Props) {
   const [eventType, setEventType] = useState<CareerEventType>("TITULARISATION");
   const [eventDate, setEventDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [description, setDescription] = useState("");
@@ -112,6 +114,15 @@ export default function ContractChangeModal({ open, employee, onClose, onSuccess
     }
     setFields(prefill);
   };
+
+  // Ouverture avec un type présélectionné : on préremplit le formulaire comme si l'utilisateur l'avait choisi
+  useEffect(() => {
+    if (open && employee && initialEventType) {
+      handleTypeChange(initialEventType);
+      setDescription("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, employee?.id, initialEventType]);
 
   const setField = (key: string, value: string) =>
     setFields(prev => ({ ...prev, [key]: value }));

@@ -1,10 +1,20 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, RefreshCw } from "lucide-react";
 import { FaHourglass, FaFileContract, FaEnvelope, FaPhone, FaUserTie, FaMapMarkerAlt } from "react-icons/fa";
 import { getEmployeeById } from "@/services/employeeService";
 import type { AlertePeriodeEssai } from "@/services/employeeService";
 import type { Employee } from "@/types/employee";
+import type { CareerEventType } from "@/services/employeeService";
+import ContractChangeModal from "./ContractChangeModal";
+
+/** Mutation proposée par défaut selon l'échéance (modifiable dans le formulaire) */
+const RENEW_EVENT: Record<AlertePeriodeEssai["type_alerte"], CareerEventType> = {
+  FIN_CDD:       "RENOUVELLEMENT_CDD",
+  FIN_STAGE:     "RENOUVELLEMENT_STAGE",
+  FIN_INTERIM:   "CHANGEMENT_CONTRAT",
+  PERIODE_ESSAI: "CHANGEMENT_CONTRAT",
+};
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -31,11 +41,14 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 interface Props {
   alerte: AlertePeriodeEssai | null;
   onClose: () => void;
+  /** Appelé après un renouvellement enregistré (pour recharger la liste des alertes) */
+  onRenewed?: () => void;
 }
 
-export default function AlerteEmployeeDetailModal({ alerte, onClose }: Props) {
+export default function AlerteEmployeeDetailModal({ alerte, onClose, onRenewed }: Props) {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading,  setLoading]  = useState(false);
+  const [renewOpen, setRenewOpen] = useState(false);
 
   useEffect(() => {
     if (!alerte) return;
@@ -217,7 +230,16 @@ export default function AlerteEmployeeDetailModal({ alerte, onClose }: Props) {
           </div>
 
           {/* ── Footer ── */}
-          <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
+          <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+            <button
+              onClick={() => setRenewOpen(true)}
+              disabled={!employee}
+              title={employee ? "Ouvre la mutation contractuelle (même formulaire que « Gérer »)" : "Chargement de l'employé…"}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-camublue-900 text-white text-sm font-semibold hover:bg-camublue-800 transition shadow-sm disabled:opacity-50"
+            >
+              <RefreshCw size={15} />
+              Renouveler le contrat
+            </button>
             <button
               onClick={onClose}
               className="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
@@ -227,6 +249,19 @@ export default function AlerteEmployeeDetailModal({ alerte, onClose }: Props) {
           </div>
         </motion.div>
       </div>
+
+      <ContractChangeModal
+        open={renewOpen}
+        employee={employee}
+        initialEventType={RENEW_EVENT[alerte.type_alerte]}
+        onClose={() => setRenewOpen(false)}
+        onSuccess={(updated) => {
+          setRenewOpen(false);
+          setEmployee(updated);
+          onRenewed?.();
+          onClose();
+        }}
+      />
     </AnimatePresence>
   );
 }

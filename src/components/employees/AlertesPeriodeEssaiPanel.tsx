@@ -26,12 +26,15 @@ export default function AlertesPeriodeEssaiPanel({
   services = [],
   serviceFiltre = "TOUS",
   onServiceFiltreChange,
+  onRefresh,
 }: {
   alertes: AlertePeriodeEssai[];
   loading: boolean;
   services?: string[];
   serviceFiltre?: string;
   onServiceFiltreChange?: (service: string) => void;
+  /** Recharge les alertes (après un renouvellement de contrat) */
+  onRefresh?: () => void;
 }) {
   const [search,   setSearch]   = useState("");
   const [selected, setSelected] = useState<AlertePeriodeEssai | null>(null);
@@ -301,6 +304,7 @@ export default function AlertesPeriodeEssaiPanel({
       <AlerteEmployeeDetailModal
         alerte={selected}
         onClose={() => setSelected(null)}
+        onRenewed={onRefresh}
       />
     </>
   );

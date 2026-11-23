@@ -291,6 +291,7 @@ export default function AlertesEmployesPage() {
             services={services}
             serviceFiltre={serviceFiltre}
             onServiceFiltreChange={setServiceFiltre}
+            onRefresh={fetchAlertes}
           />
         </div>
 

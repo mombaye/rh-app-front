@@ -403,6 +403,40 @@ export const leaveRequestService = {
   },
 
   /**
+   * POST /api/leaves/requests/<id>/dg_validate/
+   * Clôture DG : PENDING_DG → APPROVED, délivre l'attestation de congé
+   */
+  dgValidate: async (id: number): Promise<LeaveRequest> => {
+    const res = await api.post(`${API}/requests/${id}/dg_validate/`, {});
+    return res.data;
+  },
+
+  /** POST /api/leaves/requests/<id>/dg_reject/ — rejet par le DG (PENDING_DG → REJECTED) */
+  dgReject: async (id: number, rejectReason: string): Promise<LeaveRequest> => {
+    const res = await api.post(`${API}/requests/${id}/dg_reject/`, { reject_reason: rejectReason });
+    return res.data;
+  },
+
+  /** GET /api/leaves/requests/<id>/attestation/ — télécharge l'attestation de congé (PDF) */
+  downloadAttestation: async (id: number, regenerate = false): Promise<void> => {
+    const res = await api.get(`${API}/requests/${id}/attestation/`, {
+      params: regenerate ? { regenerate: 1 } : {},
+      responseType: "blob",
+    });
+    const disposition: string = res.headers?.["content-disposition"] ?? "";
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+    const filename = match ? decodeURIComponent(match[1]) : `attestation_conge_${id}.pdf`;
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  /**
    * POST /api/leaves/requests/<id>/hr_reject/
    * Rejet final RH : PENDING_RH → REJECTED
    */

@@ -34,6 +34,7 @@ import { LeaveBalance, LeaveRequest, LeaveRequestCreate, LeaveType, HolidayCheck
 import AnticipationLeaveForm from "@/components/leaves/AnticipationLeaveForm";
 import toast from "react-hot-toast";
 import { COUNTRY } from "@/config/features";
+import { AttestationButton } from "@/components/leaves/LeaveClosureBlock";
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, {
@@ -43,6 +44,7 @@ const STATUS_CONFIG: Record<string, {
   PENDING:        { label: "En attente",        color: "#d97706", bg: "#fffbeb", dot: "bg-amber-400",   Icon: Clock,        textColor: "text-amber-700",  borderColor: "border-amber-200"  },
   PENDING_SECOND: { label: "2ème validation",   color: "#ea580c", bg: "#fff7ed", dot: "bg-orange-400",  Icon: Clock,        textColor: "text-orange-700", borderColor: "border-orange-200" },
   PENDING_RH:     { label: "Validation RH",     color: "#7c3aed", bg: "#f5f3ff", dot: "bg-purple-400",  Icon: Clock,        textColor: "text-purple-700", borderColor: "border-purple-200" },
+  PENDING_DG:     { label: "Clôture DG",     color: "#7c3aed", bg: "#f5f3ff", dot: "bg-purple-400",  Icon: Clock,        textColor: "text-purple-700", borderColor: "border-purple-200" },
   APPROVED:       { label: "Approuvé",          color: "#059669", bg: "#f0fdf4", dot: "bg-green-500",   Icon: CheckCircle2, textColor: "text-green-700",  borderColor: "border-green-200"  },
   REJECTED:       { label: "Rejeté",            color: "#dc2626", bg: "#fef2f2", dot: "bg-red-500",     Icon: XCircle,      textColor: "text-red-700",    borderColor: "border-red-200"    },
   CANCELLED:      { label: "Annulé",            color: "#64748b", bg: "#f8fafc", dot: "bg-gray-400",    Icon: XCircle,      textColor: "text-gray-500",   borderColor: "border-gray-200"   },
@@ -958,13 +960,31 @@ function ValidationChain({ r }: { r: LeaveRequest }) {
     }
   }
 
-  // Étape finale RH (si PENDING_RH ou déjà traité par RH)
-  if (r.status === "PENDING_RH" || (r.status === "APPROVED" && (hasN1 || hasN2))) {
+  // Clôture RH puis DG (Burkina Faso) : le DG délivre l'attestation de congé
+  const dgClosure = r.status === "PENDING_DG" || !!r.dg_reviewed_at;
+  if (dgClosure) {
+    const rhRejected = r.status === "REJECTED" && !r.dg_reviewed_at;
+    steps.push({
+      label:  "Clôture RH",
+      name:   r.hr_reviewer?.full_name ?? null,
+      date:   fmtDt(r.hr_reviewed_at),
+      status: rhRejected ? "rejected" : "done",
+    });
+    const dgRejected = r.status === "REJECTED" && !!r.dg_reviewed_at;
+    steps.push({
+      label:  "Clôture DG · attestation",
+      name:   r.dg_reviewer?.full_name ?? null,
+      date:   fmtDt(r.dg_reviewed_at),
+      note:   dgRejected ? r.reject_reason : null,
+      status: r.status === "PENDING_DG" ? "waiting" : dgRejected ? "rejected" : "done",
+    });
+  } else if (r.status === "PENDING_RH" || (r.status === "APPROVED" && (hasN1 || hasN2))) {
+    // Étape finale RH (si PENDING_RH ou déjà traité par RH)
     const rhDone = r.status === "APPROVED";
     steps.push({
       label:  "Validation RH",
-      name:   rhDone && r.reviewed_by && !hasN1 ? r.reviewed_by.full_name : null,
-      date:   rhDone ? fmtDt(r.reviewed_at) : null,
+      name:   r.hr_reviewer?.full_name ?? (rhDone && r.reviewed_by && !hasN1 ? r.reviewed_by.full_name : null),
+      date:   rhDone ? fmtDt(r.hr_reviewed_at ?? r.reviewed_at) : null,
       status: r.status === "PENDING_RH" ? "waiting" : rhDone ? "done" : "pending",
     });
   }
@@ -1187,6 +1207,9 @@ function LeaveDetailModal({ req, onClose, onEdit, onRefresh }: LeaveDetailModalP
 
             {/* Circuit de validation */}
             <ValidationChain r={localReq} />
+
+            {/* Attestation de congé (délivrée à la clôture DG) */}
+            <AttestationButton req={localReq} className="py-2.5 text-sm" />
 
             {/* Motif de rejet */}
             {localReq.reject_reason && (

@@ -18,13 +18,14 @@ import toast from "react-hot-toast";
 // ─── Config statuts ───────────────────────────────────────────────────────────
 const PAGE_SIZE = 10;
 
-type DisplayStatus = "PENDING_RH" | "PENDING" | "PENDING_SECOND" | "APPROVED" | "REJECTED" | "CANCELLED";
+type DisplayStatus = "PENDING_RH" | "PENDING_DG" | "PENDING" | "PENDING_SECOND" | "APPROVED" | "REJECTED" | "CANCELLED";
 
 const STATUS_CFG: Record<DisplayStatus, {
   label: string; color: string; bg: string; dot: string;
   Icon: React.ElementType; textColor: string; borderColor: string;
 }> = {
   PENDING_RH:     { label: "Attente RH",      color: "#7c3aed", bg: "#f5f3ff", dot: "bg-purple-500",  Icon: Clock,        textColor: "text-purple-700", borderColor: "border-purple-200" },
+  PENDING_DG:     { label: "Clôture DG",      color: "#7c3aed", bg: "#f5f3ff", dot: "bg-purple-500",  Icon: Clock,        textColor: "text-purple-700", borderColor: "border-purple-200" },
   PENDING:        { label: "Chez le manager",  color: "#d97706", bg: "#fffbeb", dot: "bg-amber-400",   Icon: Clock,        textColor: "text-amber-700",  borderColor: "border-amber-200"  },
   PENDING_SECOND: { label: "2ème validation",  color: "#ea580c", bg: "#fff7ed", dot: "bg-orange-400",  Icon: Clock,        textColor: "text-orange-700", borderColor: "border-orange-200" },
   APPROVED:       { label: "Approuvé",         color: "#059669", bg: "#f0fdf4", dot: "bg-green-500",   Icon: CheckCircle2, textColor: "text-green-700",  borderColor: "border-green-200"  },

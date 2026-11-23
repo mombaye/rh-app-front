@@ -38,6 +38,7 @@ import { ImSpinner2 } from "react-icons/im";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { COUNTRY } from "@/config/features";
+import LeaveClosureBlock from "@/components/leaves/LeaveClosureBlock";
 
 // ������ Helpers ��������������������������������������������������������������������������������������������������������������������������������
 const fmt = (d: string) =>
@@ -49,6 +50,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   PENDING:        { label: "En attente",      color: "#1d4ed8", bg: "#eff6ff", Icon: Clock,        textColor: "text-blue-700",   borderColor: "border-blue-200"  },
   PENDING_SECOND: { label: "2ème validation", color: "#1e40af", bg: "#dbeafe", Icon: Clock,        textColor: "text-blue-800",   borderColor: "border-blue-300"  },
   PENDING_RH:     { label: "Validation RH",   color: "#7c3aed", bg: "#f5f3ff", Icon: Clock,        textColor: "text-purple-700", borderColor: "border-purple-200" },
+  PENDING_DG:     { label: "Clôture DG",      color: "#7c3aed", bg: "#f5f3ff", Icon: Clock,        textColor: "text-purple-700", borderColor: "border-purple-200" },
   APPROVED:       { label: "Approuvé",        color: "#059669", bg: "#f0fdf4", Icon: CheckCircle2, textColor: "text-green-700",  borderColor: "border-green-200"  },
   REJECTED:       { label: "Rejeté",          color: "#dc2626", bg: "#fef2f2", Icon: XCircle,      textColor: "text-red-700",    borderColor: "border-red-200"    },
   CANCELLED:      { label: "Annulé",          color: "#64748b", bg: "#f8fafc", Icon: XCircle,      textColor: "text-gray-500",   borderColor: "border-gray-200"   },
@@ -262,7 +264,8 @@ function ApproveModal({
             </div>
             <div>
               <h3 className="text-white font-bold text-base">
-                {isPendingSecond ? "Validation N+2 → Approuver" : "Approuver la demande"}
+                {req.status === "PENDING_DG" ? "Clôturer le congé (DG)"
+                  : isPendingSecond ? "Validation N+2 → Approuver" : "Approuver la demande"}
               </h3>
               <p className="text-green-100 text-xs">{req.employee.full_name}</p>
             </div>
@@ -286,7 +289,17 @@ function ApproveModal({
             )}
           </div>
 
-          {!isPendingSecond && hasN2 && (
+          {req.status === "PENDING_DG" && (
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 flex items-start gap-2">
+              <AlertCircle size={15} className="text-purple-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-purple-700">
+                Le congé a été validé par le RH. Votre clôture l'approuve définitivement et délivre
+                l'<strong>attestation de congé</strong> à l'employé (envoyée par e-mail).
+              </p>
+            </div>
+          )}
+
+          {!isPendingSecond && hasN2 && req.status !== "PENDING_DG" && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
               <AlertCircle size={15} className="text-blue-500 mt-0.5 shrink-0" />
               <div>
@@ -736,6 +749,8 @@ function LeaveDetailModal({
             )}
           </div>
 
+          <LeaveClosureBlock req={req} />
+
           {/* Justificatif */}
           {req.leave_type.requires_justification && (
             <div className={`rounded-xl p-4 space-y-1.5 ${
@@ -901,6 +916,9 @@ function ApprovalCard({
               )}
               {req.status === "PENDING_RH" && (
                 <span className="px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold text-[10px] border border-purple-300">Validation RH</span>
+              )}
+              {req.status === "PENDING_DG" && (
+                <span className="px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold text-[10px] border border-purple-300">Clôture DG · attestation</span>
               )}
               {(req.status === "PENDING" || req.status === "PENDING_SECOND") && !isHistory && (
                 <span className="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold text-[10px] border border-amber-200">Votre validation manager</span>
@@ -1110,6 +1128,7 @@ function SectionFilterModal({
                     <option value="PENDING">En attente (N+1)</option>
                     <option value="PENDING_SECOND">En attente (N+2)</option>
                     <option value="PENDING_RH">En attente (RH)</option>
+                    <option value="PENDING_DG">En attente (clôture DG)</option>
                     <option value="REVOKED">Revoque</option>
                     <option value="CANCELLED">Annule</option>
                   </select>
@@ -1239,6 +1258,8 @@ interface ManagerApprovalsPageProps {
 export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, isRh = false }: ManagerApprovalsPageProps) {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
+  // DG : clôture les congés validés par le RH et délivre l'attestation (Burkina Faso)
+  const canDg = !!user?.can_close_leaves_as_dg;
 
   const [sectionTab,    setSectionTab]    = useState<SectionTab>("pending_all");
   const [missionPendingCount, setMissionPendingCount] = useState(0);
@@ -1277,6 +1298,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
         exitAuthorizationService.getAll({ manager_employee_id: employeeId, status: "PENDING" } as any),
         missionService.list({ status: "PENDING" }),
         ...(isRh ? [leaveRequestService.getAll({ status: "PENDING_RH" } as any)] : []),
+        ...(canDg ? [leaveRequestService.getAll({ status: "PENDING_DG" } as any)] : []),
       ]);
 
       // Congés
@@ -1305,7 +1327,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
       setLoading(false);
       setLoadingAll(false);
     }
-  }, [employeeId, isRh]);
+  }, [employeeId, isRh, canDg]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -1313,7 +1335,9 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
     return onEmployeesSynced(() => { refresh(); });
   }, [refresh]);
 
-  const PENDING_STATUSES = ["PENDING", "PENDING_SECOND", ...(isRh ? ["PENDING_RH"] : [])] as string[];
+  const PENDING_STATUSES = [
+    "PENDING", "PENDING_SECOND", ...(isRh ? ["PENDING_RH"] : []), ...(canDg ? ["PENDING_DG"] : []),
+  ] as string[];
 
   // En attente de MA décision : je suis le validateur courant de la chaîne.
   // Une fois que j'ai validé (ou rejeté), la demande ne reste que dans l'historique,
@@ -1321,6 +1345,7 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
   const awaitsMe = (r: LeaveRequest): boolean => {
     if (!PENDING_STATUSES.includes(r.status)) return false;
     if (r.status === "PENDING_RH") return isRh;
+    if (r.status === "PENDING_DG") return canDg;
     const current = (r.pending_approvers ?? []).filter(a => a.is_current);
     // Pas de chaîne connue (anciennes demandes) : comportement précédent
     if (current.length === 0) return true;
@@ -1362,8 +1387,16 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
     if (!employeeId) return;
     const req = requests.find(r => r.id === reqId);
     try {
+      if (canDg && req?.status === "PENDING_DG") {
+        // Clôture DG → congé approuvé, attestation délivrée
+        await leaveRequestService.dgValidate(reqId);
+        toast.success("Congé clôturé — attestation de congé délivrée.");
+        setApproveTarget(null);
+        refresh();
+        return;
+      }
       if (isRh && req?.status === "PENDING_RH") {
-        // Validation finale RH
+        // Validation finale RH (ou clôture RH avant le DG)
         await leaveRequestService.hrValidate(reqId, employeeId);
       } else {
         // Approbation manager (N+1 ou N+2) � même si l'utilisateur est RH
@@ -1381,7 +1414,9 @@ export default function ManagerApprovalsPage({ layout: Layout = ManagerLayout, i
     if (!employeeId) return;
     const req = requests.find(r => r.id === reqId);
     try {
-      if (isRh && req?.status === "PENDING_RH") {
+      if (canDg && req?.status === "PENDING_DG") {
+        await leaveRequestService.dgReject(reqId, reason);
+      } else if (isRh && req?.status === "PENDING_RH") {
         // Rejet RH
         await leaveRequestService.hrReject(reqId, reason, employeeId);
       } else {

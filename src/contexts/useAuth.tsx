@@ -23,6 +23,10 @@ type User = {
   department_name?: string | null;
   is_hse?: boolean;
   roles?: UserRole[];
+  /** Congés : clôture RH → DG activée (Burkina Faso) */
+  leave_rh_dg_closure?: boolean;
+  /** Congés : l'utilisateur peut clôturer en tant que DG (attestation de congé) */
+  can_close_leaves_as_dg?: boolean;
 };
 
 type AuthContextType = {

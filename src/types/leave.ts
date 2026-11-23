@@ -54,6 +54,7 @@ export type LeaveStatus =
   | "PENDING"
   | "PENDING_SECOND"
   | "PENDING_RH"
+  | "PENDING_DG"      // clôture DG après le RH (Burkina Faso)
   | "APPROVED"
   | "REJECTED"
   | "CANCELLED"
@@ -94,6 +95,11 @@ export interface LeaveRequest {
   // Validation RH finale
   hr_reviewer:    EmployeeMini | null;
   hr_reviewed_at: string | null;
+
+  // Clôture DG + attestation de congé (Burkina Faso)
+  dg_reviewer?:     EmployeeMini | null;
+  dg_reviewed_at?:  string | null;
+  has_attestation?: boolean;
 
   // Révocation
   revoke_reason:                string;
