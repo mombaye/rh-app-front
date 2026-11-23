@@ -25,6 +25,8 @@ export interface PlanningRow {
   fixed_code?: string;
   /** Date de sortie (employé sorti) : les jours suivants sont grisés et non modifiables */
   exit_date?: string | null;
+  /** false : ligne vue en consultation seule (accès limité à une BL, hors de l'équipe de l'utilisateur) */
+  editable?: boolean;
   cells: PlanningCell[];
 }
 
@@ -32,6 +34,8 @@ export interface PlanningGrid {
   year: number;
   month: number;
   is_rh: boolean;
+  /** Accès en consultation seule : aucune saisie, ni export */
+  read_only?: boolean;
   days: { day: number; weekday: number; holiday: string }[];
   business_lines: string[];
   managers: string[];

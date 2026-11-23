@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, CalendarRange, ChevronLeft, ChevronRight, FileSpreadsheet, Layers, ListChecks, Loader2, Mail, Paintbrush, Search, Settings2, Table2, Upload, X as XIcon } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarRange, ChevronLeft, ChevronRight, Eye, FileSpreadsheet, Layers, ListChecks, Loader2, Mail, Paintbrush, Search, Settings2, Table2, Upload, X as XIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   CellKind, ImportSummary, PlanningCell, PlanningChange, PlanningGrid, PlanningRow, teamPlanningService,
@@ -161,6 +161,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
       if (single) {
         const row = rs[s.r0]; const cell = row?.cells[s.d0 - 1];
         if (!row || !cell || !lastEl.current) return;
+        if (row.editable === false) return;               // consultation seule
         if (cell.kind === "exited") return;
         if (cell.kind === "leave" && cell.auto) { toast("Congé approuvé dans Gestion des congés : non modifiable ici."); return; }
         if (b) paint([{ employee_id: row.employee_id, day: s.d0, row }], b);
@@ -170,7 +171,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
       const targets: Target[] = [];
       for (let r = Math.min(s.r0, s.r1); r <= Math.max(s.r0, s.r1); r++) {
         const row = rs[r];
-        if (!row || row.auto_filled) continue;           // lignes remplies d'office : une saisie à la fois
+        if (!row || row.auto_filled || row.editable === false) continue;   // remplies d'office / consultation seule
         for (let d = Math.min(s.d0, s.d1); d <= Math.max(s.d0, s.d1); d++) {
           const cell = row.cells[d - 1];
           // Congés approuvés, week-ends et fériés restent tels quels quand on tire sur plusieurs jours
@@ -189,7 +190,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
   }, [grid]);
 
   const onCellClick = (row: PlanningRow, cell: PlanningCell, day: number, el: HTMLElement) => {
-    if (cell.kind === "exited") return;
+    if (cell.kind === "exited" || row.editable === false) return;
     if (cell.kind === "leave" && cell.auto) {
       toast("Congé approuvé dans Gestion des congés : non modifiable ici.");
       return;
@@ -420,7 +421,11 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
         </div>
       </div>
       <div className="flex items-center gap-2 mb-2 min-h-[28px] text-xs text-slate-500">
-        {brush ? (
+        {grid?.read_only ? (
+          <span className="flex items-center gap-2 bg-slate-100 text-slate-600 rounded-full px-3 py-1" role="status">
+            <Eye size={12} /> Consultation seule{grid.business_lines.length ? ` — ${grid.business_lines.join(", ")}` : ""} : la saisie est faite par les responsables.
+          </span>
+        ) : brush ? (
           <span className="flex items-center gap-2 bg-[#003c71] text-white rounded-full pl-3 pr-1.5 py-1" role="status">
             <Paintbrush size={12} /> Pinceau : <strong>{brush}</strong> — cliquez ou tirez sur les jours à remplir
             <button onClick={() => setBrush("")} aria-label="Arrêter le pinceau (Échap)" title="Arrêter (Échap)"
@@ -485,7 +490,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
                             {row.exit_date && <span className="ml-1.5 text-slate-500 font-semibold" title="Employé sorti : les jours suivants sont grisés">· sorti le {row.exit_date.split("-").reverse().join("/")}</span>}
                             {row.auto_filled && <span className="ml-1.5 text-emerald-600 font-semibold">· {row.fixed_code ? "code fixe" : "100 % d'office"}</span>}</div>
                         </div>
-                        {!row.auto_filled && <div className="flex shrink-0">
+                        {!row.auto_filled && row.editable !== false && <div className="flex shrink-0">
                           <button title="Remplir les jours vides et automatiques avec un projet"
                             onClick={(e) => openPicker("fill", row, e.currentTarget)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-[#003c71] hover:bg-[#003c71]/10">
@@ -497,8 +502,9 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
                     {row.cells.map((cell, i) => (
                       <td key={i} className="border-b border-slate-100 p-0.5">
                         <button
+                          disabled={row.editable === false}
                           onMouseDown={(e) => {
-                            if (e.button !== 0) return;
+                            if (e.button !== 0 || row.editable === false) return;
                             e.preventDefault();
                             drag.current = { r0: ri, d0: i + 1 };
                             lastEl.current = e.currentTarget;
@@ -511,7 +517,7 @@ export default function TeamPlanningBoard({ rhPage = false }: { rhPage?: boolean
                           }}
                           onClick={(e) => { if (e.detail === 0) onCellClick(row, cell, i + 1, e.currentTarget); }}   // clavier
                           title={cellTitle(cell)}
-                          className={`w-full h-7 rounded truncate px-0.5 ${cellStyle(cell)} ${
+                          className={`w-full h-7 rounded truncate px-0.5 disabled:cursor-default ${cellStyle(cell)} ${
                             sel && ri >= Math.min(sel.r0, sel.r1) && ri <= Math.max(sel.r0, sel.r1)
                               && i + 1 >= Math.min(sel.d0, sel.d1) && i + 1 <= Math.max(sel.d0, sel.d1)
                               ? "ring-2 ring-[#003c71] ring-inset" : ""}`}>
