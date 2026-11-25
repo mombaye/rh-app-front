@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "@/layouts/AppLayout";
 import LeaveRequestForm from "@/components/leaves/LeaveRequestForm";
 import LeaveCalendar from "@/components/leaves/LeaveCalendar";
+import AttestationTemplateModal from "@/components/leaves/AttestationTemplateModal";
 import { useAuth } from "@/contexts/useAuth";
 import { leaveRequestService, leaveTypeService, leaveBalanceService } from "@/services/leaveService";
 import { getEmployees } from "@/services/employeeService";
@@ -19,7 +20,7 @@ import {
   FileCheck, Upload, ExternalLink, Users, Settings2, Wallet,
   Search, History, Info, Trash2, Send, FileSpreadsheet,
   CheckCircle, XOctagon, Mail, GitBranch, UserX, ShieldCheck,
-  AlertCircle, SlidersHorizontal, Check, LogOut, FileDown,
+  AlertCircle, SlidersHorizontal, Check, LogOut, FileDown, FileText,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ExportColumnKey, ExportColumnDef } from "@/types/leave";
@@ -178,6 +179,9 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
   }, [tab, contractType]);
   const [showForm,       setShowForm]       = useState(false);
   const [showLeaveTypes, setShowLeaveTypes] = useState(false);
+  // Modèle Word de l'attestation de congé (circuit RH → DG, Burkina Faso)
+  const [showAttestationTpl, setShowAttestationTpl] = useState(false);
+  const attestationEnabled = !!user?.leave_rh_dg_closure;
   const [newTypeTrigger, setNewTypeTrigger] = useState(0);
   const [showHierarchy,  setShowHierarchy]  = useState(false);
   const [showFiltersModal, setShowFiltersModal] = useState(false);
@@ -492,6 +496,13 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
                   )}
                 </button>
               </>)}
+              {attestationEnabled && (
+                <button onClick={() => setShowAttestationTpl(true)} title="Modèle Word de l'attestation de congé"
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-camublue-300 text-sm font-semibold transition">
+                  <FileText className="h-4 w-4" />
+                  <span className="hidden sm:inline">Modèle d'attestation</span>
+                </button>
+              )}
               {!contractFilter && (<>
                 <button onClick={() => setShowHierarchy(true)}
                   className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-camublue-300 text-sm font-semibold transition">
@@ -1146,6 +1157,8 @@ export default function LeavePage({ contractFilter }: { contractFilter?: Contrac
           </div>
         )}
       </AnimatePresence>
+
+      {showAttestationTpl && <AttestationTemplateModal onClose={() => setShowAttestationTpl(false)} />}
 
       {/* ── Modal Types de congés ─────────────────────────────────────────── */}
       <AnimatePresence>
