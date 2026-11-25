@@ -105,14 +105,22 @@ export default function AttestationTemplateModal({ onClose }: { onClose: () => v
               </div>
             </div>
 
-            {/* Import */}
+            {/* Télécharger le modèle à remplir, puis l'importer */}
             <div>
-              <button onClick={() => input.current?.click()} disabled={!!busy}
-                className="w-full flex flex-col items-center gap-1 rounded-xl border-2 border-dashed border-camublue-200 bg-camublue-50/40 hover:bg-camublue-50 px-4 py-5 text-camublue-900 disabled:opacity-60">
-                {busy === "upload" ? <Loader2 className="animate-spin" /> : <Upload size={20} />}
-                <span className="text-sm font-semibold">Importer un nouveau modèle (.docx)</span>
-                <span className="text-xs text-slate-500">Le modèle importé remplace le modèle utilisé pour les prochaines attestations.</span>
-              </button>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <button onClick={() => attestationTemplateService.download("default", "Modele_Attestation_Conge.docx")}
+                  className="flex flex-col items-center gap-1 rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 px-4 py-5 text-emerald-800">
+                  <Download size={20} />
+                  <span className="text-sm font-semibold">1. Télécharger le modèle à remplir</span>
+                  <span className="text-xs text-slate-500 text-center">Modèle Word (.docx) avec les champs {"{{…}}"} déjà en place, à modifier dans Word.</span>
+                </button>
+                <button onClick={() => input.current?.click()} disabled={!!busy}
+                  className="flex flex-col items-center gap-1 rounded-xl border-2 border-dashed border-camublue-200 bg-camublue-50/40 hover:bg-camublue-50 px-4 py-5 text-camublue-900 disabled:opacity-60">
+                  {busy === "upload" ? <Loader2 className="animate-spin" /> : <Upload size={20} />}
+                  <span className="text-sm font-semibold">2. Importer le modèle (.docx)</span>
+                  <span className="text-xs text-slate-500 text-center">Il remplace le modèle utilisé pour les prochaines attestations.</span>
+                </button>
+              </div>
               <input ref={input} type="file" accept=".docx" className="hidden" onChange={(e) => upload(e.target.files?.[0])} />
               {error && (
                 <div className="mt-2 text-sm text-rose-700 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
