@@ -2667,13 +2667,15 @@ function ManageModal({
             </div>
           )}
 
-          {/* ── Attestation de congé (délivrée à la clôture DG) ── */}
+          {/* ── Attestation de congé PDF (clôture DG, ou congé approuvé avant la clôture RH → DG) ── */}
           {isApproved && r.has_attestation && (
             <>
               <ActionBtn
                 icon={FileDown}
-                label="Télécharger l'attestation de congé"
-                description={`Délivrée à la clôture DG${r.dg_reviewer ? ` (${r.dg_reviewer.full_name})` : ""}`}
+                label="Télécharger l'attestation de congé (PDF)"
+                description={r.dg_reviewed_at
+                  ? `Délivrée à la clôture DG${r.dg_reviewer ? ` (${r.dg_reviewer.full_name})` : ""}`
+                  : "Congé approuvé : attestation générée au format PDF"}
                 onClick={() => {
                   leaveRequestService.downloadAttestation(r.id)
                     .catch(() => toast.error("Impossible de télécharger l'attestation de congé."));

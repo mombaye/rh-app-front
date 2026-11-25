@@ -8,7 +8,7 @@ import type { LeaveRequest } from "@/types/leave";
 const fmt = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "";
 
-/** Télécharge l'attestation de congé (délivrée à la clôture DG). */
+/** Télécharge l'attestation de congé en PDF (clôture DG, ou congé déjà approuvé). */
 export function AttestationButton({ req, className = "" }: { req: LeaveRequest; className?: string }) {
   const [loading, setLoading] = useState(false);
   if (!req.has_attestation) return null;
@@ -30,7 +30,7 @@ export function AttestationButton({ req, className = "" }: { req: LeaveRequest; 
       className={`flex items-center justify-center gap-2 w-full py-2 rounded-xl bg-[#003c71] hover:bg-[#002a50] text-white text-xs font-bold transition disabled:opacity-60 ${className}`}
     >
       {loading ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}
-      Télécharger l'attestation de congé
+      Télécharger l'attestation de congé (PDF)
     </button>
   );
 }
@@ -60,6 +60,15 @@ export default function LeaveClosureBlock({ req }: { req: LeaveRequest }) {
   const { user } = useAuth();
   if (!user?.leave_rh_dg_closure) return null;
   if (["CANCELLED"].includes(req.status) && !req.hr_reviewed_at) return null;
+  // Congé approuvé avant la mise en place de la clôture RH → DG : seulement le téléchargement
+  if (req.status === "APPROVED" && !req.dg_reviewed_at) {
+    return req.has_attestation ? (
+      <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Attestation de congé</p>
+        <AttestationButton req={req} />
+      </div>
+    ) : null;
+  }
 
   const rejected = req.status === "REJECTED";
   const rhDone = !!req.hr_reviewed_at && (req.status !== "PENDING_RH");
