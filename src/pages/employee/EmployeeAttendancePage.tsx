@@ -17,7 +17,7 @@ import autoTable from "jspdf-autotable";
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DayRecord = {
   date: string;
-  status: "present" | "absent" | "incomplete" | "telework";
+  status: "present" | "absent" | "incomplete" | "telework" | "disponibilite";
   in_time: string | null;
   out_time: string | null;
   worked_minutes: number;
@@ -50,6 +50,7 @@ function statusBadge(status: DayRecord["status"]) {
   if (status === "present")    return { label: "Présent",   cls: "bg-green-100 text-green-700", icon: <CheckCircle2 size={13}/> };
   if (status === "incomplete") return { label: "Incomplet", cls: "bg-amber-100 text-amber-700", icon: <AlertTriangle size={13}/> };
   if (status === "telework")   return { label: "Télé-Travail", cls: "bg-teal-100 text-teal-700", icon: <CheckCircle2 size={13}/> };
+  if (status === "disponibilite") return { label: "Congé de disponibilité", cls: "bg-slate-200 text-slate-700", icon: <CheckCircle2 size={13}/> };
   return                              { label: "Absent",    cls: "bg-red-100 text-red-600",     icon: <XCircle size={13}/> };
 }
 
@@ -668,6 +669,7 @@ function AttendanceCalendar({ days, year, month, holidays = [] }: {
                 rec.status === "present"    ? "bg-emerald-50 border-emerald-200" :
                 rec.status === "absent"     ? "bg-red-50 border-red-200"         :
                 rec.status === "telework"   ? "bg-teal-50 border-teal-200"       :
+                rec.status === "disponibilite" ? "bg-slate-100 border-slate-200"  :
                                               "bg-amber-50 border-amber-200";
 
               return (

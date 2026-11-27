@@ -30,6 +30,15 @@ const EMPTY_FORM: FormState = {
 
 // ── Utilitaires de date ───────────────────────────────────────────────────────
 const _pad = (n: number) => String(n).padStart(2, "0");
+/** Disponibilité : 1 an maximum → dernier jour possible = même date l'année suivante − 1 jour. */
+function _oneYearEnd(start: string): string {
+  const [y, m, d] = start.split("-").map(Number);
+  const next = new Date(Date.UTC(y + 1, m - 1, d));
+  if (next.getUTCMonth() !== m - 1) next.setUTCDate(0);          // 29 février → 28 février
+  next.setUTCDate(next.getUTCDate() - 1);
+  return next.toISOString().slice(0, 10);
+}
+
 function _shiftDate(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const r = new Date(y, m - 1, d + days);
@@ -261,7 +270,10 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
 
   // ── Plafond / plancher date de fin dérivés du type ────────────────────────
   // Date de fin max autorisée (start + max_days - 1)
-  const maxEndDate: string | undefined = (!isFixedDuration && form.start_date && (selectedType?.max_days_per_request ?? 0) > 0)
+  const isDispo = !!selectedType?.suspends_accrual;
+  const maxEndDate: string | undefined = (!isFixedDuration && form.start_date && isDispo)
+    ? _oneYearEnd(form.start_date)
+    : (!isFixedDuration && form.start_date && (selectedType?.max_days_per_request ?? 0) > 0)
     ? _shiftDate(form.start_date, selectedType!.max_days_per_request - 1)
     : undefined;
 
@@ -801,7 +813,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
               )}
               {!isFixedDuration && maxEndDate && form.start_date && (
                 <p className="text-xs text-blue-400 mt-1">
-                  Date de fin limitée au {new Date(maxEndDate + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} ({selectedType!.max_days_per_request}j max)
+                  Date de fin limitée au {new Date(maxEndDate + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long", ...(isDispo ? { year: "numeric" } : {}) })} ({isDispo ? "disponibilité : 1 an max, solde de congés figé pendant la période" : `${selectedType!.max_days_per_request}j max`})
                 </p>
               )}
             </div>

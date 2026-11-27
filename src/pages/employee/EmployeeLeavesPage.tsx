@@ -184,6 +184,15 @@ function parseLeaveError(err: any): string {
 
 // ── Helpers date ─────────────────────────────────────────────────────────────
 const _ep = (n: number) => String(n).padStart(2, "0");
+/** Disponibilité : 1 an maximum → dernier jour possible = même date l'année suivante − 1 jour. */
+function _oneYearEnd(start: string): string {
+  const [y, m, d] = start.split("-").map(Number);
+  const next = new Date(Date.UTC(y + 1, m - 1, d));
+  if (next.getUTCMonth() !== m - 1) next.setUTCDate(0);          // 29 février → 28 février
+  next.setUTCDate(next.getUTCDate() - 1);
+  return next.toISOString().slice(0, 10);
+}
+
 function _eAddDays(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const r = new Date(y, m - 1, d + days);
@@ -244,7 +253,10 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
   })();
 
   // Plafond / plancher de date de fin
-  const maxEndDate = (!isFixedDuration && form.start_date && maxDays > 0)
+  const isDispo    = !!selectedType?.suspends_accrual;
+  const maxEndDate = (!isFixedDuration && form.start_date && isDispo)
+    ? _oneYearEnd(form.start_date)
+    : (!isFixedDuration && form.start_date && maxDays > 0)
     ? _eAddDays(form.start_date, maxDays - 1) : undefined;
   const minEndDate = (!isFixedDuration && form.start_date && minDays > 0)
     ? _eAddDays(form.start_date, minDays - 1) : (form.start_date || undefined);
@@ -588,7 +600,7 @@ function LeaveFormModal({ mode, initial, leaveTypes, employeeId, balances, onClo
               />
               {!isFixedDuration && maxEndDate && form.start_date && (
                 <p className="text-xs text-blue-400 mt-1">
-                  Limité au {new Date(maxEndDate + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} ({maxDays}j max)
+                  Limité au {new Date(maxEndDate + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long", ...(isDispo ? { year: "numeric" } : {}) })} ({isDispo ? "disponibilité : 1 an max, solde de congés figé pendant la période" : `${maxDays}j max`})
                 </p>
               )}
               {isFixedDuration && !form.start_date && (

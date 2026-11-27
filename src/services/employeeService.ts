@@ -742,7 +742,7 @@ export const fetchMyAttendance = async (start: string, end: string) =>
     end: string;
     days: {
       date: string;
-      status: "present" | "absent" | "incomplete" | "telework";
+      status: "present" | "absent" | "incomplete" | "telework" | "disponibilite";
       in_time: string | null;
       out_time: string | null;
       worked_minutes: number;

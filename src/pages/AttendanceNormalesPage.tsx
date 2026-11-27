@@ -26,7 +26,7 @@ import { FEATURES } from "@/config/features";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ViewMode = "daily" | "weekly" | "monthly";
-type StatusFilter = "all" | "ok" | "absent" | "on_leave" | "on_mission" | "telework" | "incomplete" | "anomaly" | "late" | "deficit";
+type StatusFilter = "all" | "ok" | "absent" | "on_leave" | "on_mission" | "telework" | "disponibilite" | "incomplete" | "anomaly" | "late" | "deficit";
 type MotifType = "absent" | "not_pointing";
 type WorkContext = "Normale" | "Ramadan" | string;
 
@@ -81,7 +81,7 @@ interface CompensationResult {
 
 interface FlatRecord {
   employee_id: number; matricule: string; full_name: string; department: string; project: string;
-  status: "ok" | "absent" | "on_leave" | "on_mission" | "telework" | "incomplete" | "anomaly";
+  status: "ok" | "absent" | "on_leave" | "on_mission" | "telework" | "disponibilite" | "incomplete" | "anomaly";
   is_late_api: boolean; late_label_api: string | null; late_minutes_api: number;
   computed_late_minutes: number; overtime_minutes: number;
   compensation: CompensationResult; deficit_minutes: number;
@@ -100,7 +100,7 @@ interface SummaryRecord {
 interface Pointage {
   day: string; date: string;
   in_time: string | null; out_time: string | null;
-  status: "ok" | "absent" | "incomplete" | "anomaly" | "on_leave" | "on_mission" | "telework" | "today" | "upcoming";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "on_leave" | "on_mission" | "telework" | "disponibilite" | "today" | "upcoming";
 }
 
 // ─── Utilitaires ──────────────────────────────────────────────────────────────
@@ -183,6 +183,7 @@ const STATUS_CFG = {
   on_leave:   { label: "En Congé",  dot: "bg-sky-500",     badge: "bg-sky-50 text-sky-700 ring-sky-200" },
   on_mission: { label: "En Mission", dot: "bg-indigo-500",  badge: "bg-indigo-50 text-indigo-700 ring-indigo-200" },
   telework:   { label: "Télé-Travail", dot: "bg-teal-500",  badge: "bg-teal-50 text-teal-700 ring-teal-200" },
+  disponibilite: { label: "Congé de disponibilité", dot: "bg-slate-500", badge: "bg-slate-100 text-slate-700 ring-slate-300" },
   incomplete: { label: "Incomplet",  dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-800 ring-amber-200" },
   anomaly:    { label: "Anomalie",   dot: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 ring-violet-200" },
   today:      { label: "En cours",   dot: "bg-slate-400",   badge: "bg-slate-50 text-slate-500 ring-slate-200" },
@@ -196,6 +197,7 @@ const QUICK_FILTERS = [
   { key: "on_leave"  as StatusFilter, label: "En Congé",    dotColor: "bg-sky-400",    activeText: "text-sky-700",     activeBg: "bg-sky-50",    activeDot: "bg-sky-500"       },
   { key: "on_mission"as StatusFilter, label: "En Mission",   dotColor: "bg-indigo-400", activeText: "text-indigo-700",  activeBg: "bg-indigo-50", activeDot: "bg-indigo-500"    },
   { key: "telework"  as StatusFilter, label: "Télé-Travail", dotColor: "bg-teal-400",   activeText: "text-teal-700",    activeBg: "bg-teal-50",   activeDot: "bg-teal-500"      },
+  { key: "disponibilite" as StatusFilter, label: "Disponibilité", dotColor: "bg-slate-400", activeText: "text-slate-700", activeBg: "bg-slate-100", activeDot: "bg-slate-500" },
   { key: "late"      as StatusFilter, label: "Retards",      dotColor: "bg-orange-400", activeText: "text-orange-700",  activeBg: "bg-orange-50", activeDot: "bg-orange-500"    },
   { key: "incomplete"as StatusFilter, label: "Incomplets",   dotColor: "bg-amber-400",  activeText: "text-amber-800",   activeBg: "bg-amber-50",  activeDot: "bg-amber-500"     },
   { key: "anomaly"   as StatusFilter, label: "Anomalies",    dotColor: "bg-violet-400", activeText: "text-violet-700",  activeBg: "bg-violet-50", activeDot: "bg-violet-500"    },
@@ -302,6 +304,7 @@ function ExpandedDayTable({ records, dayDetails, isLoading }: {
     on_leave:   { label: "Congé",     cls: "bg-blue-50 text-blue-600" },
     on_mission: { label: "Mission",   cls: "bg-sky-50 text-sky-700" },
     telework:   { label: "Télé-Travail", cls: "bg-teal-50 text-teal-700" },
+    disponibilite: { label: "Congé de disponibilité", cls: "bg-slate-100 text-slate-700" },
     today:      { label: "En cours",  cls: "bg-slate-50 text-slate-500" },
     upcoming:   { label: "À venir",   cls: "bg-slate-50 text-slate-400" },
   };
@@ -1251,6 +1254,7 @@ function DetailModal({ open, onClose, employeeId, initialWeek }: {
                       : p.status === "on_leave"   ? "bg-sky-50 border-sky-100"
                       : p.status === "on_mission" ? "bg-purple-50 border-purple-100"
                       : p.status === "telework"   ? "bg-teal-50 border-teal-100"
+                      : p.status === "disponibilite" ? "bg-slate-50 border-slate-200"
                       :                             "bg-rose-50 border-rose-100";
 
                     const exitAuth = exitAuths.find(ea =>
@@ -1686,7 +1690,7 @@ export default function AttendanceNormalesPage() {
           const p = (r as any).project ?? (r as any).projet ?? (r as any).project_name ?? (r as any).site ?? null;
           return p ? String(p).toUpperCase() : (projectMap.get(mat) ?? "—");
         })(),
-        status: isDaily ? r.status : (r.telework_days ?? 0) > 0 && !r.absent_days && !r.on_leave_days && !r.on_mission_days ? "telework" : r.on_mission_days > 0 ? "on_mission" : r.on_leave_days > 0 ? "on_leave" : r.absent_days > 0 ? "absent" : r.incomplete_days > 0 ? "incomplete" : "ok",
+        status: isDaily ? r.status : (r.disponibilite_days ?? 0) > 0 && (r.disponibilite_days ?? 0) >= (r.on_leave_days ?? 0) && !r.absent_days ? "disponibilite" : (r.telework_days ?? 0) > 0 && !r.absent_days && !r.on_leave_days && !r.on_mission_days ? "telework" : r.on_mission_days > 0 ? "on_mission" : r.on_leave_days > 0 ? "on_leave" : r.absent_days > 0 ? "absent" : r.incomplete_days > 0 ? "incomplete" : "ok",
         is_late_api: r.is_late ?? r.late_days > 0,
         late_label_api: r.late_label ?? (r.late_days > 0 ? `${r.late_days}j · moy ${r.avg_late_minutes}min` : null),
         late_minutes_api: r.late_minutes ?? r.total_late_minutes ?? 0,

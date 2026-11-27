@@ -17,7 +17,7 @@ export interface DailyRecord {
   late_label: string | null;
   is_late: boolean;
   early_leave_minutes: number;
-  status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working" | "on_leave" | "on_mission" | "telework";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working" | "on_leave" | "on_mission" | "telework" | "disponibilite";
   is_planned: boolean;
   flags: Record<string, unknown>;
   on_mission?: boolean;
@@ -172,7 +172,7 @@ export interface DayDetail {
   date: string;
   weekday: number;
   weekday_label: string;
-  status: "ok" | "absent" | "incomplete" | "anomaly" | "on_leave" | "on_mission" | "telework" | "today" | "upcoming";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "on_leave" | "on_mission" | "telework" | "disponibilite" | "today" | "upcoming";
   in_time?: string | null;
   out_time?: string | null;
   worked_minutes: number;
@@ -239,7 +239,7 @@ export interface ShiftRecord {
   late_label: string | null;
   is_late: boolean;
   early_leave_minutes: number;
-  status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working" | "on_leave" | "on_mission" | "telework";
+  status: "ok" | "absent" | "incomplete" | "anomaly" | "not_working" | "on_leave" | "on_mission" | "telework" | "disponibilite";
   flags: Record<string, any>;
   is_replacement: boolean;
   replaced_by: string | null;
