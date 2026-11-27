@@ -85,7 +85,7 @@ export default function LeaveRequestForm({ onClose, onSuccess, contractType = "I
   // Load leave types
   useEffect(() => {
     setIsLoadingTypes(true);
-    leaveTypeService.getAll()
+    leaveTypeService.getRequestable()
       .then((types) => { setLeaveTypes(types); setIsLoadingTypes(false); })
       .catch(() => { setError("Impossible de charger les types de congé."); setIsLoadingTypes(false); });
   }, []);

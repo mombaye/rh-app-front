@@ -54,6 +54,7 @@ const SOURCE_LABEL: Record<string, string> = {
   pointage: "a pointé ce jour", mission: "mission validée", conge: "congé approuvé",
   maladie: "congé maladie approuvé", sortie: "sortie approuvée",
   pointage_incomplet: "entrée sans sortie ou sortie sans entrée, compté comme présent",
+  teletravail: "télétravail approuvé, compté comme présent",
 };
 
 const blLabel = (bl: string) => (bl === NO_BL || !bl ? "Sans BL" : bl);

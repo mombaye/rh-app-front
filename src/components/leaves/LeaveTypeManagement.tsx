@@ -20,6 +20,8 @@ const EMPTY_FORM = {
   max_days_per_request:       "0",
   deducts_from_balance:       false,
   requires_manager_approval:  false,
+  suspends_accrual:           false,
+  is_telework:                false,
   count_mode:                 "WORKABLE",
 };
 
@@ -82,6 +84,8 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
       max_days_per_request:       String(t.max_days_per_request ?? 0),
       deducts_from_balance:       t.deducts_from_balance ?? false,
       requires_manager_approval:  t.requires_manager_approval ?? false,
+      suspends_accrual:           t.suspends_accrual ?? false,
+      is_telework:                t.is_telework ?? false,
       count_mode:                 t.count_mode ?? "WORKABLE",
     });
     setFormError(null);
@@ -103,14 +107,29 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
       if (name === "is_paid" && checked) next.is_paid = true;
       // « Déduit du solde » coché → incompatible avec un congé non payé : il redevient payé
       if (name === "deducts_from_balance" && checked && !f.is_paid) next.is_paid = true;
+      // Payé ou déduit du solde → ce n'est plus une disponibilité
+      if ((name === "is_paid" || name === "deducts_from_balance") && checked) next.suspends_accrual = false;
       return next;
     });
     setFormError(null);
   };
 
-  /** Congé non payé (demande de disponibilité) : ni payé ni déduit du solde → aucun solde exigé. */
+  /** Disponibilité : ni payée ni déduite, et le solde reste figé pendant toute la période. */
   const setUnpaid = (on: boolean) => {
-    setForm((f) => ({ ...f, is_paid: !on, deducts_from_balance: on ? false : f.deducts_from_balance }));
+    setForm((f) => ({
+      ...f, is_paid: !on, suspends_accrual: on, is_telework: on ? false : f.is_telework,
+      deducts_from_balance: on ? false : f.deducts_from_balance,
+      monthly_accrual: on ? "0" : f.monthly_accrual,
+    }));
+    setFormError(null);
+  };
+
+  /** Télétravail : soumis directement à la RH, journée comptée comme travaillée, solde inchangé. */
+  const setTelework = (on: boolean) => {
+    setForm((f) => on
+      ? { ...f, is_telework: true, is_paid: true, deducts_from_balance: false, suspends_accrual: false,
+          requires_manager_approval: false, monthly_accrual: "0" }
+      : { ...f, is_telework: false });
     setFormError(null);
   };
 
@@ -132,6 +151,8 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
         max_days_per_request:       parseInt(form.max_days_per_request) || 0,
         deducts_from_balance:       form.deducts_from_balance,
         requires_manager_approval:  form.requires_manager_approval,
+        suspends_accrual:           form.suspends_accrual,
+        is_telework:                form.is_telework,
         count_mode:                 form.count_mode,
       };
       if (editTarget) {
@@ -225,9 +246,19 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
                           Payé
                         </span>
                       )}
-                      {!t.is_paid && (
+                      {!t.is_paid && !t.suspends_accrual && (
                         <span className="text-[10px] font-semibold text-gray-500 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded-full">
                           {t.deducts_from_balance ? "Non payé" : "Congé non payé"}
+                        </span>
+                      )}
+                      {t.suspends_accrual && (
+                        <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-full">
+                          Disponibilité · solde figé
+                        </span>
+                      )}
+                      {t.is_telework && (
+                        <span className="text-[10px] font-semibold text-sky-700 bg-sky-50 border border-sky-100 px-1.5 py-0.5 rounded-full">
+                          Télétravail · RH directe
                         </span>
                       )}
                       {t.requires_justification && (
@@ -365,7 +396,8 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
                   </label>
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <input type="checkbox" name="deducts_from_balance" checked={form.deducts_from_balance} onChange={handleChange}
-                      className="w-4 h-4 rounded accent-camublue-900"
+                      disabled={form.is_telework}
+                      className="w-4 h-4 rounded accent-camublue-900 disabled:opacity-40"
                     />
                     <span className="text-sm text-gray-700 font-medium">Déduit du solde de congé</span>
                   </label>
@@ -375,13 +407,24 @@ export default function LeaveTypeManagement({ triggerNew = 0 }: { triggerNew?: n
                       className="w-4 h-4 rounded accent-camublue-900"
                     />
                     <div>
-                      <span className="text-sm text-gray-700 font-medium">Congés non payés</span>
-                      <p className="text-xs text-gray-400 mt-0.5">Demandes de disponibilité : absence longue durée sans solde. Ni payé, ni déduit du solde — aucun solde n'est exigé.</p>
+                      <span className="text-sm text-gray-700 font-medium">Congés non payés (disponibilité)</span>
+                      <p className="text-xs text-gray-400 mt-0.5">Demandes de disponibilité : absence longue durée sans solde. Le solde de congés reste figé pendant toute la période : rien n'est déduit et aucun congé n'est acquis sur ces jours.</p>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input type="checkbox" checked={form.is_telework}
+                      onChange={(e) => setTelework(e.target.checked)}
+                      className="w-4 h-4 rounded accent-camublue-900"
+                    />
+                    <div>
+                      <span className="text-sm text-gray-700 font-medium">Télétravail (TT)</span>
+                      <p className="text-xs text-gray-400 mt-0.5">Demandes soumises directement à la RH. Les journées de télétravail comptent comme des journées de travail effectif, comme sur site (solde inchangé).</p>
                     </div>
                   </label>
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <input type="checkbox" name="requires_manager_approval" checked={form.requires_manager_approval} onChange={handleChange}
-                      className="w-4 h-4 rounded accent-camublue-900"
+                      disabled={form.is_telework}
+                      className="w-4 h-4 rounded accent-camublue-900 disabled:opacity-40"
                     />
                     <div>
                       <span className="text-sm text-gray-700 font-medium">Validation hiérarchique (N+1 / N+2)</span>

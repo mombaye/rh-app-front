@@ -6,7 +6,7 @@ import {
   FaChevronLeft, FaAngleDoubleLeft, FaAngleDoubleRight, FaUsers, FaUserTimes, FaTrash, FaRegSave, FaKey,
 } from "react-icons/fa";
 import { FiGitCommit } from "react-icons/fi";
-import { TbLogout, TbPlane } from "react-icons/tb";
+import { TbHome, TbLogout, TbPlane } from "react-icons/tb";
 import { AiOutlineRollback } from "react-icons/ai";
 import { motion, AnimatePresence } from "framer-motion";
 import { Employee } from "@/types/employee";
@@ -17,6 +17,7 @@ import toast from "react-hot-toast";
 import { ImSpinner2 } from "react-icons/im";
 import { Menu, Transition } from "@headlessui/react";
 import EmployeePayslipResendModal from "@/components/employees/EmployeePayslipResendModal";
+import TeleworkModal from "@/components/employees/TeleworkModal";
 import EmployeeHistoryModal from "@/components/employees/EmployeeHistoryModal";
 import CareerHistoryModal from "@/components/employees/CareerHistoryModal";
 import ContractChangeModal from "@/components/employees/ContractChangeModal";
@@ -193,6 +194,7 @@ export default function EmployeesTable({
   const [presetName,    setPresetName]    = useState("");
   const [payslipOpen, setPayslipOpen] = useState(false);
   const [payslipEmp, setPayslipEmp] = useState<Employee | null>(null);
+  const [teleworkEmp, setTeleworkEmp] = useState<Employee | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyEmp, setHistoryEmp] = useState<Employee | null>(null);
   const [careerOpen, setCareerOpen] = useState(false);
@@ -575,6 +577,7 @@ export default function EmployeesTable({
       { id: "reset-password",  icon: <FaKey size={15} />,         label: "Réinitialiser le mot de passe",   color: "text-amber-600", show: !!rowEmp.has_user },
       { id: "delete-account",  icon: <FaUserTimes size={15} />,  label: "Supprimer le compte utilisateur", color: "text-red-500",  show: !!rowEmp.has_user },
       { id: "mission",         icon: <TbPlane size={15} />,           label: rowEmp.on_mission ? "Gérer la mission" : "Définir en mission", color: "text-indigo-600", show: !isExited },
+      { id: "telework",        icon: <TbHome size={15} />,            label: "Définir en télétravail",       color: "text-sky-600",      show: !isExited },
       { id: "exit",            icon: <TbLogout size={15} />,          label: "Enregistrer la sortie",        color: "text-red-600",      show: !isExited },
       { id: "reinstate",       icon: <AiOutlineRollback size={15} />, label: "Réintégrer l'employé",         color: "text-camublue-900", show: isExited },
       { id: "payslip",         icon: <FaFilePdf size={15} />,         label: "Renvoyer un bulletin de paie", color: "text-purple-600",   show: true },
@@ -592,6 +595,7 @@ export default function EmployeesTable({
       else if (id === "reset-password")  { handleResetPassword(rowEmp); }
       else if (id === "delete-account")  { handleDeleteAccount(rowEmp); }
       else if (id === "mission")         { onMission?.(rowEmp); setRowOpen(false); }
+      else if (id === "telework")        { setTeleworkEmp(rowEmp); setRowOpen(false); }
       else if (id === "exit")            { onExit(rowEmp); setRowOpen(false); }
       else if (id === "reinstate")       { onReinstate(rowEmp); setRowOpen(false); }
       else if (id === "payslip")         { setPayslipEmp(rowEmp); setPayslipOpen(true); setRowOpen(false); }
@@ -1080,6 +1084,8 @@ export default function EmployeesTable({
           </div>
         )}
       </AnimatePresence>
+
+      <TeleworkModal employee={teleworkEmp} onClose={() => setTeleworkEmp(null)} />
 
       <EmployeePayslipResendModal
         open={payslipOpen}

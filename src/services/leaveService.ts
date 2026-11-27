@@ -42,6 +42,12 @@ export const leaveTypeService = {
     return res.data;
   },
 
+  /** Types proposés dans « Nouvelle demande » : le télétravail est défini par la RH depuis « Gérer ». */
+  getRequestable: async (): Promise<LeaveType[]> => {
+    const res = await api.get(`${API}/types`);
+    return (res.data as LeaveType[]).filter((t) => !t.is_telework);
+  },
+
   /** POST /api/leaves/types/ */
   create: async (data: Partial<LeaveType>): Promise<LeaveType> => {
     const res = await api.post(`${API}/types/`, data, {

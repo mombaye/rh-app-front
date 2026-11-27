@@ -339,6 +339,7 @@ const STATUS_LABELS_FR: Record<string, string> = {
   absent:      "Absent",
   on_leave:    "En congé",
   on_mission:  "En mission",
+  telework:    "Télé-Travail",
   incomplete:  "Incomplet",
   anomaly:     "Anomalie",
   not_working: "Repos",
@@ -1879,6 +1880,7 @@ function ExpandedDayTable({ records, dayDetails, isLoading }: {
     anomaly:    { label: "Anomalie",   cls: "bg-violet-50 text-violet-700" },
     on_leave:   { label: "Congé",      cls: "bg-blue-50 text-blue-600" },
     on_mission: { label: "Mission",    cls: "bg-sky-50 text-sky-700" },
+    telework:   { label: "Télé-Travail", cls: "bg-teal-50 text-teal-700" },
   };
 
   const rows: { emp: SummaryRecord; day: DayDetail }[] = [];

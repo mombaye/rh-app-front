@@ -24,6 +24,9 @@ export interface LeaveType {
   allow_negative_balance:    boolean;
   deducts_from_balance:      boolean;  // seuls les CP déduisent du solde
   is_special_leave:          boolean;  // congé spécial Art. L147 — droit distinct, non déduit du solde CP
+  requires_manager_approval?: boolean;
+  suspends_accrual?:         boolean;  // disponibilité : solde figé pendant toute la période
+  is_telework?:              boolean;  // télétravail : RH directe, journée comptée comme travaillée
   notice_days_required:      number;   // délai de prévenance (0 = aucune contrainte)
   count_mode:                string;   // "CALENDAR" | "WORKING" | "WORKABLE"
   count_mode_display:        string;   // libellé lisible du mode de décompte

@@ -46,7 +46,7 @@ export default function AnticipationLeaveForm({ onClose, onSuccess }: Props) {
   // Charger seulement les types qui déduisent du solde (annuels)
   useEffect(() => {
     setLoadingTypes(true);
-    leaveTypeService.getAll()
+    leaveTypeService.getRequestable()
       .then(types => setLeaveTypes(types.filter(t => t.deducts_from_balance)))
       .catch(() => setError("Impossible de charger les types de congé."))
       .finally(() => setLoadingTypes(false));

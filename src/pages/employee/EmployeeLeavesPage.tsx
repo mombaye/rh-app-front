@@ -1615,7 +1615,7 @@ export default function EmployeeLeavesPage({
     Promise.all([
       leaveBalanceService.getByEmployee(employeeId, year),
       leaveRequestService.getByEmployee(employeeId),
-      leaveTypeService.getAll(),
+      leaveTypeService.getRequestable(),
     ]).then(([bal, reqs, types]) => {
       setBalances(bal);
       setRequests((reqs as LeaveRequest[]).slice().sort(
@@ -1633,7 +1633,7 @@ export default function EmployeeLeavesPage({
   // (ex. « Demande de disponibilité ») apparaît sans recharger la page
   useEffect(() => {
     if (!showForm) return;
-    leaveTypeService.getAll().then(setLeaveTypes).catch(() => {});
+    leaveTypeService.getRequestable().then(setLeaveTypes).catch(() => {});
   }, [showForm]);
 
   // Rafraîchir silencieusement quand l'onglet redevient visible
